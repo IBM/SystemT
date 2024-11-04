@@ -1,0 +1,140 @@
+module syslog;
+
+
+import view IPAddressInterim from module common;
+
+
+create view IpAddressExtent as
+  select  RightContextTok(D.ipAddress_Span, 5) as large_extent,
+          RightContextTok(D.ipAddress_Span, 1) as small_extent,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as "common.IPAddressInterim_____sep_____D____id"
+  from  "common.IPAddressInterim" D;
+
+output view IpAddressExtent;
+
+create view LogProcessMatch as
+  extract D.small_extent as small_extent,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    D.__auto__id as IpAddressExtent_____sep_____D____id,
+    regex /\s+(([a-zA-Z]*)\[?(\d{0,7})\]?)\s*\:/
+    with flags 'DOTALL'
+    on D.large_extent
+    return group 2 as appName
+       and group 3 as procId
+       and group 1 as match
+  from IpAddressExtent D
+  having Overlaps(match, small_extent);
+
+output view LogProcessMatch;
+
+create view ProcessMatch as
+  (select  Op.small_extent as small_extent,
+            Op.appName as appName,
+            Op.procId as procId,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__46__TempOp__0 Op)
+  union all
+  (select  Op.small_extent as small_extent,
+            Op.appName as appName,
+            Op.procId as procId,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__46__TempOp__1 Op);
+
+output view ProcessMatch;
+
+
+
+create view SyslogProcessInterim as
+  select  D.match as annot_span,
+          GetString(D.match) as annot_text,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as ProcessMatch_____sep_____D____id
+  from  ProcessMatch D;
+
+output view SyslogProcessInterim;
+
+create view SyslogAppNameInterim as
+  select  D.appName as annot_span,
+          GetString(D.appName) as annot_text,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as ProcessMatch_____sep_____D____id
+  from  ProcessMatch D
+  where Not(Equals(GetBegin(D.appName), GetEnd(D.appName)));
+
+output view SyslogAppNameInterim;
+
+create view SyslogProcessIdInterim as
+  select  D.procId as annot_span,
+          GetString(D.procId) as annot_text,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as ProcessMatch_____sep_____D____id
+  from  ProcessMatch D
+  where Not(Equals(GetBegin(D.procId), GetEnd(D.procId)))
+     and ContainsRegex(/[a-zA-Z]+/, D.small_extent);
+
+output view SyslogProcessIdInterim;
+
+create view ProcessIdSyslogOutput as
+  select  D.annot_span as span,
+          D.annot_text as text,
+          GetString('ProcessIdSyslog') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as SyslogProcessIdInterim_____sep_____D____id
+  from  SyslogProcessIdInterim D;
+
+output view ProcessIdSyslogOutput;
+
+export view syslog.ProcessIdSyslogOutput;
+
+
+create view AppNameSyslogOutput as
+  select  D.annot_span as span,
+          D.annot_text as text,
+          GetString('AppNameSyslog') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as SyslogAppNameInterim_____sep_____D____id
+  from  SyslogAppNameInterim D;
+
+output view AppNameSyslogOutput;
+
+export view syslog.AppNameSyslogOutput;
+
+
+create view __Union__46__TempOp__0 as
+  select  D.small_extent as small_extent,
+          D.appName as appName,
+          D.procId as procId,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as LogProcessMatch_____sep_____D____id
+  from  LogProcessMatch D;
+
+output view __Union__46__TempOp__0;
+
+create view __Union__46__TempOp__1 as
+  select  D.small_extent as small_extent,
+          D.appName as appName,
+          D.procId as procId,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as MsgProcessMatch_____sep_____D____id
+  from  MsgProcessMatch D;
+
+output view __Union__46__TempOp__1;
+

@@ -1,0 +1,63 @@
+---------------------------------------
+--   Person Feature Extraction
+---------------------------------------
+
+<Salutation> 		As	Dictionary('InitialDict.dict');
+ 
+<CapsPerson>	As	Regex(/\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}/);
+  
+<StrictLastName>	As	Dictionary('strictLast.dict','strictLast_german.dict',
+								    'uniqMostCommonSurname.dict');
+ 
+<HyphenatedLastNamePattern1>	As	<StrictLastName>'-'<CapsPerson>;		
+<HyphenatedLastNamePattern2>	As	<CapsPerson>'-'<StrictLastName>;	
+
+<LastName>		As		Union(<StrictLastName>,<HyphenatedLastNamePattern1>,<HyphenatedLastNamePattern2>);
+ 
+Consolidate <LastName> Using 'ContainedWithin';	
+
+<StrictFirstName>	As	Dictionary('strictFirst.dict','strictFirst_german.dict',
+								   'strictNickName.dict');
+ 
+<HyphenatedFirstNamePattern1>	As	<StrictFirstName>'-'<CapsPerson>;		
+<HyphenatedFirstNamePattern2>	As	<CapsPerson>'-'<StrictFirstName>;	
+
+<FirstName>		As		Union(<StrictFirstName>,<HyphenatedFirstNamePattern1>,<HyphenatedFirstNamePattern2>);
+ 
+Consolidate <FirstName> Using 'ContainedWithin';	
+
+ 
+
+---------------------------------------
+--   Person Candidate Rules
+---------------------------------------
+  
+<SalutationCaps>	As	<Salutation> <CapsPerson>;
+   
+<FirstLast>	As	<FirstName> <LastName>;
+ 
+<LastCommaFirst>	As	<LastName> ',' <FirstName>;
+  
+<FirstCaps>  As  <FirstName> <CapsPerson>;
+<CapsLast>	As 	<CapsPerson> <LastName>;
+ 
+---------------------------------------
+--   Merge results and Consolidate
+---------------------------------------
+
+<Person>	As	Union(<SalutationCaps>, <FirstLast>, <LastCommaFirst>, <FirstCaps>,<CapsLast>);
+ 
+Consolidate 	<Person>	Using	'LeftToRight';
+
+---------------------------------------
+--   Output
+---------------------------------------
+
+Output(<Person>);
+
+
+
+								    
+								 
+									 
+									 			   

@@ -1,0 +1,21 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- udfSizeTest.aql
+--
+-- Tests of user-defined predicates.
+
+create function toLowerCase(span Span)
+return String
+external_name 'udfjars/LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UDF!toLowerCase'
+language java
+deterministic
+return null on null input;
+
+create view PhoneNum as
+extract 
+    regex /[0-9]{3}-[0-9]{4}/
+        on D.text as number
+from Document D;
+
+output view PhoneNum; 

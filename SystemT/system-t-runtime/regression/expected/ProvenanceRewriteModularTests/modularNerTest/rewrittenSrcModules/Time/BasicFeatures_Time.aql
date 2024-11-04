@@ -1,0 +1,98 @@
+module Time;
+
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText
+;
+
+
+import dictionary WorldTimeZones from module Dictionaries as WorldTimeZones
+;
+
+
+import dictionary DaysInAWeekFromGregorianCalendar from module Dictionaries as DaysInAWeekFromGregorianCalendar
+;
+
+
+require document with columns
+  text Text;
+
+create view FourDigits as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__40__Temp_____sep_____R____id
+  from  __Subquery__40__Temp R;
+
+output view FourDigits;
+
+create view TwoDigitsInterval as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__41__Temp_____sep_____R____id
+  from  __Subquery__41__Temp R;
+
+output view TwoDigitsInterval;
+
+create view TimeZoneDict as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__42__Temp_____sep_____D____id
+  from  __Subquery__42__Temp D;
+
+output view TimeZoneDict;
+
+create view WKDay as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__43__Temp_____sep_____D____id
+  from  __Subquery__43__Temp D;
+
+output view WKDay;
+
+create view __Subquery__40__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    regex /((20)|(19)|(18)|(17)|(16))[\p{Nd}][\p{Nd}]/
+    with flags 'DOTALL'
+    on between 1 and 4 tokens in D.text
+    return group 0 as match
+  from DocumentText D;
+
+output view __Subquery__40__Temp;
+
+create view __Subquery__41__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    regex /((0)|(1)|(2)|(3))?[\d]( )*[\-]( )*((0)|(1)|(2)|(3))?[\d]/
+    with flags 'DOTALL'
+    on between 1 and 5 tokens in D.text
+    return group 0 as match
+  from DocumentText D;
+
+output view __Subquery__41__Temp;
+
+create view __Subquery__42__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'WorldTimeZones'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__42__Temp;
+
+create view __Subquery__43__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'DaysInAWeekFromGregorianCalendar'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__43__Temp;
+

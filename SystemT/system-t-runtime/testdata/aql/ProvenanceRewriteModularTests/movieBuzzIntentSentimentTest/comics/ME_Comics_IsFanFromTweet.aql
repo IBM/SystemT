@@ -1,0 +1,149 @@
+module comics;
+
+-- @purpose: Is this tweet comic-relevant ? If so, ain't the user a comic fan-boy/girl ?
+
+-- View 'Tweet' represents the tweet being sent into this module for some checks.
+-- When passing a 'tweet' to this module from elsewhere, the following view needs to be enabled (un-commented) *and*
+-- the views 'TweetSplits' and 'Tweet' inside 'isComicFanFromTweet.aql' be disabled (or, commented out) accordingly.
+
+import dictionary ME_Comics_Keywords_English_Short from module dictionariesAndTables as ME_Comics_Keywords_English_Short;
+
+import dictionary ME_Comics_NegativeClues from module dictionariesAndTables as ME_Comics_NegativeClues;
+
+create view Tweet as
+	select
+		D.text as tweetText
+	from Document D;
+
+/*-- Views 'TweetSplits' and 'Tweet' to be used only when dealing with a large data-set filtered from the Twitter source as .del files. 
+-- Expected input is a large set of 'comma-delimited' (.del) files
+
+-- Split input data into individual records as coming in from Twitter
+-- Ex : "0", "1534835894598", "@RT .... some how... "
+
+create view TweetSplits as
+	extract 
+    	split using B.boundary 
+        	retain left split point
+        	on B.text as tweet
+	from 
+	(
+    	extract 
+        	D.text as text,
+        	regex /0,/ on D.text as boundary
+        from Document D
+	) B;
+
+-- Split out the ID and text parts from the corresponding tweet
+-- Ex: 1534835894598 - tweetId, @RT .... some how...  - tweetText
+
+create view Tweet as
+	extract
+		regex /0,"(\d*)","(.*)/ on T.tweet 
+		return 
+			group 2 as tweetText
+	from TweetSplits T;
+*/
+	
+-- Identify tweets containing Comics related keywords in it
+-- Ex: @WereJustTeenss: I watched Transformers today. I've spent 2 hours in my garage telling my car I know his secret…. He's shy.
+
+create view RelevantComicsTweets as
+	select 
+		T.tweetText as tweetText
+	from Tweet T
+	where Not(ContainsDict('ME_Comics_NegativeClues', T.tweetText)); 
+	--consolidate on T.tweetText;
+	
+-- Identify hash tags from each tweet
+-- Ex: #ILoveBatman #WSDM12
+
+create view HashTagsFromTweet as
+	extract
+		C.tweetText as tweetText,
+		regex /#([^\s]+)/
+			on C.tweetText 
+			return group 1 as match 
+	from RelevantComicsTweets C;
+
+-- Removed extracting twitter mentions for comic relevance because it was hurting precision
+
+-- Identify mentions from each tweet
+-- Ex: @Official_Batman @josh123
+
+/*create view MentionsFromTweet as
+	extract
+		C.tweetText as tweetText,
+		regex /@([^\s]+)/
+			on C.tweetText 
+			return group 1 as match 
+	from RelevantComicsTweets C;*/			
+
+-- Identify tweets with 'tokens' in them that are comics-relevant
+-- Ex: 15273476324 as tweetId, batman as match
+
+create view ComicsBasedTokensFromTweet as
+	extract
+		C.tweetText as tweetText,
+		dictionary 'ME_Comics_Keywords_English_Short'
+			on C.tweetText as match 
+	from RelevantComicsTweets C;
+
+-- Get a unique list of such comic-relevant tweets as identified above
+-- This combines various facets of this tweet identified as comic relevant above
+-- with the tweet itself to provide a contextual view for those views inheriting it going forward.
+-- Facets such as mentions, hashtags and comic-relevant tokens in the tweet otherwise
+
+create view ComicsTweetCandidates as
+	(
+		select 
+			C.tweetText as tweetText, 
+			C.match as match 
+		from ComicsBasedTokensFromTweet C
+	)
+	-- Removed checking twitter mentions for comic relevance because it was hurting precision
+	/*union all
+	(
+		select 
+			M.tweetText as tweetText,
+			M.match as match
+		from MentionsFromTweet M 
+		where ContainsDict('comics/misc_comics_keywords_en_short.dict', M.match)
+	)*/
+	union all
+	(
+		select 
+			H.tweetText as tweetText, 
+			H.match as match 
+		from HashTagsFromTweet H 
+		where ContainsDict('ME_Comics_Keywords_English_Short', H.match)
+	);
+	
+create view ComicsTweets as
+	select
+		C.match as match,
+		C.tweetText as tweetText
+	from ComicsTweetCandidates C;
+	--consolidate on C.tweetText;
+
+-- Decide whether if the corresponding user whose tweet (tweetId) is a comic fan
+-- If there is more than one tuple from previous view corresponding to this tweet,
+-- then the user who tweeted this is a comic fan.
+
+create view isComicFanTweet as
+	select
+		C.tweetText as tweetText,
+		List(GetText(C.match)) as comicMatches,
+		Count(C.tweetText) as tweetCount
+	from ComicsTweets C
+	group by C.tweetText;
+
+create view isComicFanFromTweet as
+	select 
+		I.comicMatches as comicMatches,
+		--GetText(I.tweetText) as tweetText,
+		'true' as isFan
+	from isComicFanTweet I
+	where GreaterThan(I.tweetCount, 0);
+
+output view isComicFanFromTweet;

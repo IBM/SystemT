@@ -1,0 +1,123 @@
+module Linguistics;
+
+import dictionary PrepositionsInEnglish from module Dictionaries as PrepositionsInEnglish;
+import dictionary DeterminersInEnglish from module Dictionaries as DeterminersInEnglish;
+import dictionary WorldTimeZones from module Dictionaries as WorldTimeZones;
+
+----------------------------------------------------
+-- High precision rules: no need for filtering
+----------------------------------------------------
+create view LongCapsPlace as
+select CombineSpans(CP1.match, CP2.match) as match
+from CapsPlace CP1,
+     CapsPlace CP2
+where FollowsTok(CP1.match, CP2.match, 0, 1)
+	-- Sudarshan regex : 10/13/2011 - backreference on lines 10, 11, 18 and 28
+  and MatchesRegex(/\s*(-|de)?\s*/, SpanBetween(CP1.match, CP2.match))
+  and Not(MatchesRegex(/([tT]he|an?)/, CP1.match));  
+  
+create view HyphenatedLongCapsPlace1 as
+select CombineSpans(CP1.match, CP2.match) as match
+from CapsPlace CP1,
+     CapsPlace CP2
+where FollowsTok(CP1.match, CP2.match, 3, 3)
+  and MatchesRegex(/-(\p{L}\p{M}*)+-/, SpanBetween(CP1.match, CP2.match));
+
+create view HyphenatedLongCapsPlace2 as
+select CombineSpans(LeftContextTok(CP.match, 2), CP.match) as match
+from CapsPlace CP
+where MatchesRegex(/al-/, LeftContextTok(CP.match, 2));
+
+  
+create view CapsInitial as
+extract
+	regex /(\p{Lu}\p{M}*\.?){1,2}/
+	on between 1 and 4 tokens in D.text
+	as match
+from DocumentText D;  
+  
+create view CapsPlaceWithInitial1 as
+select CombineSpans(I.match, CP.match) as match
+from   CapsInitial I,
+       CapsPlace CP
+where FollowsTok(I.match, CP.match, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(I.match, CP.match)));
+  
+create view CapsPlaceWithInitial2 as
+select CombineSpans(CP.match, I.match) as match
+from CapsInitial I,
+     CapsPlace CP
+where FollowsTok(CP.match, I.match, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(I.match, CP.match)));
+  
+create view AllCapsPlace as
+extract
+	-- Sudarshan regex : 10/13/2011 - backreference on line 50
+	regex	/(\p{Lu}\p{M}*){2,}/
+		on 1 token in D.text
+		as match
+from DocumentText D
+having MatchesRegex(/\s*,/, RightContextTok(match, 1))
+   and MatchesRegex(/[\r\n]/, LeftContext(match, 1));
+  
+create view RelaxedCapsPlaceAll as
+	(select CP.* from CapsPlace CP)
+	union all
+	(select CP.* from LongCapsPlace CP)
+	union all
+	(select CP.* from HyphenatedLongCapsPlace1 CP)
+	union all
+	(select CP.* from HyphenatedLongCapsPlace2 CP)
+	union all
+	(select CP.* from CapsPlaceWithInitial1 CP)
+	union all
+	(select CP.* from CapsPlaceWithInitial2 CP)
+	union all
+	(select O.* from AllCapsPlace O);
+	
+create view RelaxedCapsPlace as
+select CP.*
+from RelaxedCapsPlaceAll CP
+where Not(ContainsDict('PrepositionsInEnglish', SubSpanTok(CP.match, 1, 1)))
+  and Not(MatchesDict('DeterminersInEnglish', CP.match));
+
+create view ExtraLongCapsPlace as
+select CombineSpans(CP1.match, CP2.match) as match
+from RelaxedCapsPlace CP1,
+     RelaxedCapsPlace CP2
+where FollowsTok(CP1.match, CP2.match, 1, 1)
+  and MatchesRegex(/\s*de\s*/, SpanBetween(CP1.match, CP2.match));
+  
+create view AllRelaxedCapsPlace as
+	(select CP.* from RelaxedCapsPlace CP)
+	union all
+	(select CP.* from ExtraLongCapsPlace CP);
+	
+create view OneToTwoAllCapsWord as 
+extract 
+	-- Sudarshan regex : 10/13/2011 - backreference on line 93
+    regex /(\p{Lu}\p{M}*){2,}([ ](\p{Lu}\p{M}*){2,})?/
+        on between 1 and 2 tokens in D.text 
+        as match 
+from DocumentText D;
+
+create view RelaxedCapsPlaceOnetoTwo as
+	(select W.* from OneToTwoAllCapsWord W)
+	union all
+	(select W.* from CapsPlaceOnetoTwo W);
+
+create view InitialWord as
+		(select I.word as word from InitialWord1 I)
+		union all
+		(select I.word as word from InitialWord2 I);
+
+-- Find weak initial words 
+	create view WeakInitialWord as
+	select R.match as word
+	from (extract regex /(\p{Lu}\p{M}*\.?\s*){1,5}/
+			on between 1 and 10 tokens in D.text
+			as match from DocumentText D) R
+	where Not(ContainsRegex(/\p{Lu}\p{M}*{3}/, R.match))
+	and Not(ContainsDict('WorldTimeZones', R.match))
+	and Not(MatchesRegex(/(VS\.|V\.)/, R.match));
+		

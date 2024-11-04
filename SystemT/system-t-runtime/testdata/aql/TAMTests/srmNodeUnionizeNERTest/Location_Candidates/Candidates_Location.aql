@@ -1,0 +1,119 @@
+module Location_Candidates;
+
+-- Patterns for location entity based on linguistic features
+
+create view PatternBasedLocation4 as
+select CP.match as loc
+from LocationLeftClue C,
+	 CapsPlaceOnetoTwo CP
+where FollowsTok(C.clue, CP.match, 0, 0)
+-- avoid matching month
+  and Not(MatchesRegex(/\s*\d+/, RightContextTok(CP.match, 1)));
+
+
+create view PatternBasedLocation5 as
+select CP.match as loc
+from LocationWeakLeftClue L,
+	 AllRelaxedCapsPlace CP
+where FollowsTok(L.clue, CP.match, 0, 0)
+    and MatchesRegex(/[ ]*([\r\n.;:(,]|(\p{Ll}\p{M}*)+|--).*/, RightContextTok(CP.match, 2));
+  
+
+create view PatternBasedLocation6 as
+select CP.match as loc
+from CapsPlaceOnetoTwo CP,
+	 LocationRightClue C	 
+where FollowsTok(CP.match, C.clue, 0, 0);
+
+
+create view PatternBasedLocation7 as
+select CP.match as loc
+from CapsPlace CP
+where MatchesRegex(/(in)\s+/, LeftContextTok(CP.match, 1))
+  and MatchesRegex(/\s+,\s*(an?)/, RightContextTok(CP.match, 2))
+  and Not(ContainsDict('MonthsInAYearFromGregorianCalendar', CP.match))
+  and Not(ContainsDict('CurrencyDenominations', CP.match));
+  
+-- in City, State
+create view StateClue as
+	(select S.* from StateWeakAll S)
+	union all
+	(select S.* from StateStrongAll S);
+	
+create view PatternBasedLocation8 as
+select CP.match as loc
+from RelaxedCapsPlace CP,
+     StateClue S
+where FollowsTok(CP.match, S.match, 1, 1)
+  and MatchesRegex(/(in|\.|and)\s+/, LeftContextTok(CP.match, 1))
+  and MatchesRegex(/\s*,\s*/, SpanBetween(CP.match, S.match))
+  and MatchesRegex(/\p{Lu}\p{M}*.*/, S.match);
+
+
+create view PatternBasedLocation9 as
+select CP.match as loc
+from RelaxedCapsPlace CP
+where MatchesRegex(/[Ii]n\s*/, LeftContextTok(CP.match, 1))
+  and MatchesRegex(/\s*[:,]/, RightContextTok(CP.match, 1))
+  and Not(ContainsDict('MonthsInAYearFromGregorianCalendar', CP.match))
+  and Not(ContainsDict('CurrencyDenominations', CP.match));
+  
+
+create view PatternBasedLocation10 as
+select CP.match as loc
+from CapsPlace CP
+where MatchesRegex(/from\s*/, LeftContextTok(CP.match, 1))
+  and MatchesRegex(/\s*to/, RightContextTok(CP.match, 1))
+  and Not(ContainsDict('MonthsInAYearFromGregorianCalendar', CP.match));
+
+
+-- ***, 80 miles ...
+create view PatternBasedLocation12 as
+select CP.match as loc
+from CapsPlace CP
+where MatchesRegex(/\s*,\s(about\s+)?\d{1,2}\s+(miles|kms).*/, RightContextTok(CP.match, 4));
+
+
+create view PatternBasedLocation13 as
+select CP.match as loc
+from RelaxedCapsPlace CP,
+     DirectionAll D
+where FollowsTok(D.match, CP.match, 1, 2)
+  and MatchesRegex(/\s*of\s+(the)?\s*/, SpanBetween(D.match, CP.match))
+  and Not(ContainsDict('WorldEthnicities', CP.match)); 
+  
+create view PatternBasedLocation14 as
+select CP.match as loc
+from RelaxedCapsPlace CP
+where MatchesRegex(/the\s*/, LeftContextTok(CP.match, 1))
+  and ContainsDict('RightContextCluesPositiveWeakForLocation', RightContextTok(CP.match, 1))
+  and Not(ContainsDict('WorldEthnicities', CP.match))
+  and Not(ContainsDict('WorldNationalities', CP.match));
+  
+-- through *** in
+create view PatternBasedLocation16 as
+select CP.match as loc, LeftContextTok(CP.match, 1) as lc, RightContextTok(CP.match, 1) as rc
+from RelaxedCapsPlaceAll CP
+where MatchesRegex(/(through|in|at)\s*/, LeftContextTok(CP.match, 1))
+  and MatchesRegex(/\s*(in|near|at|outside)/, RightContextTok(CP.match, 1));
+  
+create view PatternBasedLocation as
+	(select P.* from PatternBasedLocation4 P)
+	union all
+	(select P.* from PatternBasedLocation5 P)
+	union all
+	(select P.* from PatternBasedLocation6 P)
+	union all
+	(select P.* from PatternBasedLocation7 P)
+	union all
+	(select P.* from PatternBasedLocation8 P)
+	union all
+	(select P.* from PatternBasedLocation9 P)
+	union all
+	(select P.* from PatternBasedLocation10 P)
+	union all
+	(select P.* from PatternBasedLocation13 P)
+	union all
+	(select P.* from PatternBasedLocation14 P)
+	union all
+	(select P.loc from PatternBasedLocation16 P);

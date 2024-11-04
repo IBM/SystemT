@@ -1,0 +1,180 @@
+---------------------------------------
+--   Person Feature Extraction
+---------------------------------------
+
+Section	'Person Features';
+
+<Salutation> 		As	Dictionary('SalutationDict.dict');
+<NameSuffix> 	As	Dictionary('PersonSuffixDict.dict');
+
+<CapitalizedWordOptionalHyphenApostrophe>	As	RegexTok(/\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}/,4);
+Discard	<CapitalizedWordOptionalHyphenApostrophe>	If	ContainsDict('FilterPersonDict.dict', 'filterPerson_german.dict',
+									 'SalutationDict.dict', 'StrongPhoneVariantDictionary.dict',
+		                             'stateList.dict', 
+		                             'organization_suffix.dict', 'industryType_suffix.dict',
+    		                             'streetSuffix_forPerson.dict');
+
+Discard 	<CapitalizedWordOptionalHyphenApostrophe>	If MatchesRegex(/(\p{Lu}\p{M}*)+-.*([\p{Ll}\p{Lo}]\p{M}*).*/,
+										/.*([\p{Ll}\p{Lo}]\p{M}*).*-(\p{Lu}\p{M}*)+/);
+										
+
+<CapitalizedWordOptionalHyphen>	As	<CapitalizedWordOptionalHyphenApostrophe>;
+Discard	<CapitalizedWordOptionalHyphen>	If	ContainsRegex(/'/);
+
+<CapitalizedWord>	As	RegexTok(/\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}/, 1) On	<CapitalizedWordOptionalHyphen>;
+
+<CapitalizedNameWord>	As <CapitalizedWord>;
+Retain <CapitalizedNameWord>	If	MatchesRegex(/\b\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){1,20}\b/);   		                             
+
+<StrictLastName>	As	Dictionary('strictLast.dict','strictLast_german.dict',
+								   'strictLast_german_bluePages.dict', 'uniqMostCommonSurname.dict',
+								   'names/strictLast_italy.dict','names/strictLast_france.dict',
+								   'names/strictLast_spain.dict','names/strictLast_india.partial.dict',
+								   'names/strictLast_israel.dict');
+Retain <StrictLastName>	If	MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/);		
+
+<HyphenatedLastNamePattern1>	As	<StrictLastName>'-'<CapitalizedNameWord>;		
+<HyphenatedLastNamePattern2>	As	<CapitalizedNameWord>'-'<StrictLastName>;	
+
+<LastName>		As		Union(<StrictLastName>,<HyphenatedLastNamePattern1>,<HyphenatedLastNamePattern2>);
+Discard	<LastName>	If	MatchesRegex(/(\p{Lu}\p{M}*)+-.*([\p{Ll}\p{Lo}]\p{M}*).*/,
+									 /.*([\p{Ll}\p{Lo}]\p{M}*).*-(\p{Lu}\p{M}*)+/);		
+
+Consolidate <LastName>;	
+
+<StrictFirstName>	As	Dictionary('strictFirst.dict','strictFirst_german.dict',
+								   'strictNickName.dict','strictFirst_german_bluePages.dict', 
+								   'names/strictFirst_italy.dict','names/strictFirst_france.dict',
+								   'names/strictFirst_spain.dict','names/strictFirst_india.partial.dict',
+								   'names/strictFirst_israel.dict');
+Retain <StrictFirstName>	If	MatchesRegex(/\p{Lu}\p{M}*.{1,20}/);		
+
+<HyphenatedFirstNamePattern1>	As	<StrictFirstName>'-'<CapitalizedNameWord>;		
+<HyphenatedFirstNamePattern2>	As	<CapitalizedNameWord>'-'<StrictFirstName>;	
+
+<FirstName>		As		Union(<StrictFirstName>,<HyphenatedFirstNamePattern1>,<HyphenatedFirstNamePattern2>);
+Discard	<FirstName>	If	MatchesRegex(/(\p{Lu}\p{M}*)+-.*([\p{Ll}\p{Lo}]\p{M}*).*/,
+									 /.*([\p{Ll}\p{Lo}]\p{M}*).*-(\p{Lu}\p{M}*)+/);		
+
+Consolidate <FirstName>;	
+
+
+<FirstorLastMaybeAmbiguous>	As			Dictionary('names.dict','names/name_italy.dict',
+                                   'names/name_france.dict','names/name_spain.dict',
+                                   'names/name_israel.dict');
+Retain	<FirstorLastMaybeAmbiguous>	If	MatchesRegex(/\p{Lu}\p{M}*.{1,20}/);
+Augment	<FirstorLastMaybeAmbiguous> With <FirstName>;
+Augment	<FirstorLastMaybeAmbiguous> With <LastName>;
+Consolidate	<FirstorLastMaybeAmbiguous>;
+
+<Initials>	As	RegexTok(/([\p{Upper}]\.\s*){1,5}/, 10);
+Discard	<Initials>	If	MatchesRegex(/M\.D\./);
+
+<InitialsMaybeAmbiguous>	As	RegexTok(/([\p{Upper}]\.?\s*){1,5}/, 10);
+Discard	<InitialsMaybeAmbiguous>	If	ContainsRegex(/[\p{Upper}]{3}/);
+
+
+---------------------------------------
+--   Person Candidate Rules
+---------------------------------------
+
+Section	'Person Rules';
+
+<FirstMiddleLastPattern1>	As	<StrictFirstName><CapitalizedNameWord><StrictLastName>, DISTINCTCONCEPTS;
+-- added distinct value check on all parts of the name
+Discard 	<FirstMiddleLastPattern1>	If	ContainsRegex(/[\n\r\t]/);
+
+<FirstMiddleLastPattern2>	As	<FirstorLastMaybeAmbiguous><CapitalizedWord><StrictLastName>, DISTINCTCONCEPTS;
+-- added distinct value check on all parts of the name
+Discard 	<FirstMiddleLastPattern2>	If	ContainsRegex(/[\n\r\t]/);
+
+<FirstMiddleLastPattern3>	As	<StrictFirstName><CapitalizedWord><FirstorLastMaybeAmbiguous>, DISTINCTCONCEPTS;
+-- added distinct value check on all parts of the name
+Discard 	<FirstMiddleLastPattern3>	If	ContainsRegex(/[\n\r\t]/);
+
+<SalutationCapsWordInitialsCapsWord>	As	<Salutation> <CapitalizedWordOptionalHyphenApostrophe> <Initials> <CapitalizedWordOptionalHyphenApostrophe>;
+
+<SalutationName>	As	<Salutation> <CapitalizedWordOptionalHyphenApostrophe>;
+<SalutationInitialsName>	As	<Salutation> <Initials>{1,2} <CapitalizedWordOptionalHyphenApostrophe>;
+Augment	<SalutationName> With <SalutationInitialsName>;
+Discard <SalutationName>	If	ContainsRegex(/[\n\r\t]/);
+
+
+<SalutationMultiPartName>	As	<Salutation> <CapitalizedWordOptionalHyphenApostrophe>{2,3};
+Discard 	<SalutationMultiPartName>	If	ContainsRegex(/[\n\r\t]/);
+
+<NameInitialsNameAmbiguous>	As	<FirstorLastMaybeAmbiguous> <InitialsMaybeAmbiguous> <FirstorLastMaybeAmbiguous>, DISTINCTCONCEPTS;
+-- added distinct value check on the two parts of the name
+<FirstInitialsCapsWord> 	As	<FirstName> <Initials> <CapitalizedWordOptionalHyphenApostrophe>;
+<CapsWordInitialsLast>	As 	<CapitalizedWordOptionalHyphenApostrophe> <Initials> <LastName>;
+
+<FirstLast>	As	<FirstName> <LastName>;
+Discard	<FirstLast>	If	ContainsRegex(/[\n\r\t]/);
+-- missing distinct value check on the two parts of the name, check is currently redundant
+
+<LastCommaFirst>	As	<LastName> ',' <FirstName>;
+<CapsWordCommaFirst>	As	<CapitalizedWordOptionalHyphenApostrophe> ',' <FirstName>;
+Discard <CapsWordCommaFirst>	If	MatchesRegex(/(?i)(.+fully),.+/);
+Discard <CapsWordCommaFirst> If MatchesRegex(/(.|\n|\r)*(\.|\?|!|'|\sat|\sin)( )*/) On LeftContext(10);
+Discard <CapsWordCommaFirst> If MatchesRegex(/$.{0,10}^/) On LeftContext(15);
+-- checks on left context of capsperson and offset of match added 07/08/08
+<LastCommaCapsWord>	As	<LastName> ',' <CapitalizedWordOptionalHyphenApostrophe>;
+
+<InitialsAmbiguousNameCapsWord>	As	<Initials> <FirstorLastMaybeAmbiguous> <CapitalizedWordOptionalHyphenApostrophe>;
+<InitialsCapsWordLast>   As  <Initials> <CapitalizedWordOptionalHyphenApostrophe> <FirstorLastMaybeAmbiguous>;
+
+<FirstCapsWord>  As  <FirstName> <CapitalizedWordOptionalHyphenApostrophe>;
+<CapsWordLast>	As 	<CapitalizedWordOptionalHyphenApostrophe> <LastName>;
+
+<InitialsFirst>	As	<Initials> <FirstName>;
+<InitialsLast>	As	<Initials> <LastName>;
+
+---------------------------------------
+--   Merge results and Consolidate
+---------------------------------------
+Section	'Person Consolidation';
+
+<HighConfidencePerson>	As	Union(<SalutationCapsWordInitialsCapsWord>, <SalutationMultiPartName>, <NameInitialsNameAmbiguous>, <FirstLast>, <FirstMiddleLastPattern1>);
+Discard <HighConfidencePerson>	If	ContainsRegex(/[\n\r]/);
+
+<HighConfidenceSingleTokenPerson>	As	Union(<SalutationName>, <InitialsFirst>, <InitialsLast>, <FirstName>, <LastName>);
+<HighConfidenceSingleTokenPersonWithSuffix>	As	<HighConfidenceSingleTokenPerson> <NameSuffix>;
+Augment	<HighConfidenceSingleTokenPerson> With <HighConfidenceSingleTokenPersonWithSuffix>;
+
+<MediumConfidencePerson>	As	Union(<InitialsAmbiguousNameCapsWord>, <InitialsCapsWordLast>, <FirstInitialsCapsWord>, <CapsWordInitialsLast>, <FirstMiddleLastPattern2>, <FirstMiddleLastPattern3>,
+                  <FirstCapsWord>, <CapsWordLast>);
+Discard	<MediumConfidencePerson>	If	ContainsRegex(/[\n\r]/);
+
+<MediumConfidencePersonLastCommaFirst>	As	Union(<LastCommaFirst>, <CapsWordCommaFirst>, <LastCommaCapsWord>);
+Discard <MediumConfidencePersonLastCommaFirst>	If	ContainsDict('GreetingsDict.dict') On LeftContext(15);
+Discard <MediumConfidencePersonLastCommaFirst>	If	ContainsRegex(/[\n\r]/);
+Discard <MediumConfidencePersonLastCommaFirst>	If	MatchesRegex(/(.|\n|\r)*,[ \t]*(\p{Lu}\p{M}*(\p{L}\p{M}*|[-'.])*[ \t]*){0,2}/) On LeftContext(50);
+Discard <MediumConfidencePersonLastCommaFirst>	If	MatchesRegex(/[ \t]*(\p{Lu}\p{M}*(\p{L}\p{M}*|[-'.])*[ \t]*){0,2}([,&]|(\b(and)[ \t]+))(.|\s)*/) On RightContext(50);
+-- added checks on left and right context  
+Discard <MediumConfidencePersonLastCommaFirst>	If	Overlaps(<HighConfidencePerson>, <MediumConfidencePerson>);
+
+Discard <MediumConfidencePerson>	If 	Overlaps(<HighConfidencePerson>);
+
+<Person>	As	Union(<HighConfidencePerson>, <MediumConfidencePerson>, <MediumConfidencePersonLastCommaFirst>);
+Discard <Person>	If	MatchesRegex(/((\p{Lu}\p{M}*)|-)+[,\s]+\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*.*/,
+								 /\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*.*[,\s]+((\p{Lu}\p{M}*)|-)+/,
+								 /U\.\s*S\.\s*.+/);
+
+<PersonWithSuffix>	As	<Person> <NameSuffix>;
+Augment <Person> With <PersonWithSuffix> ;
+
+-- Discard	<Person>	If	Contains(<SentenceBoundary>);
+Consolidate 	<Person>	Using	'LeftToRight';
+
+---------------------------------------
+--   Output
+---------------------------------------
+
+Output(<Person>);
+
+
+
+								    
+								 
+									 
+									 			   

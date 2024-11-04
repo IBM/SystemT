@@ -1,0 +1,157 @@
+module Location_Candidates;
+
+create view MapLocationAll as
+	(select A.address as address, A.city as city, '' as county, A.stateorprovince as stateorprovince, A.zip as zip, '' as country, '' as continent, A.reference as reference
+	from AddressFinal A)
+	union all
+	(select '' as address, C.city as city, '' as county, C.stateorprovince as stateorprovince, '' as zip, C.country as country, C.continent as continent, C.reference as reference
+	 from City_ C)
+	union all
+	(select '' as address, '' as city, C.county as county, C.stateorprovince as stateorprovince, '' as zip, C.country as country, C.continent as continent, C.reference as reference
+	 from County_ C)
+	 union all
+	(select '' as address, '' as city, '' as county, C.stateorprovince as stateorprovince, '' as zip, C.country as country, C.continent as continent, C.reference as reference
+	 from StateOrProvince_ C)
+	union all
+	(select '' as address, '' as city, '' as county, '' as stateorprovince, '' as zip, C.country as country, C.continent as continent, C.reference as reference
+	 from Country_ C)
+	 union all
+	(select '' as address, '' as city, '' as county, '' as stateorprovince, '' as zip, '' as country, C.continent as continent, C.reference as reference
+	 from Continent_ C)
+	 union all
+	(select '' as address, '' as city, '' as county, '' as stateorprovince, C.zip as zip, '' as country, '' as continent, C.reference as reference
+	 from ZipCode_ C);
+	 
+create view MapLocation_ as
+select C.address as address, C.city as city, C.county as county, C.stateorprovince as stateorprovince, C.zip as zip, C.country as country, C.continent as continent, C.reference as reference
+from MapLocationAll C
+consolidate on C.reference
+using 'LeftToRight';
+
+-- create individual locations based on the definition of the standard datasets (i.e. do not merge "state, country" etc)
+create view LocationAll as
+	(select A.address as loc from MapLocation_ A where Not(MatchesRegex(//, A.address)))
+	union all
+	(select C.city as loc from MapLocation_ C where MatchesRegex(/.*\p{Lu}\p{M}*.+/, C.city))
+	union all
+	(select C.county as loc from MapLocation_ C where MatchesRegex(/.+/, C.county))
+	 union all
+	(select C.stateorprovince as loc from MapLocation_ C where Not(MatchesRegex(//, C.stateorprovince)))
+	union all
+	(select C.country as loc from MapLocation_ C where Not(MatchesRegex(//, C.country)))
+	 union all
+	(select C.continent as loc from MapLocation_ C where Not(MatchesRegex(//, C.continent)))
+	union all
+	(select C.match as loc from RegionValid  C where Not(MatchesRegex(//, C.match)))
+	union all
+	(select C.facility as loc from Facility C where Not(MatchesRegex(//, C.facility)))
+	union all
+	(select W.match as loc from WaterBody  W)
+	union all
+	(select L.* from PatternBasedLocation L where Not(ContainsRegex(/\n\n/,L.loc)));
+	
+create view LocationConsolidated as
+select C.loc as loc
+from LocationAll C
+consolidate on C.loc
+using 'LeftToRight';
+
+create view WrongLocation4 as
+select L.loc as loc
+from OrganizationConsolidated O,
+     LocationConsolidated L
+where Contains(O.organization, L.loc);
+
+create view WrongLocation6 as
+select L.match as loc
+from CapsPlaceOnetoTwo L,
+     The T,
+     CapsPlace C
+where FollowsTok(T.match, L.match, 0, 0)
+  and FollowsTok(L.match, C.match, 0, 0);
+  
+create view WrongLocation7 as
+select L.loc as loc
+from WrongLocationLeftClue LC,
+     LocationConsolidated L
+where FollowsTok(LC.clue, L.loc, 0, 0);
+
+create view WrongLocation8 as
+select L.*
+from WrongLocationRightClue RC,
+     LocationConsolidated L
+where FollowsTok(L.loc, RC.clue, 0, 0);  
+
+create view WrongLocation as
+	(select L.loc as loc from WrongLocation4 L)
+	union all
+	(select L.loc as loc from WrongLocation6 L)
+	union all
+	(select L.loc as loc from WrongLocation7 L)
+	union all
+	(select L.loc as loc from WrongLocation8 L);
+	
+------------------------------------------------------------
+-- Additional customization - extend with "City" and "State" 
+------------------------------------------------------------
+create view CityExtended as	
+select CombineSpans(C.loc, CR.match) as loc
+from
+	LocationConsolidated C, 
+	CityRightClue CR
+where FollowsTok(C.loc, CR.match, 0, 0)
+  and MatchesRegex(/\p{Lu}\p{M}*.*/, CR.match);
+
+
+create view LocationExtendedtoRight as	
+select CombineSpans(C.loc, S.match) as loc
+from
+	LocationConsolidated C, 
+	RightMergeableContext S
+where FollowsTok(C.loc, S.match, 0, 0)
+  and Not(ContainsRegex(/[\n\r\t]/, SpanBetween(C.loc, S.match)));
+
+
+create view LocationExtendedtoLeft as	
+select CombineSpans(S.clue, C.loc) as loc
+from
+	LocationConsolidated C, 
+	LeftMergeableContext S
+where FollowsTok(S.clue, C.loc, 0, 0)
+  and Not(ContainsRegex(/[\n\r\t]/, SpanBetween(S.clue, C.loc)));
+
+create view LocationExtended as
+	(select C.loc as loc from LocationConsolidated C)
+	union all
+	(select C.loc as loc from CityExtended C)
+	union all
+	(select C.loc as loc from LocationExtendedtoRight C)
+	union all
+	(select C.loc as loc from LocationExtendedtoLeft C)
+	union all
+	(select T.match as loc from TownConsolidated T);
+
+create view LocationExtendedConsolidated as
+select L.loc as loc
+from LocationExtended L
+consolidate on L.loc; 
+
+create view LocationExtendedValidAll as
+	(select C.* from LocationExtendedConsolidated C)
+	minus
+	(select C.* from WrongLocation C);
+
+create view LocationTokenCandidates as
+select CW.match as loc
+from (select L.loc as loc, toUpperCase(L.loc) as normLoc from LocationExtendedValidAll L) L,
+     (select CW.match as match, toUpperCase(CW.match) as normMatch from CapsPlaceOnetoTwo CW) CW
+where
+	Equals(GetText(L.normLoc), GetText(CW.normMatch))
+  and Not(MatchesRegex(/\s*\p{Lu}\p{M}*.*/,RightContextTok(CW.match,1)))
+  and Not(MatchesRegex(/\p{Lu}\p{M}*.*\s*/,LeftContextTok(CW.match,1)))
+  and Not(MatchesRegex(/\.\s+In/,CombineSpans(LeftContextTok(CW.match,1),CW.match)));
+
+create view LocationTokenCandidatesConsolidated as
+select L.loc as loc
+from LocationTokenCandidates L
+consolidate on L.loc;

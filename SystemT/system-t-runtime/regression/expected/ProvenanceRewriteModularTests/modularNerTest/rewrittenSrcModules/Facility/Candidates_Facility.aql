@@ -1,0 +1,234 @@
+module Facility;
+
+
+import dictionary FacilityNegativeCluesStrong from module Dictionaries as FacilityNegativeCluesStrong
+;
+
+
+import dictionary FacilityNegativeCluesTwo from module Dictionaries as FacilityNegativeCluesTwo
+;
+
+
+import view Nationalities from module CommonFeatures as Nationalities
+;
+
+
+create view CapsFacilityCandidate as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__111__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__111__TempOp__1 Op);
+
+output view CapsFacilityCandidate;
+
+create view FacilityFilter as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__112__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__112__TempOp__1 Op);
+
+output view FacilityFilter;
+
+create view CapsFacility as
+  select  Op.match as match,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__113__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__113__TempOp__1 Op,
+        __Minus__113__Temp __t
+  where Equals(Op.match, __t.match);
+
+output view CapsFacility;
+
+create view FacilityAll1 as
+  select  CombineSpans(C.match, F.match) as facility,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CapsFacility_____sep_____C____id,
+          F.__auto__id as FacilitySuffix_____sep_____F____id
+  from  CapsFacility C,
+        FacilitySuffix F
+  where FollowsTok(C.match, F.match, 0, 0)
+     and Not(ContainsDict('FacilityNegativeCluesStrong', C.match));
+
+output view FacilityAll1;
+
+create view FacilityAll2 as
+  select  C.match as facility,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CapsFacility_____sep_____C____id,
+          F.__auto__id as FacilitySuffixLowerCase_____sep_____F____id
+  from  CapsFacility C,
+        FacilitySuffixLowerCase F
+  where FollowsTok(C.match, F.match, 0, 0)
+     and Not(ContainsDict('FacilityNegativeCluesStrong', C.match));
+
+output view FacilityAll2;
+
+create view FacilityAll as
+  (select  Op.facility as facility,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__114__TempOp__0 Op)
+  union all
+  (select  Op.facility as facility,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__114__TempOp__1 Op);
+
+output view FacilityAll;
+
+create view FacilityInvalid as
+  select  F.facility as facility,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          F.__auto__id as FacilityAll_____sep_____F____id
+  from  FacilityAll F
+  where ContainsDict('FacilityNegativeCluesTwo', LeftContextTok(F.facility, 1));
+
+output view FacilityInvalid;
+
+create view FacilityValid as
+  select  Op.facility as facility,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__115__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__115__TempOp__1 Op,
+        __Minus__115__Temp __t
+  where Equals(Op.facility, __t.facility);
+
+output view FacilityValid;
+
+create view __Minus__113__Temp as
+  select  __t.match as match
+  from  
+    ((select  Op.match as match
+      from  __Minus__113__TempOp__1 Op)
+    minus
+    (select  Op.match as match
+      from  __Minus__113__TempOp__2 Op)
+    ) __t
+  group by __t.match;
+
+output view __Minus__113__Temp;
+
+create view __Minus__113__TempOp__1 as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CapsFacilityCandidate_____sep_____C____id
+  from  CapsFacilityCandidate C;
+
+output view __Minus__113__TempOp__1;
+
+create view __Minus__113__TempOp__2 as
+  select  F.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          F.__auto__id as FacilityFilter_____sep_____F____id
+  from  FacilityFilter F;
+
+output view __Minus__113__TempOp__2;
+
+create view __Minus__115__Temp as
+  select  __t.facility as facility
+  from  
+    ((select  Op.facility as facility
+      from  __Minus__115__TempOp__1 Op)
+    minus
+    (select  Op.facility as facility
+      from  __Minus__115__TempOp__2 Op)
+    ) __t
+  group by __t.facility;
+
+output view __Minus__115__Temp;
+
+create view __Minus__115__TempOp__1 as
+  select  F.facility as facility,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          F.__auto__id as FacilityAll_____sep_____F____id
+  from  FacilityAll F;
+
+output view __Minus__115__TempOp__1;
+
+create view __Minus__115__TempOp__2 as
+  select  F.facility as facility,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          F.__auto__id as FacilityInvalid_____sep_____F____id
+  from  FacilityInvalid F;
+
+output view __Minus__115__TempOp__2;
+
+create view __Union__111__TempOp__0 as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CapsFacilityCandidate1_____sep_____C____id
+  from  CapsFacilityCandidate1 C;
+
+output view __Union__111__TempOp__0;
+
+create view __Union__111__TempOp__1 as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CapsFacilityCandidate2_____sep_____C____id
+  from  CapsFacilityCandidate2 C;
+
+output view __Union__111__TempOp__1;
+
+create view __Union__112__TempOp__0 as
+  select  F.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          F.__auto__id as FacilityFilter1_____sep_____F____id
+  from  FacilityFilter1 F;
+
+output view __Union__112__TempOp__0;
+
+create view __Union__112__TempOp__1 as
+  select  N.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          N.__auto__id as Nationalities_____sep_____N____id
+  from  Nationalities N;
+
+output view __Union__112__TempOp__1;
+
+create view __Union__114__TempOp__0 as
+  select  F.facility as facility,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          F.__auto__id as FacilityAll1_____sep_____F____id
+  from  FacilityAll1 F;
+
+output view __Union__114__TempOp__0;
+
+create view __Union__114__TempOp__1 as
+  select  F.facility as facility,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          F.__auto__id as FacilityAll2_____sep_____F____id
+  from  FacilityAll2 F;
+
+output view __Union__114__TempOp__1;
+

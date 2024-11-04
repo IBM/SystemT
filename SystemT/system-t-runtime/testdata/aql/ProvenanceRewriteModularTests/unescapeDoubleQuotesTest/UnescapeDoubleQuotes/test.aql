@@ -1,0 +1,31 @@
+module UnescapeDoubleQuotes;
+ 
+-- Use a dictionary to extract instances of 'billing'
+create dictionary billingDict as ('billing', '\'billing\'');
+
+create view billing as
+  extract dictionary 'billingDict' on D.text as match
+from Document D;
+
+-- Use a dictionary to extract instances of 'newBilling'
+create dictionary newBillingDict as ('newBilling', '\'newBilling\'');
+
+create view newBilling as
+  extract dictionary 'newBillingDict' on D.text as match
+from Document D;
+
+-- Use a regex to extract the ="yes" or ="no"
+create view response as
+  extract regex /="(\w*)"/ on D.text
+    return group 1 as match
+from Document D;
+
+-- use a pattern to put together biling and newBilling and the corresponding response flags
+create view billingInfo as
+  extract pattern <B.match>'="'(<R1.match>)'"' <NB.match>'="'(<R2.match>)'"'
+    return group 0 as match and
+           group 1 as billing and
+           group 2 as newBilling
+from billing B, newBilling NB, response R1, response R2;
+
+output view billingInfo;

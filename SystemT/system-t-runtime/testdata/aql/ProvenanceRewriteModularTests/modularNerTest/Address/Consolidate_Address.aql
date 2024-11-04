@@ -1,0 +1,71 @@
+module Address;
+
+import view Dates from module Date as Dates;
+import view Times from module Time as Times;
+import view PhoneNumCons from module PhoneNumber as PhoneNumCons;
+
+
+create view GermanAddressAll as
+    select
+          GSA.match as streetaddress, GCZ.city as city, GCZ.zipcode as zipcode,CombineSpans(GSA.match, GCZ.match) as match
+    from
+        GermanCityZipcode GCZ,
+        GermanStreetAddress GSA
+     where
+        FollowsTok(GSA.match, GCZ.match, 0, 3)
+        and  MatchesRegex(/\W*([Gg]ermany|Deutsch\s*[Ll]and)?.{0,5}\W*/, SpanBetween(GSA.match, GCZ.match));
+        
+
+create view GermanAddress as
+select GAA.streetaddress as streetaddress, GAA.city as city, GAA.zipcode as zipcode, GAA.match as match
+from GermanAddressAll GAA;
+
+
+create view USAddressAll as
+  (select R.number as number, R.streetname as streetname, 
+           R.secondaryUnit as secondaryUnit, R.city as city, R.state as state, 
+           R.zipcode as zipcode, R.loc as loc
+    from USAddressWeakCandidatesRemoved R)
+    union all
+    (select R.number as number, R.streetname as streetname, 
+           R.secondaryUnit as secondaryUnit, R.city as city, R.state as state, 
+           R.zipcode as zipcode, R.loc as loc
+    from USAddressCandidateStrong R
+    );
+ 
+create view USAddress as
+select S.number as number, S.streetname as streetname, S.secondaryUnit as secondaryUnit, S.city as city, S.state as state, S.zipcode as zipcode, S.loc as loc
+from USAddressAll S
+consolidate on S.loc
+--using 'ContainsButNotEqual'
+;
+
+-- Laura 04/29/2009: changed name due to conflict with lotus notes post-processing
+--create view Address as
+create view AddressAll as
+(select CombineSpans(S.number,S.streetname) as address, S.city as city, S.state as stateorprovince, S.zipcode as zip, S.loc as loc from USAddress S)
+union all
+(select S.streetaddress as address, S.city as city, RightContext(S.city,0) as stateorprovince, S.zipcode as zip, S.match as loc from GermanAddress S);
+
+
+create view WrongAddress as
+(select A.address as address, A.city as city, A.stateorprovince as stateorprovince, A.zip as zip, A.loc as loc
+from   AddressAll A,
+	   Dates D 
+where Overlaps(D.match,A.loc))
+union all
+(select A.address as address, A.city as city, A.stateorprovince as stateorprovince, A.zip as zip, A.loc as loc
+from   AddressAll A,
+	   Times T 
+where Overlaps(T.match,A.loc))
+union all
+(select A.address as address, A.city as city, A.stateorprovince as stateorprovince, A.zip as zip, A.loc as loc
+from   AddressAll A,
+	   PhoneNumCons T 
+where Overlaps(T.num,A.loc));
+
+create view AddressFinal as
+	(select A.address as address, A.city as city, A.stateorprovince as stateorprovince, A.zip as zip, A.loc as reference from AddressAll A)
+	minus
+	(select WA.address as address, WA.city as city, WA.stateorprovince as stateorprovince, WA.zip as zip, WA.loc as reference from WrongAddress WA);
+

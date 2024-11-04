@@ -1,0 +1,216 @@
+module locatorTest;
+
+require document with columns text Text;
+
+-- Test of table functions with record locator arguments
+
+-- Declare a simple table function that "zips together" two input tables
+create function MyTableFunc( 
+    firstArg table( spanVal Span ) as locator,
+    secondArg table( spanVal Span, strVal Text ) as locator
+)
+return table( outSpan1 Span, outSpan2 Span, outStr Text)
+external_name 
+    -- Path relative to module root; udfjars is inside <project root>/testdata
+    '../../../../udfjars/tableFnTestsUDFs.jar:com.ibm.test.udfs.TableConsumingTableFunc!eval'
+language java
+deterministic
+called on null input;
+
+
+-- Declare a simple scalar function that turns two tables into a big string
+create function MyScalarFunc( 
+    firstArg table( spanVal Span ) as locator,
+    secondArg table( spanVal Span, strVal Text ) as locator
+)
+return String
+external_name 
+    -- Path relative to module root; udfjars is inside <project root>/testdata
+    '../../../../udfjars/tableFnTestsUDFs.jar:com.ibm.test.udfs.TableConsumingScalarFunc!eval'
+language java
+deterministic
+called on null input;
+
+
+-- Declare a scalar function that does a simple string search, using a dynamic
+-- table of strings
+create function StringSearchScalarFunc( 
+    target Span,
+    searchStrings table( str Span ) as locator
+)
+return Boolean
+external_name 
+    -- Path relative to module root; udfjars is inside <project root>/testdata
+    '../../../../udfjars/tableFnTestsUDFs.jar:com.ibm.test.udfs.StringSearchScalarFunc!eval'
+language java
+deterministic
+return null on null input;
+
+-- Declare a scalar function that can be used as a join predicate
+create function DoubleStringSearchScalarFunc( 
+    target1 Span,
+    target2 Span,
+    searchStrings table( str Span ) as locator
+)
+return Boolean
+external_name 
+    -- Path relative to module root; udfjars is inside <project root>/testdata
+    '../../../../udfjars/tableFnTestsUDFs.jar:com.ibm.test.udfs.DoubleStringSearchScalarFunc!eval'
+language java
+deterministic
+return null on null input;
+
+
+
+-- Declare the table function from the basic test
+create function MySimpleTableFunc( intArg Integer )
+return table( stringVal Text, realVal Float )
+external_name 
+    -- Path relative to module root; udfjars is inside <project root>/testdata
+    '../../../../udfjars/tableFnTestsUDFs.jar:com.ibm.test.udfs.BasicTableFunc!eval'
+language java
+deterministic
+called on null input;
+
+-- Create two views to serve as inputs to the table function.
+-- Note that column names don't match, but types do.
+create view FirstInputView as
+extract regex /\d+/ on 1 token in D.text as match
+from Document D;
+
+
+-- The first view is not output, because we want to make sure that inputs to
+-- table functions don't get compiled away.  Output a copy of the first input
+-- for verification purposes=.
+create view FirstInputViewCopy as
+extract regex /\d+/ on 1 token in D.text as match
+from Document D;
+
+output view FirstInputViewCopy;
+
+-- Create another copy to repeat the same test on the scalar function call 
+-- below.
+create view FirstScalarInputView as
+extract regex /\d+/ on 1 token in D.text as match
+from Document D;
+
+
+
+create view SecondInputView as
+select S.match as spanCol, 'Dummy string' as textCol
+from 
+    (extract regex /[A-Z][a-z]+/ on 1 token in D.text as match
+    from Document D) S;
+
+output view SecondInputView;
+
+create view TabFuncOutput as 
+select * from MyTableFunc(FirstInputView, SecondInputView);
+
+output view TabFuncOutput;
+
+-- Try selecting just two columns
+create view TabFuncOutput2 as 
+select T.outSpan1 as span1, T.outSpan2 as span2
+from MyTableFunc(FirstInputView, SecondInputView) T;
+
+output view TabFuncOutput2;
+
+-- Call the scalar function defined above from the select list.
+create view ScalarFuncOutput as 
+select MyScalarFunc(FirstScalarInputView, SecondInputView) as func
+from Document D;
+
+output view ScalarFuncOutput;
+
+-- Call the scalar function defined above indirectly from the select list.
+create view ScalarFuncOutput2 as 
+select ToLowerCase(MyScalarFunc(FirstScalarInputView, SecondInputView))
+    as lc
+from Document D;
+
+output view ScalarFuncOutput2;
+
+-- Input view for string lookup below
+create view CapsWord as 
+extract regex /[A-Z][a-z]+/ on 1 token in D.text as match
+    from Document D;
+
+-- Copy for validation.  We don't want to output CapsWord directly, since
+-- we need to make sure it isn't compiled out.
+create view CapsWordCopy as 
+extract regex /[A-Z][a-z]+/ on 1 token in D.text as match
+    from Document D;
+
+output view CapsWordCopy;
+
+
+-- Call a scalar function that uses both a locator argument and a column from
+-- each input tuple.
+create view StringSearchOutput as
+select D.text as text, 
+    StringSearchScalarFunc(D.text, CapsWord) as searchResult
+from Document D;
+
+output view StringSearchOutput;
+
+-- Call the scalar function as an argument to a table function
+create view TabFuncCallingScalar as
+select * 
+from MySimpleTableFunc(
+    -- Use a case expression to get around some problems with the
+    -- Text/String type that are currently being fixed.
+    case 
+        when 
+            Equals('hello world', 
+                MyScalarFunc(FirstScalarInputView, SecondInputView))
+        then 2
+        else 3
+) T;
+
+output view TabFuncCallingScalar;
+
+
+-- Call the scalar function from the where clause as the entire selection
+-- predicate
+create view ScalarSelect1 as
+select D.text
+from Document D
+where StringSearchScalarFunc(D.text, CapsWord);
+
+output view ScalarSelect1;
+
+-- Call the scalar function from the where clause as part of a selection
+-- predicate
+create view ScalarSelect2 as
+select D.text
+from Document D
+where Equals('hello world', MyScalarFunc(FirstScalarInputView,
+    SecondInputView));
+
+output view ScalarSelect2;
+
+-- Call the scalar function from the where clause as the join predicate
+create view ScalarJoin1 as
+select C1.match as match
+from CapsWord C1, CapsWord C2
+where DoubleStringSearchScalarFunc(C1.match, C2.match, CapsWord);
+
+output view ScalarJoin1;
+
+
+-- Call the scalar function from the where clause as part of the join 
+-- predicate
+create view ScalarJoin2 as
+select C1.match as match
+from CapsWord C1, CapsWord C2
+where 
+    Equals(
+        StringSearchScalarFunc(C1.match, CapsWord),
+        StringSearchScalarFunc(C2.match, CapsWord)
+    );
+
+output view ScalarJoin2;
+
+
+

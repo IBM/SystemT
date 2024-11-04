@@ -1,0 +1,22 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- urlRegexTest.aql
+--
+-- Test to see why a sub-part of one of the URL regexes produces more matches
+-- than the entire expression does.
+
+create view MainRegex as
+extract regex /(\w+[\w\-:&=_?\/~.<>@:]+\.(com|edu|org)\/[\w&_?~.<>@:][\w\-:&=_?\/~.<>@:]+[\w\-:&=_?\/~]{2,})/
+on between 1 and 20 tokens in D.text as match
+from Document D
+consolidate on match using 'LeftToRight';
+
+output view MainRegex;
+
+create view SubRegex0 as
+extract regex /\.(com|edu|org)\/[\w&_?~.<>@:](\w+|[\-:&=_?\/~.<>@:])/
+on between 1 and 100 tokens in D.text as match
+from Document D;
+
+output view SubRegex0;

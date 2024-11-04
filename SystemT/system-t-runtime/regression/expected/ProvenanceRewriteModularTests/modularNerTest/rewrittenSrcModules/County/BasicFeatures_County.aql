@@ -1,0 +1,57 @@
+module County;
+
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText
+;
+
+
+import dictionary CountyPositiveClues from module Dictionaries as CountyPositiveClues
+;
+
+
+import dictionary WorldCountries from module Dictionaries as WorldCountries
+;
+
+
+require document with columns
+  text Text;
+
+create view CountyClue as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__378__Temp_____sep_____D____id
+  from  __Subquery__378__Temp D;
+
+output view CountyClue;
+
+create view WeakCounty as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__379__Temp_____sep_____D____id
+  from  __Subquery__379__Temp D
+  where MatchesRegex(/\p{Lu}\p{M}*.+/, D.match);
+
+output view WeakCounty;
+
+create view __Subquery__378__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'CountyPositiveClues'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__378__Temp;
+
+create view __Subquery__379__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'WorldCountries'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__379__Temp;
+

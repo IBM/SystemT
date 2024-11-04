@@ -1,0 +1,831 @@
+-------------------------------------------------------------------------------
+-- adjacentFollwedByTokBug2.aql
+--
+-- Exhaustive test cases for defect 29471: Defect in AdjacentJoin with the FollowedByTok
+-- predicate. All these rules execute FollowsTok() predicates using the AdjacentJoin operator 
+-------------------------------------------------------------------------------
+--------------------------------------------------------
+-- EXHAUSTIVE TESTS WITH SPANS NOT ON TOKEN BOUNDARIES
+--------------------------------------------------------
+
+-- A single token
+create view OneToken as
+extract regex /.*/ on 1 token in D.text as match
+from Document D;
+
+-- Left context of 0 characters of a single token
+create view OneTokenLC_0 as
+select LeftContext(T.match,0) as match 
+from OneToken T;
+
+-- Right context of 0 characters of a single token
+create view OneTokenRC_0 as
+select RightContext(T.match,0) as match 
+from OneToken T;
+
+-- A single token with the immediately preceding character
+create view OneTokenExpandedLeftOneChar as
+select CombineSpans(LeftContext(T.match,1), T.match) as match
+from OneToken T;
+
+-- A single token with the immediately following character
+create view OneTokenExpandedRightOneChar as
+select CombineSpans( T.match, RightContext(T.match,1)) as match
+from OneToken T;
+
+-- A single token without the first character
+create view OneTokenContractedRightOneChar as
+select SpanBetween(RightContext(LeftContext(T.match,0),1), RightContext(T.match,0)) as match
+from OneToken T;
+
+-- The first character of a token
+create view OneTokenFirstChar as
+select RightContext(LeftContext(T.match,0),1) as match
+from OneToken T;
+
+-- The last character of a token
+create view OneTokenLastChar as
+select LeftContext(RightContext(T.match,0),1) as match
+from OneToken T;
+
+
+--------------------------------------------------------
+-- TEST FOR [AAA][ BBB]
+-- First span ends on token boundary, second span begins inbetween two tokens
+--------------------------------------------------------
+-- Combine a full token with one token expanded left
+create view Join0_Exactly_0 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneToken T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 0)
+order by T1.match, T2.match;
+  
+create view Join0_Exactly_1 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneToken T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 1, 1)
+order by T1.match, T2.match;
+  
+create view Join0_Exactly_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneToken T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 2, 2)
+order by T1.match, T2.match;
+  
+create view Join0_0_To_1 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneToken T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 1)
+order by T1.match, T2.match;
+  
+create view Join0_1_To_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneToken T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 1, 2)
+order by T1.match, T2.match;
+  
+create view Join0_0_To_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneToken T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 2)
+order by T1.match, T2.match;
+  
+create view Join0_2_To_4 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneToken T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 2, 4)
+order by T1.match, T2.match;
+  
+  
+--------------------------------------------------------
+-- TEST FOR [AAA] B[BB]
+-- First span ends on token boundary, second span begins in the middle of a token
+--------------------------------------------------------
+-- Combine a full token with one token contracted right
+create view Join1_Exactly_0 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneToken T1, OneTokenContractedRightOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 0)
+order by T1.match, T2.match;
+  
+create view Join1_Exactly_1 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneToken T1, OneTokenContractedRightOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 1, 1)
+order by T1.match, T2.match;
+  
+create view Join1_Exactly_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneToken T1, OneTokenContractedRightOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 2, 2)
+order by T1.match, T2.match;
+  
+create view Join1_0_To_1 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneToken T1, OneTokenContractedRightOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 1)
+order by T1.match, T2.match;
+  
+create view Join1_1_To_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneToken T1, OneTokenContractedRightOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 1, 2)
+order by T1.match, T2.match;
+  
+create view Join1_0_To_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneToken T1, OneTokenContractedRightOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 2)
+order by T1.match, T2.match;
+  
+create view Join1_2_To_4 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneToken T1, OneTokenContractedRightOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 2, 4)
+order by T1.match, T2.match;
+  
+  
+--------------------------------------------------------
+-- TEST FOR [AA]A [ BBB]
+-- First span ends in the middle of a token, second span begins inbetween two tokens
+-- Combine first char of one token with one token expanded left
+--------------------------------------------------------
+
+create view Join2_Exactly_0 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenFirstChar T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 0)
+order by T1.match, T2.match;
+  
+create view Join2_Exactly_1 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenFirstChar T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 1, 1)
+order by T1.match, T2.match;
+  
+create view Join2_Exactly_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenFirstChar T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 2, 2)
+order by T1.match, T2.match;
+  
+create view Join2_0_To_1 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenFirstChar T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 1)
+order by T1.match, T2.match;
+  
+create view Join2_1_To_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenFirstChar T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 1, 2)
+order by T1.match, T2.match;
+  
+create view Join2_0_To_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenFirstChar T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 2)
+order by T1.match, T2.match;
+  
+create view Join2_2_To_4 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenFirstChar T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 2, 4)
+order by T1.match, T2.match;
+  
+  
+--------------------------------------------------------
+-- TEST FOR [AA]A B[BB]
+-- First span ends in the middle of a token, second span begins in the middle of a token
+-- Combine a token's first character with one token contracted right
+--------------------------------------------------------
+
+create view Join3_Exactly_0 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenFirstChar T1, OneTokenContractedRightOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 0)
+order by T1.match, T2.match;
+  
+create view Join3_Exactly_1 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenFirstChar T1, OneTokenContractedRightOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 1, 1)
+order by T1.match, T2.match;
+  
+create view Join3_Exactly_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenFirstChar T1, OneTokenContractedRightOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 2, 2)
+order by T1.match, T2.match;
+  
+create view Join3_0_To_1 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenFirstChar T1, OneTokenContractedRightOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 1)
+order by T1.match, T2.match;
+  
+create view Join3_1_To_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenFirstChar T1, OneTokenContractedRightOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 1, 2)
+order by T1.match, T2.match;
+  
+create view Join3_0_To_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenFirstChar T1, OneTokenContractedRightOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 2)
+order by T1.match, T2.match;
+  
+create view Join3_2_To_4 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenFirstChar T1, OneTokenContractedRightOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 2, 4)
+order by T1.match, T2.match;
+  
+  
+--------------------------------------------------------
+-- TEST FOR [AA]A [BBB]
+-- First span ends in the middle of a token, second span begins at the begin of a token
+-- Combine a token's first character with one full token 
+--------------------------------------------------------
+create view Join4_Exactly_0 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenFirstChar T1, OneToken T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 0)
+order by T1.match, T2.match;
+  
+create view Join4_Exactly_1 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenFirstChar T1, OneToken T2
+where 
+  FollowsTok(T1.match, T2.match, 1, 1)
+order by T1.match, T2.match;
+  
+create view Join4_Exactly_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenFirstChar T1, OneToken T2
+where 
+  FollowsTok(T1.match, T2.match, 2, 2)
+order by T1.match, T2.match;
+  
+create view Join4_0_To_1 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenFirstChar T1, OneToken T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 1)
+order by T1.match, T2.match;
+  
+create view Join4_1_To_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenFirstChar T1, OneToken T2
+where 
+  FollowsTok(T1.match, T2.match, 1, 2)
+order by T1.match, T2.match;
+  
+create view Join4_0_To_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenFirstChar T1, OneToken T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 2)
+order by T1.match, T2.match;
+  
+create view Join4_2_To_4 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenFirstChar T1, OneToken T2
+where 
+  FollowsTok(T1.match, T2.match, 2, 4)
+order by T1.match, T2.match;
+  
+  
+--------------------------------------------------------
+-- TEST FOR [AAA ] [ BBB]
+-- First span ends in between two tokens, second span begins inbetween two tokens
+-- Combine one token expanded right with one token expanded left
+--------------------------------------------------------
+
+create view Join5_Exactly_0 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenExpandedRightOneChar T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 0)
+order by T1.match, T2.match;
+  
+create view Join5_Exactly_1 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenExpandedRightOneChar T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 1, 1)
+order by T1.match, T2.match;
+  
+create view Join5_Exactly_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenExpandedRightOneChar T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 2, 2)
+order by T1.match, T2.match;
+  
+create view Join5_0_To_1 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenExpandedRightOneChar T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 1)
+order by T1.match, T2.match;
+  
+create view Join5_1_To_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenExpandedRightOneChar T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 1, 2)
+order by T1.match, T2.match;
+  
+create view Join5_0_To_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenExpandedRightOneChar T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 2)
+order by T1.match, T2.match;
+  
+create view Join5_2_To_4 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenExpandedRightOneChar T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 2, 4)
+order by T1.match, T2.match;
+  
+  
+--------------------------------------------------------
+-- TEST FOR [AAA ] B[BB]
+-- First span ends in the middle of a token, second span begins in the middle of a token
+-- Combine one token expanded right with the right char of a token
+--------------------------------------------------------
+
+create view Join6_Exactly_0 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenExpandedRightOneChar T1, OneTokenLastChar T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 0)
+order by T1.match, T2.match;
+  
+create view Join6_Exactly_1 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenExpandedRightOneChar T1, OneTokenLastChar T2
+where 
+  FollowsTok(T1.match, T2.match, 1, 1)
+order by T1.match, T2.match;
+  
+create view Join6_Exactly_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenExpandedRightOneChar T1, OneTokenLastChar T2
+where 
+  FollowsTok(T1.match, T2.match, 2, 2)
+order by T1.match, T2.match;
+  
+create view Join6_0_To_1 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenExpandedRightOneChar T1, OneTokenLastChar T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 1)
+order by T1.match, T2.match;
+  
+create view Join6_1_To_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenExpandedRightOneChar T1, OneTokenLastChar T2
+where 
+  FollowsTok(T1.match, T2.match, 1, 2)
+order by T1.match, T2.match;
+  
+create view Join6_0_To_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenExpandedRightOneChar T1, OneTokenLastChar T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 2)
+order by T1.match, T2.match;
+  
+create view Join6_2_To_4 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenExpandedRightOneChar T1, OneTokenLastChar T2
+where 
+  FollowsTok(T1.match, T2.match, 2, 4)
+order by T1.match, T2.match;
+  
+  
+--------------------------------------------------------
+-- TEST FOR [AAA ] [BBB]
+-- First span ends in the middle of a token, second span begins at the begin of a token
+-- Combine one token expanded right with one full token
+--------------------------------------------------------
+create view Join7_Exactly_0 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenExpandedRightOneChar T1, OneToken T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 0)
+order by T1.match, T2.match;
+  
+create view Join7_Exactly_1 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenExpandedRightOneChar T1, OneToken T2
+where 
+  FollowsTok(T1.match, T2.match, 1, 1)
+order by T1.match, T2.match;
+  
+create view Join7_Exactly_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenExpandedRightOneChar T1, OneToken T2
+where 
+  FollowsTok(T1.match, T2.match, 2, 2)
+order by T1.match, T2.match;
+  
+create view Join7_0_To_1 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenExpandedRightOneChar T1, OneToken T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 1)
+order by T1.match, T2.match;
+  
+create view Join7_1_To_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenExpandedRightOneChar T1, OneToken T2
+where 
+  FollowsTok(T1.match, T2.match, 1, 2)
+order by T1.match, T2.match;
+  
+create view Join7_0_To_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenExpandedRightOneChar T1, OneToken T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 2)
+order by T1.match, T2.match;
+  
+create view Join7_2_To_4 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenExpandedRightOneChar T1, OneToken T2
+where 
+  FollowsTok(T1.match, T2.match, 2, 4)
+order by T1.match, T2.match;
+  
+  
+--------------------------------------------------------
+-- TEST FOR  [] AAA [ BBB]
+-- First span ends before the first token in the document, second span begins inbetween two tokens
+-- Combine one token left context of 0 with one token expanded left
+--------------------------------------------------------
+
+create view Join8_Exactly_0 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 0)
+order by T1.match, T2.match;
+  
+create view Join8_Exactly_1 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 1, 1)
+order by T1.match, T2.match;
+  
+create view Join8_Exactly_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 2, 2)
+order by T1.match, T2.match;
+  
+create view Join8_0_To_1 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 1)
+order by T1.match, T2.match;
+  
+create view Join8_1_To_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 1, 2)
+order by T1.match, T2.match;
+  
+create view Join8_0_To_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 2)
+order by T1.match, T2.match;
+  
+create view Join8_2_To_4 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneTokenExpandedLeftOneChar T2
+where 
+  FollowsTok(T1.match, T2.match, 2, 4)
+order by T1.match, T2.match;
+  
+  
+--------------------------------------------------------
+-- TEST FOR [] AAA B[BB]
+-- First span ends before the first token in the document, second span begins in the middle of a token
+-- Combine one token left context of 0 with the right char of a token
+--------------------------------------------------------
+
+create view Join9_Exactly_0 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneTokenLastChar T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 0)
+order by T1.match, T2.match;
+  
+create view Join9_Exactly_1 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneTokenLastChar T2
+where 
+  FollowsTok(T1.match, T2.match, 1, 1)
+order by T1.match, T2.match;
+  
+create view Join9_Exactly_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneTokenLastChar T2
+where 
+  FollowsTok(T1.match, T2.match, 2, 2)
+order by T1.match, T2.match;
+  
+create view Join9_0_To_1 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneTokenLastChar T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 1)
+order by T1.match, T2.match;
+  
+create view Join9_1_To_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneTokenLastChar T2
+where 
+  FollowsTok(T1.match, T2.match, 1, 2)
+order by T1.match, T2.match;
+  
+create view Join9_0_To_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneTokenLastChar T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 2)
+order by T1.match, T2.match;
+  
+create view Join9_2_To_4 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneTokenLastChar T2
+where 
+  FollowsTok(T1.match, T2.match, 2, 4)
+order by T1.match, T2.match;
+  
+  
+--------------------------------------------------------
+-- TEST FOR [] AAA [BBB]
+-- First span ends before the first token in the document, second span begins at the begin of a token
+-- Combine one token left context of 0 with one full token
+--------------------------------------------------------
+create view Join10_Exactly_0 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneToken T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 0)
+order by T1.match, T2.match;
+  
+create view Join10_Exactly_1 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneToken T2
+where 
+  FollowsTok(T1.match, T2.match, 1, 1)
+order by T1.match, T2.match;
+  
+create view Join10_Exactly_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneToken T2
+where 
+  FollowsTok(T1.match, T2.match, 2, 2)
+order by T1.match, T2.match;
+  
+create view Join10_0_To_1 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneToken T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 1)
+order by T1.match, T2.match;
+  
+create view Join10_1_To_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneToken T2
+where 
+  FollowsTok(T1.match, T2.match, 1, 2)
+order by T1.match, T2.match;
+  
+create view Join10_0_To_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneToken T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 2)
+order by T1.match, T2.match;
+  
+create view Join10_2_To_4 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneToken T2
+where 
+  FollowsTok(T1.match, T2.match, 2, 4)
+order by T1.match, T2.match;
+  
+--------------------------------------------------------
+-- TEST FOR [] AAA BBB []
+-- First span ends before the first token in the document, second span begins after the last token of the document
+-- Combine one token left context of 0 with one token right context of 0
+--------------------------------------------------------
+
+create view Join11_Exactly_0 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneTokenRC_0 T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 0)
+order by T1.match, T2.match;
+  
+create view Join11_Exactly_1 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneTokenRC_0 T2
+where 
+  FollowsTok(T1.match, T2.match, 1, 1)
+order by T1.match, T2.match;
+  
+create view Join11_Exactly_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneTokenRC_0 T2
+where 
+  FollowsTok(T1.match, T2.match, 2, 2)
+order by T1.match, T2.match;
+  
+create view Join11_0_To_1 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneTokenRC_0 T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 1)
+order by T1.match, T2.match;
+  
+create view Join11_1_To_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneTokenRC_0 T2
+where 
+  FollowsTok(T1.match, T2.match, 1, 2)
+order by T1.match, T2.match;
+  
+create view Join11_0_To_2 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneTokenRC_0 T2
+where 
+  FollowsTok(T1.match, T2.match, 0, 2)
+order by T1.match, T2.match;
+  
+create view Join11_2_To_4 as
+select T1.match as first, T2.match as second, CombineSpans(T1.match, T2.match) as match
+from OneTokenLC_0 T1, OneTokenRC_0 T2
+where 
+  FollowsTok(T1.match, T2.match, 2, 4)
+order by T1.match, T2.match;
+
+output view OneToken;
+output view OneTokenLC_0;
+output view OneTokenRC_0;
+output view OneTokenExpandedLeftOneChar;
+output view OneTokenExpandedRightOneChar;
+output view OneTokenContractedRightOneChar;
+output view OneTokenFirstChar;
+output view OneTokenLastChar;  
+  
+output view Join0_Exactly_0;
+output view Join0_Exactly_1;
+output view Join0_Exactly_2;
+output view Join0_0_To_1;
+output view Join0_1_To_2;
+output view Join0_0_To_2;
+output view Join0_2_To_4;
+
+
+output view Join1_Exactly_0;
+output view Join1_Exactly_1;
+output view Join1_Exactly_2;
+output view Join1_0_To_1;
+output view Join1_1_To_2;
+output view Join1_0_To_2;
+output view Join1_2_To_4;
+
+output view Join2_Exactly_0;
+output view Join2_Exactly_1;
+output view Join2_Exactly_2;
+output view Join2_0_To_1;
+output view Join2_1_To_2;
+output view Join2_0_To_2;
+output view Join2_2_To_4;
+
+
+output view Join3_Exactly_0;
+output view Join3_Exactly_1;
+output view Join3_Exactly_2;
+output view Join3_0_To_1;
+output view Join3_1_To_2;
+output view Join3_0_To_2;
+output view Join3_2_To_4;
+
+
+output view Join4_Exactly_0;
+output view Join4_Exactly_1;
+output view Join4_Exactly_2;
+output view Join4_0_To_1;
+output view Join4_1_To_2;
+output view Join4_0_To_2;
+output view Join4_2_To_4;
+
+
+output view Join5_Exactly_0;
+output view Join5_Exactly_1;
+output view Join5_Exactly_2;
+output view Join5_0_To_1;
+output view Join5_1_To_2;
+output view Join5_0_To_2;
+output view Join5_2_To_4;
+
+
+output view Join6_Exactly_0;
+output view Join6_Exactly_1;
+output view Join6_Exactly_2;
+output view Join6_0_To_1;
+output view Join6_1_To_2;
+output view Join6_0_To_2;
+output view Join6_2_To_4;
+
+
+output view Join7_Exactly_0;
+output view Join7_Exactly_1;
+output view Join7_Exactly_2;
+output view Join7_0_To_1;
+output view Join7_1_To_2;
+output view Join7_0_To_2;
+output view Join7_2_To_4;
+
+
+output view Join8_Exactly_0;
+output view Join8_Exactly_1;
+output view Join8_Exactly_2;
+output view Join8_0_To_1;
+output view Join8_1_To_2;
+output view Join8_0_To_2;
+output view Join8_2_To_4;
+
+
+output view Join9_Exactly_0;
+output view Join9_Exactly_1;
+output view Join9_Exactly_2;
+output view Join9_0_To_1;
+output view Join9_1_To_2;
+output view Join9_0_To_2;
+output view Join9_2_To_4;
+
+
+output view Join10_Exactly_0;
+output view Join10_Exactly_1;
+output view Join10_Exactly_2;
+output view Join10_0_To_1;
+output view Join10_1_To_2;
+output view Join10_0_To_2;
+output view Join10_2_To_4;
+
+
+output view Join11_Exactly_0;
+output view Join11_Exactly_1;
+output view Join11_Exactly_2;
+output view Join11_0_To_1;
+output view Join11_1_To_2;
+output view Join11_0_To_2;
+output view Join11_2_To_4;
+

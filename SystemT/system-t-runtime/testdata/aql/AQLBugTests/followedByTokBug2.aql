@@ -1,0 +1,92 @@
+-------------------------------------------------------------------------------
+-- followedByTokBug2.aql
+--
+-- Test case for bug in followedByTok()
+-------------------------------------------------------------------------------
+
+detag Document.text as Doc
+annotate
+element 'table' as TABLE;
+
+--Locates ending of a sentence
+create view Boundary as
+extract 
+        D.text as text,
+        regex /(?:(?:[\;\.\?!]+\s)|(\n\s*\n))/ on D.text as boundary 
+        from Doc D
+		-- Filter the candidate boundaries.
+		having Not(ContainsDict('dictionaries/abbreviations.dict', CombineSpans(LeftContextTok(boundary, 1), boundary)))
+;
+
+	
+------------------------------
+--Splitting on boundaries to get individual sentences
+------------------------------
+
+create view Sentences as
+extract 
+    split using B.boundary 
+        retain right split point
+        on B.text
+        as sentence
+from Boundary B;
+
+create dictionary StrongWords with case insensitive as 
+(
+'Sales by major product categories'
+);
+
+-----------------------------------
+--Sentences Start end positions
+create view StartnEndOfSentences as
+select
+GetBegin(S.sentence) as start,
+GetEnd(S.sentence) as end,
+S.sentence as sentence
+from Sentences S
+--Toggle this 
+where ContainsDict('StrongWords', S.sentence)
+;
+
+--output view StartnEndOfSentences;
+
+--Table start and end positions
+create view StartnEndOfTable as
+select
+GetBegin(T.match) as start,
+GetEnd(T.match) as end,
+T.match as thetable
+from TABLE T;
+
+--output view StartnEndOfTable;
+
+--Span between sentence and table
+create view BetweenSentenceNTable as
+select
+SpanBetween(S.sentence, T.match) as betweenSentencenTable
+from Sentences S, TABLE T
+where
+--Comment this to look for all sentences
+ContainsDict('StrongWords', S.sentence)
+;
+
+--output view BetweenSentenceNTable;
+
+
+-------------------------------
+--Extract table which lies after Sentences
+-------------------------------
+
+create view TableAfterSentences as
+select
+S.sentence as sentence,
+T.match as match
+from TABLE T, Sentences S
+where
+FollowsTok(S.sentence, Chomp(T.match),0,22)
+--Comment this to look for all sentences
+and ContainsDict('StrongWords', S.sentence)
+consolidate on T.match
+;
+
+output view TableAfterSentences;

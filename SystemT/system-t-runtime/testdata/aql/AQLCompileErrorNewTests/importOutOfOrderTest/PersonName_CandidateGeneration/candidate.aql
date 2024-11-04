@@ -1,0 +1,36 @@
+-------------------------------------------------------------------------------
+--
+-- Test case for validating that import statements in main AQL body throw exceptions
+--
+-------------------------------------------------------------------------------
+
+module PersonName_CandidateGeneration;
+
+--import module PersonName_BasicFeatures;
+    
+import view FirstName from module PersonName_BasicFeatures as FirstName;
+
+
+create view FirstLast as 
+select CombineSpans(FN.first, LN.last) as name
+from FirstName FN, LastName LN
+where FollowsTok(FN.first, LN.last, 0, 0);
+
+-- This should throw exception
+import view FirstName from module PersonName_BasicFeatures as FirstName1;
+
+output view FirstLast;
+
+export view FirstLast;
+
+-- This should also throw exception
+import view LastName from module PersonName_BasicFeatures as LastName;
+
+create view Person as
+    (select P.first as person from FirstName1 P)
+    union all
+    (select P.last as person from LastName P)
+    union all
+    (select P.name as person from FirstLast P);
+    
+    export view Person;

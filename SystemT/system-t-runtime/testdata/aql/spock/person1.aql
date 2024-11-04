@@ -1,0 +1,18 @@
+-- Find firsts names, using a dictionary.
+create view FirstName as 
+select D.match as first
+from Dictionary("spock/strictfirst.dict", DocScan.text) D
+where MatchesRegex(/[A-Z][a-z]*/, D.match);
+
+-- Find last names, using a dictionary.
+create view LastName as 
+select D.match as last
+from Dictionary("spock/strictlast.dict", DocScan.text) D
+where MatchesRegex(/[A-Z][a-z]*/, D.match);
+
+-- Find complete names 
+select FN.first as first, LN.last as last, CombineSpans(FN.first, LN.last) as name
+into Person
+from FirstName FN, LastName LN
+where FollowsTok(FN.first, LN.last,0,0);
+

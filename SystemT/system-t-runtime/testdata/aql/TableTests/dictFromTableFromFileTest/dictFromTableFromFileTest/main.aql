@@ -1,0 +1,17 @@
+module dictFromTableFromFileTest;
+
+create table MyTable (textVal Text, booleanVal Boolean)
+	from file 'sampleTable.csv';
+
+create dictionary TableDict
+	from table MyTable
+	with entries from textVal
+		and language as 'en'
+		and case insensitive;	
+
+create view DictFromTable as
+	extract dictionary 'TableDict' on D.text as match 
+	from Document D;
+
+
+output view DictFromTable;

@@ -1,0 +1,113 @@
+require document with columns text Text;
+
+-- Test case for incorrect regex match on detagged text containing "&"
+
+
+detag Document.text into Doc
+annotate 
+	element 'title' as Title,
+	element 'body' as Body,
+	element 'li' as ListItem,
+	element 'br' as BR;
+
+
+create view Semicolon as
+extract regex 
+	/;/
+on D.text as name
+from Doc D;
+
+output view Semicolon;
+
+
+-- ================ Detect short headlines =====================
+
+
+-- the titles and short announcements are treated as short text. 
+-- a plain text document less than 200 characters, is also treated as short text
+create view ShortTextTemp as
+select T.match as text
+from
+(
+	( select T.match as match from Title T )
+	union all
+	( select L.match as match from ListItem L )
+--	union all
+--	( select L.item as match from ShortAnnouncementListItem L );
+	union all
+	( select D.text as match from Doc D where GreaterThan(200, GetLength(D.text)))
+) T
+consolidate on T.match using 'NotContainedWithin';
+
+
+--HACK: remove the between the first '-' in the StreetInsider.com title
+create view ShortText as
+(
+	select Chomp(T.match) as match
+	from 
+		(	
+		extract regex /\A[^-]*-(.+)/ 
+			on T.text
+			return 
+				group 1 as match
+		from ShortTextTemp T
+		) T
+)
+union all
+(
+	select T.text as match
+	from ShortTextTemp T
+	where Not(ContainsRegex(/\A[^-]*-/, T.text))
+);
+
+
+
+
+
+--Find company names based on financial event clues in short text
+--extract company clues related to financial events
+
+create dictionary eventclue as(
+	'merger with'
+);
+
+
+create view EventClue as
+select E.clue as clue, RightContext(E.clue, 60) as rc
+from
+(
+	extract dictionary 'eventclue'
+	on D.text as clue
+	from Doc D
+) E
+consolidate on E.clue;
+
+
+create view EventClueShort as
+select E.clue as clue, 
+       --get only the context within the short text
+       CombineSpans(RightContext(E.clue,0), RightContext(A.match,0)) as rc
+from EventClue E, ShortText A
+where Contains(A.match, E.clue);
+
+ 
+-- look for patterns of the form "to acquire/buy [comp-name]"
+create view CompanyInfoWeakNoTickerShortTemp2 as
+select RightContext(CW.companyname,0) as exchange, RightContext(CW.companyname,0) as ticker, CW.companyname as companyname, CW.companyname as match
+from
+(
+  extract 
+	regex
+	--/\A[ ]*(\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|-)+([ ]*\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|-)+)*)[ ]*(\.)?[ ]*\z/ and
+    --        /\A[ ]*(\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|-)+([ ]*\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|-)+)*)[ ]*;/
+    /;/ --'
+on E.rc 
+  --regex /\A[ ]*(\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|-)+([ ]*\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|-)+)*)[ ]*(\.|;)?[ ]*\z/ on E.rc 
+    	as companyname
+  from EventClueShort E
+) CW;
+
+
+output view ShortText;
+output view EventClueShort;
+output view CompanyInfoWeakNoTickerShortTemp2;

@@ -1,0 +1,21 @@
+module whitehouse;
+
+require document with columns
+  id Integer
+  and label Text
+  and text Text
+  and url Text
+  and timeStamp Text;
+
+/**
+* Comment for external view EmailMetadata
+*/  
+create external view EmailMetadata(fromAddress Text, toAddress Text, msgid Integer)  
+-- comment the above line and uncomment this once Spans are supported in JSON input - eyhung
+--create external view EmailMetadata(fromAddress Span, toAddress Text, msgid Integer) 
+external_name 'EmailMetadataSrc'; 
+ 
+create view Recipient as
+select em.toAddress from EmailMetadata em;
+
+output view Recipient;

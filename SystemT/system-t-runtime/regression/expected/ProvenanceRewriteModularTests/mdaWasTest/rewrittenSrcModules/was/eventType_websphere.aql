@@ -1,0 +1,62 @@
+module was;
+
+
+create view EventType_sysoutErr_base as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /[FEWAICDORZ\>\<123]{1}/
+    with flags 'DOTALL'
+    on between 1 and 1 tokens in D.text
+    return group 0 as match
+  from Document D;
+
+output view EventType_sysoutErr_base;
+
+create view EventType_sysoutErr_interim as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as EventType_sysoutErr_base_____sep_____C____id
+  from  EventType_sysoutErr_base C
+  where MatchesRegex(/\s/, LeftContext(C.match, 1))
+     and MatchesRegex(/\s/, RightContext(C.match, 1));
+
+output view EventType_sysoutErr_interim;
+
+create view EventType_sysoutErr as
+  select  eventTypeI.match as eventType,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          shortnameF.__auto__id as Shortname_____sep_____shortnameF____id,
+          eventTypeI.__auto__id as EventType_sysoutErr_interim_____sep_____eventTypeI____id
+  from  Shortname shortnameF,
+        EventType_sysoutErr_interim eventTypeI
+  where FollowsTok(shortnameF.shortname, eventTypeI.match, 0, 0);
+
+output view EventType_sysoutErr;
+
+create view EventTypeSysoutErrOutputInterim as
+  select  D.eventType as eventType_Span,
+          GetText(D.eventType) as eventType_Text,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as EventType_sysoutErr_____sep_____D____id
+  from  EventType_sysoutErr D;
+
+output view EventTypeSysoutErrOutputInterim;
+
+create view EventTypeOutput as
+  select  D.eventType_Span as span,
+          D.eventType_Text as text,
+          GetString('EventTypeWS') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as EventTypeSysoutErrOutputInterim_____sep_____D____id
+  from  EventTypeSysoutErrOutputInterim D;
+
+output view EventTypeOutput;
+
+export view was.EventTypeOutput;
+
+

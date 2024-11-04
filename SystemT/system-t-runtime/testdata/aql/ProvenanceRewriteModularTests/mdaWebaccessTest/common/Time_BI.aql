@@ -1,0 +1,219 @@
+module common;
+
+-- ========================================================================
+-- Time
+-- ========================================================================
+/*
+//CHECKED: This rule will handle time intervals such as  10-11 Sat
+<rule annotation=Time id=1>
+<internal>
+<token attribute={etc}>TWODIGITSINTERVAL</token>
+<token attribute={etc}PRD:WKDAY{etc}>ANYWORD</token>
+</internal>
+</rule>
+*/
+create view Time1 as
+select 
+	CombineSpans(td.match, wkd.match) as match
+from 
+	TwoDigitsInterval td,
+	WKDay wkd
+where 
+	FollowsTok(td.match, wkd.match, 0, 0);
+
+/*
+//CHECKED: This rule will handle time intervals such as  Sat 10-11
+<rule annotation=Time id=2>
+<internal>
+<token attribute={etc}PRD:WKDAY{etc}>ANYWORD</token>
+<token attribute={etc}>TWODIGITSINTERVAL</token>
+</internal>
+</rule>
+*/
+create view Time2 as
+select 
+	CombineSpans(wkd.match, td.match) as match
+from 
+	TwoDigitsInterval td,
+	WKDay wkd
+where 
+	FollowsTok(wkd.match, td.match, 0, 0);
+	
+create view Time2Plus as
+select 
+	CombineSpans(t.match, tz.match) as match
+from 
+	Time2 t,
+	TimeZone tz
+where 
+	FollowsTok(t.match, tz.match, 0, 0);
+
+/*
+This rule will handle times of the form : 9:00 
+<rule annotation=Time id=4>
+<internal>
+<token attribute={etc}>\d{1,2}\\:\d{2}(\\:\d{2})?</token>
+</internal>
+</rule>
+*/
+-- also match 7-9PM
+create view Time4 as
+select 
+	R.match as match
+from 
+	Regex(/((2[0-3]|[0-1][0-9]|[0-9]):([0-5][0-9])(:\d{2}((\.|,|:)\d{3})*)?)/,
+        Document.text) R;
+
+
+-- BEGIN CHANGE BY FRED:
+-- The following views were completely undocumented when I found them at the
+-- top of my AQL profiling results.  They appear to identify matches of Time4
+-- that are followed by a time zone, and optionally by a year (?).
+-- The rules as originally written were impacting performance noticeably, 
+-- because they used regular expressions that match the empty string.
+
+-- OLD, BROKEN AQL RULES:	
+--create view Time4Follows1 as
+--select 
+--	CombineSpans(t4.match, p.match) as match
+--from 
+--	Time4 t4,
+--	Regex(/(\s|\(|\s)?/, Document.text) p
+--where 
+--	Follows(t4.match, p.match, 0, 0);	
+--
+--create view Time4Follows2 as
+--select 
+--	CombineSpans(t4f1.match, tz.match) as match
+--from 
+--	Time4Follows1 t4f1,
+--	TimeZone tz
+--where 
+--	Follows(t4f1.match, tz.match, 0, 0);	
+--
+--create view Time4Follows3 as
+--select 
+--	CombineSpans(t4f2.match, n.match) as match
+--from 
+--	Time4Follows2 t4f2,
+-- Regex(/(\s|\)|\s)?([+-](?:2[0-3]|[01]?[0-9])(?::?(?:[0-5]?[0-9])))?\s?([0-9]{4})*\)?/, Document.text) n
+--where 
+--	Follows(t4f2.match, n.match, 0, 0);	
+
+
+-- NEW REPLACEMENT RULES:
+
+-- The rule Time4Follows3 above contains a mystery regex, 
+-- /(\s|\)|\s)?([+-](?:2[0-3]|[01]?[0-9])(?::?(?:[0-5]?[0-9])))?\s?([0-9]{4})*\)?/.
+-- The author of this regex didn't document what it is supposed to match,
+-- so I'm just copying it verbatim (in pieces) and hoping for the best.
+-- TODO: FIGURE OUT WHAT THIS REGEX IS SUPPOSED TO DO, document it properly,
+--       and make sure that it actually does what it's supposed to do.
+create view MysteryRegex_part1 as
+extract regex /([+-](?:2[0-3]|[01]?[0-9])(?::?(?:[0-5]?[0-9])))/
+	on D.text as match
+from Document D;
+
+create view MysteryRegex_part2 as
+extract regex /([0-9]{4})+/
+	on D.text as match
+from Document D; 
+
+-- TODO: This rule currently has a lot of "?"'s in it, because I 
+-- duplicated the semantics of the original mystery regex.  Try
+-- and rewrite this rule without so many optional parts.
+create view Time4Follows3 as
+extract pattern
+	<T.match> '('? <TZ.match> ')'? <M1.match>? <M2.match>?
+	return group 0 as match
+from Time4 T, TimeZone TZ, MysteryRegex_part1 M1, MysteryRegex_part2 M2
+consolidate on match;
+
+-- END CHANGE BY FRED
+
+--- for webaccess logs: Mon Jun 11 00:00:00 2012 -----
+	
+create view YearFollowsTime4 as
+select 
+	CombineSpans(t4.match, year.match) as match
+from 
+	Time4 t4,
+	FourDigits year
+where 
+	Follows(t4.match, year.match, 0, 1);
+	
+		
+/*
+//CHECKED: This rule will handle times according to a watch: 9:00 A.M, 9 AM, 9:00 PM
+<rule annotation=Time id=3>
+<internal>
+<token attribute={etc}>[0-9\\:\\.]+</token>
+<token attribute={etc}TIMEZONE{etc}>ANYWORD</token>
+</internal>
+</rule>
+*/
+
+
+create view TimeOptMsTz as
+extract 
+regex
+/(2[0-3]|[0-1][0-9]|[0-9]):([0-5][0-9]):([0-5][0-9])([\.\:][0-9]+)?(Z|[+-](?:2[0-3]|[0-1][0-9]):[0-5][0-9])?/
+	on D.text as match
+from Document D;
+
+	
+create view TimeOptMsTz_a as
+extract 
+regex
+/:(2[0-3]|[0-1][0-9]|[0-9]):([0-5][0-9]):([0-5][0-9])([\.\:][0-9]+)?(Z|[+-](?:2[0-3]|[0-1][0-9]):[0-5][0-9])?/
+	on D.text as match
+from Document D;
+
+
+create view TimeOptMsTz_b as
+extract 
+regex
+/((:)((2[0-3]|[0-1][0-9]|[0-9]):([0-5][0-9]):([0-5][0-9])([\.\:]([0-9]+))?([ ]Z|[ ][+-](?:2[0-3]|[0-1][0-9])[0-5][0-9])?))/
+	on D.text as match
+from Document D;
+---- for webaccess logs time 11/Jun/2012:00:00:00 +0540 --
+create view TimeOptMsTz_c as
+extract 
+regex
+/((:)\d{2}(:)\d{2}(:)\d{2}( )(\+|-)\d{4})/
+	on D.text as match
+from Document D;
+		
+------------------------------------------------------------
+-- Union all Times
+------------------------------------------------------------
+create view TimeAll as
+	(select t.match as match from Time1 t)
+	union all
+	(select t.match as match from Time2 t)
+	union all
+	(select t.match as match from Time2Plus t)
+	union all
+	(select t.match as match from Time4 t)
+	union all
+	(select t.match as match from Time4Follows3 t)
+	union all
+	(select t.match as match from TimeOptMsTz t) 
+	union all
+	(select t.match as match from YearFollowsTime4 t);
+
+------------------------------------------------------------
+-- Consolidate all Times
+------------------------------------------------------------
+create view Times as
+select R.match as match
+from TimeAll R
+consolidate on R.match;
+
+create view TimeOutput as
+select R.match as span,  GetText(R.match) as text, GetString('Time') as field_type
+from Times R
+consolidate on R.match;
+
+export view TimeOutput;
+

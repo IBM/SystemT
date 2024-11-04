@@ -1,0 +1,36 @@
+-------------------------------------------------------------------------------
+-- caseTypeInferenceBug.aql
+--
+-- Test case for Defect #20573: SystemT runtime code infers an incorrect 
+-- return datatype for case expression when used in select stmt .
+------------------------------------------------------------------------------
+require document with columns text Text;
+
+create dictionary AuxVerbDict as
+('is', 'are');
+
+create view AuxVerb as
+extract dictionary AuxVerbDict on D.text as verb
+from Document D;
+
+create view AuxVerb1 as
+select A.*,
+	case 
+	 when Equals(GetString(A.verb), GetString('is'))  
+	  then GetString('true')
+	else GetString('false')
+	as passive
+from  AuxVerb A;
+  
+create view AuxVerb2 as
+select A.*, GetString('false') as passive 
+from AuxVerb A;
+
+create view AuxVerbTest as
+	(select P.* from AuxVerb1 P)
+	union all
+	(select P.* from AuxVerb2 P);
+
+output view AuxVerbTest;
+
+ 

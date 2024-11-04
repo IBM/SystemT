@@ -1,0 +1,77 @@
+###############################################################################
+#adjacent.aog
+#
+# ("aog" stands for Avatar Operator Graph.)
+#
+# Test of special token distance join/selection predicates for a token distance
+# of zero, and the accompanying join operator, AdjacentJoin.  Looks for "first
+# names" followed immediately by "last names". 
+###############################################################################
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+CreateDict(
+    "name" => "dictionaries/first.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+CreateDict(
+    "name" => "dictionaries/last.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+# Find potential first names.
+$FirstName = 
+Project(( "match" => "first" ), 
+	Dictionary("dictionaries/first.dict", "text", $Document));
+
+# Find potential last names.
+$LastName = 
+Project(( "match" => "last" ), 
+	Dictionary("dictionaries/last.dict", "text", $Document));
+	
+# As a baseline, use a sort-merge join with $FirstName as the outer.
+$MergeFollowsTok =
+ApplyFunc(CombineSpans(GetCol("first"), GetCol("last")) => "Combined", 
+	SortMergeJoin(FollowsTok(GetCol("first"), GetCol("last"), 
+			IntConst(0), IntConst(0)), $FirstName, $LastName)
+);
+
+# Second baseline: Sort-merge join with $LastName as the outer.
+$MergeFollowedByTok =
+ApplyFunc(CombineSpans(GetCol("first"), GetCol("last")) => "Combined", 
+	SortMergeJoin(FollowedByTok(GetCol("last"), GetCol("first"), 
+			IntConst(0), IntConst(0)), $LastName, $FirstName)
+);
+
+$AdjacentFollowsTok =
+ApplyFunc(CombineSpans(GetCol("first"), GetCol("last")) => "Combined", 
+	AdjacentJoin(FollowsTok(GetCol("first"), GetCol("last"), 
+			IntConst(0), IntConst(0)), $FirstName, $LastName)
+);
+
+# Second baseline: Sort-merge join with $LastName as the outer.
+$AdjacentFollowedByTok =
+ApplyFunc(CombineSpans(GetCol("first"), GetCol("last")) => "Combined", 
+	AdjacentJoin(FollowedByTok(GetCol("last"), GetCol("first"), 
+			IntConst(0), IntConst(0)), $LastName, $FirstName)
+);
+
+
+################################################################################
+# OUTPUT SPEC
+Output: 
+#    $FirstName, $LastName,
+    $MergeFollowsTok, 
+    $MergeFollowedByTok, 
+    $AdjacentFollowsTok,
+    $AdjacentFollowedByTok
+;
+

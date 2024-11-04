@@ -1,0 +1,999 @@
+module OrganizationCandidates;
+
+
+require document with columns
+  text Text;
+
+create view OrgGovSuffix as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'SuffixesForGovernmentOrganizations'
+    with flags 'Exact'
+    on D.text as match
+  from DocumentText D;
+
+output view OrgGovSuffix;
+
+create view OrgGovPrefix as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'PrefixesForGovernmentOrganizations'
+    with flags 'Exact'
+    on D.text as match
+  from DocumentText D;
+
+output view OrgGovPrefix;
+
+
+
+create view OrgMediaSuffix as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'SuffixesForMediaAndEntertainmentOrganizations'
+    with flags 'Exact'
+    on D.text as match
+  from DocumentText D;
+
+output view OrgMediaSuffix;
+
+create view OrgClueStIndCaps as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__166__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__166__TempOp__1 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__166__TempOp__2 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__166__TempOp__3 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__166__TempOp__4 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__166__TempOp__5 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__166__TempOp__6 Op);
+
+output view OrgClueStIndCaps;
+
+create view OrgClueStIndPrefixCaps as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__172__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__172__TempOp__1 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__172__TempOp__2 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__172__TempOp__3 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__172__TempOp__4 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__172__TempOp__5 Op);
+
+output view OrgClueStIndPrefixCaps;
+
+create view OrgFullCase1 as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionaries 'WorldGovernmentOrganizations'
+                   and 'UniversitiesInUSA'
+    on D.text as match
+  from DocumentText D
+  having MatchesRegex(/\p{Lu}\p{M}*.+/, match);
+
+output view OrgFullCase1;
+
+create view OrgFullCase2 as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionaries 'WorldCommercialOrganizationsAbbreviations'
+                   and 'WorldCommercialOrganizationsAbbreviationsAndExpanded'
+                   and 'WorldGovernmentOrganizationsAbbreviations'
+                   and 'MediaAndEntertainmentOrganizations'
+                   and 'NewspaperOrganizations'
+    with flags 'Exact'
+    on D.text as match
+  from DocumentText D;
+
+output view OrgFullCase2;
+
+create view OrganizationFortune1000_2000_2008_Case as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__178__Temp_____sep_____D____id
+  from  __Subquery__178__Temp D;
+
+output view OrganizationFortune1000_2000_2008_Case;
+
+create view OrganizationFortune1000_2000_2008 as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'PopularWorldOrganizationsAbbreviationsAndExpandedLong'
+    on D.text as match
+  from DocumentText D
+  having MatchesRegex(/[\p{Lu}\p{M}*\d].+/, match);
+
+output view OrganizationFortune1000_2000_2008;
+
+create view OrganizationFortune1000_2000_2008_NoCase as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'PopularWorldOrganizations'
+    on D.text as match
+  from DocumentText D;
+
+output view OrganizationFortune1000_2000_2008_NoCase;
+
+create view OrgFullNoCase as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__179__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__179__TempOp__1 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__179__TempOp__2 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__179__TempOp__3 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__179__TempOp__4 Op);
+
+output view OrgFullNoCase;
+
+create view StockEx as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'TypesOfFinancialExchanges'
+    on D.text as match
+  from DocumentText D
+  having MatchesRegex(/\p{Lu}\p{M}*.+/, SubSpanTok(match, 0, 1));
+
+output view StockEx;
+
+create view OrgConj as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__183__Temp_____sep_____D____id
+  from  __Subquery__183__Temp D;
+
+output view OrgConj;
+
+create view OrgPrep as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__184__Temp_____sep_____D____id
+  from  __Subquery__184__Temp D;
+
+output view OrgPrep;
+
+create view CapsOrg as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__185__Temp_____sep_____R____id
+  from  __Subquery__185__Temp R;
+
+output view CapsOrg;
+
+create view AllCapsOrg as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__186__Temp_____sep_____R____id
+  from  __Subquery__186__Temp R;
+
+output view AllCapsOrg;
+
+create view AnyCapsOrg as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__187__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__187__TempOp__1 Op);
+
+output view AnyCapsOrg;
+
+create view OrgToAvoid as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__188__Temp_____sep_____D____id
+  from  __Subquery__188__Temp D;
+
+output view OrgToAvoid;
+
+create view DotComAnchor as
+  select  D.match as anchor,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__189__Temp_____sep_____D____id
+  from  __Subquery__189__Temp D;
+
+output view DotComAnchor;
+
+
+
+create view DotComLC as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__190__Temp_____sep_____R____id
+  from  __Subquery__190__Temp R
+  where Not(MatchesRegex(/[\.@]/, LeftContextTok(R.match, 1)));
+
+output view DotComLC;
+
+create view OrgCluePartnershipSuffix as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__191__Temp_____sep_____D____id
+  from  __Subquery__191__Temp D;
+
+output view OrgCluePartnershipSuffix;
+
+create view OrgClueStSuffixCapsCand as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__192__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__192__TempOp__1 Op);
+
+output view OrgClueStSuffixCapsCand;
+
+create view OrgClueStSuffixAuxCaps as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__194__Temp_____sep_____D____id
+  from  __Subquery__194__Temp D
+  where MatchesRegex(/\p{Lu}\p{M}*.*/, D.match);
+
+output view OrgClueStSuffixAuxCaps;
+
+create view OrgClueStIndSuffixWeakCaps as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__195__Temp_____sep_____D____id
+  from  __Subquery__195__Temp D
+  where MatchesRegex(/\p{Lu}\p{M}*.*/, D.match);
+
+output view OrgClueStIndSuffixWeakCaps;
+
+create view OrgNewspaper as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionaries 'PopularGlobalNewspapersByCirculation'
+                   and 'PopularNationalNewspapersByCirculation'
+                   and 'PopularUSANewspapersByCirculation'
+    on D.text as match
+  from DocumentText D
+  having MatchesRegex(/(al-)?\p{Lu}\p{M}*.+/, match);
+
+output view OrgNewspaper;
+
+create view OrgSportsGeneralCase as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'WorldSportsAssociationsAbbreviations'
+    with flags 'Exact'
+    on D.text as match
+  from DocumentText D;
+
+output view OrgSportsGeneralCase;
+
+create view OrgSportsGeneral as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'WorldSportsAssociations'
+    on D.text as match
+  from DocumentText D
+  having MatchesRegex(/\p{Lu}\p{M}*.*/, match);
+
+output view OrgSportsGeneral;
+
+create view OrgPublisher as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'WorldPublishingHouses'
+    on D.text as match
+  from DocumentText D
+  having MatchesRegex(/\p{Lu}\p{M}*.+/, match);
+
+output view OrgPublisher;
+
+create view OrgAirline as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'WorldAirlineOrganizations'
+    with flags 'Exact'
+    on D.text as match
+  from DocumentText D;
+
+output view OrgAirline;
+
+create view OrgTerrorist as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'WorldTerroristOrganizations'
+    on D.text as match
+  from DocumentText D
+  having MatchesRegex(/(al[ -]?)?\p{Lu}\p{M}*.+/, match);
+
+output view OrgTerrorist;
+
+create view OrgIslamicMovement as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionaries 'WorldIslamicFundamentalists'
+                   and 'WorldParamilitaryOrganizations'
+    with flags 'Exact'
+    on D.text as match
+  from DocumentText D;
+
+output view OrgIslamicMovement;
+
+create view OrgNewsAgency as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'WorldNewsAgencies'
+    with flags 'Exact'
+    on D.text as match
+  from DocumentText D;
+
+output view OrgNewsAgency;
+
+create view OrgPoliticalParty as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'WorldPoliticalOrganizations'
+    on D.text as match
+  from DocumentText D
+  having MatchesRegex(/\p{Lu}\p{M}*.+/, match);
+
+output view OrgPoliticalParty;
+
+create view OrgByCountry as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionaries 'CommercialOrganizationsInRussiaAbbreviationsAndExpanded'
+                   and 'BanksInRussiaAbbreviationsAndExpanded'
+                   and 'CommercialOrganizationsInSpainAbbreviationsAndExpanded'
+                   and 'BanksInSpain'
+                   and 'CommercialOrganizationsInHongKong'
+                   and 'CommercialOrganizationsInChinaAbbreviationsAndExpanded'
+                   and 'CommercialOrganizationsInSouthKorea'
+                   and 'CommercialOrganizationsInJapanAbbreviationsAndExpanded'
+    on D.text as match
+  from DocumentText D
+  having MatchesRegex(/\p{Lu}\p{M}*.+/, match);
+
+output view OrgByCountry;
+
+create view SoccerTeam as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionaries 'WorldSoccerClubs'
+                   and 'USASoccerClubs'
+    on D.text as org
+  from DocumentText D
+  having MatchesRegex(/[\p{Lu}\p{M}*\d].+/, org)
+  consolidate on org using 'ContainedWithin';
+
+output view SoccerTeam;
+
+create view BaseballTeam as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'USABaseballClubs'
+    on D.text as org
+  from DocumentText D
+  having MatchesRegex(/[\p{Lu}\p{M}*\d].+/, org)
+  consolidate on org using 'ContainedWithin';
+
+output view BaseballTeam;
+
+create view BasketballTeam as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'USABasketballClubs'
+    on D.text as org
+  from DocumentText D
+  having MatchesRegex(/[\p{Lu}\p{M}*\d].+/, org)
+  consolidate on org using 'ContainedWithin';
+
+output view BasketballTeam;
+
+create view HockeyTeam as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'USAHockeyClubs'
+    on D.text as org
+  from DocumentText D
+  having MatchesRegex(/[\p{Lu}\p{M}*\d].+/, org)
+  consolidate on org using 'ContainedWithin';
+
+output view HockeyTeam;
+
+create view AmericanFootballTeam as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'USAFootballClubs'
+    on D.text as org
+  from DocumentText D
+  having MatchesRegex(/[\p{Lu}\p{M}*\d].+/, org)
+  consolidate on org using 'ContainedWithin';
+
+output view AmericanFootballTeam;
+
+create view __Subquery__167__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'SuffixesForGroupsOfOrganizations'
+    with flags 'Exact'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__167__Temp;
+
+create view __Subquery__168__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'SuffixesForEducationalOrganizations'
+    with flags 'Exact'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__168__Temp;
+
+create view __Subquery__169__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'SuffixesForMedicalOrganizations'
+    with flags 'Exact'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__169__Temp;
+
+create view __Subquery__170__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'SuffixesForOtherOrganizations'
+    with flags 'Exact'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__170__Temp;
+
+create view __Subquery__171__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'SuffixesForGroupsOfMiscellaneousOrganizations'
+    with flags 'Exact'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__171__Temp;
+
+create view __Subquery__173__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'PrefixesForGroupsOfOrganizations'
+    with flags 'Exact'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__173__Temp;
+
+create view __Subquery__174__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'PrefixesForEducationalOrganizations'
+    with flags 'Exact'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__174__Temp;
+
+create view __Subquery__175__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'PrefixesForMedicalOrganizations'
+    with flags 'Exact'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__175__Temp;
+
+create view __Subquery__176__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'PrefixesForOtherOrganizations'
+    with flags 'Exact'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__176__Temp;
+
+create view __Subquery__177__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'PrefixesForGroupsOfMiscellaneousOrganizations'
+    with flags 'Exact'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__177__Temp;
+
+create view __Subquery__178__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'PopularWorldOrganizationsAbbreviationsAndExpandedShort'
+    with flags 'Exact'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__178__Temp;
+
+create view __Subquery__180__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'WorldCommercialOrganizations'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__180__Temp;
+
+create view __Subquery__181__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'TerroristOrganizations'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__181__Temp;
+
+create view __Subquery__182__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'RegionalMediaAndEntertainmentOrganizations'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__182__Temp;
+
+create view __Subquery__183__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'ConjunctionsAll'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__183__Temp;
+
+create view __Subquery__184__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'PrepositionsInEnglish'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__184__Temp;
+
+create view __Subquery__185__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    regex /\p{Lu}\p{M}*([\p{Ll}\p{Lo}]\p{M}*|[\&\.'\-\,])+/
+    with flags 'DOTALL'
+    on between 1 and 6 tokens in D.text
+    return group 0 as match
+  from DocumentText D;
+
+output view __Subquery__185__Temp;
+
+create view __Subquery__186__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    regex /(\p{Lu}\p{M}*){1,2}((\s*&\s*)?(\p{Lu}\p{M}*)+|([\p{Ll}\p{Lo}]\p{M}*)+((\p{Lu}\p{M}*)([\p{Ll}\p{Lo}]\p{M}*)+){1,2})/
+    with flags 'DOTALL'
+    on between 1 and 3 tokens in D.text
+    return group 0 as match
+  from DocumentText D;
+
+output view __Subquery__186__Temp;
+
+create view __Subquery__188__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'FiltersForOrganizationInEnglish'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__188__Temp;
+
+create view __Subquery__189__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'WebDomainSuffixesForOrganization'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__189__Temp;
+
+create view __Subquery__190__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    regex /\p{L}\p{M}*[\w\&\-]+$/
+    with flags 'DOTALL'
+    on between 1 and 25 tokens in D.text
+    return group 0 as match
+  from DocumentText D;
+
+output view __Subquery__190__Temp;
+
+create view __Subquery__191__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'SuffixesForCommercialOrganizations'
+    with flags 'Exact'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__191__Temp;
+
+create view __Subquery__193__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'GlobalSuffixesForOrganizations'
+    with flags 'Exact'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__193__Temp;
+
+create view __Subquery__194__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'AuxiliarySuffixesForOrganizations'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__194__Temp;
+
+create view __Subquery__195__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'ProfessionBasedSuffixesForOrganizations'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__195__Temp;
+
+create view __Union__166__TempOp__0 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__167__Temp_____sep_____D____id
+  from  __Subquery__167__Temp D;
+
+output view __Union__166__TempOp__0;
+
+create view __Union__166__TempOp__1 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__168__Temp_____sep_____D____id
+  from  __Subquery__168__Temp D;
+
+output view __Union__166__TempOp__1;
+
+create view __Union__166__TempOp__2 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as OrgGovSuffix_____sep_____D____id
+  from  OrgGovSuffix D;
+
+output view __Union__166__TempOp__2;
+
+create view __Union__166__TempOp__3 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__169__Temp_____sep_____D____id
+  from  __Subquery__169__Temp D;
+
+output view __Union__166__TempOp__3;
+
+create view __Union__166__TempOp__4 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as OrgMediaSuffix_____sep_____D____id
+  from  OrgMediaSuffix D;
+
+output view __Union__166__TempOp__4;
+
+create view __Union__166__TempOp__5 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__170__Temp_____sep_____D____id
+  from  __Subquery__170__Temp D;
+
+output view __Union__166__TempOp__5;
+
+create view __Union__166__TempOp__6 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__171__Temp_____sep_____D____id
+  from  __Subquery__171__Temp D;
+
+output view __Union__166__TempOp__6;
+
+create view __Union__172__TempOp__0 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__173__Temp_____sep_____D____id
+  from  __Subquery__173__Temp D;
+
+output view __Union__172__TempOp__0;
+
+create view __Union__172__TempOp__1 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__174__Temp_____sep_____D____id
+  from  __Subquery__174__Temp D;
+
+output view __Union__172__TempOp__1;
+
+create view __Union__172__TempOp__2 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as OrgGovPrefix_____sep_____D____id
+  from  OrgGovPrefix D;
+
+output view __Union__172__TempOp__2;
+
+create view __Union__172__TempOp__3 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__175__Temp_____sep_____D____id
+  from  __Subquery__175__Temp D;
+
+output view __Union__172__TempOp__3;
+
+create view __Union__172__TempOp__4 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__176__Temp_____sep_____D____id
+  from  __Subquery__176__Temp D;
+
+output view __Union__172__TempOp__4;
+
+create view __Union__172__TempOp__5 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__177__Temp_____sep_____D____id
+  from  __Subquery__177__Temp D;
+
+output view __Union__172__TempOp__5;
+
+create view __Union__179__TempOp__0 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__180__Temp_____sep_____D____id
+  from  __Subquery__180__Temp D;
+
+output view __Union__179__TempOp__0;
+
+create view __Union__179__TempOp__1 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__181__Temp_____sep_____D____id
+  from  __Subquery__181__Temp D;
+
+output view __Union__179__TempOp__1;
+
+create view __Union__179__TempOp__2 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__182__Temp_____sep_____D____id
+  from  __Subquery__182__Temp D;
+
+output view __Union__179__TempOp__2;
+
+create view __Union__179__TempOp__3 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as OrganizationFortune1000_2000_2008_____sep_____D____id
+  from  OrganizationFortune1000_2000_2008 D;
+
+output view __Union__179__TempOp__3;
+
+create view __Union__179__TempOp__4 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as OrganizationFortune1000_2000_2008_NoCase_____sep_____D____id
+  from  OrganizationFortune1000_2000_2008_NoCase D;
+
+output view __Union__179__TempOp__4;
+
+create view __Union__187__TempOp__0 as
+  select  O.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          O.__auto__id as AllCapsOrg_____sep_____O____id
+  from  AllCapsOrg O;
+
+output view __Union__187__TempOp__0;
+
+create view __Union__187__TempOp__1 as
+  select  O.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          O.__auto__id as CapsOrg_____sep_____O____id
+  from  CapsOrg O;
+
+output view __Union__187__TempOp__1;
+
+create view __Union__192__TempOp__0 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__193__Temp_____sep_____D____id
+  from  __Subquery__193__Temp D;
+
+output view __Union__192__TempOp__0;
+
+create view __Union__192__TempOp__1 as
+  select  O.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          O.__auto__id as OrgCluePartnershipSuffix_____sep_____O____id
+  from  OrgCluePartnershipSuffix O;
+
+output view __Union__192__TempOp__1;
+

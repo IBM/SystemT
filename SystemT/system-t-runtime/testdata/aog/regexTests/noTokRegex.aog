@@ -1,0 +1,65 @@
+############################################################
+# noTokRegex.aog
+#
+# A version of hotspotRegex.aog does not perform any 
+# tokenization; used for measuring the performance of just
+# the Regex implementations.
+
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+
+# The base regex for CapsPerson
+$CapsPersonRaw = 
+	Regex(/\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['\-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}/,
+	(0 => "match"), "text", $Document);
+	
+$CapsOrg = 
+	Regex(/\p{Lu}\p{M}*([\p{Ll}\p{Lo}\&\.'\-\,]\p{M}*)*[\p{Ll}\p{Lo}]/,
+	(0 => "match"), "text", $Document);
+	
+$WeakInitialWord = 
+	Regex(/([\p{Upper}]\.?\s*){1,5}/,
+	(0 => "match"), "text", $Document);
+	
+$AllCapsOrg = 
+	Regex(/(\p{Lu}\p{M}*){2,30}/,
+	(0 => "match"), "text", $Document);	
+	
+$InitialWord = 
+	Regex(/([\p{Upper}]\.\s*){0,4}[\p{Upper}]\./,
+	(0 => "match"), "text", $Document);	
+	
+$Time4 = 
+	Regex(/(\d{1,2}:\d{2}(:\d{2})?|\d{1,2}-\d{1,2})(\s*[AP])?/,
+	(0 => "match"), "text", $Document);	
+	
+$TwoDigitsInterval = 
+	Regex(/\b((0)|(1)|(2)|(3))?[\d]( )*[\-]( )*((0)|(1)|(2)|(3))?[\d]\b/, 
+	(0 => "match"), "text", $Document);		
+	
+$CapsPersonNoP =
+	Select(Not(ContainsRegex(RegexConst(/'/, "JavaRegex"), GetCol("match"))), $CapsPersonRaw);
+	
+$StrictCapsPersonR = 
+	Regex(/\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}/,
+	(0 => "name"), "match", $CapsPersonNoP);
+	
+$StrictCapsPerson = 
+	Select(
+		MatchesRegex(
+			RegexConst(/\b\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){1,20}\b/, "JavaRegex"), 
+			GetCol("name")), 
+		$StrictCapsPersonR);				
+	
+$StrictCapsPerson2 = 
+	Regex(/\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){1,20}/, 
+		(0 => "match"), "text", $Document);		
+		
+Output: $CapsPersonRaw, $CapsOrg, $WeakInitialWord, $AllCapsOrg, $InitialWord, 
+	$Time4, $TwoDigitsInterval, $StrictCapsPersonR, $StrictCapsPerson,
+	$StrictCapsPerson2;
+	

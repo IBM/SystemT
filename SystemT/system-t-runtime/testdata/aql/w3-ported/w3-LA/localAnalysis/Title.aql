@@ -1,0 +1,232 @@
+-------------------------------------------------------------------------------
+-- HTML.aql
+--
+-- HTML tag extraction for W3 local analysis.
+--
+-- This file produces the contents of the following local analysis result
+-- tables:
+--      a. Title: The contents of every TITLE tag, along with the substring
+--				  of the tag that contains the name of the page.
+--		b. TitleHash: The hash code of the text inside the first TITLE tag
+--		c. TitleSegs: The first two segments separated by | of the TITLE
+--
+-- Based on Huiayu's original Java implementation.
+-- Author: Fred Reiss <frreiss@us.ibm.com>, Laura Chiticariu <chiti@us.ibm.com>
+-------------------------------------------------------------------------------
+
+
+
+
+-- ***********************************************************************
+-- ***                        TITLE                                   ****
+-- ***********************************************************************
+	
+-- We want the contents of only the *first* title tag in the document.
+-- While we're at it, trim any whitespace from the beginning or end 
+-- of the title string.
+create view FirstTitle as 
+select Chomp(A.match) as title,A.match as origtitle
+from AllTitle A
+consolidate on A.match using 'RetainFirst';
+
+
+-- Compute the hash code of the title
+create view TitleHash as
+select 
+--Added by deepak as per appraoch document for matching the hash values with Java output(HashTitlePath.java)
+HashCode(GetText(T.origtitle)) as titleHash,T.origtitle as origtitle
+from FirstTitle T
+where NotNull(T.origtitle);
+
+
+-- ***********************************************************************
+-- ***                TITLE SEGMENTATION for Homepage                 ****
+-- ***********************************************************************
+-- Titles in the IBM intranet tend to have a hierarchical structure.
+create view TitleSegWithDelimiter as
+	extract 
+		E.title as title,
+		split using E.delim on E.title as elem
+	from 
+	(
+		extract
+			T.title as title, 
+			regex /\s*[\|—]\s*|\s*[-:]\s+/ on T.title as delim
+		from FirstTitle T
+	) E;
+
+-- Titles containing no delimiter
+create view TitleSegNoDelimiter as
+select T.title as title, Chomp(T.title) as elem
+from FirstTitle T
+where Not(ContainsRegex(/\s*[\|—]\s*|\s*[-:]\s+/, T.title));
+
+-- Titles that start with a delimiter
+create view TitleSegStartsWithDelimiter as
+select T.title as title, Chomp(T.title) as elem
+from FirstTitle T
+where ContainsRegex(/\A\s*[\|—]\s*|\s*[-:]\s+/, T.title);
+
+create view TitleSeg as
+select S.title as title, S.elem as elem
+from
+(
+	(select S.title as title, Chomp(S.elem) as elem from TitleSegWithDelimiter S)
+	union all
+	(select S.title as title, Chomp(S.elem) as elem from TitleSegNoDelimiter S)
+	-- Laura 7/6: add titles that start with a delimiter due to bug 
+	-- SystemT bug #148046: [Extract split returns no answers when string to be split starts with a split point]
+	-- To remove once bug  #148046  is fixed
+	union all
+	(select S.title as title, Chomp(S.elem) as elem from TitleSegStartsWithDelimiter S)
+) S
+where Not(Equals(GetLength(S.elem), 0))
+-- Laura 7/6: consolidate retaining the smaller spans, to avoid overlap 
+-- due to adding back titles that start with a delimiter 
+-- To remove once SystemT bug  #148046 is fixed.
+consolidate on S.elem using 'NotContainedWithin';
+
+-- Extract the substring of the title tag that contains the name of the page.
+-- We do so by finding the last part of the split title that is not in the
+-- SkipTail dictionary.
+create view TitleWithName as
+select S.title as title, S.elem as elem
+from TitleSeg S
+where 
+	-- Filter out segments that contain only whitespace
+	Not(MatchesRegex(/\s*/,S.elem))
+	-- Filter out segments that exactly match the SkipTail dictionary
+	and Not(MatchesDict('homepage/skipTail.dict', S.elem))
+consolidate on S.elem using 'RetainLast';
+
+-- Titles for which there is no name
+create view TitleWithoutName as
+(select Chomp(T.title) as title from FirstTitle T)
+minus
+(select T.title as title from TitleWithName T);
+
+-- All titles with ot without name
+create view TitleAll as
+(select T.title as title, T.elem as elem from TitleWithName T)
+union all
+-- make the name to be at the last offset in title
+(select T.title as title, RightContext(T.title,0) as elem from TitleWithoutName T);
+	
+create view TitleFinal as 
+select S.title as content, S.elem as name, Remap(S.title) as content_remap, Remap(S.elem) as name_remap
+from TitleAll S;
+
+-- Final output view with all attributes according to the Jaql schema
+create view Title as
+select GetText(T.content) as content_text, GetBegin(T.content_remap) as content_begin, GetEnd(T.content_remap) as content_end,
+	   GetText(T.name) as name_text, GetBegin(T.name_remap) as name_begin, GetEnd(T.name_remap) as name_end	
+from TitleFinal T;
+
+
+
+-- ***********************************************************************
+-- ***                      TITLE SEGS                                ****
+-- ***********************************************************************
+/*
+-- Select the first and second segments of the title delimited by |
+-- At the same time, strip the word 'IBM' (if it exists) 
+-- from the beginning of the first segment
+create view TitleSegsTemp as
+select Chomp(T.seg1) as seg1, Chomp(T.seg2) as seg2
+from
+(
+	extract
+		regex /\A(IBM\s*)?([^\|]*)\|?([^\|]*)\|?(\.*)/
+		on T.title
+		return group 2 as seg1
+		and group 3 as seg2
+	from FirstTitle T
+) T;
+
+
+
+-- Finally, strip the words 'Intranet', 'intranet' from the end of the first segment
+create view TitleSegs as
+(
+	select T.seg1 as seg1, T.seg2 as seg2
+	from TitleSegsTemp T
+	where Not(ContainsRegex(/[Ii]ntranet\Z/, T.seg1))
+)
+union all
+(	
+	select  
+		   Chomp(SpanIntersection(LeftContext(T.delim,200), T.seg1)) as seg1,
+		   T.seg2 as seg2
+	from 
+		(
+			extract
+				T.seg1 as seg1,
+				T.seg2 as seg2,
+				regex /[Ii]ntranet\Z/ on T.seg1 as delim			
+			from TitleSegsTemp T
+		) T
+);
+
+output view TitleSegsTemp;
+output view FirstTitle;
+output view TitleSegs;
+*/
+
+-- ***********************************************************************
+-- Laura 8/6: Replaced the code snippet above which was incorrect
+
+-- Extract first 2 segments of the title
+create view FirstSegs as
+select T.elem as seg
+from TitleSeg T
+order by T.elem
+limit 2;
+
+-- The first segment
+create view Seg1Raw as
+select *
+from FirstSegs S
+order by S.seg
+limit 1;
+
+
+-- The 2nd segment
+create view Seg2 as
+(select * from FirstSegs)
+minus
+(select * from Seg1Raw);
+
+
+-- Strip the word 'IBM' from the beginning of Seg1
+create view Seg1StripPrefix as
+select Chomp(S.seg) as seg
+from
+(
+	extract regex /\A(IBM)?(.*)/ on S.seg
+			return group 2 as seg
+	from Seg1Raw S
+) S;
+
+
+-- Strip the words 'Intranet' and 'intranet' from the end of Seg1
+create view Seg1 as
+(
+	select S.seg as seg
+	from Seg1StripPrefix S
+	where Not(ContainsRegex(/[Ii]ntranet\Z/, S.seg))
+)
+union all
+(	
+	select  
+		   Chomp(SpanIntersection(LeftContext(S.delim,200), S.seg)) as seg
+	from 
+		(
+			extract
+				S.seg as seg,
+				regex /[Ii]ntranet\Z/ on S.seg as delim			
+			from Seg1StripPrefix S
+		) S
+);
+
+-- ***********************************************************************
+

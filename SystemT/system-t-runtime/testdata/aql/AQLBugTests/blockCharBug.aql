@@ -1,0 +1,23 @@
+-------------------------------------------------------------------------------
+-- Test case for defect 58349: Extract block with character distance outputs 
+-- blocks of length maxSize+1
+-------------------------------------------------------------------------------
+
+require document with columns text Text;
+
+create view CapitalizedWords as
+ extract
+      regex /[A-Z]([A-Z|a-z]*)?/ 
+     on D.text as word from Document D;
+
+-- "with count between 2 and 3" why does it match Asia Pacific Equity Research?
+create view BlockCharBug as
+ extract blocks
+    with count between 2 and 3
+    and separation between 0 and 2 characters
+    on CW.word as capswords
+from CapitalizedWords CW;
+
+output view CapitalizedWords;
+output view BlockCharBug;
+

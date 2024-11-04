@@ -1,0 +1,33 @@
+module module2;
+
+
+import view CapsWord from module module1 as CapsWord1
+;
+
+
+create view First as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /[A-Z][a-z]+(\-[A-Z][a-z]+)?/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as match
+  from Document D;
+
+output view First;
+
+create view Person1 as
+  select  CombineSpans(F.match, C.match) as name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          F.__auto__id as First_____sep_____F____id,
+          C.__auto__id as CapsWord1_____sep_____C____id
+  from  First F,
+        CapsWord1 C
+  where FollowsTok(F.match, C.match, 0, 0);
+
+output view Person1;
+
+
+

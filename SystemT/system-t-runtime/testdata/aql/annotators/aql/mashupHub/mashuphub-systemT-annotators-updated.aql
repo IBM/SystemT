@@ -1,0 +1,202 @@
+---------------------------------------
+-- Document Preprocessing
+---------------------------------------
+include 'core-updated/detag.aql';
+
+---------------------------------------
+-- UDFs Declarations
+---------------------------------------
+create function getAbbreviation(span Span)
+return String
+external_name 'NamedEntityUDFs.jar:com.ibm.avatar.udf.NamedEntityUDFs!getAbbreviation'
+language java
+deterministic
+return null on null input;
+
+create function toUpperCase(span Span)
+return String
+external_name 'NamedEntityUDFs.jar:com.ibm.avatar.udf.NamedEntityUDFs!toUpperCase'
+language java
+deterministic
+return null on null input;
+
+----------------------------------------
+-- Basic Named Entity Annotators
+----------------------------------------
+
+--------------------------------------------------------------------------------
+-- First, include the server side version of certain dictionaries
+include 'core-updated/GenericNE/serverSideSpecific/AdditionalDictsForAddress.aql';
+include 'core-updated/GenericNE/serverSideSpecific/AdditionalDictsForOrganization.aql';
+include 'core-updated/GenericNE/serverSideSpecific/AdditionalDictsForPerson.aql';
+--------------------------------------------------------------------------------
+
+include 'core-updated/GenericNE/DictsForAddress.aql';
+include 'core-updated/GenericNE/Sentence.aql';
+include 'core-updated/GenericNE/MacrosForTimeDates.aql';
+include 'core-updated/GenericNE/Date.aql';
+include 'core-updated/GenericNE/Time.aql';
+include 'core-updated/GenericNE/PhoneNumber.aql';
+include 'core-updated/GenericNE/Address.aql';
+include 'core-updated/GenericNE/CityStateCountry.aql';
+include 'core-updated/GenericNE/County.aql';
+include 'core-updated/GenericNE/Town.aql';
+include 'core-updated/GenericNE/StockExchangeAndTicker.aql';
+include 'core-updated/GenericNE/URL.aql';
+include 'core-updated/GenericNE/EmailAddress.aql';
+include 'core-updated/GenericNE/NotesEmailAddress.aql';
+include 'core-updated/GenericNE/Organization.aql';
+include 'core-updated/GenericNE/Organization-FilterSingleNewLineTab.aql';
+include 'core-updated/GenericNE/Organization-Sentence.aql';
+include 'core-updated/GenericNE/Person-BasicFeature.aql';
+include 'core-updated/GenericNE/formalContent/Person-Context-Based.aql';
+include 'core-updated/GenericNE/Person.aql';
+include 'core-updated/GenericNE/Person-FilterSingleNewLineTab.aql';
+include 'core-updated/GenericNE/Person-Filter.aql';
+include 'core-updated/GenericNE/formalContent/Location-Context-Based.aql';
+include 'core-updated/GenericNE/Region.aql';
+include 'core-updated/GenericNE/Facility-CoNLL2003.aql';
+include 'core-updated/GenericNE/StateStrongAbbrev.aql';
+include 'core-updated/GenericNE/WaterBody.aql';
+
+include 'core-updated/GenericNE/Address-consolidation.aql';
+include 'core-updated/GenericNE/OrgWithinNotesEmail.aql';
+include 'core-updated/GenericNE/Organization-FilterAddress.aql';
+include 'core-updated/GenericNE/Organization-SportsTeam-for-CoNLL2003.aql';
+include 'core-updated/GenericNE/Organization-FilterHeadline.aql';
+include 'core-updated/GenericNE/Organization-consolidation.aql';
+include 'core-updated/GenericNE/formalContent/Organization-Context-Based.aql';
+include 'core-updated/GenericNE/Organization-Abbreviation.aql';
+include 'core-updated/GenericNE/OrganizationTypes.aql';
+include 'core-updated/GenericNE/Person-consolidation.aql';
+include 'core-updated/GenericNE/DateTime-consolidation.aql';
+include 'core-updated/GenericNE/Location-consolidation.aql';
+
+
+----------------------------------------------
+-- Consolidation:
+-- For now, we just remove annotations that are completely
+-- contained within other annotations.
+----------------------------------------------
+include 'core-updated/GenericNE/AttributesAssigner.aql';
+include 'core-updated/GenericNE/AttributesAssigner-Person.aql';
+include 'core-updated/GenericNE/AttributesAssigner-URL.aql';
+include 'core-updated/GenericNE/Location-ValueBasedJoin.aql';
+include 'core-updated/GenericNE/AdditionalPerson.aql';
+include 'core-updated/GenericNE/Organization-ValueBasedJoin-for-CoNLL2003.aql';
+include 'core-updated/GenericNE/Organization-Aggregate.aql';
+
+create view PersonMixed as
+	(select P.* from PersonBeforeFinalOrgFilter P)
+	minus
+	(select P.* from PersonBeforeFinalOrgFilter P, OrganizationMixed O where Contains(O.organization, P.person));
+	
+--	output view PersonMixed;
+--	output view OrganizationMixed;
+
+include 'core-updated/GenericNE/Location-aggregate.aql';
+
+-------------------------------------------------------------------------------
+-- include possible unambiguous single token matches. 
+-------------------------------------------------------------------------------
+
+include 'mashupHub/specific/Disambiguation.aql';
+
+---------------------------------------------
+-- Financial Annotators 1
+---------------------------------------------
+include 'core-updated/Financial/CompanyEvents/preprocesswithdetag.aql';
+include 'core-updated/Financial/CompanyEvents/companyinfo.aql';
+include 'core-updated/Financial/CompanyAnalystAnnouncement/CompanyAnalystAnnouncements.aql';
+include 'core-updated/Financial/CompanyAnalystAnnouncement/AnalystAnnouncements.aql';
+include 'core-updated/Financial/CompanyAnalystAnnouncement/CompanyAnnouncements.aql';
+include 'core-updated/Financial/CompanyAnalystAnnouncement/AttributesAssigner.aql';
+
+
+---------------------------------------------
+-- Financial Annotators 2
+---------------------------------------------
+
+include 'core-updated/Financial/CompanyEvents/merger.aql';
+include 'core-updated/Financial/CompanyEvents/acquisition.aql';
+include 'core-updated/Financial/CompanyEvents/jointventure.aql';
+include 'core-updated/Financial/CompanyEvents/alliance.aql';
+include 'core-updated/Financial/CompanyEvents/allevents.aql';
+
+
+---------------------------------------------
+-- Final output types
+---------------------------------------------
+include 'mashupHub/specific/OutputTypes.aql';
+
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Output section <<<<<<<<<<<<<<<<
+-- ===========================================================================		
+
+--4.1 City 
+
+output view City;
+
+--4.2 County: 
+output view County;
+
+--4.3 ZipCode
+output view ZipCode;
+
+--4.4 Address
+output view Address;
+
+--4.5 StateOrProvince
+output view StateOrProvince;
+
+--4.6 Country
+output view Country;
+
+--4.7 Continent: 
+output view Continent;
+
+--4.8 MapLocation
+output view MapLocation;
+
+--4.9 Email Address
+output view EmailAddress;
+
+--4.10 NotesEmailAddress
+output view NotesEmailAddress;
+
+--4.11 PhoneNumber
+output view PhoneNumber;
+
+--4.12 Person
+output view Person;
+
+--4.13 Organization
+output view Organization;
+
+--4.14 DateTime
+output view DateTime;
+
+--4.15 URL
+output view URL;
+
+-- 4.16 Merger
+output view Merger;
+
+-- 4.17 Acquisition
+output view Acquisition;
+
+--4.18 Alliance: 
+output view Alliance;
+
+--4.19 JointVenture:
+output view JointVenture;
+
+--4.20 CompanyEarningsAnnouncement
+output view CompanyEarningsAnnouncement;
+
+--4.21 AnalystEarningsEstimate
+output view AnalystEarningsEstimate;
+
+--4.22 CompanyEarningsGuidance
+output view CompanyEarningsGuidance;

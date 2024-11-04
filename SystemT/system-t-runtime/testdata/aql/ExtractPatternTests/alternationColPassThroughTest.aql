@@ -1,0 +1,57 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test cases for extension to sequence patterns to pass through attributes
+-- Test cases for passing through columns from a single PatternAlternationNode
+--
+-------------------------------------------------------------------------------
+
+create view CapsWord as
+extract 'CapsWord' as type, 
+		1 as typeInt,
+	regex /[A-Z].*/ on 1 token in D.text as match
+from Document D
+limit 10;
+
+create view LowWord as
+extract 'LowWord' as type,
+		2 as typeInt,
+	regex /[a-z]*/ on 1 token in D.text as match
+from Document D
+limit 10;
+
+
+-- Alternation with two pass through cols of type string
+create view Alternation1 as
+extract C.type as ctype, L.type as ltype,
+	    pattern (<C.match>) | (<L.match>) 
+	    return group 0 as match
+	       and group 1 as first
+	       and group 2 as last
+from CapsWord C, LowWord L;
+
+output view Alternation1;
+
+-- Alternation with two pass through cols of type Integer
+create view Alternation2 as
+extract C.typeInt as ctypeInt,
+		L.typeInt as ltypeInt,
+	    pattern (<C.match>) | (<L.match>) 
+	    return group 0 as match
+	       and group 1 as first
+	       and group 2 as last
+from CapsWord C, LowWord L;
+
+output view Alternation2;
+
+-- Alternation with three pass through cols of various types
+create view Alternation3 as
+extract C1.type as ctype,
+		C2.typeInt as ctypeInt,
+		L.typeInt as ltypeInt,
+	    pattern (<C1.match>) | (<C2.match>) |(<L.match>) 
+	    return group 0 as match
+	       and group 1 as first
+	       and group 2 as last
+from CapsWord C1, CapsWord C2, LowWord L;
+
+output view Alternation3;

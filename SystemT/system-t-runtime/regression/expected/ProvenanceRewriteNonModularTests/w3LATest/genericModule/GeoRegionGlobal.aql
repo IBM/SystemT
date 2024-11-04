@@ -1,0 +1,318 @@
+module genericModule;
+
+
+create dictionary "GlobalDict"
+with case insensitive
+as (
+  'global'
+);
+
+
+create view Region_Global_PageUrl as
+  select  'GLOBAL' as match,
+          'URL:GLOBAL' as evidence,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PageURL_____sep_____P____id
+  from  PageURL P
+  where ContainsRegex(/\/global\//, 'CASE_INSENSITIVE', P.url);
+
+output view Region_Global_PageUrl;
+
+create view Region_Global_URLHome as
+  select  'GLOBAL' as match,
+          'URLHome:GLOBAL' as evidence,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          H.__auto__id as URLHome_____sep_____H____id
+  from  URLHome H
+  where MatchesDict('GlobalDict', H.name_text);
+
+output view Region_Global_URLHome;
+
+create view Region_Global_TitleHome as
+  select  'GLOBAL' as match,
+          'TitleHome.name:GLOBAL' as evidence,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as TitleHome_____sep_____T____id
+  from  TitleHome T
+  where MatchesDict('GlobalDict', T.name_text);
+
+output view Region_Global_TitleHome;
+
+create view Region_Global_TitleSeg as
+  select  'GLOBAL' as match,
+          'TitleSeg:GLOBAL' as evidence,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          TS.__auto__id as TitleSeg_____sep_____TS____id
+  from  TitleSeg TS
+  where MatchesDict('GlobalDict', TS.elem);
+
+output view Region_Global_TitleSeg;
+
+create view TitleHomeInTitleSegGlobal as
+  select  TS.elem as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as __Subquery__83__Temp_____sep_____T____id,
+          TS.__auto__id as TitleSeg_____sep_____TS____id
+  from  __Subquery__83__Temp T,
+        TitleSeg TS
+  where Contains(TS.elem, T.match);
+
+output view TitleHomeInTitleSegGlobal;
+
+create view Region_Global_TitleHomeTitleSeg as
+  extract 'TitleHome.name:GLOBAL' as evidence,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    TH.__auto__id as TitleHomeInTitleSegGlobal_____sep_____TH____id,
+    dictionaries 'homepage/skipHomeHead.dict'
+                   and 'homepage/skipHomeTail.dict'
+    on TH.match as match
+  from TitleHomeInTitleSegGlobal TH;
+
+output view Region_Global_TitleHomeTitleSeg;
+
+create view RegionEvidenceGlobal as
+  select  __t2.id as id,
+          __t2.evidence as evidence,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__86__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__86__Temp__1 __t1,
+        __Consolidate__86__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.id, __t2.evidence;
+
+output view RegionEvidenceGlobal;
+
+create view RegionGlobalFinal as
+  select  __t2.match as match,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__89__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__89__Temp__1 __t1,
+        __Consolidate__89__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.match;
+
+output view RegionGlobalFinal;
+
+create view __Consolidate__86__Temp__1 as
+  select  C.id as id,
+          C.evidence as evidence,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as __Subquery__85__Temp_____sep_____C____id,
+          C.evidence as __consolidate__target
+  from  __Subquery__85__Temp C;
+
+output view __Consolidate__86__Temp__1;
+
+create view __Consolidate__86__Temp__2 as
+  select  __t1.id as id,
+          __t1.evidence as evidence,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__86__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__86__Temp__2;
+
+create view __Consolidate__89__Temp__1 as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as __Subquery__88__Temp_____sep_____C____id,
+          C.match as __consolidate__target
+  from  __Subquery__88__Temp C;
+
+output view __Consolidate__89__Temp__1;
+
+create view __Consolidate__89__Temp__2 as
+  select  __t1.match as match,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__89__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__89__Temp__2;
+
+create view __Subquery__83__Temp as
+  select  T.name as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as HomepageFirstClean_____sep_____T____id
+  from  HomepageFirstClean T
+  where Equals('TitleHome', GetText(T.type))
+     and ContainsDict('GlobalDict', T.name);
+
+output view __Subquery__83__Temp;
+
+create view __Subquery__85__Temp as
+  (select  Op.id as id,
+            Op.evidence as evidence,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__84__TempOp__0 Op)
+  union all
+  (select  Op.id as id,
+            Op.evidence as evidence,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__84__TempOp__1 Op)
+  union all
+  (select  Op.id as id,
+            Op.evidence as evidence,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__84__TempOp__2 Op)
+  union all
+  (select  Op.id as id,
+            Op.evidence as evidence,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__84__TempOp__3 Op)
+  union all
+  (select  Op.id as id,
+            Op.evidence as evidence,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__84__TempOp__4 Op);
+
+output view __Subquery__85__Temp;
+
+create view __Subquery__88__Temp as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__87__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__87__TempOp__1 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__87__TempOp__2 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__87__TempOp__3 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__87__TempOp__4 Op);
+
+output view __Subquery__88__Temp;
+
+create view __Union__84__TempOp__0 as
+  select  1 as id,
+          C.evidence as evidence,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as Region_Global_PageUrl_____sep_____C____id
+  from  Region_Global_PageUrl C;
+
+output view __Union__84__TempOp__0;
+
+create view __Union__84__TempOp__1 as
+  select  1 as id,
+          C.evidence as evidence,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as Region_Global_URLHome_____sep_____C____id
+  from  Region_Global_URLHome C;
+
+output view __Union__84__TempOp__1;
+
+create view __Union__84__TempOp__2 as
+  select  1 as id,
+          C.evidence as evidence,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as Region_Global_TitleHome_____sep_____C____id
+  from  Region_Global_TitleHome C;
+
+output view __Union__84__TempOp__2;
+
+create view __Union__84__TempOp__3 as
+  select  1 as id,
+          C.evidence as evidence,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as Region_Global_TitleSeg_____sep_____C____id
+  from  Region_Global_TitleSeg C;
+
+output view __Union__84__TempOp__3;
+
+create view __Union__84__TempOp__4 as
+  select  1 as id,
+          C.evidence as evidence,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as Region_Global_TitleHomeTitleSeg_____sep_____C____id
+  from  Region_Global_TitleHomeTitleSeg C;
+
+output view __Union__84__TempOp__4;
+
+create view __Union__87__TempOp__0 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as Region_Global_PageUrl_____sep_____R____id
+  from  Region_Global_PageUrl R;
+
+output view __Union__87__TempOp__0;
+
+create view __Union__87__TempOp__1 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as Region_Global_URLHome_____sep_____R____id
+  from  Region_Global_URLHome R;
+
+output view __Union__87__TempOp__1;
+
+create view __Union__87__TempOp__2 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as Region_Global_TitleHome_____sep_____R____id
+  from  Region_Global_TitleHome R;
+
+output view __Union__87__TempOp__2;
+
+create view __Union__87__TempOp__3 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as Region_Global_TitleSeg_____sep_____R____id
+  from  Region_Global_TitleSeg R;
+
+output view __Union__87__TempOp__3;
+
+create view __Union__87__TempOp__4 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as Region_Global_TitleHomeTitleSeg_____sep_____R____id
+  from  Region_Global_TitleHomeTitleSeg R;
+
+output view __Union__87__TempOp__4;
+

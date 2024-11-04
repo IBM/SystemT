@@ -1,0 +1,107 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- rseTests.aql
+--
+-- Various test queries for RSE joins, using the Enron dataset.  
+-- Based on personphone.aql.
+-------------------------------------------------------------------------------
+
+-- Find first names, using an exhaustive dictionary.
+create view FirstName as
+select D.match as name
+from Dictionary('dictionaries/first.dict', Document.text) D
+where MatchesRegex(/\A[A-Z][a-z]*\Z/, D.match);
+
+
+-- Find phone numbers, using a pair of regular expressions.
+create view PhoneNumber as
+(
+    select R.match as num
+    from RegexTok(/\+?\([1-9]\d{2}\)\d{3}-\d{4}/, 7, Document.text) R
+)
+union all
+(
+    select R.match as num
+    from RegexTok(/\+?[Xx]\.?\d{4,5}/, 7, Document.text) R
+);
+
+-- Find instances of first name followed within 50 chars by phone number.
+-- Currently not RSE-compatible.
+select CombineSpans(F.name, P.num) as personphone,
+     F.name as name,
+     P.num as num   
+into PersonPhone
+from FirstName F, PhoneNumber P
+where Follows(F.name, P.num, 0, 50);
+
+
+-- A RSE-compatible version of the previous query.
+-- Calls Regex() directly, instead of going through a subquery.
+select CombineSpans(F.name, P.match) as personphone,
+     F.name as name,
+     P.match as num   
+into PersonPhoneDirect
+from FirstName F, 
+	-- Note that we're merging the two regular expressions.
+	RegexTok(/\+?\([1-9]\d{2}\)\d{3}-\d{4}|\+?[Xx]\.?\d{4,5}/, 7, Document.text) P
+where Follows(F.name, P.match, 0, 50);
+
+
+-- Version of PersonPhoneDirect with the order of the from list reversed.
+select CombineSpans(F.name, P.match) as personphone,
+     F.name as name,
+     P.match as num   
+into PersonPhoneReversed
+from 
+	-- Note that we're merging the two regular expressions.
+	RegexTok(/\+?\([1-9]\d{2}\)\d{3}-\d{4}|\+?[Xx]\.?\d{4,5}/, 7, Document.text) P,
+	FirstName F
+where Follows(F.name, P.match, 0, 50);
+
+-- Version of PersonPhoneDirect with the join predicate reversed (e.g. phone 
+-- followed by person)
+select 
+     F.name as name,
+     P.match as num,   
+     CombineSpans(P.match, F.name) as phoneperson
+into PhonePerson
+from FirstName F, 
+	-- Note that we're merging the two regular expressions.
+	RegexTok(/\+?\([1-9]\d{2}\)\d{3}-\d{4}|\+?[Xx]\.?\d{4,5}/, 7, Document.text) P
+where Follows(P.match, F.name, 0, 50);
+
+
+-- Version of PersonPhone with a token-based predicate
+-- Currently not RSE-compatible
+select 
+     F.name as name,
+     P.num as num,
+     CombineSpans(F.name, P.num) as personphone
+into PersonPhoneTok
+from FirstName F, PhoneNumber P
+where FollowsTok(F.name, P.num, 2, 10);
+
+-- A RSE-compatible version of the previous query.
+-- Calls Regex() directly, instead of going through a subquery.
+select 
+     F.name as name,
+     P.match as num,
+     CombineSpans(F.name, P.match) as personphone
+into PersonPhoneTokDirect
+from FirstName F, 
+	-- Note that we're merging the two regular expressions.
+	RegexTok(/\+?\([1-9]\d{2}\)\d{3}-\d{4}|\+?[Xx]\.?\d{4,5}/, 7, Document.text) P
+where FollowsTok(F.name, P.match, 2, 10);
+
+-- A version of PhonePerson with a token-based predicate.
+select 
+     F.name as name,
+     P.match as num,   
+     CombineSpans(P.match, F.name) as phoneperson
+into PhonePersonTok
+from FirstName F, 
+	-- Note that we're merging the two regular expressions.
+	RegexTok(/\+?\([1-9]\d{2}\)\d{3}-\d{4}|\+?[Xx]\.?\d{4,5}/, 7, Document.text) P
+where FollowsTok(P.match, F.name, 2, 10);
+

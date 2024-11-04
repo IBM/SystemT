@@ -1,0 +1,145 @@
+-- Overview: this section of the AQL is mainly used to categorize US locations into city, state and country
+-- Some disambiguation is done when same names are identified in more than one category
+
+-- All explicit city mentions and aliases
+create view  Loc_CityNamesNotConsolidated as
+    (
+    select GetString(T.city) as match, D.fullspan as fullspan, D.match as orig_match
+    from Loc_AliasUSCities D, Loc_AliasToNormalized_Cities T
+    where equalsIgnoreCaseSmarc(GetString(D.match), GetString(T.alias))
+    )
+    union all
+    (
+    select GetString(D.match) as match, D.fullspan as fullspan, D.match as orig_match
+    from  Loc_CityNamesConsolidatedNoAlias D
+    );
+
+-- Pick top candidate from the list of cities
+create view  Loc_CityNamesConsolidatedUnfiltered as    
+    select D.match as match, D.fullspan as fullspan, D.orig_match as orig_match
+    from Loc_CityNamesNotConsolidated D
+    consolidate on D.orig_match using 'ContainedWithin'
+    ;     
+
+-- All explicit state mentions and aliases
+create view  Loc_StateNamesNotConsolidated as
+    (
+    select GetString(D.match) as match, D.fullspan as fullspan, D.match as orig_match
+    from  Loc_StateNamesConsolidatedNoAlias D
+    )
+    union all
+    (
+    select GetString(A.state) as match, D.fullspan as fullspan, D.match as orig_match
+    from Loc_AliasUSStates D, Loc_AliasToNormalized_States T, Loc_StateToAbbrv A
+    where equalsIgnoreCaseSmarc(GetString(D.match), GetString(T.alias))
+    and Equals(GetString(T.stateAbbrv), GetString(A.abbrv))
+    );
+
+-- Pick top candidate for state
+create view  Loc_StateNamesConsolidatedUnfiltered as    
+    select D.match as match, D.fullspan as fullspan, D.orig_match as orig_match
+    from Loc_StateNamesNotConsolidated D
+    consolidate on D.orig_match using 'ContainedWithin'; 
+     
+-- All explicit country mentions and aliases
+-- Note that this particular view is not limited to US
+create view  Loc_CountryNames as
+    (
+    select GetString(D.match) as match, D.fullspan as fullspan, D.match as orig_match
+    from  Loc_CountryNamesNoAlias D
+    )
+    union all
+    (
+    select GetString(I.country) as match, D.fullspan as fullspan, D.match as orig_match
+    from Loc_AliasCountries D, Loc_AliasToNormalized_Countries T, Loc_CountryToISO I
+    where equalsIgnoreCaseSmarc(GetString(D.match), GetString(T.alias)) 
+    and Equals(GetString(I.countryISO), GetString(T.countryISO))
+    );
+ 
+       
+-- GET AMBIGUOUS STATE/CITY NAMES, LIKE IN 'NEW YORK NEW YORK'). IF FULLSPAN OF THE STRONG 
+-- FORM "NAME1, NAME2" THEN ASSIGN IT TO CITY IF BEFORE COMMA, TO STATE IF AFTER COMMA
+create view Loc_SpanWithAmbiguousCityState as 
+	select D.match as match, D.fullspan as fullspan, D.orig_match as orig_match
+    from Loc_StateNamesConsolidatedUnfiltered D, Loc_CityNamesConsolidatedUnfiltered C
+    where Equals(D.orig_match, C.orig_match);
+
+create view Loc_AmbiguousCityStateResolvedToCity as
+	(
+	select D.match, D.fullspan, D.orig_match
+	from Loc_SpanWithAmbiguousCityState D
+	where ContainsRegex(/,/,RightContext(D.orig_match, 5))
+	and Not(ContainsRegex(/,/,LeftContext(D.orig_match, 5)))
+	)
+	minus 
+	(
+	select D.match, D.fullspan, D.orig_match
+	from Loc_SpanWithAmbiguousCityState D, Loc_Abbrv_USCountry C
+	where Equals(D.fullspan, C.fullspan)
+	)
+--	and Overlaps(C.fullspan, M.fullspan)
+--	and Not(Overlaps() TODO
+	;
+	
+create view Loc_AmbiguousCityStateResolvedToState as
+	(
+	select D.match, D.fullspan, D.orig_match
+	from Loc_SpanWithAmbiguousCityState D
+	where ContainsRegex(/,/,LeftContext(D.orig_match, 5))
+	)
+	union all
+	(
+	select D.match, D.fullspan, D.orig_match
+	from Loc_SpanWithAmbiguousCityState D, Loc_Abbrv_USCountry C
+	where Equals(D.fullspan, C.fullspan)
+	)
+	;	
+
+-- A view where we have identified an entry to be a city name	
+create view  Loc_CityNamesConsolidated as 
+	(
+    select D.match as match, D.fullspan as fullspan, D.orig_match as orig_match
+    from Loc_CityNamesConsolidatedUnfiltered D
+    )
+    minus
+    (
+     select D.match as match, D.fullspan as fullspan, D.orig_match as orig_match
+    from Loc_AmbiguousCityStateResolvedToState D
+    );	
+    
+-- A view where we have identified an entry to be a state name	
+create view  Loc_StateNamesConsolidated as 
+	(
+    select D.match as match, D.fullspan as fullspan, D.orig_match as orig_match
+    from Loc_StateNamesConsolidatedUnfiltered D
+    )
+    minus
+    (
+    select D.match as match, D.fullspan as fullspan, D.orig_match as orig_match
+    from Loc_AmbiguousCityStateResolvedToCity D
+    );	
+        
+
+-- GET THE LONGEST MATCH OVERALL    
+create view Loc_AllNames as 
+    (
+    select D.match as match, 'state' as prov, D.fullspan as fullspan, D.orig_match as orig_match
+    from Loc_StateNamesConsolidated D
+    )
+    union all
+    (
+    select D.match as match, 'city' as prov, D.fullspan as fullspan, D.orig_match as orig_match
+    from Loc_CityNamesConsolidated D
+    )
+    union all
+    (
+    select GetString(D.match) as match, 'stateAbbrv' as prov, D.fullspan as fullspan, D.match as orig_match
+    from Loc_StateAbbrvNames D
+    )
+    union all
+    (
+    select D.match as match, 'country' as prov, D.fullspan as fullspan, D.orig_match as orig_match
+    from Loc_CountryNames D
+    );
+    
+    

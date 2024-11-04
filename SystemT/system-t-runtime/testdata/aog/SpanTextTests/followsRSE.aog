@@ -1,0 +1,73 @@
+###############################################################################
+# followsRSE.aog
+#
+# ("aog" stands for Avatar Operator Graph.)
+#
+# Test of character distance RSE join predicates.  Based on follows.aog.
+###############################################################################
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+CreateDict(
+    "name" => "dictionaries/first.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+CreateDict(
+    "name" => "dictionaries/last.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+# Find potential first names.
+$FirstName = 
+Project(( "match" => "first" ), 
+	Dictionary("dictionaries/first.dict", "text", $Document));
+
+# Use a regular expression to find potential last names.
+#$LastName = 
+#	RegexTok(/[A-Z]\w*/, (0 => "last"), 2, "text", $Document);
+
+
+# Find potential first names.
+$LastName = 
+Project(( "match" => "last" ), 
+	Dictionary("dictionaries/last.dict", "text", $Document));
+
+
+###############################################################################
+# Now we test the FollowsTok predicate
+
+# Same thing with an RSE join.
+$RSEJoinFollowsTok =
+ApplyFunc(CombineSpans(GetCol("first"), GetCol("last")) => "Combined", 
+	RSEJoin(FollowsTok(GetCol("first"), GetCol("last"), 
+			IntConst(1), IntConst(7)), $FirstName, 
+		RegexTok(/[A-Z]\w*/, (0 => "last"), 2, "text", $Document))
+);
+
+# Look for the names in reverse order, first with nested loops join.
+$NLJoinFollowedByTok =
+ApplyFunc(CombineSpans(GetCol("last"), GetCol("first")) => "Combined", 
+	NLJoin(FollowsTok(GetCol("last"), GetCol("first"), 
+			IntConst(1), IntConst(7)), $FirstName, $LastName)
+);
+
+# Same thing with an RSE join.  Note the explicitly inverted predicate.
+$RSEJoinFollowedByTok =
+ApplyFunc(CombineSpans(GetCol("last"), GetCol("first")) => "Combined", 
+	RSEJoin(FollowedByTok(GetCol("first"), GetCol("last"), 
+			IntConst(1), IntConst(7)), $FirstName, 
+		RegexTok(/[A-Z]\w*/, (0 => "last"), 2, "text", $Document))
+);
+
+################################################################################
+# OUTPUT SPEC
+Output:  $FirstName, $LastName, $RSEJoinFollowsTok, $NLJoinFollowedByTok, $RSEJoinFollowedByTok;
+

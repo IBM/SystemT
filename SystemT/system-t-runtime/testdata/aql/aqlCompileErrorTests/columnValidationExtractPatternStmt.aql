@@ -1,0 +1,26 @@
+-------------------------------------------------------------------------------
+-- columnValidationExtractPatternStmt.aql
+
+-- Test for a defect# 18697
+-- NPE while validating pattern spec(Atom of the form viewname.columnname) 
+-- missing column name.
+-------------------------------------------------------------------------------
+create view Test0 as
+  select Doc.text 
+  as match 
+  from Document Doc
+;
+
+-- Note the missing column spec in the pattern
+create view Test as
+  extract
+    pattern <T>{1,3}
+-- this would be correct:
+-- pattern <T.match>{1,3}
+    return
+      group 0 as match
+    from Test0 T
+;
+
+output view Test;
+

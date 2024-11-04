@@ -1,0 +1,21 @@
+module syslog;
+
+create view ErrorCands as 
+    extract regex /(\%[A-Z]+([\dA-Za-z-_])+[A-Z]+)\s*\:/ on D.text 
+    return group 1 as match
+    from Document D;
+    
+create view ErrorCandsAutoGeneral as 
+    extract regex /((%)?(\p{Lu}{1,6})?((6)|(_|%|-))(\p{Lu}{2,9}|\d)(-)(\d|\p{Lu}{3,7})(-|_)?(\p{Lu}{4,14}|( ))(:)( )?)/ on D.text as match
+    from Document D;    
+    
+create view CandidateCiscoErrorsInterim as 
+    select D.match as annot_span, GetString(D.match) as annot_text
+    from ErrorCands D;
+
+create view ErrorSyslogOutput as
+select D.annot_span as span, D.annot_text as text, GetString('ErrorSyslog') as field_type
+from CandidateCiscoErrorsInterim D;
+
+export view ErrorSyslogOutput;
+

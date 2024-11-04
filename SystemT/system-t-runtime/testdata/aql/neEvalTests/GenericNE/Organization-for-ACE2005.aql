@@ -1,0 +1,972 @@
+
+create dictionary FilterOrgDict as
+(
+	'Fellow', 'Sir', 'IBMer', 'Researcher', 'All','Tell','About',
+	'Friends', 'Friend', 'Colleague', 'Colleagues','If',
+	'Customer', 'Users', 'User', 'Valued', 
+	--'Executive', 
+	'Chairs','Please', 'Outlook', 'Notes','Lists', 'Seminar', 'We', 'Its',
+	'This', 'That', 'There', 'Here', 'Subscribers', 'What', 'When', 'Where',
+	'With', 'While', 'Thanks', 'Thanksgiving','Senator', 'Perspective',
+	'Manager', 'Professor', 'Dear', 'Contact', 'Cheers', 'Athelet',
+	'Act', 'But', 'Hello', 'Call', 'From',  'Take',
+	'Both', 'Let', 'You', 'Your', 'Name',
+	'Administrative', 'Members', 'Address', 'Please', 'List',
+	'Parkway', 'Then', 'Statements', 'Our', 'My', 'His','Her',
+	'Their', '\'s Leading',
+	'President', 'Commissioner', 'Commitment', 'Commits', 'Hey',
+	'Director', 'End', 'Exit', 'Experiences', 'Acquire',
+	'Nov', 'Infrastructure', 'Inside', 'Convention', 'Bonus',
+	'Judge', 'Projected', 
+	'Recalls', 'Regards', 'Recently', 'Independence', 'Denied',
+	'Unfortunately', 'Under', 'Secretary','Ideally','Join',
+	-- German greetings
+	'Liebe', 'Lieber', 'Herr', 'Frau', 'Hi', 'Futures', 'Athlete', 'Invitational',
+	'-based',
+	-- More added on 02/07/2008
+	'Find', 'At','To', 'Copyright',
+	-- added on 04/18/2008  
+	'The',
+	-- added on 04/22/2008
+	'Newsletter', 'Entire', 'After', 'Or',
+	-- added on 03/09/2009
+	'For', 'Announces', 'Against', 'Says', 'On', 'Downgrades', 'Owned', 'Based', 'Is', 'Are', 
+    -- added on 11/20/2009
+    'Retired', 'Some', 'As'
+); 
+
+ 
+ create dictionary OrgConjDict as
+(
+	'&','and','und'
+);
+ 
+ create dictionary OrgPrepDict as
+(
+	 'of','for'
+);
+
+create dictionary TheDict as
+(
+	 'The',
+	 -- German
+	 'Das'
+);
+
+create dictionary OrgToAvoidDict as
+(	
+	'The',
+	'Travel',
+	'Internal',
+	'Betting',
+	'Solution',
+	'Resolution',
+	'West',
+	'North',
+	'South',
+	'East',
+	'High',
+	'Community',
+	'Sunday',
+	'Summer',
+	'American',
+	'Law',
+	'Business',
+	'Elementary',
+	'Middle',
+	'Health',
+	'Structure',
+	'Newly Formed',
+	-- added 02/08/2008
+	'Luxury',
+	-- added 04/22/2008
+	'New',
+	'Private',
+	'S-',
+	'For',
+	-- added 03/09/2009
+	'Strategic', 'Hours', 'Mid-Day','Day', 'Morning'
+);
+
+create dictionary OrgPartnershipDict as 
+(
+	'LP',
+	'L.P.',
+	'LLP',
+	'L.L.P.',
+	'LLLP',
+	'L.L.L.P.',
+	'LP',
+	'& Partners',
+	'and Partners',
+	'NV',
+	'& Associates',
+	'& Sons'
+);
+ 
+ create view OrgConj as
+	select
+		D.match as match
+	from
+		Dictionary('OrgConjDict', Doc.text) D;
+		
+ create view OrgPrep as
+	select
+		D.match as match
+	from
+		Dictionary('OrgPrepDict', Doc.text) D;
+		
+ create view The as
+	select
+		D.match as match
+	from
+		Dictionary('TheDict', Doc.text) D;
+ 
+ create view CapsOrg as
+	select
+		R.match as match
+	from
+		--Regex(/\b\p{Upper}[\p{Lower}\&\.\-\,]+\b/, Doc.text) R;
+		-- Allow matches such as 'the Children's Hospital of Pittsburgh' 
+		--Regex(/\b\p{Upper}[\p{Lower}\&\.'\-\,]+\b/, Doc.text) R;
+		-- Allow unicode matches
+		--Regex(/\b\p{Lu}\p{M}*[[\p{Ll}\p{Lo}]\p{M}*\&\.'\-\,]+\b/, Doc.text) R;
+		--Regex(/\b\p{Lu}\p{M}*([\p{Ll}\p{Lo}]\p{M}*|[\&\.'\-\,])+\b/, Doc.text) R;
+		-- Avoid capture partial organization name such as '[Univ. of Michigan College] of Engineering'
+	    --where Not(ContainsDict(industryType_prefix.dict', R.match));
+	    -- switch to faster regex math
+	    RegexTok(/\p{Lu}\p{M}*([\p{Ll}\p{Lo}]\p{M}*|[\&\.'\-\,])+\b/, 6, Doc.text) R; --'
+ 
+-- Added 02/08/2008
+create view AllCapsOrg as
+	select 
+		R.match as match
+	from 
+	-- to capture ABC
+	--	Regex(/\b(\p{Lu}\p{M}*){2,}\b/, Doc.text) R;
+	-- allow matches for B&B, BB&T
+	--	Regex(/\b(\p{Lu}\p{M}*){1,2}(\s*&\s*)?(\p{Lu}\p{M}*)+\b/, Doc.text) R
+	-- all matches for StreetSmart
+	--Regex(/\b(\p{Lu}\p{M}*){1,2}((\s*&\s*)?(\p{Lu}\p{M}*)+|([\p{Ll}\p{Lo}]\p{M}*)+(\p{Lu}\p{M}*)([\p{Ll}\p{Lo}]\p{M}*)+)\b/, Doc.text) R;
+	-- to capture CabCabCab
+	RegexTok(/\b(\p{Lu}\p{M}*){1,2}((\s*&\s*)?(\p{Lu}\p{M}*)+|([\p{Ll}\p{Lo}]\p{M}*)+((\p{Lu}\p{M}*)([\p{Ll}\p{Lo}]\p{M}*)+){1,2})/, 3, Doc.text) R;
+	
+create view AnyCapsOrg as
+	(select O.match as match from AllCapsOrg O)
+	union all
+	(select O.match as match from CapsOrg O);
+ 
+/* 
+ create view DotCom as
+	select
+		R.match as match
+	from
+		--Regex(/\b[\w\&\-]+\.com\b/, Doc.text) R;
+		-- Don't allow DOTCOM to be part of a URL
+		Regex(/(?<!\.)\b[\w\&\-]+\.com\b(?!\/)/, Doc.text) R;
+
+*/
+
+-- Yunyao: changes made to use dictionary
+-- start block change
+	create dictionary DotComSuffixDict as (
+		'.com'
+	);
+/*
+ 	create view DotComAnchor as
+	select
+		R.match as anchor
+	from
+		--Regex(/\b[\w\&\-]+\.com\b/, Doc.text) R;
+		-- Don't allow DOTCOM to be part of a URL
+		Regex(/\.com\b(?!\/)/, Doc.text) R;
+*/	
+
+  	create view DotComAnchor as
+	select
+		D.match as anchor
+	from
+		Dictionary('DotComSuffixDict', Doc.text) D;
+	
+	create view DotComContext as
+    select LeftContextTok(R.anchor,4) as lc, R.anchor as anchor
+    from   DotComAnchor R;
+ 
+	create view DotComLC as
+    select  R.match  as match 
+    --from   Regex(/\b[a-zA-Z][\w\&\-]+$/,  DotComContext.lc) R
+    from   RegexTok(/[a-zA-Z][\w\&\-]+$/,  25, DotComContext.lc) R
+    where Not(MatchesRegex(/[\.@]/, LeftContextTok(R.match,1)));
+    
+    create view DotCom as
+	select CombineSpans(R1.match,R2.anchor) as match
+	from   DotComLC R1, DotComAnchor R2
+	where FollowsTok(R1.match, R2.anchor,0,0);
+
+-- end block change
+	
+/*	
+ create view WrongDotCom as
+	(select
+		R.match as match
+	from
+		Regex(/\b[\w\&\-]+\.com\b/, Doc.text) R)
+	minus 
+	(select R.match as match from DotCom R);
+*/
+	 
+ --create view OrgClueStInd as
+ 
+ create view OrgGovSuffix as
+	extract 
+		dictionary 'industryTypeGovernment_suffix.dict'
+		with flags 'Exact'
+		on D.text as match
+	from Doc D;
+	
+ create view OrgGovPrefix as
+	extract 
+		dictionary 'industryTypeGovernment_prefix.dict'
+		with flags 'Exact'
+		on D.text as match
+	from Doc D;
+
+create view OrgNewspaperSuffix as
+	extract 
+		dictionary 'industryTypeNewspaper_suffix.dict'
+		with flags 'Exact'
+		on D.text as match
+	from Doc D;
+
+create view OrgMediaSuffix as
+	extract 
+		dictionary 'industryTypeMedia_suffix.dict'
+		with flags 'Exact'
+		on D.text as match
+	from Doc D;
+
+ create view OrgClueStIndCaps as
+	( select D.match as match from Dictionary('industryTypeCompany_suffix.dict', 'Exact', Doc.text) D )
+	union all
+	( select D.match as match from Dictionary('industryTypeEducation_suffix.dict', 'Exact', Doc.text) D )
+	union all
+	( select D.match as match from OrgGovSuffix D )
+	union all
+	( select D.match as match from Dictionary('industryTypeMedical_suffix.dict', 'Exact', Doc.text) D )
+	union all
+	( select D.match as match from OrgMediaSuffix D )
+	union all
+	( select D.match as match from OrgNewspaperSuffix D )
+	union all
+	( select D.match as match from Dictionary('industryTypeOthers_suffix.dict', 'Exact', Doc.text) D );
+		
+create view OrgClueStIndPrefixCaps as
+	( select D.match as match from Dictionary('industryTypeCompany_prefix.dict', 'Exact', Doc.text) D )
+	union all
+	( select D.match as match from Dictionary('industryTypeEducation_prefix.dict', 'Exact', Doc.text) D )
+	union all
+	( select D.match as match from OrgGovPrefix D )
+	union all
+	( select D.match as match from Dictionary('industryTypeMedical_prefix.dict', 'Exact', Doc.text) D )
+	union all
+	( select D.match as match from Dictionary('industryTypeOthers_prefix.dict', 'Exact', Doc.text) D );
+
+ -- Yunyao: added on 03/04/09 to ensure that we capture organizations with parternships
+ create view OrgCluePartnershipSuffix as
+ 	select
+ 		D.match as match
+ 	from
+ 		Dictionary('OrgPartnershipDict', 'Exact', Doc.text) D;	
+ 				
+ --create view OrgClueStSuffix as
+ create view OrgClueStSuffixCaps as
+	(select
+		D.match as match
+	from
+		Dictionary('organization_suffix.dict', 'Exact', Doc.text) D)
+	union all
+ 	(select O.match as match from OrgCluePartnershipSuffix O);
+
+
+		
+ create view OrgClueStCaps
+ as
+	(select OCSIC.match as match from OrgClueStIndCaps OCSIC)
+ union all
+    (select OCSSC.match as match from OrgClueStSuffixCaps OCSSC)
+ union all
+ 	(select O.match as match from OrgCluePartnershipSuffix O);
+    
+ /*	
+ Yunyao: replaced with OrgFullCase1 and OrgFullCase on 09/14/2009 to allow more flexible matching of the dictionary entries
+         Essentially, only enforce the first word to be capitalized
+ create view OrgFullCase as
+	(select
+		D.match as match
+	from
+		Dictionary('organization_full_case.dict', 'Exact', Doc.text) D)
+	union all
+	(select
+		D.match as match
+	from
+		Dictionary('organization_media.dict', 'Exact', Doc.text) D)
+	union all
+	(select
+		D.match as match
+	from
+		Dictionary('organization_newspaper.dict', 'Exact', Doc.text) D)
+	union all
+	(select
+		D.match as match
+	from
+		OrganizationFortune1000_2000_2008_Case D );
+*/
+
+
+create view OrgFullCase1 as
+extract
+    dictionaries
+        'organization_full_case.dict' 
+    and 'organization_media.dict'
+    and 'organization_newspaper.dict'
+    and 'organization_government.dict'
+--NOTE: more dictionaries can be added here
+        on D.text   
+        as match     
+        from Doc D
+        having MatchesRegex(/\p{Lu}\p{M}*.+/, match);
+        
+-- Yunyao: added on 10/11/2009 to capture abbreviations
+create view OrgFullCase2 as
+extract
+    dictionaries
+        'organization_abbrev.dict'
+    with flags 'Exact'
+    on D.text   
+    as match     
+    from Doc D;  
+
+
+create view OrgFullCase as 
+	(select O.match as match from OrgFullCase1 O)
+	union all
+	(select O.match as match from OrgFullCase2 O)
+	union all
+	(select O.match as match from OrganizationFortune1000_2000_2008_Case O);		
+		
+		
+ create view OrgFullNoCase as
+	(select
+		D.match as match
+	from
+		Dictionary('organization_full_noCase.dict', Doc.text) D)
+	union all
+	(select
+		D.match as match
+	from
+		Dictionary('organization_government_noCase.dict', Doc.text) D)
+		union all
+	(select
+		D.match as match
+	from
+		Dictionary('organization_media_noCase.dict', Doc.text) D)
+	union all
+	(select
+		D.match as match
+	from
+		OrganizationFortune1000_2000_2008 D);
+		
+		
+ create view OrgFull
+	as 
+	 (select R.match as match from OrgFullNoCase R)
+	union all 
+	 (select R.match as match from OrgFullCase R);		
+   
+    create view Coonetotwo as
+    select B.block as match
+    from BlockTok(0, 1, 2, CapsOrg.match) B;
+
+    create view Coonetothree as
+    select B.block as match
+    from BlockTok(0, 1, 3, CapsOrg.match) B;
+		
+-- rule 7
+		
+	create view CoOcscOpCo as
+	select
+ 		CombineSpans(coco1.match, coco2.match) as match
+	from
+		Coonetotwo coco1,
+		OrgClueStCaps ocsc,
+		OrgPrep op,
+		Coonetotwo coco2
+ 	where
+		FollowsTok(coco1.match, ocsc.match, 0, 0) and
+		FollowsTok(ocsc.match, op.match,0, 0) and
+		FollowsTok(op.match, coco2.match, 0, 0);
+		
+
+-- rule 10
+
+  create view CoOcsic1 as
+	select
+ 		CombineSpans(coco.match, ocsic.match) as match
+	from
+		Coonetothree coco,
+		OrgClueStIndCaps ocsic 
+ 	where
+		FollowsTok(coco.match, ocsic.match, 0, 0);
+		-- Laura 8/5/09: added knob for turning on/off matches over single new lines
+		-- and	Not(ContainsRegex(/[\n\r]/, CombineSpans(coco.match, ocsic.match)));
+		
+ create view CoOcsic2 as
+	select
+ 		CombineSpans(coco.match, ocsic.match) as match
+	from
+		Coonetothree coco,
+ 		OrgClueStSuffixCaps ocsic
+ 	where
+		FollowsTok(coco.match, ocsic.match, 0, 0);
+		-- Laura 8/5/09: added knob for turning on/off matches over single new lines
+		-- and Not(ContainsRegex(/[\n\r]/, CombineSpans(coco.match, ocsic.match)));
+
+
+create view Continents as
+select D.match as match
+from   Dictionary('continent.dict', Doc.text) D;
+
+create view Nationalities as
+select D.match as match
+from   Dictionary('nationality.dict', Doc.text) D;
+
+create view OrgToAvoid as
+select D.match as match
+from Dictionary('OrgToAvoidDict', Doc.text) D;
+
+create view NonOrgDictMatches as
+	(select D.match as match from Continents D)
+	union all
+	(select D.match as match from Nationalities D)
+	union all
+	(select D.match as match from CountryCandidate D)
+	union all
+	(select D.match as match from StateCandidate D)
+	union all
+	(select D.match as match from OrgToAvoid D);
+
+create view NonOrgs as
+select CombineSpans(NO.match, OC.match) as match
+from   NonOrgDictMatches NO,
+ 	   OrgClueStCaps OC
+where
+	FollowsTok(NO.match, OC.match, 0, 1)
+	and MatchesRegex(/\s*\W*\s*/, SpanBetween(NO.match, OC.match)); 
+	
+	
+-- select O.match as match into
+-- NonOrgsAll
+-- from NonOrgs O;
+
+-- TODO: carry the ticker infomation through out
+create view CompanyInfoStrong as
+  extract R.exchange as exchange, R.ticker as ticker, 
+     regex /((\p{Lu}\p{M}*(\p{L}\p{M}*|-)+[ ]+){0,2}\p{Lu}\p{M}*(\p{L}\p{M}*|-)+)[ ]*\($/ on R.lc 
+    return group 1 as companyname
+  from StockExchangeAndTicker R;
+
+create view CoOcsicAll as
+	(select C.match as match from CoOcsic1 C)
+	union all
+	(select C.match as match from CoOcsic2 C)
+	union all
+	(select C.companyname as match from CompanyInfoStrong C);
+
+create view CoOcsic as
+	(select C.match as match from CoOcsicAll C)
+	minus
+	(select C.match as match from NonOrgs C);
+
+-- rule 10 expansion
+	create view CoOcsicEx as
+	select CombineSpans(C.match, S.match) as match
+	from   CoOcsic1 C,
+		   OrgClueStSuffixCaps S,
+		   CapsOrg O
+	where  FollowsTok(C.match, O.match, 0, 0)
+	   and FollowsTok(O.match, S.match, 0, 0);
+
+--rule 9
+
+  create view CoOcsscAll as
+	select
+ 		CombineSpans(coco.match, ocssc.match) as match
+	from
+		Coonetothree coco,
+		OrgClueStSuffixCaps ocssc 
+ 	where
+		FollowsTok(coco.match, ocssc.match, 0, 1) and
+		-- ContainsRegex(/^\s*,\s*$/, SpanBetween(coco.match,ocssc.match));
+		-- allow cases such as 'Test Test AG' as well		
+		MatchesRegex(/\s*[,\s]\s*/, SpanBetween(coco.match,ocssc.match));
+		
+	create view CoOcssc as
+	(select C.match as match from CoOcsscAll C)
+	minus
+	(select C.match as match from NonOrgs C);
+	
+-- rule 5
+  create view OcscOpCoOcCoAll as
+	select
+ 		CombineSpans(ocsc.match, coco2.match) as match, coco2.match as suffix
+	from
+		--OrgClueStCaps ocsc,
+		OrgClueStIndPrefixCaps ocsc,
+		OrgPrep op,
+		Coonetotwo coco1,
+		OrgConj oc,
+		Coonetothree coco2
+	 	where
+			FollowsTok(ocsc.match, op.match, 0, 0) and
+			FollowsTok(op.match, coco1.match, 0, 0) and
+			FollowsTok(coco1.match, oc.match, 0, 0) and
+			FollowsTok(oc.match, coco2.match, 0, 0);
+			-- Laura 8/5/09: added knob for turning on/off matches over single new lines
+			-- and Not(ContainsRegex(/[\t\n\r]/, CombineSpans(ocsc.match, coco2.match)));
+
+
+			
+  -- Yunyao: added 04/22/2008			
+  -- avoid match "Univ. of Michigan and Ohio State University"
+   create view OcscOpCoOcCoInvalid as
+   select o.match as match, c.match as suffix
+   from 
+   		OcscOpCoOcCoAll o,
+   		CoOcsic1 c
+   where 
+   		Overlaps(o.suffix, c.match) and
+   		Not(ContainsRegex(/&/, o.match));
+   
+   create view OcscOpCoOcCo as 
+   		(select o.match as match  from	OcscOpCoOcCoAll o)
+   		minus
+   		(select o.match as match  from	OcscOpCoOcCoInvalid o);
+   			   
+   create view CoOcscOpCoOcCo as 
+  	  select 
+  	  		CombineSpans(coco.match, R1.match) as match
+  	  from 
+  	  		Coonetothree coco,
+  	  		OcscOpCoOcCo R1
+  	  where 
+  	  		FollowsTok(coco.match,R1.match,0,0);
+  	  		-- 04/23/2008 to avoid line break
+  	  		-- Laura 8/5/09: added knob for turning on/off matches over single new lines
+  	  		-- and Not(ContainsRegex(/[\t\n\r]/, CombineSpans(coco.match, R1.match)));
+  
+   create view CoOcscOpCoOcCoAll as
+   	   	(select o.match as match from OcscOpCoOcCo o)
+   	   union all
+ 		(select o.match as match from CoOcscOpCoOcCo o);
+ 
+
+   create view CoOcscOpCoOcCoConsolidated as
+   select 
+   		o.match as match
+   from 
+   		CoOcscOpCoOcCoAll o;
+   -- Laura 8/5/09: removed consolidation to ensure the original semantics
+   --               after adding the knob for turning on/off matches over single new lines
+   -- consolidate on o.match;
+   	   
+-- R1
+
+	create view OfCo as
+		select 
+			CombineSpans(of.match,coco.match) as match
+		from
+			OrgFull of,
+			Coonetotwo coco
+		where
+			FollowsTok(of.match,coco.match,0,0);
+	  	  		
+	 create view OfCozerototwo as
+	 	(select R.match as match from OrgFull R)
+	 union all
+	    (select R.match as match from OfCo R);
+	    
+	 create view OfCoOcsc as
+	     select
+	     	CombineSpans(of.match,ocsc.match) as match
+	     from
+	     	OfCozerototwo of,
+	     	OrgClueStCaps ocsc
+	     where
+	     	FollowsTok(of.match,ocsc.match,0,0);
+	     	
+-- R2
+
+	create view CoOc as
+	     select
+	     	CombineSpans(co.match,oc.match) as match
+	     from
+	     	Coonetotwo co,
+	     	OrgConj oc
+	     where
+	     	FollowsTok(co.match,oc.match,0,0);
+	     	
+	create view CoOcCo as
+	     select
+	     	CombineSpans(cooc.match,co.match) as match
+	     from
+	     	CoOc cooc,
+	     	Coonetotwo co
+	     where
+	     	FollowsTok(cooc.match,co.match,0,0);
+
+	create view CoOcCozerototwo as
+		(select R.match as match from CoOc R)
+	union all 
+		(select R.match as match from CoOcCo R); 
+
+	create view CoOcCozerototwoOcscOpCo as
+		select
+	     	CombineSpans(coocco.match,co.match) as match
+	     from
+	     	CoOcCozerototwo coocco,
+	     	OrgClueStCaps ocsc,
+	     	OrgPrep op,
+	     	Coonetotwo co
+	     where
+	     	FollowsTok(coocco.match, ocsc.match,0,0) and
+	     	FollowsTok(ocsc.match,op.match,0,0) and
+	     	FollowsTok(op.match,co.match,0,0);
+	     	-- Laura 8/5/09: added knob for turning on/off matches over single new lines
+	     	-- and Not(ContainsRegex(/[\t\r\n]/, CombineSpans(coocco.match,co.match)));
+
+	
+	     	
+	-- Added by Yunyao Li on 03/03/2009 to support organization names as 'MedCare Inc'
+	create view AllCapsOrgStClue as 
+	select CombineSpans(O.match, C.match) as match 
+	from OrgClueStCaps C,
+		 AllCapsOrg	O
+	where FollowsTok(O.match, C.match, 0, 0);
+	   -- Laura 8/5/09: added knob for turning on/off matches over single new lines
+	   -- and Not(ContainsRegex(/[\n\r]/, CombineSpans(O.match, C.match)));
+	     	
+-- R11
+-- Added by Yunyao Li to support organization names such as 'the University of Washington' etc
+-- Yunyao: 05/23/2008 split into two
+-- TODO:   used to test optimizer
+/*
+create view OrganizationR11_no_quantifier as
+select CombineSpans(OP.match, CO.block) as match
+from BlockTok(0, 1, 3, CapsOrg.match) CO,
+     OrgPrep P,
+     OrgClueStIndPrefixCaps OP
+where FollowsTok(OP.match, P.match, 0, 0)
+  and FollowsTok(P.match, CO.block, 0, 0)
+  -- do not allow new line
+  and Not(ContainsRegex(/[\n\r]/, CombineSpans(OP.match, CO.block)))
+  -- Avoid capture partial organization name such as '[Univ. of Michigan College] of Engineering'
+  and Not(ContainsDict(industryType_prefix.dict', CO.block));
+*/
+create view OrganizationR11_no_quantifiertemp as
+select OP.match as match, CO.match as block
+from  Coonetothree CO,
+	  OrgPrep P,
+      OrgClueStIndPrefixCaps OP
+where FollowsTok(OP.match, P.match, 0, 0)
+  and FollowsTok(P.match, CO.match, 0, 0);
+  
+
+  
+create view OrganizationR11_no_quantifier as
+select CombineSpans(O.match, O.block) as match
+from OrganizationR11_no_quantifiertemp O
+where  -- do not allow new line
+	  -- Laura 8/5/09: added knob for turning on/off matches over single new lines
+      -- Not(ContainsRegex(/[\n\r]/, CombineSpans(O.match, O.block)))
+  	  -- Avoid capture partial organization name such as '[Univ. of Michigan College] of Engineering'
+     Not(ContainsDict('industryTypeCompany_prefix.dict', O.block)) and
+     Not(ContainsDict('industryTypeEducation_prefix.dict', O.block)) and
+     Not(ContainsDict('industryTypeGovernment_prefix.dict', O.block)) and
+     Not(ContainsDict('industryTypeMedical_prefix.dict', O.block)) and
+     Not(ContainsDict('industryTypeOthers_prefix.dict', O.block));
+  
+/*
+create view NonOrgQuantifier as
+select CO.block as match	
+from BlockTok(0, 1, 3, CapsOrg.match) CO,
+	 OrganizationR11_no_quantifier O
+where Overlaps(CO.block, O.match);
+ 
+create view OrgQuantifier as
+	(select B.block as match from BlockTok(0, 1, 3, CapsOrg.match) B)
+    minus
+    (select B.match as match from NonOrgQuantifier B);
+    
+select Q.match as match into
+OrgQuantifiers
+from OrgQuantifier Q;
+
+select Q.match as match into
+NonOrgQuantifiers
+from NonOrgQuantifier Q;
+*/
+
+create view OrganizationR11_with_quantifier as
+select CombineSpans(CO.match, O.match) as match	
+from Coonetothree CO,
+	 OrganizationR11_no_quantifier O
+where FollowsTok(CO.match, O.match, 0, 0);
+
+create view OrganizationR11_no_the as 
+ 	(select O.match as match from OrganizationR11_no_quantifier O)
+union all
+	(select O.match as match from OrganizationR11_with_quantifier O);
+	
+-- R5, R7, R9, R10, R11
+ 
+ 	create view Org5791011	
+	as 
+	 (select R.match as match from  CoOcscOpCoOcCoConsolidated R)
+	 union all 
+	 (select R.match as match from  CoOcsic R)
+	union all 
+	 (select R.match as match from CoOcssc R)
+	union all 
+	 (select R.match as match from  CoOcscOpCo R)
+	union all
+	 (select R.match as match from  OrganizationR11_no_the R)
+	union all
+	 (select R.match as match from CoOcsicEx R);
+
+	-- Find initial words 
+	create view InitialWord1 as
+	select R.match as word
+	--from Regex(/\b([\p{Upper}]\.\s*){1,5}\b/, Doc.text) R
+	from RegexTok(/([\p{Upper}]\.\s*){1,5}/, 10, Doc.text) R
+	-- added on 04/18/2008
+	where Not(MatchesRegex(/M\.D\./, R.match));
+	
+	
+	-- Yunyao: added on 11/21/2008 to capture names with prefix (we use it as initial 
+	-- to avoid adding too many commplex rules)
+	create view InitialWord2 as
+	select D.match as word
+	from Dictionary('specialNamePrefix.dict', Doc.text) D;
+	
+	create view InitialWord as
+		(select I.word as word from InitialWord1 I)
+		union all
+		(select I.word as word from InitialWord2 I);
+		
+	-- Find weak initial words 
+	create view WeakInitialWord as
+	select R.match as word
+	--from Regex(/\b([\p{Upper}]\.?\s*){1,5}\b/, Doc.text) R;
+	from RegexTok(/([\p{Upper}]\.?\s*){1,5}/, 10, Doc.text) R
+	-- added on 05/12/2008
+	-- Do not allow weak initial word to be a word longer than three characters
+	where Not(ContainsRegex(/[\p{Upper}]{3}/, R.match))
+	-- added on 04/14/2009
+	-- Do not allow weak initial words to match the timezon
+	and Not(ContainsDict('timeZone.dict', R.match));
+	
+	-- added 02/08/2008
+	 create view ExpandedOrg5791011R1 as
+	 	select
+			CombineSpans(ab.match, org5791011.match) as match
+  	  from 
+  	  		AllCapsOrg  ab,
+  	  		Org5791011 org5791011
+  	  where 
+  	  		FollowsTok(ab.match,org5791011.match,0,0);
+  	  		-- Laura 8/5/09: added knob for turning on/off matches over single new lines
+  	  		-- and Not(ContainsRegex(/[\n\r]/, SpanBetween(ab.match,org5791011.match)));
+  	  		
+  	create view ExpandedOrg5791011R2 as
+	 	select
+			CombineSpans(ab.word, org5791011.match) as match
+  	  from 
+  	  		InitialWord  ab,
+  	  		Org5791011 org5791011
+  	  where 
+  	  		FollowsTok(ab.word,org5791011.match,0,0);
+  	  		-- Laura 8/5/09: added knob for turning on/off matches over single new lines
+  	  		-- and Not(ContainsRegex(/[\n\r]/, SpanBetween(ab.word,org5791011.match)));
+	
+	create view ExpandedOrg5791011 as
+		(select O.match as match from  ExpandedOrg5791011R1 O)
+		union all
+		(select O.match as match from  ExpandedOrg5791011R2 O);
+		
+  	 create view TheOrg5791011 as  
+  	  select 
+  	  		CombineSpans(C.match, org5791011.match) as match
+  	  from 
+  	  		The  the,
+  	  		CoOc C,
+  	  		Org5791011 org5791011
+  	  where 
+  	  		FollowsTok(the.match,C.match,0,0) and
+  	  		FollowsTok(C.match,org5791011.match,0,0);
+  	  		  	 
+  	 -- Yunyao: added 04/18/2008
+ 	create view ExpandedOrg5791011WithAnd1 as
+	select 
+		CombineSpans(C.match, O.match) as match
+	from 
+		Coonetothree C,
+		Org5791011 O
+	where
+		FollowsTok(C.match, O.match, 0,1) and
+		MatchesRegex(/\s+[&]\s+/, SpanBetween(C.match, O.match));
+		-- Laura 8/5/09: added knob for turning on/off matches over single new lines
+		-- and Not(ContainsRegex(/[\t\n\r]/, CombineSpans(C.match, O.match)));
+	
+	create view ExpandedOrg5791011WithAnd2 as
+	select 
+		CombineSpans(C.match, O.match) as match
+	from 
+		AllCapsOrg C,
+		ExpandedOrg5791011WithAnd1 O
+	where
+		FollowsTok(C.match, O.match, 0,0);
+		-- Laura 8/5/09: added knob for turning on/off matches over single new lines
+		-- and Not(ContainsRegex(/[\t\n\r]/, SpanBetween(C.match, O.match)));
+	
+	create view ExpandedOrg5791011WithAnd3 as
+	select 
+		CombineSpans(I.word, O.match) as match
+	from 
+		InitialWord I,
+		ExpandedOrg5791011WithAnd1 O
+	where
+		FollowsTok(I.word, O.match, 0,0);
+		-- Laura 8/5/09: added knob for turning on/off matches over single new lines
+		-- and Not(ContainsRegex(/[\t\n\r]/, SpanBetween(I.word, O.match)));
+		
+	create view ExpandedOrg5791011WithAnd as
+		(select O.match as match from ExpandedOrg5791011WithAnd1 O)
+		union all
+		(select O.match as match from ExpandedOrg5791011WithAnd2 O)
+		union all
+		(select O.match as match from ExpandedOrg5791011WithAnd3 O);
+  
+
+-- Prefix and Suffix of governmental orgs might be orgs in themselves
+create view OrgGov as
+( select * from OrgGovSuffix )
+union all
+( select * from OrgGovPrefix );
+
+
+	-- ===========================================================================
+-- >>>>>>>>>>>>>>> Aggregation/Consolidation section <<<<<<<<<<<<<<<<
+-- ===========================================================================
+
+-- Customization for ACE2005
+create view OrgCruise as
+extract dictionary 'orgs/ace2005/organization_cruiseLines.dict'
+	on D.text as match
+from Doc D;
+
+-- Customization for ACE2005
+create view OrgAuction as
+extract dictionary 'orgs/ace2005/organization_auction.dict'
+	on D.text as match
+from Doc D
+having MatchesRegex(/\p{Lu}\p{M}*.+/, match);
+
+-- Customization for ACE2005
+create view OrgNewspaper as
+extract dictionary 'orgs/ace2005/newspaper_top100ByCirculation.dict'
+               and 'orgs/ace2005/newspaper_byCountry.dict'
+	on D.text as match
+from Doc D
+having Or(MatchesRegex(/the\s+\p{Lu}\p{M}*.+/, match),
+          MatchesRegex(/\p{Lu}\p{M}*.+/, match));
+
+-- Customization for ACE2005
+create dictionary MagazineClue as(
+	'magazine', 'article', 'column', 'editorial', 'reports'
+);
+
+create view OrgMagazineCand as
+extract dictionary 'orgs/ace2005/magazine_byCountry.dict'
+	--with flags 'Exact'
+	on D.text as match
+from Doc D
+having MatchesRegex(/\p{Lu}\p{M}*.+/, match);
+
+create view OrgMagazine as
+	-- strong matches with two or more tokens
+	(select * from OrgMagazineCand O where ContainsRegex(/\s+/,O.match))
+	union all
+    -- weaker matches with a single token require a magazine clue to the left or right
+	(
+		select * 
+		from OrgMagazineCand O 
+		where Not(ContainsRegex(/\s+/,O.match)) 
+		  and Or( ContainsDict('MagazineClue', RightContextTok(O.match,3)),
+		          ContainsDict('MagazineClue',  LeftContextTok(O.match,2)) 
+		        )
+	);
+
+	
+-- Customization for ACE2005
+create view OrgPublisher as
+extract dictionary 'orgs/ace2005/organization_publishing.dict'
+	on D.text as match
+from Doc D
+having MatchesRegex(/\p{Lu}\p{M}*.+/, match);
+
+
+-- Customization for ACE2005
+create view OrgAirline as
+extract dictionary 'orgs/ace2005/organization_airlines.dict'
+	with flags 'Exact'
+	on D.text as match
+from Doc D;
+
+
+-- Merge all the different rules.
+create view OrgAll as
+	 (select R.match as org from DotCom R)
+union all 
+	 (select R.match as org from OrgFull R)
+union all
+	 (select R.match as org from Org5791011 R)
+union all
+	 (select R.match as org from TheOrg5791011 R)
+union all
+	 (select R.match as org from ExpandedOrg5791011 R)
+union all
+	 (select R.match as org from ExpandedOrg5791011WithAnd R)
+union all
+     (select R.match as org from OfCoOcsc R)
+union all 
+	 (select R.match as org from CoOcCozerototwoOcscOpCo R)
+union all
+	 (select R.match as org from AllCapsOrgStClue R)
+-- Laura 11/18/2009: Governemnt Suffix = Organization
+union all
+     (select R.match as org from OrgGov R)
+-- Laura 11/20/2009: The rest are customizations for ACE2005
+union all
+     (select R.match as org from OrgCruise R)
+union all
+     (select R.match as org from OrgAuction R)
+union all
+     (select R.match as org from OrgNewspaper R)
+union all
+     (select R.match as org from OrgMagazine R)
+union all
+     (select R.match as org from OrgPublisher R)
+union all
+     (select R.match as org from OrgAirline R);
+	 	 	
+	 

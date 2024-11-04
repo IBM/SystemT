@@ -1,0 +1,79 @@
+require document with columns text Text;
+
+create view CapsWord as
+	extract 
+		regex /\p{Lu}\p{M}*([\p{Ll}\p{Lo}]\p{M}*|[\&\.'\-\,])+\b/  --'
+        on between 1 and 6 tokens in D.text
+        as word
+	from Document D; 
+
+ 
+create view AllCapsWord as
+	extract 
+		regex /(\p{Lu}\p{M}*){1,2}((\s*&\s*)?(\p{Lu}\p{M}*)+|([\p{Ll}\p{Lo}]\p{M}*)+(\p{Lu}\p{M}*)([\p{Ll}\p{Lo}]\p{M}*)+)/
+        on between 1 and 3 tokens in D.text 
+        as word
+	from Document D;
+
+	
+create view CapsWordFromDoc as
+(select C.word as word from CapsWord C)
+union all
+(select C.word as word from AllCapsWord C);
+
+/*
+create view Company as
+  select R.block as name
+  from BlockTok(0,3,3,CapsWordFromDoc.match) R;
+*/
+  
+create view Company as
+    extract blocks
+    	with count 3
+    	and separation 0 tokens
+    	on CW.word as name
+	from CapsWordFromDoc CW;
+
+
+
+
+-- Extract One to Three tokens out of StrongMedium companies
+create view CapsWordCompany as
+	extract 
+		regex /\p{Lu}\p{M}*([\p{Ll}\p{Lo}]\p{M}*|[\&\.'\-\,])+\b/  --'
+        on between 1 and 6 tokens in R.name
+        as word
+	from Company R; 
+
+ 
+create view AllCapsWordCompany as
+	extract 
+		regex /(\p{Lu}\p{M}*){1,2}((\s*&\s*)?(\p{Lu}\p{M}*)+|([\p{Ll}\p{Lo}]\p{M}*)+(\p{Lu}\p{M}*)([\p{Ll}\p{Lo}]\p{M}*)+)/
+        on between 1 and 3 tokens in R.name 
+        as word
+	from Company R;
+
+	
+create view CapsWordFromCompany as
+(select C.word as word from CapsWordCompany C)
+union all
+(select C.word as word from AllCapsWordCompany C);
+
+
+create view CapsWordOnetoThreeFromCompanyTemp as
+	extract blocks
+    	with count between 1 and 3
+    	and separation 0 tokens
+    	on CW.word as match
+	from CapsWordFromCompany CW;
+
+
+--filter out matches that do not start at the beginning of company name
+create view CapsWordOnetoThreeFromCompany as
+select CW.match as match
+from CapsWordOnetoThreeFromCompanyTemp CW, Company C
+where Equals( GetBegin(C.name), GetBegin(CW.match) );
+
+
+output view CapsWordOnetoThreeFromCompanyTemp;
+output view CapsWordOnetoThreeFromCompany;

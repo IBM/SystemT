@@ -1,0 +1,142 @@
+module syslog;
+
+
+import view IDBuildingBlockConsolidated from module common;
+
+
+create view CodeCharNumSymBaseUnfilered as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /[^\/\%]\b([a-zA-Z\d-!\^\-_]{6,20})\b/
+    with flags 'DOTALL'
+    on D.text
+    return group 1 as match
+  from Document D;
+
+output view CodeCharNumSymBaseUnfilered;
+
+create view CodeCharNumSymBase as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as CodeCharNumSymBaseUnfilered_____sep_____D____id
+  from  CodeCharNumSymBaseUnfilered D
+  where MatchesRegex(/[a-zA-Z\d]+[a-zA-Z\d-!\^]*[\d\-_][a-zA-Z\d-!\^\-_]*[a-zA-Z\d]/, D.match);
+
+output view CodeCharNumSymBase;
+
+
+
+
+
+
+
+create view CodeBuildingBlockConsolidatedUnfiltered as
+  select  __t2.match as match,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__42__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__42__Temp__1 __t1,
+        __Consolidate__42__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.match;
+
+output view CodeBuildingBlockConsolidatedUnfiltered;
+
+create view CodeBuildingBlockConsolidated as
+  select  Op.match as match,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__43__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__43__TempOp__1 Op,
+        __Minus__43__Temp __t
+  where Equals(Op.match, __t.match);
+
+output view CodeBuildingBlockConsolidated;
+
+create view CodeInterim as
+  select  D.match as Code_Span,
+          GetText(D.match) as Code_Text,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as CodeBuildingBlockConsolidated_____sep_____D____id
+  from  CodeBuildingBlockConsolidated D;
+
+output view CodeInterim;
+
+
+
+
+
+
+
+create view CodeSyslogOutput as
+  select  D.Code_Span as span,
+          D.Code_Text as text,
+          GetString('CodeSyslog') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as CodeInterim_____sep_____D____id
+  from  CodeInterim D;
+
+output view CodeSyslogOutput;
+
+export view syslog.CodeSyslogOutput;
+
+
+
+
+
+
+
+
+create view __Consolidate__42__Temp__1 as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CodeCharNumSymBase_____sep_____C____id,
+          C.match as __consolidate__target
+  from  CodeCharNumSymBase C;
+
+output view __Consolidate__42__Temp__1;
+
+create view __Consolidate__42__Temp__2 as
+  select  __t1.match as match,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__42__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__42__Temp__2;
+
+create view __Minus__43__Temp as
+  select  __t.match as match
+  from  
+    ((select  Op.match as match
+      from  __Minus__43__TempOp__1 Op)
+    minus
+    (select  Op.match as match
+      from  __Minus__43__TempOp__2 Op)
+    ) __t
+  group by __t.match;
+
+output view __Minus__43__Temp;
+
+create view __Minus__43__TempOp__1 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as CodeBuildingBlockConsolidatedUnfiltered_____sep_____D____id
+  from  CodeBuildingBlockConsolidatedUnfiltered D;
+
+output view __Minus__43__TempOp__1;
+
+create view __Minus__43__TempOp__2 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as "common.IDBuildingBlockConsolidated_____sep_____D____id"
+  from  "common.IDBuildingBlockConsolidated" D;
+
+output view __Minus__43__TempOp__2;
+

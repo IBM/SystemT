@@ -1,0 +1,48 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test case for selecting a Span column
+--
+-------------------------------------------------------------------------------
+require document with columns text Text;
+
+create view CapsWord as
+extract regex /[A-Z][a-z]*/
+        on 1 token in D.text
+        as match
+from Document D;
+output view CapsWord;
+
+create dictionary CommonWords as (
+	'first', 'of', 'the', 'of the'
+);
+
+create view DictMatch as
+	select D1.*
+	from Dictionary('CommonWords', Document.text) D1;
+
+-- Find pairs of  words within 20 tokens of each other.
+create view WordPairs as
+	select D1.match as first, C.match as second
+	from Dictionary('CommonWords', Document.text) D1, CapsWord C
+	where FollowsTok(D1.match, C.match, 0, 20);
+output view WordPairs;
+
+create view OverLapText as 
+    select D.text as text
+    from Document D
+    where Overlaps(D.text, D.text);
+
+create view OverlapText as 
+    select D.text as first, C.match as second
+    from Document D, CapsWord C
+    where Overlaps(D.text, D.text);
+output view OverlapText;
+
+create view OverlapFollow as 
+    select D.text as first, C.match as second
+    from Document D, CapsWord C
+    where Overlaps(D.text, D.text)
+    and FollowsTok(D.text, D.text, 0, 6);
+output view OverlapFollow;
+
+

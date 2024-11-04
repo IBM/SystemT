@@ -1,0 +1,24 @@
+-- Customization for ACE2005
+-- Yunyao: created on 11/06/2009 to capture stand-alone state abbreviations
+create view StateStrongAbbrev1  as
+ extract 
+ 	dictionaries 
+ 		'location/stateAbbrevs/stateListStrongAbbrev.dict'
+    with flags 'Exact'
+ 		on D.text   
+        as match     
+        from Doc D;
+
+create view StateStrongAbbrev2  as
+    extract 
+ 	dictionaries 
+ 		'location/stateAbbrevs/stateStrongAbbrv.ChicagoAPStyle.dict'
+    	on D.text   
+        as match     
+        from Doc D
+    having MatchesRegex(/(\p{Lu}\p{M}*(\p{Ll}\p{M}*)+|(\p{Ll}\p{M}*\.?){2,}|(\p{Lu}\p{M}*\.?){2,})\.?/, match);
+    
+create view StateStrongAbbrevAll as
+	(select S.match as match from StateStrongAbbrev1 S)
+	union all
+	(select S.match as match from StateStrongAbbrev2 S);

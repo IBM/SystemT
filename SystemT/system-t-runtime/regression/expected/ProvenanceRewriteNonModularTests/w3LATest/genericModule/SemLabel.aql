@@ -1,0 +1,214 @@
+module genericModule;
+
+
+create view SemlabelOrgChart as
+  select  'contenttypes_orgchart' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          OrgChart.__auto__id as OrgChart_____sep_____OrgChart____id
+  from  OrgChart OrgChart
+  limit 1;
+
+output view SemlabelOrgChart;
+
+create view SemlabelSiteServ as
+  select  'sites_siteserv' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          SiteServ.__auto__id as SiteServ_____sep_____SiteServ____id
+  from  SiteServ SiteServ
+  limit 1;
+
+output view SemlabelSiteServ;
+
+create view SemlabelLoginCode as
+  select  'backend_login_code' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as UrlLoginwssCode_____sep_____U____id
+  from  UrlLoginwssCode U
+  limit 1;
+
+output view SemlabelLoginCode;
+
+create view SemlabelFirstSeg as
+  select  T.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as CheckFirstSegDict_____sep_____S____id,
+          -1 as FirstSegMappingTable_____sep_____T____id
+  from  CheckFirstSegDict S,
+        FirstSegMappingTable T
+  where Equals(GetText(S.elem), GetText(T.str));
+
+output view SemlabelFirstSeg;
+
+create view SemlabelLastSegForward as
+  select  T.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as CheckLastSegDict_____sep_____S____id,
+          -1 as LastSegMappingTable_____sep_____T____id
+  from  CheckLastSegDict S,
+        LastSegMappingTable T
+  where Equals(GetText(S.elem), GetText(T.str));
+
+output view SemlabelLastSegForward;
+
+create view SemlabelLastSegBackwards as
+  select  T.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as CheckLastSegDictTrue_____sep_____S____id,
+          -1 as LastSegMappingTableBackwards_____sep_____T____id
+  from  CheckLastSegDictTrue S,
+        LastSegMappingTableBackwards T
+  where Equals(GetText(S.elem), GetText(T.str));
+
+output view SemlabelLastSegBackwards;
+
+create view SemlabelLastSeg as
+  (select  Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__388__TempOp__0 Op)
+  union all
+  (select  Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__388__TempOp__1 Op);
+
+output view SemlabelLastSeg;
+
+create view SemlabelAll as
+  (select  Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__389__TempOp__0 Op)
+  union all
+  (select  Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__389__TempOp__1 Op)
+  union all
+  (select  Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__389__TempOp__2 Op)
+  union all
+  (select  Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__389__TempOp__3 Op)
+  union all
+  (select  Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__389__TempOp__4 Op);
+
+output view SemlabelAll;
+
+create view SemlabelNormalized as
+  select  Op.label as label,
+          Op.id as id,
+          AutoID() as __auto__id
+  from  __Base__SemlabelNormalized__Temp Op;
+
+output view SemlabelNormalized;
+
+create view Semlabel as
+  select  Op.label as label,
+          AutoID() as __auto__id
+  from  __Base__Semlabel__Temp Op;
+
+output view Semlabel;
+
+create view __Base__SemlabelNormalized__Temp as
+  select  GetText(S.label) as label,
+          1 as id
+  from  SemlabelAll S
+  group by GetText(S.label);
+
+output view __Base__SemlabelNormalized__Temp;
+
+create view __Base__Semlabel__Temp as
+  select  ListJoin(S.label, ';') as label
+  from  
+    (select  S.id as id,
+            List(S.label) as label
+    from  SemlabelNormalized S
+    group by S.id
+    ) S;
+
+output view __Base__Semlabel__Temp;
+
+create view __Union__388__TempOp__0 as
+  select  SemlabelLastSegForward.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          SemlabelLastSegForward.__auto__id as SemlabelLastSegForward_____sep_____SemlabelLastSegForward____id
+  from  SemlabelLastSegForward SemlabelLastSegForward;
+
+output view __Union__388__TempOp__0;
+
+create view __Union__388__TempOp__1 as
+  select  SemlabelLastSegBackwards.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          SemlabelLastSegBackwards.__auto__id as SemlabelLastSegBackwards_____sep_____SemlabelLastSegBackwards____id
+  from  SemlabelLastSegBackwards SemlabelLastSegBackwards;
+
+output view __Union__388__TempOp__1;
+
+create view __Union__389__TempOp__0 as
+  select  SemlabelOrgChart.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          SemlabelOrgChart.__auto__id as SemlabelOrgChart_____sep_____SemlabelOrgChart____id
+  from  SemlabelOrgChart SemlabelOrgChart;
+
+output view __Union__389__TempOp__0;
+
+create view __Union__389__TempOp__1 as
+  select  SemlabelSiteServ.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          SemlabelSiteServ.__auto__id as SemlabelSiteServ_____sep_____SemlabelSiteServ____id
+  from  SemlabelSiteServ SemlabelSiteServ;
+
+output view __Union__389__TempOp__1;
+
+create view __Union__389__TempOp__2 as
+  select  SemlabelFirstSeg.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          SemlabelFirstSeg.__auto__id as SemlabelFirstSeg_____sep_____SemlabelFirstSeg____id
+  from  SemlabelFirstSeg SemlabelFirstSeg;
+
+output view __Union__389__TempOp__2;
+
+create view __Union__389__TempOp__3 as
+  select  SemlabelLastSeg.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          SemlabelLastSeg.__auto__id as SemlabelLastSeg_____sep_____SemlabelLastSeg____id
+  from  SemlabelLastSeg SemlabelLastSeg;
+
+output view __Union__389__TempOp__3;
+
+create view __Union__389__TempOp__4 as
+  select  SemLabelURL.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          SemLabelURL.__auto__id as SemLabelURL_____sep_____SemLabelURL____id
+  from  SemLabelURL SemLabelURL;
+
+output view __Union__389__TempOp__4;
+

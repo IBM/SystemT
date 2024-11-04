@@ -1,0 +1,64 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- scalartests.aql
+--
+-- Tests of various scalar functions and predicates.
+-------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
+-- Test 1: SpanBetween and ContainsRegex
+
+-- Find first names, using an exhaustive dictionary.
+create view FirstName as 
+select D.match as annot
+from Dictionary('dictionaries/first.dict', Document.text) D
+where ContainsRegex(/\A[A-Z][a-z]*\Z/, D.match);
+
+-- Find phone numbers, using a pair of regular expressions.
+create view PhoneNumber as
+( 
+	select R.match as annot
+	from Regex(/\+?\([1-9]\d{2}\)\d{3}-\d{4}/, Document.text) R
+)
+union all
+(
+	select R.match as annot
+	from Regex(/\+?[Xx]\.?\d{4,5}/, Document.text) R
+);
+
+
+-- Find instances of first name followed within 50 chars by phone number
+-- and return the span *between* them.
+select SpanBetween(name.annot, phone.annot) as annot
+into SpanBetween
+from FirstName name, PhoneNumber phone
+where Follows(name.annot, phone.annot, 0, 50);
+
+-- Use SpanBetween() and MatchesRegex() to find instances of person, phone 
+-- where the span between person and phone contains 'or'
+select CombineSpans(name.annot, phone.annot) as annot
+into SpanBetweenFilt
+from FirstName name, PhoneNumber phone
+where 
+	Follows(name.annot, phone.annot, 0, 50)
+	and ContainsRegex(/\bor\b/, SpanBetween(name.annot, phone.annot));
+
+-------------------------------------------------------------------------------
+-- Test 2: ContainsDict and Not
+ 
+create dictionary FilterPersonDict as
+(
+	'Travel', 'Fellow', 'Sir', 'IBMer', 'Researcher', 'All',
+	'Friends', 'Friend', 'Colleague', 'Colleagues', 'Managers',
+	'Customer', 'Users', 'User', 'Valued', 'Executive', 'Chairs'
+);
+
+-- CapsPerson subrule from personstrict.aql.
+select
+	R.match as name
+into CapsPerson
+from
+	Regex(/\b\p{Upper}\p{Lower}[\p{Alpha}]{1,20}\b/, Document.text) R
+where
+	Not(ContainsDict('FilterPersonDict', R.match));

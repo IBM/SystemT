@@ -1,0 +1,46 @@
+module webaccess;
+
+create view UserAgent_base as 
+select 
+	R.match 
+from 
+	Regex(/[a-zA-Z][\w*\.\s\[\]\(;\)\/\-:]*/, Document.text) R;  
+    	
+create view UserAgent_interim as 
+    select C.match 
+    from UserAgent_base C
+     where MatchesRegex(/\"/, LeftContext(C.match, 1))
+    and MatchesRegex(/\"/, RightContext(C.match, 1));
+    
+
+create view referrer_interim as 
+    select C.referrer_uri_span 
+    from referrerDetails C
+     where MatchesRegex(/\"/, LeftContext(C.referrer_uri_span, 1))
+    and MatchesRegex(/\"/, RightContext(C.referrer_uri_span, 1));
+
+create view UserAgent as
+select 
+	userAgentI.match as userAgent
+from 
+	referrer_interim referrerF,
+	UserAgent_interim userAgentI
+where 
+	FollowsTok(referrerF.referrer_uri_span, userAgentI.match, 1, 30)
+	and MatchesRegex(/"[\s*|]"/,SpanBetween(referrerF.referrer_uri_span, userAgentI.match))
+	    consolidate on 	userAgentI.match;
+	
+
+create view UserAgentOutputInterim as 
+select D.userAgent as userAgent_Span, GetText(D.userAgent) as userAgent_Text
+from UserAgent D;
+
+create view UserAgentOutput as
+select
+	U.userAgent_Span as span,
+	U.userAgent_Text as text,
+	GetString('UserAgent') as field_type
+from
+	UserAgentOutputInterim U;
+
+export view UserAgentOutput;

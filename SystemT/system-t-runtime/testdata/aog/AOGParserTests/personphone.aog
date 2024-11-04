@@ -1,0 +1,54 @@
+###############################################################################
+# personphone.aog
+#
+# ("aog" stands for Avatar Operator Graph.)
+#
+# A "person ... phone number" annotator, expressed as a graph of Avatar 
+# operators.  Looks for a first name, followed by a phone number 0-20 chars 
+# out.  Also saves the "person" annotations to the output.
+###############################################################################
+
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+#create dictionary of first names
+CreateDict(
+    "name" => "dictionaries/first.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+# Look for matches to a dictionary of first names.
+# Separated out so that it can be referenced in the
+# Output statement.
+$Person = 
+Project(
+	( "match" => "person" ),
+  	Select(MatchesRegex(RegexConst(/\A[A-Z][a-z]*\Z/, "JavaRegex"), 
+            GetCol("match")), 
+			Dictionary("dictionaries/first.dict", "text", $Document))
+);
+
+
+# Find the "person" part, then pull out a RightContext.
+$PersonRC = ApplyFunc(RightContext(GetCol("person"), IntConst(50)) => "rc", $Person);
+
+# Use the output of PersonRC to find the PersonPhone annotations.
+# Consolidate to remove overlap.
+$Person_Phone = 
+	Consolidate("ContainedWithin", GetCol("personphone"),
+		ApplyFunc(CombineSpans(GetCol("person"), GetCol("phone")) => "personphone", 
+			Union(
+				Regex(/\+?\([1-9]\d{2}\)\d{3}-\d{4}/, (0 => "phone"), "rc", $PersonRC),
+				Regex(/\+?[Xx]\.?\d{4,5}/, (0 => "phone"), "rc", $PersonRC)
+			)
+		)
+	);
+	
+			
+# Specify the output.
+Output: $Person, $Person_Phone;

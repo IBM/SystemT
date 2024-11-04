@@ -1,0 +1,57 @@
+require document with columns text Text;
+
+------------------------------------------------------------------------------
+-- Tests of MINUS support for the List() aggregate function.
+-- ALso test for nulls and Lists
+------------------------------------------------------------------------------
+
+
+create dictionary CommonWords as (
+	'a', 'the', 'of', 'of a', 'of the'
+);
+
+-- Find pairs of common words within 20 tokens of each other.
+create view WordPairs_Unsorted as
+select D1.match as first, D2.match as second, 
+	CombineSpans(D1.match, D2.match) as annot
+from Dictionary('CommonWords', Document.text) D1,
+	Dictionary('CommonWords', Document.text) D2
+where FollowsTok(D1.match, D2.match, 0, 20);
+
+
+create view WordPairs_Grouped as
+select W.first as first, List(W.second) as second
+from WordPairs_Unsorted W
+group by W.first;
+
+
+create view WordPairs_Grouped1 as
+select *
+from WordPairs_Grouped W
+where GreaterThan(1000, GetBegin(W.first));
+
+create view WordPairs_Grouped2 as
+select *
+from WordPairs_Grouped W
+where GreaterThan(GetBegin(W.first), 500);
+
+
+-- Test for MINUS when the schema has a list attribute
+create view OneMinusTwo as
+(select * from WordPairs_Grouped1)
+minus
+(select * from WordPairs_Grouped2);
+
+create view TwoMinusOne as
+(select * from WordPairs_Grouped2)
+minus
+(select * from WordPairs_Grouped1);
+
+--output view WordPairs_Grouped1;
+--output view WordPairs_Grouped2;
+output view OneMinusTwo;
+output view TwoMinusOne;
+
+
+
+

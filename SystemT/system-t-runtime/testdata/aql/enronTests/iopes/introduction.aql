@@ -1,0 +1,28 @@
+
+create view PersonLeftContextForIntro as
+select P.person as person, LeftContext(P.person,40) as lc
+from Person P;
+
+create view IntroPersonCand1 as 
+select  R.match as intro
+from Regex(/my\s+name\s+is\s+$/,PersonLeftContextForIntro.lc) R;
+
+create view IntroPersonCand2 as 
+select  R.match as intro
+from Regex(/I\s+am\s+$/,PersonLeftContextForIntro.lc) R;
+
+create view IntroCandAll as
+(select R.intro as intro from IntroPersonCand1 R)
+union all
+(select R.intro as intro from IntroPersonCand2 R);
+
+create view IntroCandAllCons as
+select R.intro as intro
+from IntroCandAll R
+consolidate on R.intro;
+
+--create view Introduction as
+select I.intro as intro, P.person as anchor, CombineSpans(I.intro,P.person) as personintro
+into IntroductionOutput
+from IntroCandAllCons I, Person P
+where FollowsTok(I.intro, P.person,0,0);

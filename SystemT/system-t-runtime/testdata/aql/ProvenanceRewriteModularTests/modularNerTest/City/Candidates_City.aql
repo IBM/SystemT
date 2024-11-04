@@ -1,0 +1,171 @@
+module City;
+
+import view StateStrongAll from module CommonFeatures as StateStrongAll;
+import view StrongStateAll from module CommonFeatures as StrongStateAll;
+import view StateCandidate from module CommonFeatures as StateCandidate;
+import view CountryCandidate from module CommonFeatures as CountryCandidate;
+import view MajorCity from module CommonFeatures as MajorCity;
+import view USCity from module CommonFeatures as USCity;
+import view CityAll from module CommonFeatures as CityAll; 
+import view RelaxedCapsPlace from module Linguistics as RelaxedCapsPlace;
+import view OrganizationFull from module OrganizationCandidates as OrganizationFull;
+import view PersonFinalAllWithoutDots from module PersonCandidates as PersonFinalAllWithoutDots;
+import view RegionCandidate from module Region as RegionCandidate;
+
+create view RegionInvalid1 as
+select R.match as match
+from   RegionCandidate R,
+	   PersonFinalAllWithoutDots P
+where  Contains(P.person, R.match)
+  and  Not(Equals(P.person, R.match));      
+
+create view StateOrCountry as
+	(select S.match as match from StateStrongAll S)
+	union all
+	(select C.match as match from CountryCandidate C);
+
+create view CityStateCandidate as
+select CombineSpans(C.match, S.match) as match, C.match as city, S.match as state
+from USCity C,
+	 StrongStateAll S
+where FollowsTok(C.match, S.match, 0, 1)
+  and MatchesRegex(/\s*[,]?\s*/, SpanBetween(C.match, S.match))
+  and Not(ContainsRegex(/[\n\r]/, SpanBetween(C.match, S.match)))
+  -- avoid matchings like "Post ID"
+  and Not(MatchesRegex(/[^,]+\s+ID/, CombineSpans(C.match, S.match)));
+
+-- avoid matching a random list of city,state combinations
+create view CityStateWrong as
+select C.match as match, C.city as city, C.state as state
+from CityStateCandidate C
+where ContainsRegex(/,/, LeftContext(C.match, 10))
+ and ContainsRegex(/,/, RightContextTok(C.match, 10));
+
+create view CityState as
+	(select C.match as match, C.city as city, C.state as state from CityStateCandidate C)
+	minus
+	(select C.match as match, C.city as city, C.state as state from CityStateWrong C);
+
+create view CityConsolidated as
+select C.match as match
+from CityAll C
+consolidate on C.match;
+
+create view StrongCity as
+	(select C.match as match from CityLeftClue CL,  CityConsolidated C	where FollowsTok(CL.match, C.match, 0, 0))
+	union all
+	(select C.match as match from CityConsolidated C, CityRightClue CR	where FollowsTok(C.match, CR.match, 0, 0));	
+
+	
+-- major city, state, country
+create view CityStateCountryCandidate as
+select CombineSpans(C.match, CN.match) as match, SpanBetween(C.match, CN.match) as state, C.match as city, CN.match as country, '' as continent
+from CityConsolidated C,
+	 CountryCandidate CN
+where FollowsTok(C.match, CN.match, 3, 3)
+  and MatchesRegex(/\s*,\s*\p{Lu}\p{M}*(\p{L}\p{M}*)+\s*,\s*/, SpanBetween(C.match, CN.match))
+  and Not(ContainsRegex(/[\n\r]/, SpanBetween(C.match, CN.match)));
+
+create view CityStateCountryWrong1 as
+select C.match as match, C.city as city, C.state as state, C.country as country, C.continent as continent
+from CityStateCountryCandidate C,
+	 CountryCandidate CN
+where Contains(C.state, CN.match);
+
+-- avoid matching a random list of city,state, country combinations
+create view CityStateCountryWrong2 as
+select C.match as match, C.city as city, C.state as state, C.country as country, C.continent as continent
+from CityStateCountryCandidate C
+where MatchesRegex(/,/, RightContextTok(C.match, 1))
+  and Not(ContainsRegex(/[\n\r]/, LeftContextTok(C.match, 1)));
+
+create view CityStateCountryWrong as 
+	(select C.match as match, C.city as city, C.state as state, C.country as country, C.continent as continent from CityStateCountryWrong1 C)
+	union all
+	(select C.match as match, C.city as city, C.state as state, C.country as country, C.continent as continent from CityStateCountryWrong2 C); 
+
+create view CityStateCountry as
+	(select C.match as match, C.city as city, C.state as state, C.country as country, C.continent as continent from CityStateCountryCandidate C)
+	minus
+	(select C.match as match, C.city as city, C.state as state, C.country as country, C.continent as continent from CityStateCountryWrong C);
+	
+create view CityStateCountryCandidates as
+	(select C.match as match, 'city' as subtype, C.match as city, '' as state, '' as country, '' as continent from MajorCity C)
+	union all
+	(select C.match as match, 'city' as subtype, C.match as city, '' as state, '' as country, '' as continent from StrongCity C)
+	union all
+	(select C.match as match, 'state' as subtype, '' as city, C.match as state, '' as country, '' as continent from StateCandidate C)
+	union all
+	(select C.match as match, 'country' as subtype, '' as city, '' as state, C.match as country, '' as continent from CountryCandidate C)
+	union all
+	(select C.match as match, 'city' as subtype, C.city as city, C.state as state, '' as country, '' as continent from CityState C)
+	union all
+	(select C.match as match, 'city' as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent from CityStateCountry C);
+	
+	-- only keep cities that do not have the same name as a country or state
+create view CityConsolidatedFiltered as
+	(select C.match as match from CityConsolidated C)
+	minus 
+	(select SC.match as match from StateOrCountry SC);
+	
+create view CityCountry as
+select CC.match as match, 'city' as subtype, CC.match as city, '' as county, '' as state, C.match as country, '' as continent, CombineSpans(CC.match, C.match) as reference
+from CityConsolidatedFiltered CC,
+	 CountryCandidate C
+where FollowsTok(CC.match, C.match, 0, 1)
+  and MatchesRegex(/\s*[,]?\s*/, SpanBetween(CC.match, C.match))
+  and Not(ContainsRegex(/[\n\r]/, SpanBetween(CC.match, C.match)));
+  
+create view AllCityStateCountry as
+select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent
+from CityStateCountryCandidates C
+consolidate on C.match;
+  
+create view AllCityStateCountryZipcode as
+	(select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.match as reference from AllCityStateCountry C)
+	union all
+	(select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityCountry C);
+
+create view CityStateCountryInvalid1 as
+select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference
+from   AllCityStateCountryZipcode C,
+	   PersonFinalAllWithoutDots P
+where  Contains(P.person, C.match)
+  and  Not(Equals(P.person, C.match));      
+
+create view CityStateCountryInvalid2 as
+select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference
+from   AllCityStateCountryZipcode C,
+	   OrganizationFull O 
+where  Contains(O.organization, C.match)
+  and  Not(Equals(O.organization, C.match));   
+
+create view CityStateCountryInvalid3 as
+select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference
+from   AllCityStateCountryZipcode C,
+	   OrganizationFull O 
+where  Overlaps(O.organization, C.match)
+  and  Not(Contains(O.organization, C.match));  
+
+create view CityStateCountryInvalid as
+	(select C.match as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityStateCountryInvalid1 C)
+	union all
+	(select C.match as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityStateCountryInvalid2 C)
+	union all
+	(select C.match as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityStateCountryInvalid3 C);
+
+create view CityStateCountryValid as
+	(select C.match as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from AllCityStateCountryZipcode C)
+	minus
+	(select C.loc as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityStateCountryInvalid C);
+
+create view CityConsolidatedInvalid as
+select C.match as match
+from   CityStateCountryInvalid CI,
+	   CityConsolidated C
+where  Equals(CI.loc, C.match);   
+	
+create view CityConsolidatedValid as
+	(select C.match as match from CityConsolidated C)
+	 minus 
+	(select C.match as match from CityConsolidatedInvalid C);

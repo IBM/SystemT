@@ -1,0 +1,19 @@
+
+create view WrongPersonACE2005 as
+	(extract
+		dictionaries 'names/ace2005/wrongPerson_ace2005.dict'
+		with flags 'Exact'
+		on D.text   
+        as person
+		from Doc D)
+	union all
+	(select P.* 
+	 from PersonCandidatesAll P,
+	 	  Facility F
+	 where Contains(F.facility, P.person));
+			
+create view PersonCandidatesValid as
+	(select P.person as person from PersonCandidatesAll P)
+	minus
+	(select P.person as person from WrongPersonACE2005 P);
+------------------------------------------------------	

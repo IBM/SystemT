@@ -1,0 +1,62 @@
+-------------------------------------------------------------------------------
+-- minusBug.aql
+--
+-- Test case for problems with the minus operator, post-refactoring.
+--
+-- The bug turned out to be a problem with dictionary reading -- dictionary
+-- entries with trailing spaces got extra tokens.
+-------------------------------------------------------------------------------
+
+require document with columns text Text;
+
+-- Dictionary where the entry has a trailing space.
+create dictionary CityNames as
+(
+	'Davis '
+);
+
+
+select D.match as match
+into CityName1
+from Dictionary('CityNames', 'Exact', Document.text) D;
+
+-- Same thing from a dictionary file.
+select D.match as match
+into CityName2
+from Dictionary('dictionaries/spacetest.dict', 'Exact', Document.text) D;
+
+
+create view PersonName as 
+select R.match as person
+from Regex(/David Davis/, Document.text) R;
+
+create view EmptySet as
+select R.match as person
+from Regex(/qwerqefadfaewqrrqf/, Document.text) R;
+
+
+-- Here's the statement that originally found the problem; make sure it
+-- works properly.
+create view WithUSCity_view as
+(select P.person as person 
+	 from PersonName P, CityName1 UC 
+	 )
+	minus
+	(select P1.person as person from EmptySet P1);
+	
+select V.person as person
+into WithUSCity
+from WithUSCity_view V;
+
+create view WithoutUSCity_view as
+(select P.person as person 
+	 from PersonName P
+	 )
+	minus
+	(select P1.person as person from EmptySet P1);
+	
+select V.person as person
+into WithoutUSCity
+from WithoutUSCity_view V;
+
+

@@ -1,0 +1,44 @@
+module aqldump;
+
+-- Test Create ... Select
+create view FullPersonName1 as 
+  select 'Barack' as firstName,
+ 		 'Obama' as lastName,
+ 		 CombineSpans (firstName, lastName) as fullName,
+ 		 '555-6789' as personPhone
+ from Document D;
+ 
+-- Test Select into
+select '555-6789' as phoneNumber,
+    F.lastName as name
+into PhoneNumber
+from Document D, FullPersonName1 F;   
+
+
+-- test extra clauses 		 
+create view FullPersonName_InternalIEWT_1 as
+  select
+    F2.fullName,
+    F2.firstName,
+    F2.lastName,
+    F2.personPhone
+  from
+    FullPersonName1 F2,
+    PhoneNumber P
+  where
+    FollowsTok(
+      F2.fullName,
+      P.phoneNumber,
+      0,
+      4
+      )
+      
+  consolidate on
+    CombineSpans(F2.firstName, F2.lastName)
+    using 'NotContainedWithin'
+    with priority from F2.personPhone
+ 	ascending;
+  order by F2.personPhone, F2.fullName, F2.firstName
+  limit 3;
+    
+output view FullPersonName_InternalIEWT_1;

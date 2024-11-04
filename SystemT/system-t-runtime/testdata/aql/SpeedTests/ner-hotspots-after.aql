@@ -1,0 +1,108 @@
+require document with columns text Text;
+-------------------------------------------------------------------------------
+-- ner-hotspots-before.aql
+--
+-- AQL file that isolates just the expensive views in NER.
+-------------------------------------------------------------------------------
+
+
+create view Doc as select Document.text from Document;
+
+--------------------------------------------------------------------------------
+-- AllCapsOrg
+
+create view AllCapsOrg as
+extract regex 
+    /(\p{Lu}\p{M}*){1,2}((\s*&\s*)?(\p{Lu}\p{M}*)+|([\p{Ll}\p{Lo}]\p{M}*)+((\p{Lu}\p{M}*)([\p{Ll}\p{Lo}]\p{M}*)+){1,2})/
+on between 1 and 3 tokens in D.text as match
+from Doc D;
+		
+output view AllCapsOrg;
+
+-------------------------------------------------------------------------------
+-- CapsOrg
+
+-- NOTE: The original version of this view used the regex
+--       /\p{Lu}\p{M}*([\p{Ll}\p{Lo}]\p{M}*|[\&\.'\-\,])+\n/
+-- (uppercase letter, followed by a mix of punctuation and lowercase, ending
+-- on a word boundary).
+-- The regex
+--       /\p{Lu}\p{M}*([\p{Ll}\p{Lo}]\p{M}*|[\&\.'\-\,])*[\p{Ll}\p{Lo}]\p{M}*/
+-- (uppercase letter, followed by a mix of punctuation and lowercase, ending
+-- with a lowercase letter) does almost the same thing, except that it doesn't 
+-- return matches for things like [E-]Card and [Shopping.]com.  So we add a
+-- second "cleanup" part of the view just for these special cases. 
+-- TODO: Figure out whether the "cleanup" portion of the view is really 
+-- necessary.
+create view CapsOrg as
+select Subquery.match from
+(
+	(
+	    -- Main part of view
+		extract regex
+			/\p{Lu}\p{M}*([\p{Ll}\p{Lo}]\p{M}*|[\&\.'\-\,])*[\p{Ll}\p{Lo}]\p{M}*/
+		on between 1 and 6 tokens in D.text as match
+		from Doc D
+			-- First "Cleanup" part of the view (see note above).
+			-- Filter out matches that came before a word character.
+			having Not(MatchesRegex(/\w/, RightContext(match, 1)))
+	) 
+		union all 
+	(
+		-- Second "Cleanup" part of view (see note above).
+		-- Subquery finds words ending with punctuation, followed by another
+		-- word char.
+		-- Top-level query trims off the final token.
+		select 
+			SpanIntersection(S.match, 
+			    LeftContext(LeftContextTok(RightContext(S.match, 0), 1), 10000)
+			)
+				as match
+		from
+		(
+			extract regex
+				/\p{Lu}\p{M}*([\p{Ll}\p{Lo}]\p{M}*|[\&\.'\-\,])*[\&\.'\-\,](\p{Alnum}+|_)/
+			on between 1 and 6 tokens in D.text as match
+			from Doc D
+		) S
+	)
+) Subquery
+-- Consolidate to handle cases where matches of the "cleanup" portion of
+-- the view overlap with matches of the main part.
+consolidate on Subquery.match
+;
+	
+output view CapsOrg; 
+
+
+-------------------------------------------------------------------------------
+--NumCP 
+
+create view NumCP as
+extract regex
+	/([1-9\p{Alpha}][\d\p{Alpha}\-\,]*)?\d([\d\p{Alpha}\-\,]*[\d\p{Alpha}])?/
+on between 1 and 20 tokens in D.text as match
+from Doc D
+having Not(MatchesRegex(/[1-9]\d{3}[,-]\s+.*/, match))
+	-- The following disjunction emulates the word boundary check in the 
+	-- original regex.
+	-- TODO: Figure out whether this part is really necessary
+	and 
+	Or(
+		-- Case 1: last char is word char, next is not
+		And(
+			MatchesRegex(/\w/, RightContext(match, 1)),
+			MatchesRegex(/\W/, LeftContext(RightContext(match, 0), 1))
+		),
+		-- Case 2: last char is non-word char, next is not
+		And(
+			MatchesRegex(/\W/, RightContext(match, 1)),
+			MatchesRegex(/\w/, LeftContext(RightContext(match, 0), 1))
+		),
+		-- Case 3: End of doc
+		Equals(0, GetLength(RightContext(match, 1)))
+	);
+
+-- We disable this output because the new version produces almost the
+-- same output, but not quite.
+--output view NumCP;

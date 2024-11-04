@@ -1,0 +1,46 @@
+module Sentiment; 
+-- TODO: Add AQL content here 
+
+--------------------------
+-- Speaker Does Target
+--------------------------
+create view SpeakerDoesTarget as
+	select ADN.*, T.text as target
+	from AgentDoesNonagent ADN,  SentimentCustom.Speaker S, SentimentCustom.Target T
+	where   Equals(GetText(S.text),GetText(ADN.agent)) and 
+		    Equals(GetText(T.text),GetText(ADN.nonAgent));
+		
+--output view SpeakerDoesTarget;
+
+--------------------------
+-- Speaker Does not Do Target
+--------------------------	
+create view SpeakerNotDoesTarget as
+	select ADN.*, T.text as target
+	from AgentNotDoesNonagent ADN,  SentimentCustom.Speaker S, SentimentCustom.Target T
+	where   Equals(GetText(S.text),GetText(ADN.agent)) and 
+		    Equals(GetText(T.text),GetText(ADN.nonAgent));
+		
+--------------------------
+-- Speaker Does Target Positive
+--------------------------
+create view SpeakerDoesTargetPositive as
+	(select T.*, 'Speaker does positive on target' as Pattern , 'SpkDoesPosOnTgt' as PatternCode
+	 from SpeakerDoesTarget T
+	 where MatchesDict('SentimentCustom.SpeakerDoesTargetPositive_V',T.verbBase))
+	union all
+	(select T.*, 'Not[speaker does negative on target]' as Pattern, 'SpkNotDoesNegOnTgt' as PatternCode 
+	 from SpeakerNotDoesTarget T
+	 where MatchesDict('SentimentCustom.SpeakerDoesTargetNegative_V',T.verbBase));
+	  
+--------------------------
+-- Speaker Does Target Negative
+--------------------------
+create view SpeakerDoesTargetNegative as
+	(select T.*, 'Speaker does negative on target' as Pattern, 'SpkDoesNegOnTgt' as PatternCode
+	 from SpeakerDoesTarget T
+	 where MatchesDict('SentimentCustom.SpeakerDoesTargetNegative_V',T.verbBase))
+	 union all
+	 (select T.*, 'Not[Speaker does positive on target]' as Pattern, 'SpkNotDoesPosOnTgt' as PatternCode 
+	 from SpeakerNotDoesTarget T
+	 where MatchesDict('SentimentCustom.SpeakerDoesTargetPositive_V',T.verbBase));

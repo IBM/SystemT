@@ -1,0 +1,22 @@
+-- Defect 98984
+
+create view View1 as
+extract regex /.+/
+on D.text as text
+from Document D;
+
+-- This is works as expected
+create view View2 as
+select V1.*
+from View1 V1, Document D
+where Contains(V1.text, D.text);
+
+-- This is produces no output
+create view View3 as
+select V1.*
+from View1 V1, Document D
+where Contains(D.text, V1.text);
+
+output view View1;
+output view View2;
+output view View3;

@@ -1,0 +1,513 @@
+module PersonCandidates;
+
+
+create view PersonFinalAllWithoutDotsConsolidated as
+  select  __t2.person as person,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__274__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__274__Temp__1 __t1,
+        __Consolidate__274__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.person;
+
+output view PersonFinalAllWithoutDotsConsolidated;
+
+create view PersonWithAttr1 as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    P.__auto__id as PersonFinalAllWithoutDotsConsolidated_____sep_____P____id,
+    regex /^([\p{L}\p{M}-']{2,})\s+([\p{L}\p{M}-']{2,})$/
+    with flags 'DOTALL'
+    on P.person
+    return group 0 as reference
+       and group 1 as first
+       and group 2 as last
+  from PersonFinalAllWithoutDotsConsolidated P;
+
+output view PersonWithAttr1;
+
+create view PersonWithAttr2 as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    P.__auto__id as PersonFinalAllWithoutDotsConsolidated_____sep_____P____id,
+    regex /^([\p{L}\p{M}-']{2,})\s*,\s*([\p{L}\p{M}-']{2,})$/
+    with flags 'DOTALL'
+    on P.person
+    return group 0 as reference
+       and group 2 as first
+       and group 1 as last
+  from PersonFinalAllWithoutDotsConsolidated P;
+
+output view PersonWithAttr2;
+
+create view PersonWithAttr3 as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    P.__auto__id as PersonFinalAllWithoutDotsConsolidated_____sep_____P____id,
+    regex /^([\p{L}\p{M}-']{2,})\s+([\p{L}\p{M}-'.]+)\s+([\p{L}\p{M}-'.]{2,})$/
+    with flags 'DOTALL'
+    on P.person
+    return group 0 as reference
+       and group 1 as first
+       and group 2 as middle
+       and group 3 as last
+  from PersonFinalAllWithoutDotsConsolidated P;
+
+output view PersonWithAttr3;
+
+create view PersonWithAttr3a as
+  select  R.first as first,
+          R.middle as middle,
+          R.last as last,
+          R.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as PersonWithAttr3_____sep_____R____id
+  from  PersonWithAttr3 R
+  where Not(ContainsDict('RightContextSuffixesForProperNounNames', R.last));
+
+output view PersonWithAttr3a;
+
+create view PersonWithAttr3b as
+  select  R.first as first,
+          '' as middle,
+          R.middle as last,
+          R.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as PersonWithAttr3_____sep_____R____id
+  from  PersonWithAttr3 R
+  where ContainsDict('RightContextSuffixesForProperNounNames', R.last);
+
+output view PersonWithAttr3b;
+
+create view PersonWithAttr4 as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    P.__auto__id as PersonFinalAllWithoutDotsConsolidated_____sep_____P____id,
+    regex /^([\p{L}\p{M}-']{2,})$/
+    with flags 'DOTALL'
+    on P.person
+    return group 0 as reference
+  from PersonFinalAllWithoutDotsConsolidated P;
+
+output view PersonWithAttr4;
+
+create view PersonWithAttr4a as
+  select  R.reference as first,
+          '' as middle,
+          '' as last,
+          R.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as PersonWithAttr4_____sep_____R____id
+  from  PersonWithAttr4 R
+  where ContainsDicts('FirstNamesUsedGlobally', 'FirstNamesUsedInGermanyLong', 'NickNamesUsedGlobally', 'FirstNamesUsedInGermanyShort', 'FirstNamesUsedInItaly', 'FirstNamesUsedInFrance', 'FirstNamesUsedInSpain', 'FirstNamesUsedInIndia', 'FirstNamesUsedInIsrael', R.reference)
+     and Not(ContainsDicts('LastNamesUsedGlobally', 'LastNamesUsedInGermanyLong', 'LastNamesUsedInGermanyShort', 'LastNamesUsedGloballyUnique', 'LastNamesUsedInItaly', 'LastNamesUsedInFrance', 'LastNamesUsedInSpain', 'LastNamesUsedInIndia', 'LastNamesUsedInIsrael', R.reference));
+
+output view PersonWithAttr4a;
+
+create view PersonWithAttr4b as
+  select  '' as first,
+          '' as middle,
+          R.reference as last,
+          R.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as PersonWithAttr4_____sep_____R____id
+  from  PersonWithAttr4 R
+  where Not(ContainsDicts('FirstNamesUsedGlobally', 'FirstNamesUsedInGermanyLong', 'NickNamesUsedGlobally', 'FirstNamesUsedInGermanyShort', 'FirstNamesUsedInItaly', 'FirstNamesUsedInFrance', 'FirstNamesUsedInSpain', 'FirstNamesUsedInIndia', 'FirstNamesUsedInIsrael', R.reference))
+     and ContainsDicts('LastNamesUsedGlobally', 'LastNamesUsedInGermanyLong', 'LastNamesUsedInGermanyShort', 'LastNamesUsedGloballyUnique', 'LastNamesUsedInItaly', 'LastNamesUsedInFrance', 'LastNamesUsedInSpain', 'LastNamesUsedInIndia', 'LastNamesUsedInIsrael', R.reference);
+
+output view PersonWithAttr4b;
+
+create view PersonWithAttr5 as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    P.__auto__id as PersonFinalAllWithoutDotsConsolidated_____sep_____P____id,
+    regex /^([\p{L}\p{M}]+\.)\s+([\p{L}\p{M}-']{2,})$/
+    with flags 'DOTALL'
+    on P.person
+    return group 0 as reference
+       and group 1 as initial
+       and group 2 as name
+  from PersonFinalAllWithoutDotsConsolidated P;
+
+output view PersonWithAttr5;
+
+create view PersonWithAttr5a as
+  select  '' as first,
+          '' as middle,
+          R.name as last,
+          R.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as PersonWithAttr5_____sep_____R____id
+  from  PersonWithAttr5 R
+  where Not(ContainsDicts('FirstNamesUsedGlobally', 'FirstNamesUsedInGermanyLong', 'NickNamesUsedGlobally', 'FirstNamesUsedInGermanyShort', 'FirstNamesUsedInItaly', 'FirstNamesUsedInFrance', 'FirstNamesUsedInSpain', 'FirstNamesUsedInIndia', 'FirstNamesUsedInIsrael', R.name));
+
+output view PersonWithAttr5a;
+
+create view PersonWithAttr5b as
+  select  R.name as first,
+          '' as middle,
+          '' as last,
+          R.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as PersonWithAttr5_____sep_____R____id
+  from  PersonWithAttr5 R
+  where ContainsDicts('FirstNamesUsedGlobally', 'FirstNamesUsedInGermanyLong', 'NickNamesUsedGlobally', 'FirstNamesUsedInGermanyShort', 'FirstNamesUsedInItaly', 'FirstNamesUsedInFrance', 'FirstNamesUsedInSpain', 'FirstNamesUsedInIndia', 'FirstNamesUsedInIsrael', R.name)
+     and Not(ContainsDicts('LastNamesUsedGlobally', 'LastNamesUsedInGermanyLong', 'LastNamesUsedInGermanyShort', 'LastNamesUsedGloballyUnique', 'LastNamesUsedInItaly', 'LastNamesUsedInFrance', 'LastNamesUsedInSpain', 'LastNamesUsedInIndia', 'LastNamesUsedInIsrael', R.name));
+
+output view PersonWithAttr5b;
+
+create view PersonWithAttr6 as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    P.__auto__id as PersonFinalAllWithoutDotsConsolidated_____sep_____P____id,
+    regex /^([\p{L}\p{M}-']{2,})\s+([\p{L}\p{M}-'.]+)\s+([\p{L}\p{M}-'.]{2,})[,\s]+([\p{L}\p{M}-'.]{2,})$/
+    with flags 'DOTALL'
+    on P.person
+    return group 0 as reference
+       and group 1 as first
+       and group 2 as middle
+       and group 3 as last
+       and group 4 as suffix
+  from PersonFinalAllWithoutDotsConsolidated P;
+
+output view PersonWithAttr6;
+
+create view PersonWithAttr6a as
+  select  R.first as first,
+          R.middle as middle,
+          R.last as last,
+          R.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as PersonWithAttr6_____sep_____R____id
+  from  PersonWithAttr6 R
+  where ContainsDict('RightContextSuffixesForProperNounNames', R.suffix);
+
+output view PersonWithAttr6a;
+
+create view PersonWithAttrValid as
+  (select  Op.person as person,
+            Op.first as first,
+            Op.middle as middle,
+            Op.last as last,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__275__TempOp__0 Op)
+  union all
+  (select  Op.person as person,
+            Op.first as first,
+            Op.middle as middle,
+            Op.last as last,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__275__TempOp__1 Op)
+  union all
+  (select  Op.person as person,
+            Op.first as first,
+            Op.middle as middle,
+            Op.last as last,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__275__TempOp__2 Op)
+  union all
+  (select  Op.person as person,
+            Op.first as first,
+            Op.middle as middle,
+            Op.last as last,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__275__TempOp__3 Op)
+  union all
+  (select  Op.person as person,
+            Op.first as first,
+            Op.middle as middle,
+            Op.last as last,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__275__TempOp__4 Op)
+  union all
+  (select  Op.person as person,
+            Op.first as first,
+            Op.middle as middle,
+            Op.last as last,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__275__TempOp__5 Op)
+  union all
+  (select  Op.person as person,
+            Op.first as first,
+            Op.middle as middle,
+            Op.last as last,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__275__TempOp__6 Op)
+  union all
+  (select  Op.person as person,
+            Op.first as first,
+            Op.middle as middle,
+            Op.last as last,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__275__TempOp__7 Op)
+  union all
+  (select  Op.person as person,
+            Op.first as first,
+            Op.middle as middle,
+            Op.last as last,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__275__TempOp__8 Op);
+
+output view PersonWithAttrValid;
+
+create view PersonWithoutAttr as
+  select  Op.person as person,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__276__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__276__TempOp__1 Op,
+        __Minus__276__Temp __t
+  where Equals(Op.person, __t.person);
+
+output view PersonWithoutAttr;
+
+create view PersonWithAttrAll as
+  (select  Op.person as person,
+            Op.first as first,
+            Op.middle as middle,
+            Op.last as last,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__277__TempOp__0 Op)
+  union all
+  (select  Op.person as person,
+            Op.first as first,
+            Op.middle as middle,
+            Op.last as last,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__277__TempOp__1 Op);
+
+output view PersonWithAttrAll;
+
+create view __Consolidate__274__Temp__1 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonFinalAllWithoutDots_____sep_____P____id,
+          P.person as __consolidate__target
+  from  PersonFinalAllWithoutDots P;
+
+output view __Consolidate__274__Temp__1;
+
+create view __Consolidate__274__Temp__2 as
+  select  __t1.person as person,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__274__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__274__Temp__2;
+
+create view __Minus__276__Temp as
+  select  __t.person as person
+  from  
+    ((select  Op.person as person
+      from  __Minus__276__TempOp__1 Op)
+    minus
+    (select  Op.person as person
+      from  __Minus__276__TempOp__2 Op)
+    ) __t
+  group by __t.person;
+
+output view __Minus__276__Temp;
+
+create view __Minus__276__TempOp__1 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonFinalAllWithoutDotsConsolidated_____sep_____P____id
+  from  PersonFinalAllWithoutDotsConsolidated P;
+
+output view __Minus__276__TempOp__1;
+
+create view __Minus__276__TempOp__2 as
+  select  P.reference as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonWithAttrValid_____sep_____P____id
+  from  PersonWithAttrValid P;
+
+output view __Minus__276__TempOp__2;
+
+create view __Union__275__TempOp__0 as
+  select  P.reference as person,
+          P.first as first,
+          '' as middle,
+          P.last as last,
+          P.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonWithAttr1_____sep_____P____id
+  from  PersonWithAttr1 P;
+
+output view __Union__275__TempOp__0;
+
+create view __Union__275__TempOp__1 as
+  select  P.reference as person,
+          P.first as first,
+          '' as middle,
+          P.last as last,
+          P.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonWithAttr2_____sep_____P____id
+  from  PersonWithAttr2 P;
+
+output view __Union__275__TempOp__1;
+
+create view __Union__275__TempOp__2 as
+  select  P.reference as person,
+          P.first as first,
+          P.middle as middle,
+          P.last as last,
+          P.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonWithAttr3a_____sep_____P____id
+  from  PersonWithAttr3a P;
+
+output view __Union__275__TempOp__2;
+
+create view __Union__275__TempOp__3 as
+  select  P.reference as person,
+          P.first as first,
+          P.middle as middle,
+          P.last as last,
+          P.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonWithAttr3b_____sep_____P____id
+  from  PersonWithAttr3b P;
+
+output view __Union__275__TempOp__3;
+
+create view __Union__275__TempOp__4 as
+  select  P.reference as person,
+          P.first as first,
+          P.middle as middle,
+          P.last as last,
+          P.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonWithAttr4a_____sep_____P____id
+  from  PersonWithAttr4a P;
+
+output view __Union__275__TempOp__4;
+
+create view __Union__275__TempOp__5 as
+  select  P.reference as person,
+          P.first as first,
+          P.middle as middle,
+          P.last as last,
+          P.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonWithAttr4b_____sep_____P____id
+  from  PersonWithAttr4b P;
+
+output view __Union__275__TempOp__5;
+
+create view __Union__275__TempOp__6 as
+  select  P.reference as person,
+          P.first as first,
+          P.middle as middle,
+          P.last as last,
+          P.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonWithAttr5a_____sep_____P____id
+  from  PersonWithAttr5a P;
+
+output view __Union__275__TempOp__6;
+
+create view __Union__275__TempOp__7 as
+  select  P.reference as person,
+          P.first as first,
+          P.middle as middle,
+          P.last as last,
+          P.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonWithAttr5b_____sep_____P____id
+  from  PersonWithAttr5b P;
+
+output view __Union__275__TempOp__7;
+
+create view __Union__275__TempOp__8 as
+  select  P.reference as person,
+          P.first as first,
+          P.middle as middle,
+          P.last as last,
+          P.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonWithAttr6a_____sep_____P____id
+  from  PersonWithAttr6a P;
+
+output view __Union__275__TempOp__8;
+
+create view __Union__277__TempOp__0 as
+  select  P.reference as person,
+          P.first as first,
+          P.middle as middle,
+          P.last as last,
+          P.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonWithAttrValid_____sep_____P____id
+  from  PersonWithAttrValid P;
+
+output view __Union__277__TempOp__0;
+
+create view __Union__277__TempOp__1 as
+  select  P.person as person,
+          '' as first,
+          '' as middle,
+          '' as last,
+          P.person as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonWithoutAttr_____sep_____P____id
+  from  PersonWithoutAttr P;
+
+output view __Union__277__TempOp__1;
+

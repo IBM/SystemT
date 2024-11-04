@@ -1,0 +1,192 @@
+-- Inappropriate, Private - top priorities
+create view InappropriateDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/inappropriate/email.inappropriate.dict', Document.text) D;	
+
+create view NounDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/nouns.dict', Document.text) D;	
+
+create view VerbDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/verbs.dict', Document.text) D;	
+
+create view AdvDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/advs.dict', Document.text) D;	
+
+create view PronounDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/pronouns.dict', Document.text) D;	
+
+
+
+create view SexQualifiersDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/inappropriate/sexQualifiers.dict', Document.text) D;	
+
+create view SexDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/inappropriate/sex.dict', Document.text) D;	
+
+
+
+create dictionary FatDictList as
+(
+	'fat'
+);
+create view FatDict as
+select D.match as match
+from   Dictionary('FatDictList', Document.text) D;
+
+create dictionary SlobDictList as
+(
+	'slob','slob','shit','retard','rabbit','rat','sandwich','girl','woman'
+);
+create view SlobDict as
+select D.match as match
+from   Dictionary('SlobDictList', Document.text) D;
+
+
+create dictionary BlowDictList as
+(
+	'blow'
+);
+create view BlowDict as
+select D.match as match
+from   Dictionary('BlowDictList', Document.text) D;
+
+create dictionary JobDictList as
+(
+	'job'
+);
+create view JobDict as
+select D.match as match
+from   Dictionary('JobDictList', Document.text) D;
+
+
+
+create dictionary WonderDictList as
+(
+	'wonder'
+);
+create view WonderDict as
+select D.match as match
+from   Dictionary('WonderDictList', Document.text) D;
+
+create dictionary BraDictList as
+(
+	'bra'
+);
+create view BraDict as
+select D.match as match
+from   Dictionary('BraDictList', Document.text) D;
+
+
+
+
+create view NounAdjPronounDict as
+	(select d.match as match from NounDict d)
+	union all 
+	(select d.match as match from AdjDict d)
+	union all 
+	(select d.match as match from PronounDict d);
+
+create view Inappropriate1 as
+	select
+ 		CombineSpans(tdi.match, napd.match) as match
+	from
+		InappropriateDict tdi,
+		NounAdjPronounDict napd
+ 	where  
+ 		FollowsTok(tdi.match, napd.match, 0, 1);
+
+
+
+-- <mi category="Inappropriate" value="dict;;${0.str}${1.str}"><w id="0" pos="/(noun)|(adjective)|(pronoun)/"/><w id="1" category=".email.inappropriate"/></mi>
+
+create view Inappropriate2 as
+	select
+ 		CombineSpans(napd.match, tdi.match) as match
+	from
+		InappropriateDict tdi,
+		NounAdjPronounDict napd
+ 	where  
+ 		FollowsTok(napd.match, tdi.match, 0, 1);
+
+
+-- <mi category="Inappropriate" value="sex;;${0.str}${1.str}"><w id="0" lex="!/(other|opposite|same|weaker)/"/><w id="1" lex="sex"/></mi> 
+-- <mi category="Inappropriate" value="Blonde;;${0.str}${1.str}"><w id="0" lex="stupid"/><w id="1" lex="blond"/></mi>
+create view Inappropriate3 as
+	select
+ 		CombineSpans(sqd.match, sd.match) as match
+	from
+		SexDict sd,
+		SexQualifiersDict sqd
+ 	where  
+ 		FollowsTok(sqd.match, sd.match, 0, 1);
+
+
+create view Inappropriate4 as
+	select
+ 		CombineSpans(fd.match, sd.match) as match
+	from
+		FatDict fd,
+		SlobDict sd
+ 	where  
+ 		FollowsTok(fd.match, sd.match, 0, 1);
+
+
+
+create view Inappropriate5 as
+	select
+ 		CombineSpans(bd.match, jd.match) as match
+	from
+		BlowDict bd,
+		JobDict jd
+ 	where  
+ 		FollowsTok(bd.match, jd.match, 0, 1);
+
+
+create view Inappropriate6 as
+	select
+ 		CombineSpans(wd.match, bd.match) as match
+	from
+		WonderDict wd,
+		BraDict bd
+ 	where  
+ 		FollowsTok(wd.match, bd.match, 0, 1);
+
+
+create view InappropriateAll as 
+     (select R.match as match from Inappropriate1 R)
+     union all
+     (select R.match as match from Inappropriate2 R)
+     union all
+     (select R.match as match from Inappropriate3 R)
+     union all
+     (select R.match as match from Inappropriate4 R)
+     union all
+     (select R.match as match from Inappropriate5 R)
+     union all
+     (select R.match as match from Inappropriate6 R)
+     union all
+     (select R.match as match from InappropriateDict R);
+
+
+
+

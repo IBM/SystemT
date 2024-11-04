@@ -1,0 +1,49 @@
+require document with columns text Text;
+
+-- ****************************************************************************
+--
+-- Created By : Yunyao Li (yunyaoli@us.ibm.com)
+-- 
+-- Annotator type : Built-in
+-- 
+-- Purpose : Extract urls from plain text
+-- Examples :
+--			http://explorer.msn.com
+--          www.BlackBerry.net
+--
+-- This is a translation based on UrlRecognizer
+-- ****************************************************************************
+/**
+ * Rule 1: identifies urls that begins with protocol names http or ftp
+ * Examples: http://explorer.msn.com
+ *           ftp://cvs.ibm.com
+ */
+create view URL1 as
+select R.match as annot
+from Regex(/((ht|f)tps?:\/\/\w+[\w\-:&=_?\/~.<>@]+[\w\-:&=_?\/~]{2,})/, Document.text) R;
+
+/**
+ * Rule 2: identifies urls that are not necessarily begin with protocol names http or ftp
+ * Examples: http://explorer.msn.com
+ *           w3.ibm.com
+ *           http://172.17.172.62/rt/tips/index.html
+ */
+create view URL2 as
+select R.match as annot
+from   Regex(/(((([\w]+:)\/\/)|(w\w+\.))(([\d\w]|%[a-fA-f\d]{2,2})+(:([\d\w]|%[a-fA-f\d]{2,2})+)?@)?([\d\w][-\d\w]{0,253}[\d\w]\.)+[\w]{2,4}(:[\d]+)?(\/([-+_~.\d\w]|%[a-fA-f\d]{2,2})*)*(\?(&?([-+_~.\d\w]|%[a-fA-f\d]{2,2})=?)*)?(#([-+_~.\d\w]|%[a-fA-f\d]{2,2})*)?)/, Document.text) R;
+
+/**
+ * Combine all the matches identified so far
+ */
+create view URLAll as
+  (select URL1.annot as annot from URL1)
+union all
+  (select URL2.annot as annot from URL2);
+
+/**
+ * Consolidate all the matches and output them
+ */
+select C.annot as url
+into URL
+from URLAll C
+consolidate on C.annot;

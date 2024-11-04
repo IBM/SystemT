@@ -1,0 +1,25 @@
+/**
+* Test case for defect 35244: Text Analytics Runtime : SRM [Shared Regex Matching] optimization issue with modular NER AQL.
+* Create two views that use regular expressions and generate SRM nodes in AOG. Similarly create a second module with two different regexes, 
+* and with extract output columns of different names than the ones used in this module. 
+* Attempt to run both the modules together. Ideally, there should not be any problem. However, due to a bug in SRM optimization, 
+* the user is forced to name all the output columns to same name for these AQLs to work together. 
+*/
+
+module module2;
+
+create view FourDigitExtension as
+extract regex /x\d{4}/
+on 1 token in D.text 
+as ext
+from Document D;
+
+create view NotA4DigitExtension as
+extract regex /X\d{3}/
+on  1 token in D.text 
+as match
+from Document D;
+
+output view FourDigitExtension;
+
+output view NotA4DigitExtension;

@@ -1,0 +1,610 @@
+module webaccess;
+
+
+import view URLAll from module common;
+
+
+import view hostname from module common;
+
+
+create view referrer as
+  select  U.annot as referrer_uri,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as "common.URLAll_____sep_____U____id"
+  from  "common.URLAll" U;
+
+output view referrer;
+
+create view referrer_scheme as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    R.__auto__id as referrer_____sep_____R____id,
+    regex /(([a-z]{3,}):\/\/)/
+    with flags 'DOTALL'
+    on R.referrer_uri
+    return group 1 as scheme_with_slash
+       and group 2 as scheme_without_slash
+  from referrer R;
+
+output view referrer_scheme;
+
+create view referrer_domain as
+  select  hn.hostname as domain,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          s.__auto__id as referrer_scheme_____sep_____s____id,
+          hn.__auto__id as "common.hostname_____sep_____hn____id"
+  from  referrer_scheme s,
+        "common.hostname" hn
+  where Follows(s.scheme_with_slash, hn.hostname, 0, 0);
+
+output view referrer_domain;
+
+create view referrer_host as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    U.__auto__id as "common.URLAll_____sep_____U____id",
+    regex /(([a-z]{3,}:\/\/)([a-zA-Z-]{1,})[:\/])/
+    with flags 'DOTALL'
+    on U.annot
+    return group 3 as host
+  from "common.URLAll" U;
+
+output view referrer_host;
+
+create view possible_ports as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    U.__auto__id as "common.URLAll_____sep_____U____id",
+    regex /((:)([0-9]{1,5}))/
+    with flags 'DOTALL'
+    on U.annot
+    return group 1 as pport_with_colon
+       and group 2 as colon
+       and group 3 as pport
+  from "common.URLAll" U;
+
+output view possible_ports;
+
+create view referrer_host_ports as
+  select  pp.pport as port,
+          pp.pport_with_colon as port_with_colon,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          pp.__auto__id as possible_ports_____sep_____pp____id,
+          rh.__auto__id as referrer_host_____sep_____rh____id
+  from  possible_ports pp,
+        referrer_host rh
+  where Follows(rh.host, pp.pport_with_colon, 0, 0);
+
+output view referrer_host_ports;
+
+create view referrer_domain_ports as
+  select  pp.pport as port,
+          pp.pport_with_colon as port_with_colon,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          pp.__auto__id as possible_ports_____sep_____pp____id,
+          rd.__auto__id as referrer_domain_____sep_____rd____id
+  from  possible_ports pp,
+        referrer_domain rd
+  where Follows(rd.domain, pp.pport_with_colon, 0, 0);
+
+output view referrer_domain_ports;
+
+create view referrer_domain_port_combined as
+  select  CombineSpans(rd.domain, rdp.port_with_colon) as domain_and_port,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          rd.__auto__id as referrer_domain_____sep_____rd____id,
+          rdp.__auto__id as referrer_domain_ports_____sep_____rdp____id
+  from  referrer_domain rd,
+        referrer_domain_ports rdp
+  where Follows(rd.domain, rdp.port_with_colon, 0, 0);
+
+output view referrer_domain_port_combined;
+
+create view referrer_host_port_combined as
+  select  CombineSpans(rh.host, rhp.port_with_colon) as host_and_port,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          rh.__auto__id as referrer_host_____sep_____rh____id,
+          rhp.__auto__id as referrer_host_ports_____sep_____rhp____id
+  from  referrer_host rh,
+        referrer_host_ports rhp
+  where Follows(rh.host, rhp.port_with_colon, 0, 0);
+
+output view referrer_host_port_combined;
+
+create view possible_roots as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    U.__auto__id as "common.URLAll_____sep_____U____id",
+    regex /(\/[a-zA-Z0-9_.-]{1,})/
+    with flags 'DOTALL'
+    on U.annot
+    return group 0 as possible_root
+  from "common.URLAll" U;
+
+output view possible_roots;
+
+create view domain_roots_with_slash as
+  select  pr.possible_root as slash_roots,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          pr.__auto__id as possible_roots_____sep_____pr____id,
+          rdnp.__auto__id as referrer_domain_port_combined_____sep_____rdnp____id
+  from  possible_roots pr,
+        referrer_domain_port_combined rdnp
+  where Follows(rdnp.domain_and_port, pr.possible_root, 0, 0);
+
+output view domain_roots_with_slash;
+
+create view referrer_domain_roots_without_slash as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    rws.__auto__id as domain_roots_with_slash_____sep_____rws____id,
+    regex /(\/)([a-zA-Z0-9_.-]{1,})/
+    with flags 'DOTALL'
+    on rws.slash_roots
+    return group 2 as roots
+  from domain_roots_with_slash rws;
+
+output view referrer_domain_roots_without_slash;
+
+create view domain_roots_with_slash_not_considering_port as
+  select  pr.possible_root as slash_roots,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          pr.__auto__id as possible_roots_____sep_____pr____id,
+          rd.__auto__id as referrer_domain_____sep_____rd____id
+  from  possible_roots pr,
+        referrer_domain rd
+  where Follows(rd.domain, pr.possible_root, 0, 0);
+
+output view domain_roots_with_slash_not_considering_port;
+
+create view referrer_domain_roots_without_slash_not_considering_port as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    r.__auto__id as domain_roots_with_slash_not_considering_port_____sep_____r____id,
+    regex /(\/)([a-zA-Z0-9_.-]{1,})/
+    with flags 'DOTALL'
+    on r.slash_roots
+    return group 2 as roots
+  from domain_roots_with_slash_not_considering_port r;
+
+output view referrer_domain_roots_without_slash_not_considering_port;
+
+create view host_roots_with_slash as
+  select  pr.possible_root as slash_roots,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          pr.__auto__id as possible_roots_____sep_____pr____id,
+          rhnp.__auto__id as referrer_host_port_combined_____sep_____rhnp____id
+  from  possible_roots pr,
+        referrer_host_port_combined rhnp
+  where Follows(rhnp.host_and_port, pr.possible_root, 0, 0);
+
+output view host_roots_with_slash;
+
+create view referrer_host_roots_without_slash as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    hrws.__auto__id as host_roots_with_slash_____sep_____hrws____id,
+    regex /(\/)([a-zA-Z0-9_.-]{1,})/
+    with flags 'DOTALL'
+    on hrws.slash_roots
+    return group 2 as roots
+  from host_roots_with_slash hrws;
+
+output view referrer_host_roots_without_slash;
+
+create view host_roots_with_slash_not_considering_port as
+  select  pr.possible_root as slash_roots,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          pr.__auto__id as possible_roots_____sep_____pr____id,
+          rh.__auto__id as referrer_host_____sep_____rh____id
+  from  possible_roots pr,
+        referrer_host rh
+  where Follows(rh.host, pr.possible_root, 0, 0);
+
+output view host_roots_with_slash_not_considering_port;
+
+create view referrer_host_roots_without_slash_not_considering_port as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    r.__auto__id as host_roots_with_slash_not_considering_port_____sep_____r____id,
+    regex /(\/)([a-zA-Z0-9_.-]{1,})/
+    with flags 'DOTALL'
+    on r.slash_roots
+    return group 2 as roots
+  from host_roots_with_slash_not_considering_port r;
+
+output view referrer_host_roots_without_slash_not_considering_port;
+
+create function getReferrerCategoryWithPort(
+  scheme String  ,domainOrHost String  ,port String  ,root String)
+return Text
+external_name 'logAAqlUDFs.jar:com.ibm.logparse.aql.Util!getCategory'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create function getReferrerCategoryWithoutPort(
+  scheme String  ,domainOrHost String  ,root String)
+return Text
+external_name 'logAAqlUDFs.jar:com.ibm.logparse.aql.Util!getCategory'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create view referrer_domain_type1 as
+  select  ref.referrer_uri as referrer_uri_span,
+          GetText(ref.referrer_uri) as referrer_uri_text,
+          rs.scheme_without_slash as scheme,
+          GetText(rs.scheme_without_slash) as scheme_text,
+          rd.domain as domain,
+          GetText(rd.domain) as domain_text,
+          rdp.port as port,
+          GetText(rdp.port) as port_text,
+          rdrws.roots as root,
+          GetText(rdrws.roots) as root_text,
+          getReferrerCategoryWithPort(GetString(rs.scheme_without_slash), GetString(rd.domain), GetString(rdp.port), GetString(rdrws.roots)) as category,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          ref.__auto__id as referrer_____sep_____ref____id,
+          rs.__auto__id as referrer_scheme_____sep_____rs____id,
+          rd.__auto__id as referrer_domain_____sep_____rd____id,
+          rdp.__auto__id as referrer_domain_ports_____sep_____rdp____id,
+          rdrws.__auto__id as referrer_domain_roots_without_slash_____sep_____rdrws____id
+  from  referrer ref,
+        referrer_scheme rs,
+        referrer_domain rd,
+        referrer_domain_ports rdp,
+        referrer_domain_roots_without_slash rdrws;
+
+output view referrer_domain_type1;
+
+create view referrer_domain_type2 as
+  select  ref.referrer_uri as referrer_uri_span,
+          GetText(ref.referrer_uri) as referrer_uri_text,
+          rs.scheme_without_slash as scheme,
+          GetText(rs.scheme_without_slash) as scheme_text,
+          rd.domain as domain,
+          GetText(rd.domain) as domain_text,
+          r.roots as root,
+          GetText(r.roots) as root_text,
+          getReferrerCategoryWithoutPort(GetString(rs.scheme_without_slash), GetString(rd.domain), GetString(r.roots)) as category,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          ref.__auto__id as referrer_____sep_____ref____id,
+          rs.__auto__id as referrer_scheme_____sep_____rs____id,
+          rd.__auto__id as referrer_domain_____sep_____rd____id,
+          r.__auto__id as referrer_domain_roots_without_slash_not_considering_port_____sep_____r____id
+  from  referrer ref,
+        referrer_scheme rs,
+        referrer_domain rd,
+        referrer_domain_roots_without_slash_not_considering_port r;
+
+output view referrer_domain_type2;
+
+create view referrer_host_type1 as
+  select  ref.referrer_uri as referrer_uri_span,
+          GetText(ref.referrer_uri) as referrer_uri_text,
+          rs.scheme_without_slash as scheme,
+          GetText(rs.scheme_without_slash) as scheme_text,
+          rh.host as host,
+          GetText(rh.host) as host_text,
+          rhp.port as port,
+          GetText(rhp.port) as port_text,
+          rhrws.roots as root,
+          GetText(rhrws.roots) as root_text,
+          getReferrerCategoryWithPort(GetString(rs.scheme_without_slash), GetString(rh.host), GetString(rhp.port), GetString(rhrws.roots)) as category,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          ref.__auto__id as referrer_____sep_____ref____id,
+          rs.__auto__id as referrer_scheme_____sep_____rs____id,
+          rh.__auto__id as referrer_host_____sep_____rh____id,
+          rhp.__auto__id as referrer_host_ports_____sep_____rhp____id,
+          rhrws.__auto__id as referrer_host_roots_without_slash_____sep_____rhrws____id
+  from  referrer ref,
+        referrer_scheme rs,
+        referrer_host rh,
+        referrer_host_ports rhp,
+        referrer_host_roots_without_slash rhrws;
+
+output view referrer_host_type1;
+
+create view referrer_host_type2 as
+  select  ref.referrer_uri as referrer_uri_span,
+          GetText(ref.referrer_uri) as referrer_uri_text,
+          rs.scheme_without_slash as scheme,
+          GetText(rs.scheme_without_slash) as scheme_text,
+          rh.host as host,
+          GetText(rh.host) as host_text,
+          r.roots as root,
+          GetText(r.roots) as root_text,
+          getReferrerCategoryWithoutPort(GetString(rs.scheme_without_slash), GetString(rh.host), GetString(r.roots)) as category,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          ref.__auto__id as referrer_____sep_____ref____id,
+          rs.__auto__id as referrer_scheme_____sep_____rs____id,
+          rh.__auto__id as referrer_host_____sep_____rh____id,
+          r.__auto__id as referrer_host_roots_without_slash_not_considering_port_____sep_____r____id
+  from  referrer ref,
+        referrer_scheme rs,
+        referrer_host rh,
+        referrer_host_roots_without_slash_not_considering_port r;
+
+output view referrer_host_type2;
+
+create function getTheNullSpan(
+  span Span)
+return Text
+external_name 'logAAqlUDFs.jar:com.ibm.logparse.aql.Util!getNullSpan'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create view referrerDetails as
+  (select  Op.referrer_uri_span as referrer_uri_span,
+            Op.referrer_uri_text as referrer_uri_text,
+            Op.scheme as scheme,
+            Op.scheme_text as scheme_text,
+            Op.host as host,
+            Op.host_text as host_text,
+            Op.domain as domain,
+            Op.domain_text as domain_text,
+            Op.port as port,
+            Op.port_text as port_text,
+            Op.root as root,
+            Op.root_text as root_text,
+            Op.category as category,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__43__TempOp__0 Op)
+  union all
+  (select  Op.referrer_uri_span as referrer_uri_span,
+            Op.referrer_uri_text as referrer_uri_text,
+            Op.scheme as scheme,
+            Op.scheme_text as scheme_text,
+            Op.host as host,
+            Op.host_text as host_text,
+            Op.domain as domain,
+            Op.domain_text as domain_text,
+            Op.port as port,
+            Op.port_text as port_text,
+            Op.root as root,
+            Op.root_text as root_text,
+            Op.category as category,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__43__TempOp__1 Op)
+  union all
+  (select  Op.referrer_uri_span as referrer_uri_span,
+            Op.referrer_uri_text as referrer_uri_text,
+            Op.scheme as scheme,
+            Op.scheme_text as scheme_text,
+            Op.host as host,
+            Op.host_text as host_text,
+            Op.domain as domain,
+            Op.domain_text as domain_text,
+            Op.port as port,
+            Op.port_text as port_text,
+            Op.root as root,
+            Op.root_text as root_text,
+            Op.category as category,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__43__TempOp__2 Op)
+  union all
+  (select  Op.referrer_uri_span as referrer_uri_span,
+            Op.referrer_uri_text as referrer_uri_text,
+            Op.scheme as scheme,
+            Op.scheme_text as scheme_text,
+            Op.host as host,
+            Op.host_text as host_text,
+            Op.domain as domain,
+            Op.domain_text as domain_text,
+            Op.port as port,
+            Op.port_text as port_text,
+            Op.root as root,
+            Op.root_text as root_text,
+            Op.category as category,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__43__TempOp__3 Op);
+
+output view referrerDetails;
+
+create view referrerDetailsOutputInterim as
+  select  __t2.referrer_uri_span as referrer_uri_span,
+          __t2.referrer_uri_text as referrer_uri_text,
+          __t2.scheme as scheme,
+          __t2.scheme_text as scheme_text,
+          __t2.host as host,
+          __t2.host_text as host_text,
+          __t2.domain as domain,
+          __t2.domain_text as domain_text,
+          __t2.port as port,
+          __t2.port_text as port_text,
+          __t2.root as root,
+          __t2.root_text as root_text,
+          __t2.category as category,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__44__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__44__Temp__1 __t1,
+        __Consolidate__44__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.referrer_uri_span, __t2.referrer_uri_text, __t2.scheme, __t2.scheme_text, __t2.host, __t2.host_text, __t2.domain, __t2.domain_text, __t2.port, __t2.port_text, __t2.root, __t2.root_text, __t2.category;
+
+output view referrerDetailsOutputInterim;
+
+create view HttpReferrerOutput as
+  select  R.referrer_uri_span as span,
+          R.referrer_uri_text as text,
+          R.scheme as scheme,
+          R.scheme_text as scheme_text,
+          R.host as host,
+          R.host_text as host_text,
+          R.domain as domain,
+          R.domain_text as domain_text,
+          R.port as port,
+          R.port_text as port_text,
+          R.root as root,
+          R.root_text as root_text,
+          R.category as category,
+          GetString('Referrer') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as referrerDetailsOutputInterim_____sep_____R____id
+  from  referrerDetailsOutputInterim R;
+
+output view HttpReferrerOutput;
+
+export view webaccess.HttpReferrerOutput;
+
+
+create view __Consolidate__44__Temp__1 as
+  select  R.referrer_uri_span as referrer_uri_span,
+          R.referrer_uri_text as referrer_uri_text,
+          R.scheme as scheme,
+          R.scheme_text as scheme_text,
+          R.host as host,
+          R.host_text as host_text,
+          R.domain as domain,
+          R.domain_text as domain_text,
+          R.port as port,
+          R.port_text as port_text,
+          R.root as root,
+          R.root_text as root_text,
+          R.category as category,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as referrerDetails_____sep_____R____id,
+          R.referrer_uri_span as __consolidate__target
+  from  referrerDetails R;
+
+output view __Consolidate__44__Temp__1;
+
+create view __Consolidate__44__Temp__2 as
+  select  __t1.referrer_uri_span as referrer_uri_span,
+          __t1.referrer_uri_text as referrer_uri_text,
+          __t1.scheme as scheme,
+          __t1.scheme_text as scheme_text,
+          __t1.host as host,
+          __t1.host_text as host_text,
+          __t1.domain as domain,
+          __t1.domain_text as domain_text,
+          __t1.port as port,
+          __t1.port_text as port_text,
+          __t1.root as root,
+          __t1.root_text as root_text,
+          __t1.category as category,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__44__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__44__Temp__2;
+
+create view __Union__43__TempOp__0 as
+  select  R.referrer_uri_span as referrer_uri_span,
+          R.referrer_uri_text as referrer_uri_text,
+          R.scheme as scheme,
+          R.scheme_text as scheme_text,
+          getTheNullSpan(R.scheme) as host,
+          getTheNullSpan(R.scheme) as host_text,
+          R.domain as domain,
+          R.domain_text as domain_text,
+          R.port as port,
+          R.port_text as port_text,
+          R.root as root,
+          R.root_text as root_text,
+          R.category as category,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as referrer_domain_type1_____sep_____R____id
+  from  referrer_domain_type1 R;
+
+output view __Union__43__TempOp__0;
+
+create view __Union__43__TempOp__1 as
+  select  R.referrer_uri_span as referrer_uri_span,
+          R.referrer_uri_text as referrer_uri_text,
+          R.scheme as scheme,
+          R.scheme_text as scheme_text,
+          getTheNullSpan(R.scheme) as host,
+          getTheNullSpan(R.scheme) as host_text,
+          R.domain as domain,
+          R.domain_text as domain_text,
+          getTheNullSpan(R.scheme) as port,
+          getTheNullSpan(R.scheme) as port_text,
+          R.root as root,
+          R.root_text as root_text,
+          R.category as category,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as referrer_domain_type2_____sep_____R____id
+  from  referrer_domain_type2 R;
+
+output view __Union__43__TempOp__1;
+
+create view __Union__43__TempOp__2 as
+  select  R.referrer_uri_span as referrer_uri_span,
+          R.referrer_uri_text as referrer_uri_text,
+          R.scheme as scheme,
+          R.scheme_text as scheme_text,
+          R.host as host,
+          R.host_text as host_text,
+          getTheNullSpan(R.scheme) as domain,
+          getTheNullSpan(R.scheme) as domain_text,
+          R.port as port,
+          R.port_text as port_text,
+          R.root as root,
+          R.root_text as root_text,
+          R.category as category,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as referrer_host_type1_____sep_____R____id
+  from  referrer_host_type1 R;
+
+output view __Union__43__TempOp__2;
+
+create view __Union__43__TempOp__3 as
+  select  R.referrer_uri_span as referrer_uri_span,
+          R.referrer_uri_text as referrer_uri_text,
+          R.scheme as scheme,
+          R.scheme_text as scheme_text,
+          R.host as host,
+          R.host_text as host_text,
+          getTheNullSpan(R.scheme) as domain,
+          getTheNullSpan(R.scheme) as domain_text,
+          getTheNullSpan(R.scheme) as port,
+          getTheNullSpan(R.scheme) as port_text,
+          R.root as root,
+          R.root_text as root_text,
+          R.category as category,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as referrer_host_type2_____sep_____R____id
+  from  referrer_host_type2 R;
+
+output view __Union__43__TempOp__3;
+

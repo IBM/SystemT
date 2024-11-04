@@ -1,0 +1,73 @@
+-------------------------------------------------------------------------------
+-- metaOrderBug.aql
+--
+-- Test case for a bug involving inconsistent parsing of META tags in
+-- documents containing multiple instances of the same kind of META tag.
+--
+-- The rules here are a subset of those in HTML.aql
+-------------------------------------------------------------------------------
+
+detag Document.text as Doc
+annotate 
+	element 'meta' as Meta
+		with attribute 'name' as name
+		and attribute 'content' as content
+	;
+
+
+create dictionary MetaKeywordsTagName as
+(
+	'Keywords'
+);
+
+-- Separate out the META tags containing name="keywords".
+create view MetaKeywordsFull as
+select M.content as content
+from Meta M
+where ContainsDict('MetaKeywordsTagName', M.name)
+   	--MatchesRegex(/keywords/, M.name)
+	and NotNull(M.content)
+order by M.content;
+
+output view MetaKeywordsFull;
+
+create view MetaAll as 
+select M.content as content
+from Meta M
+order by GetText(M.content);
+
+output view MetaAll;
+
+-- Find comma-separated keywords in META tags, separate out the 
+-- individual keywords, and trim out whitespace.
+create view MetaKeywords as
+select Chomp(S.keyword) as keyword
+from
+(
+	(
+		extract
+		    split using S2.comma
+		        on S2.content
+		        as keyword
+		from 
+		(
+			-- Find commas in the content field to keywords tags
+			extract 
+				M.content as content, 
+				regex /,/ on M.content as comma 
+			from MetaKeywordsFull M
+		) S2
+	)
+	union all
+	(
+		-- Also return the keywords lists that *don't* contain
+		-- commas.
+		select M.content as keyword
+		from MetaKeywordsFull M
+		where Not(ContainsRegex(/,/, M.content))
+	)
+) S
+-- Filter out empty strings
+where Not(MatchesRegex(/\s*/, S.keyword));
+
+output view MetaKeywords;

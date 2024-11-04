@@ -1,0 +1,230 @@
+module datapower;
+
+
+import view IPAddressOutput from module common;
+
+
+import view DateTimeOutput from module common;
+
+
+create function getConnReceivedCategory(
+  val1 String  ,val2 String  ,val3 String  ,val4 String)
+return Text
+external_name 'logAAqlUDFs.jar:com.ibm.logparse.aql.Util!getCategory'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create function getConnRepliedCategory(
+  val1 String  ,val2 String  ,val3 String  ,val4 String)
+return Text
+external_name 'logAAqlUDFs.jar:com.ibm.logparse.aql.Util!getCategory'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create dictionary "httpMethodDict"
+with case insensitive
+as (
+  'OPTIONS',
+  'GET',
+  'HEAD',
+  'POST',
+  'PUT',
+  'DELETE',
+  'TRACE',
+  'CONNECT'
+);
+
+
+create view pathStr as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /\/|(\/[\p{Alnum}_%\.\-]+)+/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as path
+  from Document D;
+
+output view pathStr;
+
+create view urlStr as
+  (select  Op.url as url,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__42__TempOp__0 Op)
+  union all
+  (select  Op.url as url,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__42__TempOp__1 Op);
+
+output view urlStr;
+
+create view methodStr as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'httpMethodDict'
+    on D.text as method
+  from Document D;
+
+output view methodStr;
+
+create view receivedHTTP as
+  select  Op.span as span,
+          Op.method as method,
+          Op.path as path,
+          Op.host as host,
+          AutoID() as __auto__id
+  from  __Base__datapower__receivedHTTP__Temp Op;
+
+output view receivedHTTP;
+
+create view ncsaHTTP as
+  select  Op.span as span,
+          Op.method as method,
+          Op.path as path,
+          AutoID() as __auto__id
+  from  __Base__datapower__ncsaHTTP__Temp Op;
+
+output view ncsaHTTP;
+
+create view ncsaHTTPContext as
+  select  Op.span as span,
+          Op.host as host,
+          AutoID() as __auto__id
+  from  __Base__datapower__ncsaHTTPContext__Temp Op;
+
+output view ncsaHTTPContext;
+
+create view repliedHTTP as
+  select  CombineSpans(C.span, N.span) as span,
+          C.host as host,
+          N.method as method,
+          N.path as path,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as ncsaHTTPContext_____sep_____C____id,
+          N.__auto__id as ncsaHTTP_____sep_____N____id
+  from  ncsaHTTPContext C,
+        ncsaHTTP N
+  where FollowsTok(C.span, N.span, 0, 0);
+
+output view repliedHTTP;
+
+create view ConnReceivedOutput as
+  select  R.span as span,
+          GetText(R.span) as text,
+          GetText(R.method) as method,
+          GetText(R.path) as path,
+          GetText(R.host) as host,
+          'ConnReceived' as field_type,
+          getConnReceivedCategory(GetText(R.span), GetText(R.path), GetText(R.host), GetText(R.method)) as category,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as receivedHTTP_____sep_____R____id
+  from  receivedHTTP R;
+
+output view ConnReceivedOutput;
+
+
+
+export view datapower.ConnReceivedOutput;
+
+
+create view ConnRepliedInterim as
+  select  R.span as span,
+          GetText(R.span) as text,
+          GetText(R.method) as method,
+          GetText(R.path) as path,
+          Case(NotNull(R.host), GetText(R.host), '') as host,
+          'ConnReplied' as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as repliedHTTP_____sep_____R____id
+  from  repliedHTTP R;
+
+output view ConnRepliedInterim;
+
+create view ConnRepliedOutput as
+  select  R.span as span,
+          R.text as text,
+          R.method as method,
+          R.path as path,
+          R.host as host,
+          'ConnReplied' as field_type,
+          getConnRepliedCategory(GetText(R.span), GetText(R.path), GetText(R.host), GetText(R.method)) as category,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as ConnRepliedInterim_____sep_____R____id
+  from  ConnRepliedInterim R;
+
+output view ConnRepliedOutput;
+
+export view datapower.ConnRepliedOutput;
+
+
+create view __Base__datapower__ncsaHTTPContext__Temp as
+  extract pattern (<IP.span>)? '- - [' <D.span> ']'
+  return group 0 as span
+     and group 1 as host
+  from  "common.IPAddressOutput" IP,
+        "common.DateTimeOutput" D
+  consolidate on span using 'ContainedWithin';
+
+output view __Base__datapower__ncsaHTTPContext__Temp;
+
+create view __Base__datapower__ncsaHTTP__Temp as
+  extract pattern '"' (<M.method>) (<P.path>) 'HTTP$http_version"'     /\d{3}/     /\d{1,6}/ '"' <U.url>
+  return group 0 as span
+     and group 1 as method
+     and group 2 as path
+  from  methodStr M,
+        pathStr P,
+        urlStr U;
+
+output view __Base__datapower__ncsaHTTP__Temp;
+
+create view __Base__datapower__receivedHTTP__Temp as
+  extract pattern 'Received HTTP/1.1' (<M.method>) 'for' (<P.path>) 'from' (<IP.span>)
+  return group 0 as span
+     and group 1 as method
+     and group 2 as path
+     and group 3 as host
+  from  methodStr M,
+        pathStr P,
+        "common.IPAddressOutput" IP;
+
+output view __Base__datapower__receivedHTTP__Temp;
+
+create view __Union__42__TempOp__0 as
+  select  U.URL_Span as url,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as "common.URLAllInterim_____sep_____U____id"
+  from  "common.URLAllInterim" U;
+
+output view __Union__42__TempOp__0;
+
+create view __Union__42__TempOp__1 as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /http:\/\/\//
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as url
+  from Document D;
+
+output view __Union__42__TempOp__1;
+

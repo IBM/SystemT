@@ -1,0 +1,64 @@
+module Sentiment; 
+-- TODO: Add AQL content here 
+
+create view ExtendedAgents as
+	(select * from Agent)
+	union all
+	(select * from MissingAgent);
+
+create view ActionsInNeed as
+	select A.*
+	from Actions Need, Actions A
+	where Equals(GetText(Need.aid),GetText(A.enclosing)) and
+		  MatchesDict('NeedVerbs',Need.verbBase);	
+
+create view NegatedActions as
+	(  
+	   select A.*
+	   from Actions A
+	   where Or(Equals(GetText(A.voice), 'negative'),Equals(GetText(A.voice), 'seminegative'))
+	)
+	union all
+	(  
+	   select * from ActionsInNeed
+	)
+	union all
+	(  
+	   select * from SentimentCustom.ExtraNegatedActions
+	);
+	
+
+	
+create view NonNegatedActions as
+	(select * from Actions)
+	minus
+	(select * from NegatedActions);
+	
+	
+--output view NonNegatedActions;	
+
+create view AgentDoes as
+	select AC.aid, AC.voice, AC.mood, AC.verbBase, AG.value as agent
+	from NonNegatedActions AC, ExtendedAgents AG
+	where  Equals(GetText(AC.aid),GetText(AG.aid));
+		   
+create view AgentNotDoes as
+	select AC.aid, AC.voice, AC.mood, AC.verbBase, AG.value as agent
+	from NegatedActions AC, ExtendedAgents AG
+	where Equals(GetText(AC.aid),GetText(AG.aid));		   
+		   
+create view AgentDoesNonagent as
+	select AC.aid, AC.rootNodeID, AC.voice, AC.mood, AC.verb, AC.verbBase, AG.value as agent, NAG.value as nonAgent, NAG.name as nonAgentType, NAG.headNorm as nonAgentNF, AC.text as evidence
+	from NonNegatedActions AC, ExtendedAgents AG, NonAgent NAG
+	where  Equals(GetText(AC.aid),GetText(AG.aid)) and 
+		   Equals(GetText(AC.aid),GetText(NAG.aid));	
+
+create view AgentNotDoesNonagent as
+	select AC.aid, AC.rootNodeID, AC.voice, AC.mood, AC.verb, AC.verbBase, AG.value as agent, NAG.value as nonAgent, NAG.name as nonAgentType, NAG.headNorm as nonAgentNF, AC.text as evidence
+	from NegatedActions AC, ExtendedAgents AG, NonAgent NAG
+	where  Equals(GetText(AC.aid),GetText(AG.aid)) and 
+		   Equals(GetText(AC.aid),GetText(NAG.aid));			   
+	
+	
+create dictionary AdverbContextNames as ('manner','qualification');
+

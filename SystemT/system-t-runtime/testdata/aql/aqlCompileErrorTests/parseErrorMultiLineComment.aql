@@ -1,0 +1,29 @@
+-------------------------------------------------------------------------------
+-- missingSemicolan.aql
+
+-- Test for a defect# 16669
+-- Multiline comment when used to comment a single line gives parse error.
+-------------------------------------------------------------------------------
+
+/* Multiline comment when used to comment a single line gives parse error 1*/
+create view Phone as
+extract regexes /\d{3}-\d{4}/ and /\+?[Xx]\.?\d{4,5}/
+	on D.text as phone
+from Document D;
+
+/* Multiline comment when used to comment a single line gives parse error 2*/
+
+create view PhoneText as
+select GetText(P.phone) 
+from Phone P;
+
+/* 
+Multiline comment when used to comment 
+a single line gives compilation error 3
+*/
+
+create view CapsToken1 as
+extract regex // on 1 token in D.text as match
+from Document D;
+
+output view PhoneText;

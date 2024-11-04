@@ -1,0 +1,37 @@
+-------------------------------------------------------------------------------
+--
+-- Test case for throwing an exception when too many minus operands are given
+-- Minus should have exactly two operands, no more, no less.  This AQL has views
+-- with three and four, so should throw an exception on those two views.
+--
+-------------------------------------------------------------------------------
+
+create view A as select D.text as text from Document D;
+create view B as select D.text as text from Document D;
+create view C as select D.text as text from Document D;
+create view E as select D.text as text from Document D;
+
+create view MinusTest2 as
+(select * from A)
+minus 
+(select * from C);
+
+create view MinusTest3 as
+(select * from A)
+minus
+(select * from B)
+minus 
+(select * from C);
+
+create view MinusTest4 as
+(select * from A)
+minus
+(select * from B)
+minus 
+(select * from C)
+minus
+(select * from E);
+
+output view MinusTest2;
+output view MinusTest3;
+output view MinusTest4;

@@ -1,0 +1,93 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test cases for extension to sequence patterns to pass through attributes
+-- Test case for passing through columns from a single PatternAtomColNode
+-------------------------------------------------------------------------------
+
+create view CapsWord as
+extract 'CapsWord' as type,
+	regex /[A-Z].*/ on 1 token in D.text as match
+from Document D
+limit 10;
+
+create view LowWord as
+extract 'LowWord' as type,
+	regex /[a-z]*/ on 1 token in D.text as match
+from Document D
+limit 10;
+
+-- Col ref atom with one pass through attribute
+create view ColRefAtom1 as
+extract C.type as ctype,
+	    pattern <C.match> as match 
+from CapsWord C;
+
+output view ColRefAtom1;
+
+-- Col ref atom with one simple pass through attribute and a group
+create view ColRefAtom2 as
+extract C.type as ctype,
+	    pattern (<C.match>) 
+	    return group 0 as match0 and group 1 as match1
+from CapsWord C;
+
+output view ColRefAtom2;
+
+-- Col ref atom with various pass through attributes:  function calls, constants, a case expression
+create view ColRefAtom3 as
+extract C.type as ctype,
+	    GetString(GetText(C.type)) as ctype_str,
+		'some text' as const_str,
+		1 as const_int,
+		GetString('string') as str_str,
+		case when GreaterThan(GetLength(C.match),3) then 'larger than 3' else 'smaller than 3' as case_expr,
+	    pattern <C.match> as match 
+from CapsWord C;
+
+output view ColRefAtom3;
+
+-- Col ref atom with pass through attributes and a HAVING clause
+create view ColRefAtom4 as
+extract C.type as ctype,
+		C.match as cmatch,
+	    GetString(GetText(C.type)) as ctype_str,
+		'some text' as const_str,
+		1 as const_int,
+		GetString('string') as str_str,
+		case when GreaterThan(GetLength(C.match),3) then 'larger than 3' else 'smaller than 3' as case_expr,
+	    pattern <C.match> as match 
+from CapsWord C
+having MatchesRegex(/A.*/, cmatch)
+   and MatchesRegex(/A.*/, match)
+   and Equals('smaller than 3', case_expr);
+   
+output view ColRefAtom4;
+   
+-- Col ref atom with pass through attributes and a CONSOLIDATE clause with a col ref attribute from SELECT list
+create view ColRefAtom5 as
+extract C.type as ctype,
+		C.match as cmatch,
+	    pattern <C.match> as match 
+from CapsWord C
+consolidate on cmatch;
+
+output view ColRefAtom5;
+
+-- Col ref atom with pass through attributes and a CONSOLIDATE clause with a function attribute from RETURN clause
+create view ColRefAtom6 as
+extract C.type as ctype,
+		GetText(C.match) as cmatch,
+	    pattern <C.match> as match 
+from CapsWord C
+consolidate on match using 'LeftToRight' with priority from GetString(cmatch);
+
+output view ColRefAtom6;
+
+-- Col ref atom with one pass through attributes projected out twise - to validate that the rewrite does not generate duplicate attributes
+create view ColRefAtom7 as
+extract C.type as ctype,
+		C.type as ctype_duplicate,
+	    pattern <C.match> as match 
+from CapsWord C;
+
+output view ColRefAtom7;

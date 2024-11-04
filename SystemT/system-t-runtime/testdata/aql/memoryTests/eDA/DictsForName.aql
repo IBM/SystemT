@@ -1,0 +1,287 @@
+--------  Filter out sentence initial false positives  ----------
+--Armin April 2009
+-- the following views collect all sentence initial Names, First resp- Last   
+
+create view mixedCaps as 
+extract regex /[a-z]*[A-Z]+[A-Z]+[a-z]*|[a-z]+[A-Z]+[A-Za-z]*|[A-Z]+[a-z]+[A-Z]+[a-z]+|[A-Z]+[a-z]+[A-Z]+/
+on D.text
+as match
+from Document D;
+
+create view boundaries as 
+extract regex /\.\s*|\!\s*|\?\s*|\"\s*|:\s*|\n\s*|\r\s*|¿\s*|¡\s*|\-\s*|\t\s*|\v\s*|\)/ -- find problematic first words 
+on D.text
+as boundary
+from Document D;
+
+--find sentence initial problematic tokens to filter them out at a later stage to seperate "Any as a sentence initial ambiguous word from any Any as person.
+--problematic items are items that are problematic in either one of the languages, because quotes etc. can occur
+
+create view sentenceInitialTokenFirstGerman as
+    select A.match as match
+	from Dictionary('dictionaries/de/filterPersonFirstGerman.dict', Document.text) A,
+	     boundaries B
+    where Follows( B.boundary, A.match, 0,1);
+
+create view sentenceInitialTokenFirstEnglish as
+    select A.match as match
+	from Dictionary('dictionaries/en/filterPersonFirstEnglish.dict', Document.text) A,
+	     boundaries B
+    where Follows( B.boundary, A.match, 0,1);
+	
+create view sentenceInitialTokenFirstSpanish as
+    select A.match as match
+	from Dictionary('dictionaries/es/filterPersonFirstSpanish.dict', Document.text) A,
+	     boundaries B
+    where Follows( B.boundary, A.match, 0,1);
+	
+create view sentenceInitialTokenFirstFrench as
+    select A.match as match
+	from Dictionary('dictionaries/fr/filterPersonFirstFrench.dict', Document.text) A,
+	     boundaries B
+    where Follows( B.boundary, A.match, 0,1);
+	
+	
+create view sentenceInitialTokenFirst as
+    (select D.match as match from sentenceInitialTokenFirstGerman D)
+    union all	
+	(select D.match as match from sentenceInitialTokenFirstEnglish D)
+    union all
+	(select D.match as match from sentenceInitialTokenFirstSpanish D)
+    union all
+	(select D.match as match from sentenceInitialTokenFirstFrench D);
+	
+create view sentenceInitialTokenLastGerman as
+    select A.match as match
+	from Dictionary('dictionaries/de/filterPersonLastGerman.dict', Document.text) A,
+	     boundaries B
+    where Follows( B.boundary, A.match, 0,1);
+
+create view sentenceInitialTokenLastEnglish as
+    select A.match as match
+	from Dictionary('dictionaries/en/filterPersonLastEnglish.dict', Document.text) A,
+	     boundaries B
+    where Follows( B.boundary, A.match, 0,1);
+	
+create view sentenceInitialTokenLastSpanish as
+    select A.match as match
+	from Dictionary('dictionaries/es/filterPersonLastSpanish.dict', Document.text) A,
+	     boundaries B
+    where Follows( B.boundary, A.match, 0,1);
+	
+create view sentenceInitialTokenLastFrench as
+    select A.match as match
+	from Dictionary('dictionaries/fr/filterPersonLastFrench.dict', Document.text) A,
+	     boundaries B
+    where Follows( B.boundary, A.match, 0,1);
+	
+	
+create view sentenceInitialTokenLast as
+    (select D.match as match from sentenceInitialTokenLastGerman D)
+    union all	
+	(select D.match as match from sentenceInitialTokenLastEnglish D)
+    union all
+	(select D.match as match from sentenceInitialTokenLastSpanish D)
+    union all
+	(select D.match as match from sentenceInitialTokenLastFrench D);
+
+/* the following filterFirst and filterLast dictionaries
+    are language dependent. The final united view
+    contains only the wrong first/last names for the
+    identified document language */
+
+----------     German Name Filter  ------------
+create dictionary FilterGermanFirstDict 
+    from file 'dictionaries/de/filterPersonFirstGerman.dict'
+    with language as 'de';
+
+create view FilterGermanFirst as
+    extract dictionary 'FilterGermanFirstDict'
+            on D.text   
+    as match
+    from Document D;
+
+
+create dictionary FilterGermanLastDict 
+    from file 'dictionaries/de/filterPersonLastGerman.dict'
+    with language as 'de';
+
+create view FilterGermanLast as
+    extract dictionary 'FilterGermanLastDict'
+            on D.text   
+    as match
+    from Document D;
+    
+----------   Spanish Name Filter   -------------
+    
+create dictionary FilterSpanishFirstDict 
+    from file 'dictionaries/es/filterPersonFirstSpanish.dict'
+    with language as 'es';
+
+create view FilterSpanishFirst as
+    extract dictionary 'FilterSpanishFirstDict'
+            on D.text   
+    as match
+    from Document D;
+    
+create dictionary FilterSpanishLastDict 
+    from file 'dictionaries/es/filterPersonLastSpanish.dict'
+    with language as 'es';
+
+create view FilterSpanishLast as
+    extract dictionary 'FilterSpanishLastDict'
+            on D.text   
+    as match
+    from Document D;
+    
+----------   English Name Filter    ------------
+    
+create dictionary FilterEnglishFirstDict 
+    from file 'dictionaries/en/filterPersonFirstEnglish.dict';
+    --with language as 'en';  --comment this out to make all english quotes within other languages be filtered for english names, you will loose all english filter words in the rest of 
+	                          --the text in the foreign laguage, e.g. in German "July" is written "Juli", so essentially if July occurs it is highly probable when not within an English 
+							  --quote, that this is a name(of some American), so for German we needn't filter "July" from the names, but if you comment out this line it will be filtered 
+
+create view FilterEnglishFirst as
+    extract dictionary 'FilterEnglishFirstDict'
+            on D.text   
+    as match
+    from Document D;
+    
+create dictionary FilterEnglishLastDict 
+    from file 'dictionaries/en/filterPersonLastEnglish.dict';
+    -- with language as 'en';  
+	--coment this out to make all english quotes within other languages be filtered for english names
+
+create view FilterEnglishLast as
+    extract dictionary 'FilterEnglishLastDict'
+            on D.text   
+    as match
+    from Document D;
+
+----------   French Name Filter    ------------
+    
+create dictionary FilterFrenchFirstDict 
+    from file 'dictionaries/fr/filterPersonFirstFrench.dict'
+    with language as 'fr';
+
+create view FilterFrenchFirst as
+    extract dictionary 'FilterFrenchFirstDict'
+            on D.text   
+    as match
+    from Document D;
+    
+create dictionary FilterFrenchLastDict 
+    from file 'dictionaries/fr/filterPersonLastFrench.dict'
+    with language as 'fr';
+
+create view FilterFrenchLast as
+    extract dictionary 'FilterFrenchLastDict'
+            on D.text   
+    as match
+    from Document D;
+
+    
+---------  Filter First Languages Combined  ------
+create view FilterFirst as
+    (select D.match as match
+        from FilterGermanFirst D)
+    union all
+    (select D.match as match
+        from FilterSpanishFirst D)
+    union all
+    (select D.match as match
+        from FilterEnglishFirst D)
+	union all
+    (select D.match as match
+        from FilterFrenchFirst D);
+        
+---------  Filter Last Languages Combined   ------
+
+create view FilterLast as
+    (select D.match as match
+        from FilterGermanLast D)
+    union all
+    (select D.match as match
+        from FilterSpanishLast D)
+    union all
+    (select D.match as match
+        from FilterEnglishLast D)
+	union all
+    (select D.match as match
+        from FilterFrenchLast D);
+        
+--------   Filter Both Languages Combined  ----------
+
+create view FilterBoth as
+    (select D.match as match
+        from FilterFirst D)
+    union all
+    (select D.match as match
+        from FilterLast D);
+		
+		
+--language independent AllCapsItemsFilter
+
+create view AllCapsItemsFirst as 
+    select C.match as match 
+	from mixedCaps C
+    where ContainsDict('dictionaries/strictFirstAll.dict', C.match);	
+
+create view AllCapsItemsLast as 
+    select C.match as match 
+	from mixedCaps C
+    where ContainsDict('dictionaries/strictLastAll.dict', C.match);
+
+create view AllCapsItems as 
+    (select C.match as match from AllCapsItemsFirst C)
+    union all
+    (select C.match as match from AllCapsItemsLast C);
+
+	
+/* Language independent strict first, last and both names 
+   dictionaries */
+        
+--------      FirstAll filtered    ------------
+
+
+ 
+create view FirstAllOne as   
+    (select D.match as match
+        from Dictionary('dictionaries/strictFirstAll.dict', Document.text) D)  --'Exact', 
+    minus
+    (select D.match as match
+    from FilterFirst D);	     --former FirstAll  - rename and all filter items regardless of position will be filtered out
+
+create view FirstAll as       
+   (select D.match as match 
+       from FirstAllOne D)   
+	 minus
+     (select D.match as match 
+	 from sentenceInitialTokenFirst D);
+
+ 
+--------      LastAll filtered     ------------
+
+create view LastAllOne as  
+    (select D.match as match
+        from Dictionary('dictionaries/strictLastAll.dict', Document.text) D) --'Exact',
+    minus
+    (select D.match as match
+    from FilterLast D);	
+
+create view LastAll as    
+   (select D.match as match 
+       from LastAllOne D)  
+	 minus
+     (select D.match as match 
+	 from sentenceInitialTokenLast D);
+	 
+--------      Both filtered     ------------
+        
+create view BothName as
+    (select D.match as match
+        from Dictionary('dictionaries/nameBoth.dict', Document.text) D)
+    minus
+    (select D.match as match
+        from FilterBoth D);

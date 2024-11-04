@@ -1,0 +1,45 @@
+-------------------------------------------------------------------------------
+-- adjacentFollowsTokBug.aql
+--
+-- Test for a bug in the implementation of AdjacentJoin
+-- when both input tuples fall between the same two tokens.
+-------------------------------------------------------------------------------
+
+create view Line as
+    extract regex 
+        /^.*$/ with flags 'MULTILINE'
+    on D.text
+	as match
+    from Document D;
+
+create view EmptyLine as
+    select L.* from Line L
+    where MatchesRegex(/[\t >]*\*?/, L.match);
+
+
+create view NonEmptyLine as
+    select L.* from Line L
+    where Not(MatchesRegex(/[\t >]*\*?/, L.match));
+
+
+create view Test as
+select CombineSpans(E.match, N.match) as match
+from EmptyLine E, NonEmptyLine N
+where FollowsTok(E.match, N.match, 0,0);
+
+create view Test1 as
+	extract pattern
+        <E.match>{1,3} as match
+        from EmptyLine E
+	consolidate on match;
+
+create view Test2 as
+select CombineSpans(E.match, N.match) as match
+from Test1 E, NonEmptyLine N
+where FollowsTok(E.match, N.match, 0,0);
+         
+
+output view EmptyLine;
+output view NonEmptyLine;
+output view Test;
+output view Test2;

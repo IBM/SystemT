@@ -1,0 +1,116 @@
+module County;
+
+
+import view StateOrProvince_ from module StateOrProvince as StateOrProvince_
+;
+
+
+create view CountyState as
+  select  C.match as county,
+          S.stateorprovince as state,
+          S.country as country,
+          S.continent as continent,
+          CombineSpans(C.match, S.reference) as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StateOrProvince______sep_____S____id,
+          C.__auto__id as CountyValid_____sep_____C____id
+  from  StateOrProvince_ S,
+        CountyValid C
+  where FollowsTok(C.match, S.stateorprovince, 0, 1)
+     and MatchesRegex(/\s*[,]?\s*/, SpanBetween(C.match, S.stateorprovince))
+     and Not(ContainsRegex(/[\n\r]/, SpanBetween(C.match, S.stateorprovince)));
+
+output view CountyState;
+
+create view CountyAll as
+  (select  Op.county as county,
+            Op.state as state,
+            Op.country as country,
+            Op.continent as continent,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__376__TempOp__0 Op)
+  union all
+  (select  Op.county as county,
+            Op.state as state,
+            Op.country as country,
+            Op.continent as continent,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__376__TempOp__1 Op);
+
+output view CountyAll;
+
+create view County_ as
+  select  __t2.county as county,
+          __t2.stateorprovince as stateorprovince,
+          __t2.country as country,
+          __t2.continent as continent,
+          __t2.reference as reference,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__377__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__377__Temp__1 __t1,
+        __Consolidate__377__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.county, __t2.stateorprovince, __t2.country, __t2.continent, __t2.reference;
+
+output view County_;
+
+create view __Consolidate__377__Temp__1 as
+  select  C.county as county,
+          C.state as stateorprovince,
+          C.country as country,
+          C.continent as continent,
+          C.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CountyAll_____sep_____C____id,
+          C.county as __consolidate__target
+  from  CountyAll C;
+
+output view __Consolidate__377__Temp__1;
+
+create view __Consolidate__377__Temp__2 as
+  select  __t1.county as county,
+          __t1.stateorprovince as stateorprovince,
+          __t1.country as country,
+          __t1.continent as continent,
+          __t1.reference as reference,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__377__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__377__Temp__2;
+
+create view __Union__376__TempOp__0 as
+  select  C.county as county,
+          C.state as state,
+          C.country as country,
+          C.continent as continent,
+          C.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CountyState_____sep_____C____id
+  from  CountyState C;
+
+output view __Union__376__TempOp__0;
+
+create view __Union__376__TempOp__1 as
+  select  C.match as county,
+          '' as state,
+          '' as country,
+          '' as continent,
+          C.match as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CountyValid_____sep_____C____id
+  from  CountyValid C;
+
+output view __Union__376__TempOp__1;
+

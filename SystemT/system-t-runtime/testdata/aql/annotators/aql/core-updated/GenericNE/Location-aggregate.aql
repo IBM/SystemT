@@ -1,0 +1,63 @@
+-- remove candidate that has already been identified as organization
+create view LocationTokenCandidatesConsolidatedInvalid as
+select L.loc as loc
+from OrganizationMixed O,
+     LocationTokenCandidatesConsolidated L
+where Contains(O.organization, L.loc);
+
+create view LocationTokenCandidatesConsolidatedValid as
+	(select L.* from LocationTokenCandidatesConsolidated L)
+	minus
+	(select L.* from LocationTokenCandidatesConsolidatedInvalid L);
+
+
+create view LocationExtendedValidAreOrg as
+select L.*
+from LocationExtendedValidAll L,
+     OrganizationMixed O
+where Overlaps(O.organization, L.loc);
+     
+create view LocationExtendedValidAllFiltered as
+	(select L.* from LocationExtendedValidAll L)
+	minus 
+	(select L.* from LocationExtendedValidAreOrg L);     
+
+create view LocationValidAll as
+	(select L.loc as loc from LocationExtendedValidAllFiltered L)
+	union all
+	(select L.loc as loc from LocationTokenCandidatesConsolidatedValid L);
+
+--output view LocationValidAll;
+
+create view CombinedLocation4 as
+select CombineSpans(C1.loc, C2.loc) as loc
+from   LocationValidAll C1,
+       LocationValidAll C2
+where  FollowsTok(C1.loc, C2.loc, 0, 1)
+  and  MatchesRegex(/\.?[ ]+/, SpanBetween(C1.loc, C2.loc))
+  and  MatchesRegex(/([^\s\w]|(\p{Ll}\p{M}*)+|[\r\n]*)\s*/, LeftContextTok(C1.loc, 1))
+  and  MatchesRegex(/\s*((\p{Ll}\p{M}*)+|[^\s\w])/, RightContextTok(C2.loc, 1));
+
+--output view CombinedLocation4;
+
+create view LocationValidAllExtended as
+	(select L.* from LocationValidAll L)
+	union all
+	(select L.* from CombinedLocation4 L);
+	
+create view LocationExtendedValidConsolidated as
+select L.loc as loc
+from LocationValidAllExtended L
+consolidate on L.loc
+using 'LeftToRight';
+
+
+create view LocationFinal as
+select C.loc as loc
+from LocationExtendedValidConsolidated C
+consolidate on C.loc;
+		
+create view LocationMixed as
+select C.loc as loc
+from LocationFinal C
+order by C.loc;

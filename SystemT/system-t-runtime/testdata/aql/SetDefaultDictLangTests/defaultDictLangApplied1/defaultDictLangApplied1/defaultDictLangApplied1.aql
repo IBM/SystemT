@@ -1,0 +1,36 @@
+-- Test to assert, if the default dictionary language set by 'set default dictionary language ...' statement is used
+-- for implicitly declared dictionaries and dictionaries declares without explicit language clause.
+
+module defaultDictLangApplied1;
+
+-- setting default dictionary matching language to french and english
+set default dictionary language as 'en,fr';
+
+-- inline dictionary declared without explicit language matching clause
+create dictionary testDictInline 
+as
+(
+	'firstEntry','secondEntry'
+);
+
+-- dictionary coming from file without explicit language matching clause
+create dictionary testDictFromFile
+from file 'the.dict';
+
+create table testTable(firstCol Text) as values
+	('firstEntry'),
+	('secondEntry');
+
+-- dictionary coming from table without explicit language matching clause
+create dictionary testDictFromTable
+from table testTable
+with entries from firstCol;
+
+-- this view declares dictionary implicitly
+create view testView as
+extract dictionary 'the.dict' 
+on D.text as match
+from Document D;
+
+output view testView;
+

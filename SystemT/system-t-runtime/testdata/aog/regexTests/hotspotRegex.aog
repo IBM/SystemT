@@ -1,0 +1,62 @@
+############################################################
+# personOrgRegex.aog
+#
+# Expensive regular expressions lifted from personOrg.aql.
+
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+# The base regex for CapsPerson
+$CapsPersonRaw = 
+	RegexTok(/\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['\-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}/,
+	(0 => "match"), 3, "text", $Document);
+	
+$CapsOrg = 
+	RegexTok(/\p{Lu}\p{M}*([\p{Ll}\p{Lo}\&\.'\-\,]\p{M}*)*[\p{Ll}\p{Lo}]/,
+	(0 => "match"), 10, "text", $Document);
+	
+$WeakInitialWord = 
+	RegexTok(/([\p{Upper}]\.?\s*){1,5}/,
+	(0 => "match"), 12, "text", $Document);
+	
+$AllCapsOrg = 
+	RegexTok(/(\p{Lu}\p{M}*){2,30}/,
+	(0 => "match"), 1, "text", $Document);	
+	
+$InitialWord = 
+	RegexTok(/([\p{Upper}]\.\s*){0,4}[\p{Upper}]\./,
+	(0 => "match"), 10, "text", $Document);	
+	
+$Time4 = 
+	RegexTok(/(\d{1,2}:\d{2}(:\d{2})?|\d{1,2}-\d{1,2})(\s*[AP])?/,
+	(0 => "match"), 10, "text", $Document);	
+	
+$TwoDigitsInterval = 
+	RegexTok(/((0)|(1)|(2)|(3))?[\d]( )*[\-]( )*((0)|(1)|(2)|(3))?[\d]/, 
+	(0 => "match"), 10, "text", $Document);		
+	
+$CapsPersonNoP =
+	Select(Not(ContainsRegex(RegexConst(/'/, "JavaRegex"), GetCol("match"))), $CapsPersonRaw);
+	
+$StrictCapsPersonR = 
+	Regex(/\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}/,
+	(0 => "name"), "match", $CapsPersonNoP);
+	
+$StrictCapsPerson = 
+	Select(
+		MatchesRegex(
+			RegexConst(/\b\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){1,20}\b/, "JavaRegex"), 
+		GetCol("name")), 
+		$StrictCapsPersonR);				
+	
+$StrictCapsPerson2 = 
+	RegexTok(/\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){1,20}/, 
+		(0 => "match"), 1, "text", $Document);		
+		
+Output: $CapsPersonRaw, $CapsOrg, $WeakInitialWord, $AllCapsOrg, $InitialWord, 
+	$Time4, $TwoDigitsInterval, $StrictCapsPersonR, $StrictCapsPerson,
+	$StrictCapsPerson2;
+	

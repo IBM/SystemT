@@ -1,0 +1,29 @@
+require document with columns text Text;
+-----------------------------------------------------------------------------
+-- Tests of the GreaterThan() predicate.
+------------------------------------------------------------------------------
+
+create dictionary CommonWords as (
+	'a', 'the', 'of'
+);
+
+-- Find common words more than 1000 characters into the document.
+select D.match as word
+into LateWords
+from Dictionary('CommonWords', Document.text) D
+where GreaterThan(GetBegin(D.match), 1000);
+
+-- Find words that end less then 20 characters into the document
+select D.match as word
+into EarlyWords
+from Dictionary('CommonWords', Document.text) D
+where GreaterThan(20, GetEnd(D.match));
+
+
+-- Find words that fall between characters 100 and 200 of the document
+select D.match as word
+into MidWords
+from Dictionary('CommonWords', Document.text) D
+where 
+	GreaterThan(GetBegin(D.match), 100)
+	and GreaterThan(200, GetEnd(D.match));

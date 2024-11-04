@@ -1,0 +1,11 @@
+create view CountryCandidate as
+select
+	D.match as match
+from
+--	Dictionary('country.dict', 'Exact', Doc.text) D;
+	--Dictionary('country.dict', Doc.text) D
+	--Dictionary('loc_world_countries_en.dict', Doc.text) D
+	(extract dictionary 'loc_world_countries_en.dict'
+			 on D.text as match
+			 from Doc D) D
+where MatchesRegex(/\p{Lu}\p{M}*.+/, D.match);

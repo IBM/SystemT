@@ -1,0 +1,19 @@
+module module2;
+
+import view CapsWord from module module1;
+
+create view First as
+extract regex /[A-Z][a-z]+(\-[A-Z][a-z]+)?/ on D.text as match
+from Document D;
+
+create view Person as
+select CombineSpans(F.match, C.match) as name
+from First F, module1.CapsWord C
+where FollowsTok(F.match, C.match, 0, 0);
+
+create view PersonCopy as
+select P.name as name
+from Person P;
+
+output view Person;
+output view PersonCopy;

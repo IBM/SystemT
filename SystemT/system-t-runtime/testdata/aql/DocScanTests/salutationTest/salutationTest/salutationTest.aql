@@ -1,0 +1,55 @@
+module salutationTest;
+require document with columns
+  id Integer
+  and label Text
+  and text Text
+  and url Text
+  and timeStamp Text;
+
+/**
+* Comment for external view EmailMetadata
+*/  
+create external view EmailMetadata(fromAddress Text, toAddress Text, msgid Integer)   
+external_name 'EmailMetadataSrc'; 
+ 
+/**
+* Comment for Dict SalutationDict
+*/
+create dictionary SalutationDict as  
+(
+  'rev.', 'col.', 'reverend', 'prof.', 'professor',
+  'lady', 'miss.', 'mrs.', 'mrs', 'mr.', 'pt.', 'ms.',
+  'messrs.', 'dr.', 'master.', 'marquis', 'monsieur',
+  'ds', 'di','herr', 'Fraeulein', 'Doktor', 'Herr Doktor',
+  'Frau Doktor','Herr Professor', 'Frau professor', 'Baron', 'graf','Oops','whitehouse','dem','PRESS','03:00'
+);
+
+/**
+* Comment for view Salutation
+*/
+create view SalutationView as
+---select D.match as salutation
+extract dictionary 'SalutationDict'
+on D.timeStamp as salutation
+from Document D;
+
+
+
+/**
+* Comment for DocSchema, view dumpDoc
+*/ 
+create view dumpDoc as
+select d.id, d.label, d.text, d.url, d.timeStamp from Document d;
+
+
+create view xyz as select d.text, d.label
+    from  Document d;
+
+output view xyz;
+    
+output view SalutationView;
+
+output view dumpDoc;
+output view EmailMetadata;
+--export view EmailMetadata;
+export view dumpDoc;

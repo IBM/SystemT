@@ -1,0 +1,16 @@
+-------------------------------------------------------------------------------
+-- exactMatch.aql
+--
+-- Test of the "ExactMatch" consolidation method.
+
+require document with columns text Text;
+
+
+create view OrgFull as
+select S.match as match
+from (extract dictionary 'dictionaries/sekar/organization_full_nocase.dict'
+        with flags 'IgnoreCase'
+        on D.text as match
+      from Document D) S
+consolidate on S.match using 'ExactMatch';
+output view OrgFull;

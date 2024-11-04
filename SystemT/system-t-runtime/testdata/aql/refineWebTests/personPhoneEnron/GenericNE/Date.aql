@@ -1,0 +1,346 @@
+--=======================================
+-- Date
+--
+-- 01/31/2008
+-- Translated from date.txt by Yunyao Li
+-- ======================================
+
+-- Common Macros
+create view FourDigits as
+select
+	R.match as match
+from
+    RegexTok(/((20)|(19)|(18)|(17)|(16))[\d][\d]/, 4, Doc.text) R;
+    
+create view DateNum as
+select
+	R.match as match
+from
+--    Regex(/\b[\d\p{Alpha}\ \-\,]*\d[\d\p{Alpha}\ \-\,]*/, Doc.text) R;
+    RegexTok(/\d[\d\p{Alpha}\-\,]*(( )*\d[\d\p{Alpha}]*)?/, 15, Doc.text) R;
+ 
+-- Dictionaries  
+create view Month as
+	select
+		D.match as match
+	from
+		Dictionary('month.dict', Doc.text) D;
+
+
+/*
+//CHECKED: This rule will handle date intervals such as 10-12 October and 10-12 October 2002
+//as also date intervals such as  April 7-8 and  October 15-18 2001
+<rule annotation=Date id=1>
+<internal>
+<token attribute={etc}>TWODIGITSINTERVAL</token>
+<token attribute={etc}PRD:MONTH{etc}>ANYWORD</token>
+<token attribute={etc}>FOURDIGITS</token>?
+</internal>
+</rule>
+*/
+
+create view DateInterval1 as
+	select
+ 		CombineSpans(tdi.match, m.match) as match
+	from
+		TwoDigitsInterval tdi,
+		Month m
+ 	where  
+ 		FollowsTok(tdi.match, m.match, 0, 0);
+ 		
+/*
+//Will handle date intervals such as  April 7-8 and  October 15-18 2001
+<rule annotation=Date id=2>
+<internal>
+<token attribute={etc}PRD:MONTH{etc}>ANYWORD</token>
+<token attribute={etc}>TWODIGITSINTERVAL</token>
+<token attribute={etc}>FOURDIGITS</token>?
+</internal>
+</rule>
+*/
+
+create view DateInterval2 as
+	select
+ 		CombineSpans(m.match, tdi.match) as match
+	from
+		Month m,
+		TwoDigitsInterval tdi
+ 	where  
+ 		FollowsTok(m.match, tdi.match, 0, 0);
+ 		
+ 		
+create view DateIntervalWithoutYear as
+	(select d.match as match from DateInterval1 d)
+	union all
+	(select d.match as match from DateInterval2 d);
+	
+create view DateIntervalWithYear as
+	select
+		CombineSpans(d.match, y.match) as match
+	from 
+		DateIntervalWithoutYear d,
+		FourDigits y
+	where
+		FollowsTok(d.match, y.match, 0, 1)
+	and MatchesRegex(/\s*[,]?\s*/, SpanBetween(d.match, y.match));
+		
+create view DateIntervalWithOptionalYear as
+	(select d.match as match from DateIntervalWithoutYear d)
+	union all
+	(select d.match as match from DateIntervalWithYear d);
+
+create view Date1to3 as
+select R.match as match
+--from Consolidate(DateIntervalWithOptionalYear.match) R;
+from DateIntervalWithOptionalYear R
+consolidate on R.match;
+
+	
+/*
+// 4th March
+<rule annotation=Date id=11>
+<internal>
+<token attribute={etc}>DATENUM</token>
+<token attribute={etc}>\,</token>?
+<token attribute={etc}>of</token>?
+<token attribute={etc}PRD:MONTH{etc}>CANYWORD</token>
+</internal>
+</rule>
+*/
+
+create view Date11 as
+	select 	
+		CombineSpans(dn.match, m.match) as match
+	from
+		Month m,
+		DateNum dn
+	where		
+		FollowsTok(dn.match, m.match, 0, 1)
+	and MatchesRegex(/( )*[,]?( )*(of)?( )*/,SpanBetween(dn.match, m.match));
+
+
+/*
+// May, 3rd
+<rule annotation=Date id=12>
+<internal>
+<token attribute={etc}PRD:MONTH{etc}>CANYWORD</token>
+<token attribute={etc}>\,</token>?
+<token attribute={etc}>NUM</token>
+</internal>
+</rule>
+*/
+create view Date12 as
+	select 	
+		CombineSpans(m.match, dn.match) as match
+	from
+		Month m,
+		DateNum dn
+	where		
+		FollowsTok(m.match, dn.match, 0, 1)
+	and MatchesRegex(/( )*[,]?( )*/,SpanBetween(m.match, dn.match));
+
+
+/*
+// May 4th,  2001
+<rule annotation=Date id=6>
+<internal>
+<token attribute={etc}PRD:MONTH{etc}>ANYWORD</token>
+<token attribute={etc}>\,</token>?
+<token attribute={etc}>DATENUM</token>
+<token attribute={etc}>\,</token>?
+<token attribute={etc}>FOURDIGITS</token>
+</internal>
+</rule>
+*/
+create view Date6 as
+	select 	
+		CombineSpans(d.match, fd.match) as match
+	from
+		Date12 d,
+		FourDigits fd
+	where
+		FollowsTok(d.match, fd.match, 0, 1)
+	and MatchesRegex(/( )*[,]?( )*/,SpanBetween(d.match, fd.match));
+
+/*
+// 4th May, 2001
+<rule annotation=Date id=7>
+<internal>
+<token attribute={etc}>DATENUM</token>
+<token attribute={etc}>\,</token>?
+<token attribute={etc}>of</token>?
+<token attribute={etc}PRD:MONTH{etc}>ANYWORD</token>
+<token attribute={etc}>\,</token>?
+<token attribute={etc}>FOURDIGITS</token>
+</internal>
+</rule>
+*/
+create view Date7 as
+	select 	
+		CombineSpans(d.match, fd.match) as match
+	from
+		Date11 d,		
+		FourDigits fd
+	where		
+		FollowsTok(d.match, fd.match, 0, 1)
+	and MatchesRegex(/\s*[,]?\s*/,SpanBetween(d.match, fd.match));
+	
+/*
+// Friday, May 4, 2001
+<rule annotation=Date id=4>
+<internal>
+<token attribute={etc}PRD:WKDAY{etc}>CANYWORD</token>
+<token attribute={etc}>\,</token>?
+<token attribute={etc}PRD:MONTH{etc}>ANYWORD</token>
+<token attribute={etc}>\,</token>?
+<token attribute={etc}>DATENUM</token>
+<token attribute={etc}>\,</token>?
+<token attribute={etc}>FOURDIGITS</token>
+</internal>
+</rule>
+
+// Friday, 4th May,  2001
+<rule annotation=Date id=5>
+<internal>
+<token attribute={etc}PRD:WKDAY{etc}>CANYWORD</token>
+<token attribute={etc}>\,</token>?
+<token attribute={etc}>the</token>?
+<token attribute={etc}>DATENUM</token>
+<token attribute={etc}>\,</token>?
+<token attribute={etc}>of</token>?
+<token attribute={etc}PRD:MONTH{etc}>ANYWORD</token>
+<token attribute={etc}>\,</token>?
+<token attribute={etc}>FOURDIGITS</token>
+</internal>
+</rule>
+*/
+create view Date4to5 as
+	select 	
+		CombineSpans(wkd.match, d.match) as match
+	from 
+		WKDay wkd,
+		Date7 d
+	where
+		FollowsTok(wkd.match, d.match, 0, 2)
+	and MatchesRegex(/( )*[,]?( )*(the)?( )*/,SpanBetween(wkd.match, d.match));
+
+
+/*
+// May,  2001
+<rule annotation=Date id=8>
+<internal>
+<token attribute={etc}PRD:MONTH{etc}>CANYWORD</token>
+<token attribute={etc}>\,</token>?
+<token attribute={etc}>FOURDIGITS</token>
+</internal>
+</rule>
+*/
+create view Date8 as
+	select 	
+		CombineSpans(m.match, fd.match) as match
+	from
+		Month m,		
+		FourDigits fd
+	where		
+		FollowsTok(m.match, fd.match, 0, 1)
+	and MatchesRegex(/( )*[,]?( )*/,SpanBetween(m.match, fd.match));
+
+/*
+// Wednesday, 4th March
+<rule annotation=Date id=9>
+<internal>
+<token attribute={etc}PRD:WKDAY{etc}>ANYWORD</token>
+<token attribute={etc}>\,</token>?
+<token attribute={etc}>the</token>?
+<token attribute={etc}>DATENUM</token>
+<token attribute={etc}>\,</token>?
+<token attribute={etc}>of</token>?
+<token attribute={etc}PRD:MONTH{etc}>CANYWORD</token>
+</internal>
+</rule>
+*/
+
+create view Date9 as
+	select 	
+		CombineSpans(wkd.match, d.match) as match
+	from
+		WKDay wkd,		
+		Date11 d
+	where		
+		FollowsTok(wkd.match, d.match, 0, 2)
+	and MatchesRegex(/[\ ]*[,]?[\ ]*(the)?[\ ]*/,SpanBetween(wkd.match, d.match));
+
+/*
+// Wednesday, May, 3rd
+<rule annotation=Date id=10>
+<internal>
+<token attribute={etc}PRD:WKDAY{etc}>ANYWORD</token>
+<token attribute={etc}>\,</token>?
+<token attribute={etc}PRD:MONTH{etc}>CANYWORD</token>
+<token attribute={etc}>\,</token>?
+<token attribute={etc}>DATENUM</token>
+</internal>
+</rule>
+*/
+
+create view Date10 as
+	select 	
+		CombineSpans(wkd.match, d.match) as match
+	from
+		WKDay wkd,		
+		Date12 d
+	where		
+		FollowsTok(wkd.match, d.match, 0, 2)
+	and MatchesRegex(/[\ ]*[,]?[\ ]*(the)?[\ ]*/,SpanBetween(wkd.match, d.match));
+
+create view Date13 as
+	select
+		CombineSpans(y1.match, y2.match) as match
+	from
+		FourDigits y1,
+		FourDigits y2
+	where
+		FollowsTok(y1.match, y2.match, 1, 1)
+	and MatchesRegex(/\s*-\s*/, SpanBetween(y1.match, y2.match));
+	
+create view Date14 as
+select
+	R.match as match
+from
+    RegexTok(/(\d{1,2}|\d{4})[\-\/]\d{1,2}[\-\/]\d{1,4}/, 12, Doc.text) R;
+    
+---------------------------------------------------------------------------
+-- Union all Dates
+---------------------------------------------------------------------------
+create view DateAll as
+	(select d.match as match from Date1to3 d)
+	union all 
+	(select d.match as match from Date4to5 d)
+	union all 
+	(select d.match as match from Date6 d)
+	union all 
+	(select d.match as match from Date7 d)
+	union all 
+	(select d.match as match from Date8 d)
+	union all 
+	(select d.match as match from Date9 d)
+	union all 
+	(select d.match as match from Date10 d)
+	union all 
+	(select d.match as match from Date11 d)
+	union all 
+	(select d.match as match from Date12 d)
+	union all 
+	(select d.match as match from Date13 d)
+	union all
+	(select d.match as match from Date14 d);
+
+---------------------------------------------------------------------------
+-- Consolidate all dates
+---------------------------------------------------------------------------
+create view Dates as
+select R.match as match 
+--from Consolidate('LeftToRight',DateAll.match) R; 
+from DateAll R
+consolidate on R.match
+using 'LeftToRight';

@@ -1,0 +1,91 @@
+-----------------------------------------------------------------------------
+-- inlineRegexBug.aql
+--
+-- Test case for bug #140785: Special characters in inline regex or
+-- dictionary atoms in sequence patterns cause parse error
+-----------------------------------------------------------------------------
+
+require document with columns text Text;
+
+-- Try several variants of the same basic kind of extraction.  All of these
+-- methods give different error messages.
+
+-----------------------------------------------------------------------------
+create view Quote1 as
+  extract pattern /"'/
+  return group 0 as match
+  from Document D;
+  
+output view Quote1;
+
+-----------------------------------------------------------------------------
+create view Quote1a as
+  extract pattern /["']/
+  return group 0 as match
+  from Document D;
+
+output view Quote1a;
+
+-----------------------------------------------------------------------------
+create view Quote2 as
+  extract pattern /\"'/
+  return group 0 as match
+  from Document D;
+
+output view Quote2;
+
+-----------------------------------------------------------------------------
+create view Quote3 as
+  extract pattern /("|')/
+  return group 0 as match
+  from Document D;
+
+output view Quote3;
+
+-----------------------------------------------------------------------------
+
+create view Quote4 as
+  extract pattern '"'
+  return group 0 as match
+  from Document D;
+  
+output view Quote4;
+
+-----------------------------------------------------------------------------
+
+create view Quote5 as
+  extract pattern ('\'' | /"/)
+  return group 0 as match
+  from Document D;
+
+output view Quote5;
+
+-----------------------------------------------------------------------------
+
+create view Quote6 as
+  extract pattern '"' /[\p{L}\-']+/{0,5} '"' <I.match>
+  as match
+  from Document D, Quote5 I;
+  
+output view Quote6; 
+
+-----------------------------------------------------------------------------
+create view EmailAddress as
+  extract regex /\w*@\w*\.com/ on between 3 and 5 tokens in D.text as match
+  from Document D;
+
+create view EmailField_1 as
+    extract
+        pattern ('"\'' <E1.match>? '"\'' <E2.match>)
+        return group 1 as match
+        from EmailAddress E1, EmailAddress E2;
+
+create view EmailField_2 as
+    extract
+        pattern (/["']/ <E1.match>? /["']/ <E2.match>)
+        return group 1 as match
+        from EmailAddress E1, EmailAddress E2;
+
+output view EmailField_1;
+output view EmailField_2;
+

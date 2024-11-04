@@ -1,0 +1,29 @@
+-- nameBug2.aql
+--
+-- Greatly-simplified version of nameBug.aql that failed after the 
+-- multi-lingual tokenization refactoring.
+
+require document with columns text Text;
+
+
+create view FirstName as
+extract regex 'Sriram' on D.text as firstname
+from Document D;
+
+create view LastName as
+extract regex 'Raghavan' on D.text as lastname
+from Document D;
+
+output view FirstName;
+output view LastName;
+
+create view FirstLast as
+select 
+	FN.firstname as firstname,
+	LN.lastname as lastname,
+	CombineSpans(FN.firstname, LN.lastname) as person
+from   FirstName FN,
+       LastName LN
+where  FollowsTok(FN.firstname, LN.lastname, 0, 0);
+
+output view FirstLast;

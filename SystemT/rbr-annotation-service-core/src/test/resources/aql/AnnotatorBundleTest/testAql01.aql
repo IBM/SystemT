@@ -1,0 +1,65 @@
+module testSystemTMod01; 
+-- TODO: Add AQL content here 
+
+set default dictionary language as 'en';
+
+--require document with columns content Text
+--	and text Text;
+
+create dictionary CommonNames as (
+  'Fred', 'George', 'Mary', 'Jane' );
+
+create view Phone as extract
+  regexes /\+?\([1-9]\d{2}\)\d{3}-\d{4}/
+  on D.text as num
+from Document D;
+
+create view SimpleName as extract
+  dictionary 'CommonNames'
+  on D.text as name
+from Document D;
+
+create view ExtNames as extract
+  dictionary 'extNames.dict'
+  on D.text as name
+from Document D;
+
+create view AllTypes as select 
+  1 as IntAttr, 
+  1.5 as FloatAttr, 
+  true as BoolAttr, 
+  'Mary' as TextAttr
+from Document D;
+
+create view AtomicSpans as extract 
+  D.text as text, 
+  regex /[A-Z].+/ on D.text as match
+from Document D;
+
+-- This is missing a float-value attribute - please think about creating one
+create view AtomicValuesOfDifferentDataTypes as select 
+  A.text, 
+  A.match as spanAttr, 
+  GetText(A.match) as textAttr, 
+  GetLength(A.match) as intAttr, 
+  MatchesRegex(/[A-Z]+/, A.match) as boolAttr,
+  1.5 as floatAttr
+from AtomicSpans A;
+
+create view ScalarListsOfDifferentTypes as select 
+  List(A.spanAttr) as spanList, 
+  List(A.textAttr) as textList, 
+  List(A.intAttr) as intList,
+  -- List(A.boolAttr) as boolList -- no systemT support for boolena lists.
+  List(A.floatAttr) as floatList
+from AtomicValuesOfDifferentDataTypes A 
+group by A.text;
+
+output view Phone;
+--output view SimpleName;
+output view AllTypes;
+output view ExtNames;
+output view AtomicSpans;
+output view AtomicValuesOfDifferentDataTypes;
+output view ScalarListsOfDifferentTypes;
+

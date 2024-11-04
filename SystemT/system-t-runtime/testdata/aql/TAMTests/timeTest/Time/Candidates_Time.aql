@@ -1,0 +1,125 @@
+module Time;
+
+--  To allow timezone in parathesis with option hour information
+--  E.g. "20:30 (GMT)" or "17:30(GMT+1)"
+
+create view TimeZoneAll as
+	(select T.* from TimeZoneDict T)
+	union all
+	(select CombineSpans(LeftContextTok(T.match, 1), RightContextTok(T.match, 1)) as match
+	 from TimeZoneDict T
+	 where MatchesRegex(/\(/, LeftContextTok(T.match, 1))
+	   and MatchesRegex(/\)/, RightContextTok(T.match, 1)))
+	union all
+	(select CombineSpans(LeftContextTok(T.match, 1), RightContextTok(T.match, 3)) as match
+	 from TimeZoneDict T
+	 where MatchesRegex(/\(/, LeftContextTok(T.match, 1))
+	   and MatchesRegex(/[+]\d\)/, RightContextTok(T.match, 3)));
+
+create view TimeZone as
+select T.*
+from TimeZoneAll T
+consolidate on T.match;
+	 	
+
+-- This rule will handle time intervals such as  10-11 Sat
+
+create view Time1 as
+select 
+	CombineSpans(td.match, wkd.match) as match
+from 
+	TwoDigitsInterval td,
+	WKDay wkd
+where 
+	FollowsTok(td.match, wkd.match, 0, 0);
+
+
+-- This rule will handle time intervals such as  Sat 10-11
+
+create view Time2 as
+select 
+	CombineSpans(wkd.match, td.match) as match
+from 
+	TwoDigitsInterval td,
+	WKDay wkd
+where 
+	FollowsTok(wkd.match, td.match, 0, 0);
+	
+create view Time2Plus as
+select 
+	CombineSpans(t.match, tz.match) as match
+from 
+	Time2 t,
+	TimeZone tz
+where 
+	FollowsTok(t.match, tz.match, 0, 0);
+
+
+-- This rule will handle times of the form : 9:00 and also match 7-9PM
+
+create view Time4 as
+select 
+	R.match as match
+from 
+	(extract regex /(2[0-4]|[0-1]\d):[0-5]\d:[0-5]\d([.:]\d*)?/ on D.text as match from DocumentText D) R; 
+
+
+-- This rule will handle times according to a watch: 9:00 A.M, 9 AM, 9:00 PM
+
+create view Time3 as
+select 
+	CombineSpans(t.match, tz.match) as match
+from 
+	(extract regex /\d{1,2}([:.][0-5]\d){0,2}\s*(-\s*\d{1,2}([:.][0-5]\d){0,2})?/
+		on between 1 and 10 tokens in D.text as match from DocumentText D) t,
+	TimeZone tz 
+where 
+	FollowsTok(t.match, tz.match, 0, 0);	
+	
+------------------------------------------------------------
+-- Union all Times
+------------------------------------------------------------
+create view TimeAll as
+	(select t.match as match from Time1 t)
+	union all
+	(select t.match as match from Time2 t)
+	union all
+	(select t.match as match from Time2Plus t)
+	union all
+	(select t.match as match from Time3 t)
+	union all
+	(select t.match as match from Time4 t);
+	
+------------------------------------------------------------
+-- Consolidate all Times
+------------------------------------------------------------
+create view TimeConsolidated as
+select R.match as match
+from TimeAll R
+consolidate on R.match;
+
+-- Enable timezone extension for all time format
+
+create view TimesWithTimeZone as
+select CombineSpans(T.match, TZ.match) as match
+from TimeConsolidated T,
+	 TimeZone TZ
+where FollowsTok(T.match, TZ.match, 0, 0);
+
+create view TimesWithTimeZoneAll as
+(select T.* from TimeConsolidated T)
+union all
+(select T.* from TimesWithTimeZone T);
+
+-- Enable year extension for all time format
+
+create view TimesWithYear as
+select CombineSpans(T.match, Y.match) as match
+from TimesWithTimeZoneAll T,
+     FourDigits Y
+where FollowsTok(T.match, Y.match, 0, 0);
+
+create view TimesExtendedAll as
+(select T.* from TimesWithTimeZoneAll T)
+union all
+(select T.* from TimesWithYear T);

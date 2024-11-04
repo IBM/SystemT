@@ -1,0 +1,57 @@
+/*
+Test module, which does not export any of the declared Object. 
+*/
+module partialExport; 
+ 
+
+create dictionary CompanyNames as
+('IBM', 'BigCorp', 'Initech');
+
+create external dictionary CompanyNamesExt 
+allow_empty true
+with language as 'en'
+and case insensitive;
+
+--export dictionary CompanyNames;
+export dictionary CompanyNamesExt;
+
+-- Create a table that maps company names to locations of 
+-- corporate headquarters.
+create table NameToLocation (name Text, location Text) as
+values 
+	('IBM', 'USA'), 
+	('BigCorp', 'Apex'), 
+	('Initech', 'Dallas'),
+	('Acme Fake Company Names', 'Somewhere');
+	
+create external table NameToLocationExt (Name Text, Location Text)
+allow_empty false;
+	
+--export table NameToLocation;
+export table NameToLocationExt;
+	
+-- Find all matches of the company names dictionary.
+create view Company as
+extract
+	dictionary 'CompanyNames' on D.text as company
+from Document D;
+
+--export view Company;
+
+create view CompanyLoc as
+select N2C.Location as loc, C.company as company
+from partialExport.Company C, NameToLocationExt N2C
+where Equals(GetText(C.company), GetText(N2C.Name));
+
+
+output view CompanyLoc;
+
+
+create function udfToUpperCase(p1 String)
+return String
+external_name 'udf/udfs.jar:com.ibm.test.udfs.udf1!toUpperCase'
+language java 
+deterministic
+return null on null input;
+
+--export function udfToUpperCase;

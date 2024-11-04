@@ -1,0 +1,33 @@
+-- Yunyao: created on 08/14/2009 to identify
+-- 		   1. major international regions such as Korean Peninsula 
+-- 		   2. major general regions such as Wall Street, New England 
+
+-- major international regions
+include 'detag.aql';
+
+create view Direction as
+select	D.match as match
+from	Dictionary('direction.dict', 'Exact', Doc.text) D;
+
+create view InternationalRegionCandidate as
+select	D.match as match
+from	Dictionary('location/internationalRegions.dict', 'Exact', Doc.text) D;
+
+create view InternationalRegionExtended as
+select CombineSpans(D.match, R.match) as match
+from Direction D,
+	 InternationalRegionCandidate R
+where FollowsTok(D.match, R.match, 0, 0);
+
+create view InternationalRegionAll as
+	(select R.match as match from InternationalRegionCandidate R)
+	union all
+	(select R.match as match from InternationalRegionExtended R);
+	
+create view InternationalRegion as
+select R.match as match
+from InternationalRegionAll R
+consolidate on R.match
+using 'LeftToRight';
+	
+output view InternationalRegion;

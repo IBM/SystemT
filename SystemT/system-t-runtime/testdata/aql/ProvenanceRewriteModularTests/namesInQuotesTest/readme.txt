@@ -1,0 +1,1 @@
+This test is to verify that when certain AQL element names are enclosed in quotes, the provenance rewrite carries over the quotes into the rewritten AQL as well.

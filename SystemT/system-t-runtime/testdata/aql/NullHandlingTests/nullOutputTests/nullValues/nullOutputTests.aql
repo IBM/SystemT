@@ -1,0 +1,36 @@
+module nullValues;
+
+-- This test suite outputs fields with null values
+
+require document with columns text Text;
+
+create view Nulls as
+  select null as nullCol,
+  D.text as text
+  from Document D;
+
+create view NullFields as
+select 
+  GetBegin(N.nullCol) as nullInt,
+  GetString(GetBegin(N.nullCol)) as nullIntString,
+  Equals (0, null) as nullBoolean,
+  GetString(Equals(0, null)) as nullBoolString,
+  Equals (0, 0) as trueBoolean,
+  GetString(Equals(0, 0)) as trueBoolString,
+  Equals (0, 1) as falseBoolean,
+  GetString(Equals(0, 1)) as falseBoolString
+from Nulls N;
+
+create view NullCased as
+    select NF.trueBoolString,
+           case when Equals(NF.trueBoolString, NF.falseBoolString)
+                   then null
+                when Equals(NF.falseBoolString,'true')
+                   then NF.trueBoolString
+                else null
+                as nullFromCase
+    from NullFields NF;
+
+
+output view NullFields;
+output view NullCased;

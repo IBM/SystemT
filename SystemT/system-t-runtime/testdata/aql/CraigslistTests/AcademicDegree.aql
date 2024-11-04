@@ -1,0 +1,113 @@
+-----------------------------------------------------------------------------
+-- AcademicDegree.aql
+--
+-----------------------------------------------------------------------------
+
+create dictionary DegreeNameDict from file 'academia/degree.dict'
+with case exact;
+
+-- get degree information
+create view DegreeName as
+extract dictionary DegreeNameDict on D.text as match from DetaggedDoc D
+consolidate on match;
+
+create dictionary DegreeClueDict as (
+	'in',
+	'or higher',
+	'degree',
+	'from'
+);
+
+create view DegreeClue as
+select D.match as match
+from Dictionary('DegreeClueDict', DetaggedDoc.text) D;
+
+
+-- identify degree requirement
+-- (1) if the candidate is right next to a strong clue
+create view DegreeRequirement1 as
+select D.match as match
+from DegreeName D,
+	 DegreeClue C
+where FollowsTok(D.match, C.match, 0, 1);
+
+-- (2) if the candidate is near an identified degree 
+create view DegreeRequirement2 as
+select D.match as match
+from DegreeName D,
+     DegreeRequirement1 R
+where FollowsTok(D.match, R.match, 0, 3);
+
+-- union all the degrees identified
+create view DegreeRequirement as
+	(select D.match as match from DegreeRequirement1 D)
+	union all
+	(select D.match as match from DegreeRequirement2 D);
+
+
+-- major
+create view MajorDict as
+select M.match as match
+from Dictionary('academia/major.dict', 'Exact', DetaggedDoc.text) M;
+
+create dictionary MajorClueBeforeDict as (
+	'in',
+	'or',
+	'/',
+	','
+);
+
+create dictionary MajorClueAfterDict as (
+	'or',
+	'/'
+);
+
+create view MajorClueBefore as
+select C.match as match
+from Dictionary('MajorClueBeforeDict', DetaggedDoc.text) C;
+
+create view MajorClueAfter as
+select C.match as match
+from Dictionary('MajorClueAfterDict', DetaggedDoc.text) C;
+
+create view Major1 as
+select M.match as match
+from MajorDict M,
+	 MajorClueBefore C
+where FollowsTok(C.match, M.match, 0, 0);
+
+create view Major2 as
+select M.match as match
+from MajorDict M,
+	 MajorClueAfter C
+where FollowsTok(M.match, C.match, 0, 0);
+
+create view MajorAll as
+	(select M.match as match from Major1 M)
+	union all
+	(select M.match as match from Major2 M);
+
+create view Major as
+select M.match as match
+from MajorAll M
+consolidate on M.match;
+	
+-- identify degree associated with a major
+-- if degree is within 12 tokens of major and there is no line space in between
+create view DegreeWithMajor as
+select D.match as degree, M.match as major
+from DegreeRequirement D,
+     Major M
+where FollowsTok(D.match, M.match, 0, 12)
+  and Not(ContainsRegex(/[\n\r]/, SpanBetween(D.match, M.match)));
+	
+	
+create view DegreeWithoutMajor as
+	(select D.match as degree from DegreeRequirement D)
+	minus
+	(select D.degree as degree from DegreeWithMajor D);
+	
+create view Degree as
+	(select D.degree as degree, D.major as major, D.degree as reference from DegreeWithMajor D)
+	union all
+	(select D.degree as degree, '' as major, D.degree as reference from DegreeWithoutMajor D);

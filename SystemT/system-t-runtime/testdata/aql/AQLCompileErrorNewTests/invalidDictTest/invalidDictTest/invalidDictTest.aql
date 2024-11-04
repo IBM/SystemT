@@ -1,0 +1,41 @@
+/*
+Module with various invalid dictionary declarations.
+*/
+
+module invalidDictTest;
+
+-- dictionary declared with invalid language code string containing invalid language code
+create dictionary invalidLangCode 
+ with language as 'unknownLangCode1,en,unknownLangCode2'
+ as 
+ (
+    'entry1'
+ );
+ 
+-- dictionary declared with invalid case matching parameter
+create dictionary invalidCaseCond 
+with case sensitive
+as
+(
+	'entry1'
+); 
+
+-- Invalid dictionary declaration, accidental ';' after dictionary name. 
+-- Specifically, the following bad dictionary declaration covers the scenario 
+-- mentioned in defect#3406.
+create dictionary SampleDict;
+from file '<path to dict file>';
+
+-- Various abrupt end of dictionary declaration
+create dictionary badDict1 as;
+
+create dictionary badDict2 from file;
+
+create dictionary badDict3 with;
+
+-- Dictionary name containing period; this should return error, as we don't allow periods in dictionary name
+create dictionary "dictNameWith." as
+(
+	'firstEntry',
+	'secondEntry'
+);	

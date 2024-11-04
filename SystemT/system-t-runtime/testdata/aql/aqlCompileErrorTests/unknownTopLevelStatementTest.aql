@@ -1,0 +1,43 @@
+-------------------------------------------------------------------------------
+-- AQL file containing unknown top level statement at the begin , middle and
+-- end of the file 
+-------------------------------------------------------------------------------
+
+unknwonTopLevel1 ;
+
+-- Find first names, using an exhaustive dictionary.
+create view FirstName as
+select D.match as name
+from Dictionary('dictionaries/first.dict', DocScan.text) D
+where MatchesRegex(/\A[A-Z][a-z]*\Z/, D.match);
+
+
+-- Find phone numbers, using a pair of regular expressions.
+create view PhoneNumber as
+(
+    select R.match as num
+    from Regex(/\+?\([1-9]\d{2}\)\d{3}-\d{4}/, Document.text) R
+)
+union all
+(
+    select R.match as num
+    from Regex(/\+?[Xx]\.?\d{4,5}/, Document.text) R
+);
+
+unknwonTopLevel2 ;
+
+-- Find instances of first name followed within 50 chars by phone number
+create view PersonPhoneAll as
+select CombineSpans(F.name, P.num) as personphone,
+     F.name as name,
+     P.num as num   
+from FirstName F, PhoneNumber P
+where Follows(F.name, P.num, 0, 50);
+
+-- Remove overlap between annotations and persist as "PersonPhone"
+select PPA.personphone as personphone
+into PersonPhone
+from PersonPhoneAll PPA
+consolidate on PPA.personphone;
+
+unknwonTopLevel3 ;

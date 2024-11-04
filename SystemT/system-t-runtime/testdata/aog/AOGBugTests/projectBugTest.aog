@@ -1,0 +1,38 @@
+CreateDict(
+    "name" => "dictionaries/first.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+$Names =
+Project(
+  (
+    "match" => "match"
+  ),
+  Dictionary("dictionaries/first.dict" => "IgnoreCase" , "text", "match",
+    $Document
+  )
+);
+
+$FirstName1 =
+Select(
+    MatchesRegex(
+      RegexConst(
+        /\A[A-Z][a-z]*\Z/, "JavaRegex"
+      ),
+      GetCol(
+        "match"
+      )
+    ),
+    $Names
+);
+
+Output: $Names, $FirstName1;
+

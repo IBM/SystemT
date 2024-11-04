@@ -1,0 +1,52 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module SentenceBoundary;
+
+import dictionary MiscellaneousAbbreviations from module Dictionaries as MiscellaneousAbbreviations;
+
+--*********************************************************
+-- Combine sentence boundaries with headline boundaries 
+-- and HTML tag boundaries
+--*********************************************************
+create view SentenceBoundary as
+select S.boundary as boundary
+from
+(
+	(
+		select R.match as boundary
+		from (extract regex /(([\.\?!]+\s)|(\n\s*\n))/ on D.text as match from DocumentText D) R
+		where
+			-- Filter the candidate boundaries.
+			Not(ContainsDict('MiscellaneousAbbreviations', 
+				CombineSpans(LeftContextTok(R.match, 1), R.match)))
+	)
+	union all
+	( select H.lb as boundary from HeadlineMixedCaps H )
+	union all
+	( select H.rb as boundary from HeadlineMixedCaps H )
+	union all
+	( select H.lb as boundary from HTMLTagBoundary H )
+	union all
+	( select H.rb as boundary from HTMLTagBoundary H )
+) S
+consolidate on S.boundary;
+
+-- Export candidate view
+export view HeadlineMixedCaps;
+
+-- Export final view
+export view SentenceBoundary;

@@ -1,0 +1,103 @@
+###############################################################################
+# contains.aog
+#
+# ("aog" stands for Avatar Operator Graph.)
+#
+# Test of containment join/selection predicates.  Looks for pairs of words
+# are in the same sentence but have a period between them.
+###############################################################################
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+
+# Detect sentence boundaries.
+$sentence_1 =
+    Project(
+      "NULL",
+      (
+        "D.text" =>   "text",
+        "boundary" =>   "boundary"
+      ),
+      FastRegex(
+        /(([\.\?!]+\s)|(\n\s*\n))/,
+        (
+          0 =>   "boundary"
+        ),
+        "D.text",
+        Project(
+          "NULL",
+          (
+            "text" =>   "D.text"
+          ),
+          $Document
+        )
+      )
+    );
+  
+$Sentence =
+  Project(
+    "NULL",
+    (
+      "sentence" =>   "sentence"
+
+    ),
+    Split(
+      "B.text",
+      "B.boundary",
+      2,
+      "sentence",
+      Project(
+        "NULL",
+        (
+          "text" =>   "B.text",
+          "boundary" =>   "B.boundary"
+
+        ),
+        $sentence_1
+      )
+    )
+  );
+#$Sentence = 
+#	Project( ( "match" => "sentence" ),
+#		Sentence( "text", $Document )
+#	);
+
+# Find pairs of words with a period between them.
+$WordsWithPeriods =
+Project(("words" => "words"),
+		 Regex(/\w\p{Alpha}+\p{Space}*\.\p{Space}*\p{Alpha}+\w/,
+		 		(0 => "words"), "text", 
+                          $Document));
+
+
+# Use a cross-product and selection predicate
+$SelectContains = 
+	Select(Contains(GetCol("sentence"), GetCol("words")),
+		CrossProduct($Sentence, $WordsWithPeriods)
+	);
+	
+# Use a nested loops join
+$NLJoinContains =
+	NLJoin(Contains(GetCol("sentence"), GetCol("words")), $Sentence, $WordsWithPeriods);
+
+# Use a merge join with Sentence as the outer.
+$MergeSentContains =
+	SortMergeJoin(Contains(GetCol("sentence"), GetCol("words")), $Sentence, $WordsWithPeriods);
+	
+
+# Use a merge join with WordsWithPeriods as the outer
+$MergeWordsContains =
+	Project(("words" => "words"),
+		SortMergeJoin(ContainedWithin(GetCol("words"), GetCol("sentence")), 
+			$WordsWithPeriods, $Sentence)
+	);
+
+
+################################################################################
+# OUTPUT SPEC
+Output: $SelectContains, $NLJoinContains, $MergeSentContains, 
+		$MergeWordsContains;
+

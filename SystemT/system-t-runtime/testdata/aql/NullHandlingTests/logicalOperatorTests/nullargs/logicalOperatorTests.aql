@@ -1,0 +1,91 @@
+module nullargs;
+
+require document with columns text Text;
+
+-- This test suite tests every logical operator to see if null is treated equivalent to FALSE.
+-- Thus we should never see any output -- if we do, then it has been evaluated as TRUE.
+
+-- Technically the null literal as an argument to a function is not valid AQL 
+-- but it is still handled correctly.  
+
+
+-- Having clause
+
+-- The control should output an tuple with an error-message string.
+-- The null test should output nothing.
+create view HavingControlTest as
+extract regex /Error: NULL in having-clause evaluates as TRUE/
+on D.text as match
+from Document D
+having Equals(0, 0);
+
+output view HavingControlTest;
+
+
+create view HavingNullTest as
+extract regex /Error: NULL in having-clause evaluates as TRUE/
+on D.text as match
+from Document D
+having Equals(null, 0);
+
+output view HavingNullTest;
+
+
+
+-- Where clause
+-- The control should output an tuple with an error-message string.
+-- The null test should output nothing.
+
+create view ExtractError as
+extract regex /Error: NULL in where-clause evaluates as TRUE/
+on D.text as match
+from Document D;
+
+create view WhereControlTest as
+select E.match 
+from ExtractError E
+where Equals (0, 0);
+
+output view WhereControlTest;
+
+create view WhereTest as
+select E.match 
+from ExtractError E
+where Equals (null, 0);
+
+output view WhereTest;
+
+
+
+-- Case ... when clause
+
+create view WhenTest as
+select 
+  case 
+  when Equals(null, D.text)
+  then 'Error: NULL in case-when clause evaluates as TRUE' 
+  else 'Null in case-when clause is being handled correctly'
+  as match
+from Document D;
+
+output view WhenTest;
+
+
+
+
+-- Case ... when clause output is null
+-- Verify that the output is also null
+
+create view WhenNullOutputTest as
+select 
+  case 
+  when True() 
+  then null
+  as match
+from Document D;
+
+output view WhenNullOutputTest;
+
+
+
+  

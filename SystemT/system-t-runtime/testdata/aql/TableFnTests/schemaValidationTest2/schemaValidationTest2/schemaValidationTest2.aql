@@ -1,0 +1,50 @@
+module schemaValidationTest2;
+require document with columns text Text;
+
+-- Secondary test of schema validation for table functions.  Triggers error
+-- conditions that are masked by the errors in the first test.
+
+-- Declare a simple table function, but with the wrong output schema.
+-- This problem is caught during type inference, specifically when the UDF's 
+create function MyTableFunc1( intArg Integer )
+return table( stringVal Text )
+external_name 
+    -- Path relative to module root; udfjars is inside <project root>/testdata
+    '../../../../udfjars/tableFnTestsUDFs.jar:com.ibm.test.udfs.BasicTableFunc!eval'
+language java
+deterministic
+called on null input;
+
+-- Good copy of the same table function
+create function MyTableFunc2( intArg Integer )
+return table( stringVal Text, realVal Float )
+external_name 
+    -- Path relative to module root; udfjars is inside <project root>/testdata
+    '../../../../udfjars/tableFnTestsUDFs.jar:com.ibm.test.udfs.BasicTableFunc!eval'
+language java
+deterministic
+called on null input;
+
+
+-- Create views that call the functions.  Vary the calling methods, so as
+-- to exercise as much code as possible.
+create view TabFuncOutput1 as
+select * from MyTableFunc1(3);
+
+output view TabFuncOutput1;
+
+create view TabFuncOutput2 as
+select F.stringVal as strval from MyTableFunc1(3) F;
+
+output view TabFuncOutput2;
+
+create view TabFuncOutput3 as
+select 
+    case 
+        when Equals('Hello world', GetText(F.stringVal)) then 'Yo'
+        else 'Moo'
+    as dummyCol
+from MyTableFunc2(2) F;
+
+output view TabFuncOutput3;
+

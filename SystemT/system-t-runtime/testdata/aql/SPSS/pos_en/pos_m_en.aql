@@ -1,0 +1,62 @@
+--
+-- manage extraction of Part Of Speech 'n' (Noun) and combine it with existing Part Of Speech 'u' (Unknown)
+-- in order to have a single Port Of Speech 'm' used in Part Of Speech patterns
+--
+-- need to use "word_with_hyphen_and_part_pos_s_en" to skip words like "purple-should" (because 's' is PoS 's')
+-- purple must not be extracted as a single word
+-- 
+--
+
+module pos_en;
+
+
+import module pos_base_en;
+import module pos_u_en;
+-- import view Sentences_en from module sentence_en as Sentences;
+
+set default dictionary language as 'en';
+
+--
+-- combine all words with Pos 'n' + all hyphenated words with one part is PoS 's'
+--
+create view pos_n_word_and_hyphenated_word_and_part_pos_s_unconsolidated_en as
+(select pos_base_and_forced_n_with_nonling_en.partOfSpeech from pos_base_and_forced_n_with_nonling_en)
+union all 
+(select pos_base_en.pos_u_all_hyphenated_word_and_part_pos_s_en.partOfSpeech from pos_base_en.pos_u_all_hyphenated_word_and_part_pos_s_en);
+
+--
+-- consolidate Left to Right
+--
+create view pos_n_word_and_hyphenated_word_and_part_pos_s_en as
+select * from pos_n_word_and_hyphenated_word_and_part_pos_s_unconsolidated_en
+consolidate on pos_n_word_and_hyphenated_word_and_part_pos_s_unconsolidated_en.partOfSpeech using 'LeftToRight';
+
+-- 
+-- apply "minus" so string like "purple-should" or should-purple" will be skipped (as one token of the word has PoS=s (ie "should"))
+--
+create view pos_n_unconsolidated_en as
+(select pos_n_word_and_hyphenated_word_and_part_pos_s_en.partOfSpeech from pos_n_word_and_hyphenated_word_and_part_pos_s_en)
+minus
+(select pos_base_en.pos_u_all_hyphenated_word_and_part_pos_s_en.partOfSpeech from pos_base_en.pos_u_all_hyphenated_word_and_part_pos_s_en);
+
+export view pos_n_unconsolidated_en;
+
+-- output view pos_n_unconsolidated_en;
+
+--
+-- pos_m_en : combine 'u' + 'n' PoS.
+--
+
+-- pos_m_en : union of pos_n_en and pos_u_en
+create view pos_m_unconsolidated_en as
+(select pos_n_unconsolidated_en.partOfSpeech from pos_n_unconsolidated_en)
+union all
+(select pos_u_en.pos_u_en.partOfSpeech from pos_u_en.pos_u_en);
+
+-- create view pos_m_en as
+-- select * from pos_m_unconsolidated_en
+-- consolidate on pos_m_unconsolidated_en.partOfSpeech using 'LeftToRight';
+
+export view pos_m_unconsolidated_en;
+
+-- output view pos_m_unconsolidated_en;

@@ -1,0 +1,272 @@
+-- ****************************************************************************
+-- Created By : Yunyao Li (yunyaoli@us.ibm.com)
+-- Annotator type : Built-in
+-- Purpose : Extract phone numbers from plain text
+-- Examples :
+--			408-927-1234
+--			x1234
+--			1-800-COMCAST
+-- This is a translation based on telnumber.xml and fax-filer.xml
+-- ****************************************************************************
+-----------------------------------------------
+--   Strong Phone Numbers
+-----------------------------------------------
+create view StrongPhoneVariant as 
+    select D.match as match
+    from Dictionary('dictionaries/strongPhoneVariant.dict', Document.text) D;
+
+create view PhoneNumberInstance as
+    select R.match as match
+    from   RegexTok(/(\+\s*){0,2}[\d(]([\d ()\-.\/]){9,20}\d/, 10, Document.text) R ;
+
+create view CorrectPhoneNumberInstance as
+    select R.match as match
+    from PhoneNumberInstance R
+    -- do not allow two '/' inside to prevent capturing 01/01/2001
+    -- do not allow two '(' and two ')'
+    -- do not allow single '(' no corresponding ')' so won't capture '(24' in 'Phone: 713.854.1426 (24 hours)'
+    where Not(ContainsRegex(/(\(.+\()|(\).+\)|(\/.+\/)|(\([^)]*$))/,R.match));
+
+create view StrongPhone as
+    select CombineSpans(SPV.match,PNI.match) as num
+    from StrongPhoneVariant SPV, CorrectPhoneNumberInstance PNI
+    where FollowsTok(SPV.match,PNI.match,0,4)
+    and MatchesRegex(/(([Nn](umber|o|um)|#)\s*(is\s*)?)?\W*/, SpanBetween(SPV.match, PNI.match))
+    and Not(ContainsRegex(/[\n\r]/, SpanBetween(SPV.match, PNI.match)));
+
+create view StrongPhoneNumber as
+    select R.match as num
+    from RegexTok(/[\d(].+/, 10, StrongPhone.num) R;
+
+--===========================================================================
+-- Dictionary Matches
+--===========================================================================
+create view PhoneVariant as 
+    select D.match as annot
+    from   Dictionary('dictionaries/phoneVariants.dict', Document.text) D;
+
+create view PhoneFilter as
+    select D.match as annot
+    from Dictionary('dictionaries/filterPhoneNumber.dict', Document.text) D;
+
+--===========================================================================
+-- Translation for individual rules in telnumber.xml
+--===========================================================================
+-- Purpose:
+--        Matching International phone numbers (most European phone numbers)
+-- Example:
+--        +12 123 123 12
+--        +49 (0) 123-123-1234
+-----------------------------------
+/**----------------------------------------------------------
+    NOTE: Updated the original rule so that all the strong clues in the dictionary 
+    are considered, instead of only considering '+'. The catch is that the 
+    strong clues including '+' will not appear in the annotations 
+   ----------------------------------------------------------**/
+
+create view PhoneNumber_R1a as
+    select R.match as num
+    from RegexTok(/\(?\d{2,4}[\.\-]?\)?(\s*\(0\)\s*)?(\s*[\-\.]\s*)?(\s*[\s\.\-]\(?\d{1,2}(\s*\d{2}\s*){1,2}\)?)?(\s*[\s\.\-]?\d{2,4})(\s*[\s\.-]?\d{1,4}){1,3}/, 10, Document.text) R,
+       PhoneVariant Var
+    --Allow more noise between phone variant and phone number
+    where FollowsTok(Var.annot, R.match, 0, 2)
+    and MatchesRegex(/\s*\.{0,10}\s*/, SpanBetween(Var.annot, R.match));
+
+--------------
+-- Rule 1b and 2
+--
+-- Purpose: 
+--       Match US phone number
+--
+-- Example:
+--       +(734) 1231245
+--       (890)124.4568
+--------------
+
+create view PhoneNumber_R1b_2 as
+    select R.match as num
+    from RegexTok(/(\+\s*)?\(\s*[1-9]\d{2}\s*\)\s*[\-\.]?\d{3}[\-\.\s*]?\d{4}/, 10, Document.text) R;
+
+--------------
+-- Rule 2a
+-- Purpose: 
+--       Match US phone number
+-- Example:
+--       +(734) 123-1245
+--       (124)465 7890
+--------------
+/*----------------------------------------------
+  NOTE: Updated to allow [\-\.] between \d{3} and \d{4}
+ -----------------------------------------------*/  
+create view PhoneNumber_R2a as
+    select R.match as num
+    from RegexTok(/(\+\s*)?[1-9]\d{2}\s*[\s\-\.]\d{3}[\-\.\s]\s*\d{4}/, 10, Document.text) R;
+
+---------------------
+-- Rule 3a
+-- Purpose: 
+--    Find US numbers begin with country code 1
+-- Example
+--    1-234-456-8908
+---------------------
+/**----------------------------------------------------------
+ NOTE: Added optional '()' around area code '[1-9]\d{2}' 
+ -----------------------------------------------------------**/
+
+create view PhoneNumber_R3 as
+    select R.match as num
+    from RegexTok(/\+?(1[\-\.\s]\s*)?(\(\s*)?[1-9]\d{2}(\s*\))?[\-\. ]\d{3}[\-\. ]\d{4}/, 10, Document.text) R;
+
+---------------------
+-- Rule 3a
+-- Purpose: 
+--    Find 1-800 numbers with alphabet
+--
+-- Example
+--    1-800-COMCAST
+---------------------
+
+create view PhoneNumber_R3a as
+    select R.match as num
+    from RegexTok(/(\+?1[\-\.\s]\s*)?8\d{2}\s*[\s\-\.][A-Z\d]{3}[\.\-]?[A-Z]{4}/, 10, Document.text) R;
+
+----------------
+-- Rule 4
+-- Purpose:
+--       Find extension numbers
+-- Example:
+--       x12456
+--------------------
+
+create view PhoneNumber_R4 as
+    select R.match as num
+    from RegexTok(/[Xx][\.\-]?\d{4,5}/, 3, Document.text) R;
+
+----------------
+-- Rule 5
+-- Purpose:
+--       Find extension numbers
+-- Example:
+--       Ext: 1245
+--------------------
+create view PhoneNumber_R5 as
+    select R.match as num
+    from RegexTok(/[Ee]xt\s*[\.\-\:]?\s*\d{3,5}/, 'CASE_INSENSITIVE', 3, Document.text) R;
+
+---------------------------------
+-- Rule 7a, 7b, 7c
+-- Purpose:
+--     Identify Indian phone numbers
+-- Example: 
+--     12 34 5678
+--     123 456 7890 
+---------------------------------
+create view PhoneNumber_R7a_7b_7c as
+    select R.match as num
+    from RegexTok(/([1-9]\d{1,2}\s*[\(\s\-\.]((\d{2}\s*[\)\s\-\.]\d{8})|(\d{5}\s*[\)\s\-\.]\d{5})|(\d{2}\s*[\)\s\-\.]\d{4}\s*[\s\-\.]\d{4})))/, 10, Document.text) R,
+        PhoneVariant Var
+    where FollowsTok(Var.annot, R.match, 0, 2)
+    and MatchesRegex(/\s*\.{0,10}\s*/, SpanBetween(Var.annot, R.match));
+
+-------------------------------------
+-- Rule 8ILPhone
+-- Purpose: 
+--     Identify Isael Phone numbers
+-- Example:
+--     972-89-1234567
+--------------------------------------
+create view PhoneNumber_R8ILPhone as
+    select R.match as num
+    from RegexTok(/(972[\-\.]\d{1,2}[\-\.]\d{7})/, 5, Document.text) R;
+
+-- ===========================================================================
+-- Rules for identifying fax numbers
+-- ===========================================================================
+/**---------------------------------------------------------------------------
+ NOTE: Instead translating the individual rules, we simple identify later phone
+       numbers that follows or are followed by the filter words 
+ ----------------------------------------------------------------------------**/
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Aggregation/Consolidation section <<<<<<<<<<<<<<<<
+-- ===========================================================================
+
+-- Merge all the different rules.
+-- First merge all the full phone numbers
+create view PhoneNumFull as
+	(select P.num as num from PhoneNumber_R1a P)
+    union all
+    (select P.num as num from PhoneNumber_R1b_2 P)
+    union all
+    (select P.num as num from PhoneNumber_R2a P)
+    union all
+    (select P.num as num from PhoneNumber_R3 P)
+    union all
+    (select P.num as num from PhoneNumber_R3a P)
+    union all
+    (select P.num as num from PhoneNumber_R7a_7b_7c P)
+    union all
+    (select P.num as num from PhoneNumber_R8ILPhone P)
+    union all
+	(select P.num as num from StrongPhoneNumber P);
+
+-- Then merge all the extension numbers
+create view ExtensionNums as
+    (select P.num as num from PhoneNumber_R4 P)
+    union all
+    (select P.num as num from PhoneNumber_R5 P);
+    
+-- Merge full phone number with its extension number whenever possible
+create view PhoneNumWithExtension as
+    select CombineSpans(P.num, E.num) as num
+    from PhoneNumFull P,
+	 ExtensionNums E
+    where FollowsTok(P.num, E.num, 0, 0)
+     -- no new line allowed
+  	  and Not(ContainsRegex(/[\n\r]/, SpanBetween(P.num, E.num)));
+
+-- Merge all phone numbers
+create view PhoneNumAll as
+	(select P.num as num from PhoneNumFull P)
+    union all
+	(select P.num as num from ExtensionNums P)
+    union all
+	(select P.num as num from PhoneNumWithExtension P);
+
+-- -------------------------------------------------------
+-- Consolidation:
+-- For now, we just remove annotations that are completely
+-- contained within other annotations.
+-- -------------------------------------------------------
+
+create view PhoneNumCons as
+    select C.num as num
+    from PhoneNumAll C
+    consolidate on C.num;
+
+-- Comments out by Yunyao Li to improve recall
+--     sentence S
+--where Contains(S.sentence, C.num)
+-- -------------------------------------------------------
+-- Identify fax/pager numbers
+-- -------------------------------------------------------
+create view NonPhoneNum as
+	(select P.num as num
+	    from   PhoneNumCons P,
+    	   PhoneFilter F
+        where  FollowsTok(F.annot, P.num, 0, 4)
+        and  MatchesRegex(/\s*\:*\s*.{0,10}\s*\+*\s*/, SpanBetween(F.annot, P.num)))
+    union all 
+	(select P.num as num
+	    from   PhoneNumCons P,
+           PhoneFilter F
+	    where  FollowsTok(P.num, F.annot, 0, 2)
+  	    and MatchesRegex(/\s*\:?[\(\[]\s*/, SpanBetween(P.num, F.annot)));
+  	  
+--=====================================================================
+-- Remove fax/pager numbers
+--=====================================================================
+ create view PhoneNumOnly as
+     (select P.num as num from PhoneNumCons P)
+     minus
+     (select NP.num as num from NonPhoneNum NP);
+      

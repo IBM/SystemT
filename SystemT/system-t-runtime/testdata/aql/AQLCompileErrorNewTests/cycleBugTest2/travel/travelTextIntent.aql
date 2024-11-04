@@ -1,0 +1,893 @@
+module travel;
+
+-- I initially tried one group of verbs  {buy,book, etc} and 
+-- one group of objects {hotel, flight, tickets, etc}
+-- but caused precisoin problems.
+create dictionary travel_bookObject_dict as 
+(
+'car',
+'car rental',
+'rental car',
+'flight',
+'flights',
+'hotel',
+'hotels',
+'cruise',
+'vacation',
+'holiday',
+'travel',
+'room',
+'weekend',
+'trip',
+'train');
+
+
+
+
+
+create dictionary travel_buyWord_dict as
+('bought',
+'to buy');
+
+create view travel_bookVerb as
+extract dictionaries 'travel_bookWord_dict'and
+	'travel_buyWord_dict' on D.text as bookVerb
+from travel_inputView D;
+
+create view travel_bookObject as
+extract dictionaries 'travel_buyObject_dict' 
+	and 'travel_bookObject_dict' on D.text as bookedThing
+from travel_inputView D;
+
+create dictionary travel_notMine_dict as
+('his',
+'her',
+'your',
+'their',
+'\'s',  -- this is pointless in teh pattern below, because we only look one token left.
+'s');
+
+-- You cannot "buy a hotel".  So...either you book any sort of object (hotel, train tickets, etc)
+-- or the object must be a purchaseable one.
+
+create view travel_booked as 
+select I.text as text,
+	CombineSpans(B.bookedThing,T.bookVerb) as keyPhrase -- protected
+from travel_bookVerb T, travel_bookObject B, travel_inputView I
+where FollowsTok(B.bookedThing,T.bookVerb,0, 10) and 
+Not(ContainsDict('travel_noti_dict',I.text)) and
+Or(MatchesDict('travel_bookWord_dict',T.bookVerb),
+	MatchesDict('travel_buyObject_dict',B.bookedThing))
+and Not(ContainsDict('travel_notMine_dict',LeftContextTok(B.bookedThing,1)));
+
+create view travel_booked_reverse as 
+select I.text as text,
+	CombineSpans(T.bookVerb,B.bookedThing) as keyPhrase -- protected
+from travel_bookVerb T, travel_bookObject B, travel_inputView I
+where FollowsTok(T.bookVerb,B.bookedThing,0, 5) and 
+Not(ContainsDict('travel_noti_dict',I.text)) and
+Or(MatchesDict('travel_bookWord_dict',T.bookVerb),
+	MatchesDict('travel_buyObject_dict',B.bookedThing))
+and Not(ContainsDict('travel_notMine_dict',LeftContextTok(B.bookedThing,1)));
+
+
+-- packed and ready for my trip
+-- packed and ready for <destination> 
+-- packed and ready to go
+create dictionary travel_packed_dict as 
+('packed and ready',
+'packed and I\'m ready',
+'packed and Im ready',
+'packed up and ready',
+'suitcase packed',
+'suitcase is packed',
+'purchased suitcase',
+'bought suitcase',
+'my bag is packed',
+'pack my bag');
+
+create view travel_packed as
+extract dictionary 'travel_packed_dict' on D.text as packedAndReady
+from travel_inputView D;
+
+create dictionary travel_togo_dict as
+('to go',
+'to leave',
+'TO GOOOOO',
+'to goo',
+'to gooo',
+'for home',
+'to be home',
+'to go home',
+'to come home',
+'to head back'
+);
+
+create dictionary travel_for as 
+('for');
+
+create view travel_packed_fortrip as
+select CombineSpans(P.packedAndReady,T.indirectObject) as keyPhrase -- protected
+from travel_packed P, travel_tripOrDest T
+where FollowsTok(P.packedAndReady,T.indirectObject,1,3) and
+	ContainsDict('travel_for', SpanBetween(P.packedAndReady,T.indirectObject));
+	
+create view travel_packed_togo as 
+select CombineSpans(P.packedAndReady,RightContextTok(P.packedAndReady,5)) as keyPhrase -- protected automatically
+from travel_packed P where
+ContainsDict('travel_togo_dict',RightContextTok(P.packedAndReady,5));
+
+
+
+create dictionary travel_packed_plain_dict as 
+('packed',
+'packing',
+'packn',
+'pack');
+
+create dictionary travel_article_dict as
+('a',
+'the',
+'that');
+
+create dictionary travel_notTravelBag_dict as 
+('school',
+'uni',
+'college',
+'hospital',
+'makeup',
+'gym');
+
+create view travel_suitcase as
+extract I.text as text, dictionary 'travel_suitcase_dict' on I.text as suitcase
+from travel_inputView I
+having Not(ContainsDict('travel_notTravelBag_dict',text));
+
+
+create view travel_packed_plain as
+extract 
+	dictionaries 'travel_packed_dict' and
+	'travel_packed_plain_dict' on I.text as packed
+from travel_inputView I
+having Or(MatchesDict('travel_packed_dict',packed),
+		Not(MatchesDict('travel_article_dict',LeftContextTok(packed,1))));
+
+
+create view travel_packedSuitcase as
+(select CombineSpans(S.suitcase, P.packed) as keyPhrase
+from travel_suitcase S, travel_packed_plain P
+where Follows(S.suitcase,P.packed,0,140)) 
+union all 
+(select CombineSpans(P.packed,S.suitcase) as keyPhrase
+from travel_suitcase S, travel_packed_plain P
+where Follows(P.packed,S.suitcase,0,140));
+ 
+-- live out of, live in suitcase
+create dictionary travel_liveOutOf_dict as
+('live out of',
+'live in',
+'living out of',
+'living in');
+
+create view travel_liveOutOf as 
+select CombineSpans(LeftContextTok(S.suitcase,5),S.suitcase) as keyPhrase
+from travel_suitcase S
+where ContainsDict('travel_liveOutOf_dict',LeftContextTok(S.suitcase,5))
+;
+ 
+ 
+create dictionary travel_mytrip_intent_exclude_dict  as (
+'next',
+'future');
+
+-- if we are prepping for a trip, then we probably really do mean to go, so it's an intent
+create view travel_mytrip_intent as
+extract pattern 'for' <T.keyPhrase> as keyPhrase
+from travel_mytrip T
+having Not(ContainsDict('travel_mytrip_intent_exclude_dict',keyPhrase));
+
+-- Concrete future time
+
+
+
+create dictionary travel_time_unit_dict as 
+('week',
+ 'weeks',
+ 'day',
+ 'days',
+ 'month',
+ 'months',
+ 'hour',
+ 'hours',
+ 'minutes',
+ 'mins',
+ 'min');
+ 
+ create dictionary travel_times_dict as 
+ ('next',
+  'one',
+  'two',
+  'three',
+  'four',
+  'five',
+  'six',
+  'seven',
+  'eight',
+  'nine',
+  '1',
+  '2',
+  '3',
+  '4',
+  '5',
+  '6',
+  '7',
+  '24', --24 hours until...
+  '36',
+  '48',
+  '72',
+  '30',
+  '60',
+  '45',
+  'matter of');
+  
+  -- Intentionally only have one and two digit values here.
+  create view travel_numericTimes as 
+  extract I.text as text,
+  	regex /\d\d?/ on between 1 and 1 tokens in I.text as times
+  from travel_inputView I;
+ 
+create dictionary travel_concrete_future_dict as
+('soon',
+ 'so close',
+ 'tomorrow',
+ 'awaits',
+ 'Monday',
+ 'Tuesday',
+ 'Wednesday',
+ 'Thursday',
+ 'Friday',
+ 'Saturday',
+ 'Sunday');
+ 
+ create view travel_concrete_future as 
+ extract dictionary 'travel_concrete_future_dict' on D.text as times from
+ travel_inputView D;
+  
+  create view travel_times as 
+  (extract D.text as text,
+  dictionary 'travel_times_dict' on D.text as times from
+  travel_inputView D)
+  union all
+  (select T.text as text, T.times as times from travel_numericTimes T);
+  
+  create view travel_time_unit as
+  extract D.text as text,
+  dictionary 'travel_time_unit_dict' on D.text as unit from
+  travel_inputView D;
+ 
+ create dictionary travel_until_dict as
+ ('until',
+ 'til',
+ 'till',
+ 'before',
+ 'and');
+ --'and I\'m in',
+ --'and we\'re in',
+ --'and we r in',
+-- 'and im in',
+-- 'and i am in',
+-- 'and we are in');
+ 
+ create view travel_until as 
+ extract dictionary 'travel_until_dict' on D.text as until
+ from travel_inputView D;
+ 
+
+
+  create view travel_before as 
+ extract pattern 'before' ('we'|'I') ('go'|'leave') <Token>{0,1} <D.indirectObject> as keyPhrase
+ with inline_match on travel_inputView.text
+ from travel_tripOrDest D;
+ 
+ create dictionary travel_intent_until_disqualifiers_dict as
+ ('summer',
+   'sundown',
+   'kickoff',
+   'futbol',
+   'team',
+ 	'school',
+ 	'face',
+ 	'faces',
+ 	'game',
+ 	'http', -- this is likely a link to a news article
+ 	'football'  -- excludes sports teams mentions, eg 3 days until Bafana face Brazil
+ 	);
+ 
+ -- Look for an until
+-- create view travel_intent_until as 
+ --extract 
+-- 	pattern <T.times> 'more'? <U.unit> <A.until> <Token>{0,10} <D.indirectObject> as keyPhrase
+-- from travel_time_unit U, travel_times T, travel_tripOrDest D, travel_until A
+-- having And(Not(ContainsDict('travel_intent_until_disqualifiers_dict',keyPhrase)),Not(ContainsDict('travel_intent_until_disqualifiers_dict',RightContextTok(keyPhrase,2))));
+
+ create view travel_intent_until_parta as 
+ extract 
+ 	pattern <T.times> 'more'? <U.unit> <A.until> as untilPhrase
+ from travel_time_unit U, travel_times T, travel_until A;
+ 
+ -- 
+ 		
+create dictionary travel_intent_goto_dict as
+(
+'go to',
+'going to',
+'travel to',
+'leave for',
+'arrive at',
+'arrive in',
+'am at',
+'am in',
+'are in',
+'are at',
+'I\'m in',
+'I\'m at',
+'Im in',
+'Im at',
+'r at',
+'r in',
+'we\'re at',
+'we\'re in',
+'were at',
+'were in',
+'we r at',
+'we r in'
+);
+
+create view travel_intent_goto as 
+extract dictionary 'travel_intent_goto_dict'  on D.text as goTo
+from travel_inputView D;
+
+
+
+-- Let's try a generous gap here.
+create view travel_intent_wegoto as
+select CombineSpans(I.iWe,G.goTo) as weGoTo 
+from travel_intent_goto G, travel_firstPersonPronoun I
+where Or(FollowsTok(I.iWe,G.goTo,0,8),
+	Overlaps(I.iWe,G.goTo));
+
+-- 8 hours til my flight
+create view travel_intent_until_prefilterA as
+select CombineSpans(U.untilPhrase, D.indirectObject) as keyPhrase 
+from travel_intent_until_parta U, 
+	((select B.indirectObject from travel_tripOrDest B) union all
+	(select A.keyPhrase as indirectObject from travel_strongtravel_notime A)) D
+where FollowsTok(U.untilPhrase,D.indirectObject,0,1) and
+     Not(ContainsDict('travel_intent_until_disqualifiers_dict',RightContext(D.indirectObject,140)));
+
+create view travel_intent_until_prefilterB as
+select CombineSpans(U.untilPhrase, D.indirectObject) as keyPhrase 
+from travel_intent_until_parta U, travel_tripOrDest D, travel_intent_wegoto M
+where FollowsTok(U.untilPhrase, M.weGoTo,0,1) and
+	 FollowsTok(M.weGoTo, D.indirectObject,0,1) and 
+     Not(ContainsDict('travel_intent_until_disqualifiers_dict',RightContext(D.indirectObject,140)));
+
+create view travel_intent_until_prefilterC as 
+select CombineSpans(U.untilPhrase, J.leavingOnJetPlane) as keyPhrase
+from travel_intent_until_parta U, travel_jetplane J
+where FollowsTok(U.untilPhrase,J.leavingOnJetPlane,0,1) and
+	Not(ContainsDict('travel_noti_dict',SpanBetween(U.untilPhrase,J.leavingOnJetPlane)));
+
+create view travel_intent_until_prefilterD as
+select CombineSpans(U.untilPhrase,M.keyPhrase) as keyPhrase 
+from  travel_strongtravel_notime M,travel_intent_until_parta U
+where FollowsTok(U.untilPhrase,M.keyPhrase,0,1);
+
+
+create view travel_intent_until as
+	select U.keyPhrase as keyPhrase  
+	from ((select A.keyPhrase from travel_intent_until_prefilterA A) union all
+		   (select B.keyPhrase from travel_intent_until_prefilterB B) union all
+		   (select C.keyPhrase from travel_intent_until_prefilterC C) union all
+		   (select D.keyPhrase from travel_intent_until_prefilterD D)
+		   ) U
+	where Not(ContainsDict('travel_intent_until_disqualifiers_dict',U.keyPhrase));
+
+create view travel_timeUnit as
+select CombineSpans(T.times,U.unit) as timeUnit
+from travel_time_unit U, travel_times T
+where FollowsTok(T.times,U.unit,0,1);
+
+create dictionary travel_next_dict as
+('next');
+
+ create view travel_time_with_unit_prefilter as 
+ select 
+	CombineSpans(D.indirectObject,T.timeUnit) as keyPhrase,
+	D.indirectObject as indirectObject,
+	T.timeUnit as timeUnit
+ 	from travel_timeUnit T, travel_tripOrDest D
+ 	where FollowsTok(D.indirectObject,T.timeUnit,0,1);
+ 
+ -- France next week
+ -- France in one week
+ -- NOT: France wins next week
+
+ create view travel_time_with_unit as
+ select A.keyPhrase as keyPhrase
+ from travel_time_with_unit_prefilter A
+ where Not(ContainsDict('travel_boring_trip',LeftContextTok(A.keyPhrase,2))) and
+ 	   Or(ContainsDict('travel_in_dict',A.keyPhrase),
+ 	      And(ContainsDict('travel_next_dict',A.keyPhrase),
+ 	   	      FollowsTok(A.indirectObject,A.timeUnit,0,0)
+ 	   	      )
+ 	   	  );
+ 	   
+ 	
+ 
+  create view travel_time_with_nounit as 
+ extract-- E.text as text,
+ 	pattern <D.indirectObject> ('is'|'on') <T.times> as keyPhrase from
+ travel_concrete_future T, travel_tripOrDest D
+ having Not(ContainsDict('travel_boring_trip',LeftContextTok(keyPhrase,2)));
+ 
+ create view travel_time_myTripTomorrow as
+ select CombineSpans(M.keyPhrase,T.times)  as keyPhrase
+from travel_mytrip M, travel_concrete_future T
+where FollowsTok(M.keyPhrase,T.times,0,1);
+ 
+ create view travel_anyFutureTime as
+ (select T.timeUnit as futureRef from travel_timeUnit T)
+ union all
+ (select T.times as futureRef from travel_concrete_future T);
+ 
+ 
+ create dictionary travel_willVisit_dict as
+ ('I will visit',
+ 'I\'ll visit',
+ 'I visit');
+ 
+ create view travel_willVisit as 
+ extract dictionary 'travel_willVisit_dict' on I.text as visit
+ from travel_inputView I;
+ 
+create view travel_future_visit as 
+(select V.keyPhrase as keyPhrase from  travel_visitingMyFriendIn V)
+union all
+(select CombineSpans(V.visit,M.myFriendIn) as keyPhrase
+ from travel_willVisit V, travel_MyIn M
+ where Follows(V.visit,M.myFriendIn,0,140));
+ 
+ create view travel_visitMyFriend_intent as 
+ (select CombineSpans(V.keyPhrase, T.futureRef) as keyPhrase
+ from travel_future_visit V, travel_anyFutureTime T
+ where Follows(V.keyPhrase,T.futureRef,0,140))
+ union all
+ (select CombineSpans(T.futureRef, V.keyPhrase) as keyPhrase
+ from travel_future_visit V, travel_anyFutureTime T
+ where Follows(T.futureRef, V.keyPhrase,0,140)
+ );
+ 
+ create view travel_time_raw as
+ (select * from  travel_time_with_unit)
+ union all
+ (
+ select * from  travel_time_with_nounit
+ )
+ ;
+ 
+-- output view travel_time_with_unit;
+-- output view travel_time_with_nounit;
+ 
+ create dictionary travel_time_leftfilter_dict as
+ ('com to',
+ 'come to',
+ 'come 2',
+ 'com 2',
+'play',
+'plays',
+'hosts',
+'will host',
+'come visit',
+'com visit',
+'com back to',
+'come back to',
+'com back 2',
+'come back 2');
+
+create dictionary travel_time_exclude_dict as
+ (
+ 'game',
+ 'match',
+'good luck',
+'loud'
+);
+
+ 
+ --what happens if we exclude this filter and pile into unknown?
+ create view travel_time as 
+ select * from travel_time_raw T
+ where Not(ContainsDict('travel_time_leftfilter_dict',LeftContextTok(T.keyPhrase,3))) and
+  	Not(ContainsDict('travel_time_exclude_dict',T.keyPhrase)) and
+  	Not(ContainsDict('travel_intent_until_disqualifiers_dict',RightContext(T.keyPhrase,140))); 
+
+ create dictionary travel_other_intent_trip_dict as 
+ ('I am going on',
+  'I\'m going on',
+  'Im going on',
+  ', going on ',  -- iffy to include this--overfitting?
+  '. going on', -- iffy 
+  'packing for',
+  'packn for'
+  );
+  
+  create dictionary travel_other_intent_dest_dict as 
+ ('I am going to',
+  'I\'m going to',
+  'Im going to',
+  ', going to',  -- iffy to include this--overfitting?
+  '. going to', -- iffy 
+  'packing for',
+  'packn for',
+  'off to',
+  'heading to',
+  'headed off to',
+  'heading back to' --??
+  );
+  
+  create view travel_other_intent_trip as 
+  extract dictionary 'travel_other_intent_trip_dict' on D.text as imgoing
+  from travel_inputView D;
+  
+   create view travel_other_intent_dest as 
+  extract dictionary 'travel_other_intent_dest_dict' on D.text as imgoing
+  from travel_inputView D;
+ 
+ 
+   create dictionary travel_exclude_going as
+  (
+  'watch',
+  'sweet',
+  'study',
+  'bed',
+  'football',
+  'hockey',
+  'athletics',
+  'running',
+  'live band',
+  '#avfc'
+  );	 
+  
+   create dictionary travel_exclude_prefix_going as
+  (
+  'storm',
+  'tsunami',
+  'hurricane',
+  'Obama',
+  'hats',
+  'hat',
+  'piercing',
+  'piercings',
+  'Friday night',
+  'Saturday night'
+  );	 
+  	
+ create view travel_going_vacation_prefilter as
+ select CombineSpans(G.imgoing,T.tripWord) as keyPhrase
+  from travel_other_intent_trip G, travel_trip_word T
+  where FollowsTok(G.imgoing,T.tripWord,0,3);
+   
+   -- I'm going to fabulous Texas
+ create view travel_going_destination as
+ select CombineSpans(G.imgoing,D.destination) as keyPhrase
+ from travel_other_intent_dest G, travel_destination_word D
+ where FollowsTok(G.imgoing,D.destination,0,1);
+ 	   
+ 	     -- Problem is that we have "going to watch NY CSI" or "going back to location" tomorrow	  
+  create view travel_going_vacation as
+  select A.keyPhrase as keyPhrase 
+  from ((select B.keyPhrase as keyPhrase from travel_going_destination B) 
+  		 union all 
+  		(select C.keyPhrase as keyPhrase from travel_going_vacation_prefilter C)
+  		) A
+   where
+ 		 Not(ContainsDict('travel_boring_trip',A.keyPhrase)) and
+  		Not(ContainsDict('travel_exclude_going',A.keyPhrase)) and
+  		Not(ContainsDict('travel_exclude_prefix_going',LeftContextTok(A.keyPhrase,2))) and
+  		Not(ContainsDict('travel_http_dict',RightContext(A.keyPhrase,140)))
+  		;
+  
+    create dictionary travel_other_word_dict as (
+   'packing',
+   'journey',
+   	'touch down',
+   	'touched down',
+   	'landing',
+   	'landed',
+   	'travel',
+   	'trip',
+   	'vacation',
+   	'vacay',
+   	'cruise',
+   	'plane',
+   	'packed');
+ 
+   create view travel_leaving_prefilter as 
+   extract pattern 'leaving' <F.times>   as keyPhrase 	with inline_match on travel_inputView.text 
+   from travel_concrete_future F;
+   
+   create view travel_leaving as
+   select F.* from travel_leaving_prefilter F, travel_inputView I
+   where ContainsDict('travel_other_word_dict',I.text);
+   
+   -- itinerary
+   create dictionary travel_itinerary_dict as 
+   ('my itinerary',
+   	'our itinerary',
+   	'itinerary');
+   
+   	
+   	create view travel_itinerary_word as 
+   	extract dictionary 'travel_itinerary_dict' on I.text as itinerary
+   	from travel_inputView I;
+   	
+   	create view travel_itinerary_prefilter as 
+   	(select CombineSpans(I.itinerary,D.indirectObject) as keyPhrase
+   		from travel_tripOrDest D, travel_itinerary_word I
+   		where Follows(I.itinerary,D.indirectObject,0,140) 
+   		)
+   	union all
+   	(select CombineSpans(D.indirectObject,I.itinerary) as keyPhrase
+   		from travel_tripOrDest D, travel_itinerary_word I
+   		where Follows(D.indirectObject,I.itinerary,0,140)
+   		)
+   	union all
+   	  (select CombineSpans(M.my, I.itinerary ) as keyPhrase
+   	  from travel_tripOrDest D, travel_myWord M, travel_itinerary_word I
+   	  where FollowsTok(M.my,D.indirectObject,0,1) and
+   	  	    FollowsTok(D.indirectObject,I.itinerary,0,1)
+   	  )  
+   	;
+ 
+ create view travel_itinerary as 
+ select I.*
+ from  travel_itinerary_prefilter I
+where  ContainsDict('travel_my_dict',I.keyPhrase)
+consolidate on I.keyPhrase;
+  
+   -- roadtrip!
+
+create view travel_intent_roadtrip as
+select R.roadtrip as keyPhrase from
+travel_roadtrip R
+where ContainsDict('travel_going_dict',R.text);
+
+--- On my flight tomorrow
+create dictionary travel_intent_future_dict  as 
+('tomorrow',
+'next week',
+'next month');
+
+create view travel_intent_futureWord as
+extract dictionary 'travel_intent_future_dict' on I.text as futureWord
+from travel_inputView I;
+
+create view travel_intent_onMyFlight as
+select CombineSpans(A.onMyFlight, F.futureWord) as keyPhrase
+from travel_onMyFlight A, travel_intent_futureWord F
+where FollowsTok(A.onMyFlight,F.futureWord,0,1);
+
+---- Combine output from all views and consolidate so that one tweet produces one output.
+
+
+create view travel_intent_output_all as
+(select A.keyPhrase as keyPhrase from travel_time A)
+union all
+(select B.keyPhrase as keyPhrase from travel_going_vacation B)
+union all
+(select C.keyPhrase as keyPhrase from travel_intent_until C)
+union all
+(select D.keyPhrase as keyPhrase from travel_leaving D)
+union all
+(select F.keyPhrase as keyPhrase from travel_mytrip_intent F)
+union all
+(select G.keyPhrase as keyPhrase from travel_packed_fortrip G)
+union all
+(select H.keyPhrase as keyPhrase from travel_packed_togo H)
+union all
+(select I.keyPhrase as keyPhrase from travel_itinerary I)
+union all
+(select J.keyPhrase as keyPhrase from travel_visitMyFriend_intent J)
+union  all 
+(select K.keyPhrase as keyPhrase from travel_packedSuitcase K)
+union all
+(select L.keyPhrase as keyPhrase from travel_liveOutOf L)
+union all
+(select M.keyPhrase as keyPhrase from travel_intent_roadtrip M)
+;
+-- Created an expanded key phrase which contains the traveler
+create view travel_intent_output_maywant_preCSfilter as 
+select I.text as text,
+	T.keyPhrase as keyPhrase,
+	CombineSpans(F.firstPerson,T.keyPhrase) as personPhrase
+	from 
+travel_intent_output_all T, travel_inputView I, travel_I_all F
+where And(Or(Overlaps(F.firstPerson,T.keyPhrase),Follows(F.firstPerson,T.keyPhrase,0,140)),
+	  Or(FollowsTok(F.firstPerson, T.keyPhrase, 0, 6),
+	     	ContainsDict('travel_my_dict',T.keyPhrase)),
+	  Not(ContainsDict('travel_habitual_dict',I.text)),
+	  Not(ContainsDict('travel_negation_dict',LeftContextTok(T.keyPhrase,6))) ) ;
+
+-- Now, check that one of three things is true:
+-- (1) The expanded keyphrase contains I or We
+-- (2) The original keyphrase contains my or our
+-- (3) The expanded keyphrase does not contain you, he, she, or my sister/my parents/etc
+
+create view travel_intent_output_maywant as
+select T.text as text,
+	T.keyPhrase as keyPhrase
+	,Not(ContainsDict('travel_noti_dict',T.personPhrase)) as notI
+	,ContainsDict('travel_firstPerson_pronoun_dict', T.keyPhrase) as firstPerson
+	,ContainsDict('travel_my_dict',T.keyPhrase) as my
+from travel_intent_output_maywant_preCSfilter T
+where 
+Or(Not(ContainsDict('travel_noti_dict',T.personPhrase)),
+   ContainsDict('travel_firstPerson_pronoun_dict', T.keyPhrase),
+   ContainsDict('travel_my_dict',T.keyPhrase))
+consolidate on T.text;
+
+-- Need to remove the wants from intent output
+create view travel_intent_output_want as
+select I.text as text,
+	I.keyPhrase as keyPhrase,
+	RightContextTok(W.wishPhrase,3) as desire
+from travel_intent_output_maywant I, travel_wishful_all  W
+where Contains(I.text, W.wishPhrase) and
+	Or(FollowsTok(W.wishPhrase,I.keyPhrase,0,10),
+	   Overlaps(W.wishPhrase,I.keyPhrase));
+
+-- These do not need to be checked for want phrases.
+create view travel_intent_output_preConsolidate as
+((select A.text as text, A.keyPhrase as keyPhrase  from travel_intent_output_maywant A)
+minus
+(select B.text as text, B.keyPhrase as keyPhrase from travel_intent_output_want B))
+union all
+(select C.text as text, C.keyPhrase as keyPhrase from travel_booked C)
+union all
+(select D.text as text, D.keyPhrase as keyPhrase from travel_booked_reverse D)
+union all
+(select I.text as text, E.keyPhrase as keyPhrase from travel_going_vacation E, travel_inputView I where 
+	Or(ContainsDict('travel_my_dict',E.keyPhrase),
+	ContainsDict('travel_firstperson_present_dict',E.keyPhrase)))
+union all
+(select I.text as text, E.keyPhrase as keyPhrase from travel_before E, travel_inputView I)
+union all
+(select I.text as text, F.keyPhrase as keyPhrase from travel_time_myTripTomorrow F, travel_inputView I)
+union all
+(select I.text as text, G.keyPhrase as keyPhrase from travel_intent_roadtrip G, travel_inputView I)
+union all
+(select I.text as text, H.keyPhrase as keyPhrase from travel_intent_onMyFlight H,travel_inputView I)
+ ;
+ 
+ create view travel_intent_both_consolidateKeyPhrase as 
+ select A.text as text,
+ 	A.keyPhrase as keyPhrase
+ from travel_intent_output_preConsolidate A
+ consolidate on A.keyPhrase using 'ContainedWithin';
+
+ create view travel_intent_both as 
+ select A.text as text,
+ 	A.keyPhrase as keyPhrase
+ from travel_intent_both_consolidateKeyPhrase A
+ consolidate on A.text using 'ContainedWithin';
+
+create dictionary travel_nearintent_dict as
+('today',
+'tomorrow',
+'next week',
+'one more day',
+'in one day',
+'in two days',
+'in three days',
+'in four days',
+'in five days',
+'in six days',
+'in seven days',
+'in eight days',
+'in 1 day',
+'in 2 days',
+'in 3 days',
+'in 4 days',
+'in 5 days',
+'in 6 days',
+'in 7 days',
+'one more day',
+'two more days',
+'three more days',
+'four more days',
+'five more days',
+'six more days',
+'seven more days',
+'eight more days',
+'in 1 one day',
+'in 2 one days',
+'in 3 one days',
+'in 4 one days',
+'in 5 one days',
+'in 6 one days',
+'in 7 one days',
+'in one week',
+'tonight',
+'off to',
+'heading to',
+'packed',
+'pack',
+'packi	ng',
+'on sunday',
+'on monday',
+'on tuesday',
+'on thursday',
+'on friday',
+'on saturday',
+'in three weeks',
+'in four weeks',
+'next week',
+'next weekend',
+'this weekend',
+'in 24 hours',
+'in 8 hours',
+'in 12 hours',
+'in one hour',
+'in two hours',
+'in three hours',
+'in four hours',
+'in five hours',
+'in six hours',
+'in seven hours',
+'in eight hours',
+'in nine hours',
+'in 2 hours',
+'in 3 hours',
+'in 4 hours',
+'in 5 hours',
+'in 6 hours',
+'hours',
+'in twenty-four hours',
+'in twenty four hours');
+
+create dictionary travel_notnear_dict as
+('moving',
+'booking',
+'book',
+'a few more weeks',
+'month',
+'january',
+'jan',
+'february',
+'feb',
+'march',
+'april',
+'may',
+'june',
+'july',
+'august',
+'aug',
+'september',
+'sep',
+'sept',
+'october',
+'oct',
+'november',
+'nov',
+'december',
+'dec');
+
+create view travel_intent_near_output as
+select A.* from travel_intent_both A 
+where ContainsDict('travel_nearintent_dict',A.text) and
+	  Not(ContainsDict('travel_notnear_dict',A.text));
+
+create view travel_intent_notnear_output as
+(select A.* from travel_intent_both A)
+minus 
+(select B.* from travel_intent_near_output B);

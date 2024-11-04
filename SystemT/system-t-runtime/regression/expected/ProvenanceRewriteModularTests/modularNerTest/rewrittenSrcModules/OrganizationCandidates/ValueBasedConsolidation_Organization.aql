@@ -1,0 +1,596 @@
+module OrganizationCandidates;
+
+
+create view StrongOrgWithoutOrgSuffix as
+  select  __t2.organization as organization,
+          __t2.match as match,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__252__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__252__Temp__1 __t1,
+        __Consolidate__252__Temp__2 __t2
+  where Contains(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.organization, __t2.match;
+
+output view StrongOrgWithoutOrgSuffix;
+
+create view StrongOrgWithoutOrgSuffixClean as
+  (select  Op.organization as organization,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__253__TempOp__0 Op)
+  union all
+  (select  Op.organization as organization,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__253__TempOp__1 Op);
+
+output view StrongOrgWithoutOrgSuffixClean;
+
+create view StrongOrgWithIndustrySuffix as
+  extract R.organization as organization,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    R.__auto__id as __Subquery__256__Temp_____sep_____R____id,
+    dictionaries 'SuffixesForGroupsOfOrganizations'
+                   and 'SuffixesForEducationalOrganizations'
+                   and 'SuffixesForMedicalOrganizations'
+                   and 'SuffixesForMediaAndEntertainmentOrganizations'
+                   and 'ProfessionBasedSuffixesForOrganizations'
+                   and 'AuxiliarySuffixesForOrganizations'
+                   and 'SuffixesForMiscellaneousOrganizations'
+    on R.organization as totrim
+  from __Subquery__256__Temp R
+  having Equals(GetEnd(organization), GetEnd(totrim));
+
+output view StrongOrgWithIndustrySuffix;
+
+create view StrongOrgWithoutIndustryOrgSuffix as
+  select  R.organization as organization,
+          Chomp(SpanBetween(LeftContext(R.organization, 0), R.totrim)) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as StrongOrgWithIndustrySuffix_____sep_____R____id
+  from  StrongOrgWithIndustrySuffix R
+  where Not(MatchesDict('SuffixFiltersForOrganization', R.totrim));
+
+output view StrongOrgWithoutIndustryOrgSuffix;
+
+create view StrongOrgWithoutFullOrgClue as
+  select  O.organization as organization,
+          Chomp(SpanBetween(LeftContext(O.organization, 0), LeftContext(OCSC.match, 0))) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          O.__auto__id as OrganizationFull_____sep_____O____id,
+          OCSC.__auto__id as OrgClueStCaps_____sep_____OCSC____id
+  from  OrganizationFull O,
+        OrgClueStCaps OCSC
+  where Contains(O.organization, OCSC.match)
+     and Not(Equals(O.organization, OCSC.match))
+     and Not(ContainsDict('SuffixFiltersForOrganization', OCSC.match));
+
+output view StrongOrgWithoutFullOrgClue;
+
+create view PrefixFromFinalOrg as
+  (select  Op.original as original,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__257__TempOp__0 Op)
+  union all
+  (select  Op.original as original,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__257__TempOp__1 Op)
+  union all
+  (select  Op.original as original,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__257__TempOp__2 Op);
+
+output view PrefixFromFinalOrg;
+
+create view PrefixFromFinalOrgDedup as
+  select  R.original as original,
+          R.match as match,
+          toUpperCase(R.match) as normMatch,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__259__Temp_____sep_____R____id
+  from  __Subquery__259__Temp R
+  where Not(Equals(GetText(R.match), ''));
+
+output view PrefixFromFinalOrgDedup;
+
+create view OrgTokenCand as
+  select  O.original as original,
+          O.organization as organization,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          O.__auto__id as __Subquery__261__Temp_____sep_____O____id
+  from  __Subquery__261__Temp O;
+
+output view OrgTokenCand;
+
+create view OrgTokenOverlap as
+  (select  Op.original as original,
+            Op.organization as organization,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__262__TempOp__0 Op)
+  union all
+  (select  Op.original as original,
+            Op.organization as organization,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__262__TempOp__1 Op);
+
+output view OrgTokenOverlap;
+
+
+
+create view OrgTokenBeforeConsolidation as
+  select  Op.original as original,
+          Op.organization as organization,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__263__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__263__TempOp__1 Op,
+        __Minus__263__Temp __t
+  where Equals(Op.original, __t.original)
+     and Equals(Op.organization, __t.organization);
+
+output view OrgTokenBeforeConsolidation;
+
+create view OrgToken as
+  select  __t2.original as original,
+          __t2.organization as organization,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__264__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__264__Temp__1 __t1,
+        __Consolidate__264__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.original, __t2.organization;
+
+output view OrgToken;
+
+create view OrgTokenWithRightCapsWord as
+  select  T.original as original,
+          T.organization as organization,
+          RightContextTok(T.organization, 1) as RC,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as OrgToken_____sep_____T____id
+  from  OrgToken T
+  where ContainsRegex(/\A\s*\p{Lu}\p{M}*/, RightContextTok(T.organization, 1))
+     and Not(Equals(GetText(T.organization), toUpperCase(T.organization)));
+
+output view OrgTokenWithRightCapsWord;
+
+create view OrgTokenWithLeftCapsWordCand as
+  select  LeftContextTok(T.organization, 1) as LC,
+          T.original as original,
+          T.organization as organization,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as OrgToken_____sep_____T____id
+  from  OrgToken T
+  where ContainsRegex(/\A\p{Lu}\p{M}*/, LeftContextTok(T.organization, 1))
+     and Not(Equals(GetText(T.organization), toUpperCase(T.organization)));
+
+output view OrgTokenWithLeftCapsWordCand;
+
+create view OrgTokenWithLeftCapsWordFilter as
+  (select  Op.LC as LC,
+            Op.original as original,
+            Op.organization as organization,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__265__TempOp__0 Op)
+  union all
+  (select  Op.LC as LC,
+            Op.original as original,
+            Op.organization as organization,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__265__TempOp__1 Op);
+
+output view OrgTokenWithLeftCapsWordFilter;
+
+create view OrgTokenWithLeftCapsWord as
+  select  Op.LC as LC,
+          Op.original as original,
+          Op.organization as organization,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__266__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__266__TempOp__1 Op,
+        __Minus__266__Temp __t
+  where Equals(Op.LC, __t.LC)
+     and Equals(Op.original, __t.original)
+     and Equals(Op.organization, __t.organization);
+
+output view OrgTokenWithLeftCapsWord;
+
+
+
+create view __Base__258__Temp as
+  select  GetText(R.original) as original,
+          GetText(R.match) as match
+  from  PrefixFromFinalOrg R
+  group by GetText(R.original), GetText(R.match);
+
+output view __Base__258__Temp;
+
+create view __Consolidate__252__Temp__1 as
+  select  R.organization as organization,
+          R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__251__Temp_____sep_____R____id,
+          R.match as __consolidate__target
+  from  __Subquery__251__Temp R;
+
+output view __Consolidate__252__Temp__1;
+
+create view __Consolidate__252__Temp__2 as
+  select  __t1.organization as organization,
+          __t1.match as match,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__252__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'NotContainedWithin';
+
+output view __Consolidate__252__Temp__2;
+
+create view __Consolidate__264__Temp__1 as
+  select  O.original as original,
+          O.organization as organization,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          O.__auto__id as OrgTokenBeforeConsolidation_____sep_____O____id,
+          O.organization as __consolidate__target
+  from  OrgTokenBeforeConsolidation O;
+
+output view __Consolidate__264__Temp__1;
+
+create view __Consolidate__264__Temp__2 as
+  select  __t1.original as original,
+          __t1.organization as organization,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__264__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__264__Temp__2;
+
+create view __Minus__263__Temp as
+  select  __t.original as original,
+          __t.organization as organization
+  from  
+    ((select  Op.original as original,
+              Op.organization as organization
+      from  __Minus__263__TempOp__1 Op)
+    minus
+    (select  Op.original as original,
+              Op.organization as organization
+      from  __Minus__263__TempOp__2 Op)
+    ) __t
+  group by __t.original, __t.organization;
+
+output view __Minus__263__Temp;
+
+create view __Minus__263__TempOp__1 as
+  select  OrgTokenCand.original as original,
+          OrgTokenCand.organization as organization,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          OrgTokenCand.__auto__id as OrgTokenCand_____sep_____OrgTokenCand____id
+  from  OrgTokenCand OrgTokenCand;
+
+output view __Minus__263__TempOp__1;
+
+create view __Minus__263__TempOp__2 as
+  select  OrgTokenOverlap.original as original,
+          OrgTokenOverlap.organization as organization,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          OrgTokenOverlap.__auto__id as OrgTokenOverlap_____sep_____OrgTokenOverlap____id
+  from  OrgTokenOverlap OrgTokenOverlap;
+
+output view __Minus__263__TempOp__2;
+
+create view __Minus__266__Temp as
+  select  __t.LC as LC,
+          __t.original as original,
+          __t.organization as organization
+  from  
+    ((select  Op.LC as LC,
+              Op.original as original,
+              Op.organization as organization
+      from  __Minus__266__TempOp__1 Op)
+    minus
+    (select  Op.LC as LC,
+              Op.original as original,
+              Op.organization as organization
+      from  __Minus__266__TempOp__2 Op)
+    ) __t
+  group by __t.LC, __t.original, __t.organization;
+
+output view __Minus__266__Temp;
+
+create view __Minus__266__TempOp__1 as
+  select  OrgTokenWithLeftCapsWordCand.LC as LC,
+          OrgTokenWithLeftCapsWordCand.original as original,
+          OrgTokenWithLeftCapsWordCand.organization as organization,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          OrgTokenWithLeftCapsWordCand.__auto__id as OrgTokenWithLeftCapsWordCand_____sep_____OrgTokenWithLeftCapsWordCand____id
+  from  OrgTokenWithLeftCapsWordCand OrgTokenWithLeftCapsWordCand;
+
+output view __Minus__266__TempOp__1;
+
+create view __Minus__266__TempOp__2 as
+  select  OrgTokenWithLeftCapsWordFilter.LC as LC,
+          OrgTokenWithLeftCapsWordFilter.original as original,
+          OrgTokenWithLeftCapsWordFilter.organization as organization,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          OrgTokenWithLeftCapsWordFilter.__auto__id as OrgTokenWithLeftCapsWordFilter_____sep_____OrgTokenWithLeftCapsWordFilter____id
+  from  OrgTokenWithLeftCapsWordFilter OrgTokenWithLeftCapsWordFilter;
+
+output view __Minus__266__TempOp__2;
+
+create view __Subquery__251__Temp as
+  (select  Op.organization as organization,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__250__TempOp__0 Op)
+  union all
+  (select  Op.organization as organization,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__250__TempOp__1 Op);
+
+output view __Subquery__251__Temp;
+
+create view __Subquery__254__Temp as
+  extract R.organization as organization,
+    R.match as match,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    R.__auto__id as StrongOrgWithoutOrgSuffix_____sep_____R____id,
+    regex /(,|-|&|(\s+and))\s*\z/
+    with flags 'DOTALL'
+    on R.match
+    return group 0 as totrim
+  from StrongOrgWithoutOrgSuffix R;
+
+output view __Subquery__254__Temp;
+
+create view __Subquery__256__Temp as
+  (select  Op.organization as organization,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__255__TempOp__0 Op)
+  union all
+  (select  Op.organization as organization,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__255__TempOp__1 Op);
+
+output view __Subquery__256__Temp;
+
+create view __Subquery__259__Temp as
+  select  Op.original as original,
+          Op.match as match,
+          AutoID() as __auto__id
+  from  __Base__258__Temp Op;
+
+output view __Subquery__259__Temp;
+
+create view __Subquery__261__Temp as
+  (select  Op.original as original,
+            Op.organization as organization,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__260__TempOp__0 Op)
+  union all
+  (select  Op.original as original,
+            Op.organization as organization,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__260__TempOp__1 Op);
+
+output view __Subquery__261__Temp;
+
+create view __Union__250__TempOp__0 as
+  select  R.org as organization,
+          R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as OrgWithoutSuffix_____sep_____R____id
+  from  OrgWithoutSuffix R;
+
+output view __Union__250__TempOp__0;
+
+create view __Union__250__TempOp__1 as
+  select  R.organization as organization,
+          R.organization as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as OrganizationFull_____sep_____R____id
+  from  OrganizationFull R
+  where Not(ContainsDict('GlobalSuffixesForOrganizations', R.organization));
+
+output view __Union__250__TempOp__1;
+
+create view __Union__253__TempOp__0 as
+  select  R.organization as organization,
+          Chomp(SpanBetween(LeftContext(R.match, 0), R.totrim)) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__254__Temp_____sep_____R____id
+  from  __Subquery__254__Temp R;
+
+output view __Union__253__TempOp__0;
+
+create view __Union__253__TempOp__1 as
+  select  R.organization as organization,
+          Chomp(R.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as StrongOrgWithoutOrgSuffix_____sep_____R____id
+  from  StrongOrgWithoutOrgSuffix R
+  where Not(ContainsRegex(/(,|-|&|(\s+and))\s*\z/, R.match));
+
+output view __Union__253__TempOp__1;
+
+create view __Union__255__TempOp__0 as
+  select  R.organization as organization,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as OrganizationFull_____sep_____R____id
+  from  OrganizationFull R;
+
+output view __Union__255__TempOp__0;
+
+create view __Union__255__TempOp__1 as
+  select  R.match as organization,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as StrongOrgWithoutOrgSuffixClean_____sep_____R____id
+  from  StrongOrgWithoutOrgSuffixClean R;
+
+output view __Union__255__TempOp__1;
+
+create view __Union__257__TempOp__0 as
+  select  R.organization as original,
+          R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as StrongOrgWithoutOrgSuffixClean_____sep_____R____id
+  from  StrongOrgWithoutOrgSuffixClean R;
+
+output view __Union__257__TempOp__0;
+
+create view __Union__257__TempOp__1 as
+  select  R.organization as original,
+          R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as StrongOrgWithoutIndustryOrgSuffix_____sep_____R____id
+  from  StrongOrgWithoutIndustryOrgSuffix R;
+
+output view __Union__257__TempOp__1;
+
+create view __Union__257__TempOp__2 as
+  select  R.organization as original,
+          R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as StrongOrgWithoutFullOrgClue_____sep_____R____id
+  from  StrongOrgWithoutFullOrgClue R;
+
+output view __Union__257__TempOp__2;
+
+create view __Union__260__TempOp__0 as
+  select  CN.original as original,
+          CW.match as organization,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CW.__auto__id as CapsWordOnetoFive_____sep_____CW____id,
+          CN.__auto__id as PrefixFromFinalOrgDedup_____sep_____CN____id
+  from  CapsWordOnetoFive CW,
+        PrefixFromFinalOrgDedup CN
+  where Equals(GetText(CW.match), GetText(CN.match));
+
+output view __Union__260__TempOp__0;
+
+create view __Union__260__TempOp__1 as
+  select  CN.original as original,
+          CW.match as organization,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CW.__auto__id as CapsWordOnetoFive_____sep_____CW____id,
+          CN.__auto__id as PrefixFromFinalOrgDedup_____sep_____CN____id
+  from  CapsWordOnetoFive CW,
+        PrefixFromFinalOrgDedup CN
+  where Equals(GetText(CW.match), GetText(CN.normMatch));
+
+output view __Union__260__TempOp__1;
+
+create view __Union__262__TempOp__0 as
+  select  T.original as original,
+          T.organization as organization,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as OrgTokenCand_____sep_____T____id,
+          O.__auto__id as OrganizationFull_____sep_____O____id
+  from  OrgTokenCand T,
+        OrganizationFull O
+  where Contains(O.organization, T.organization);
+
+output view __Union__262__TempOp__0;
+
+create view __Union__262__TempOp__1 as
+  select  T.original as original,
+          T.organization as organization,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as OrgTokenCand_____sep_____T____id,
+          O.__auto__id as InvalidOrg_____sep_____O____id
+  from  OrgTokenCand T,
+        InvalidOrg O
+  where Contains(O.org, T.organization);
+
+output view __Union__262__TempOp__1;
+
+create view __Union__265__TempOp__0 as
+  select  T.LC as LC,
+          T.original as original,
+          T.organization as organization,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as OrgTokenWithLeftCapsWordCand_____sep_____T____id,
+          B.__auto__id as SentenceBoundary_____sep_____B____id
+  from  OrgTokenWithLeftCapsWordCand T,
+        SentenceBoundary B
+  where Contains(T.LC, B.boundary);
+
+output view __Union__265__TempOp__0;
+
+create view __Union__265__TempOp__1 as
+  select  T.LC as LC,
+          T.original as original,
+          T.organization as organization,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as OrgTokenWithLeftCapsWordCand_____sep_____T____id,
+          B.__auto__id as SentenceBoundary_____sep_____B____id
+  from  OrgTokenWithLeftCapsWordCand T,
+        SentenceBoundary B
+  where Follows(B.boundary, T.LC, 0, 0);
+
+output view __Union__265__TempOp__1;
+

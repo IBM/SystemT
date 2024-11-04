@@ -1,0 +1,1147 @@
+module travel;
+
+create dictionary travel_transitplace_at_dict as
+('airport',
+'train station', -- ?
+'gate'
+ );
+ 
+ create dictionary travel_transitplace_on_dict as
+(
+'plane',
+'airplane',
+'aeroplane',
+ --'train', -- maybe, but people take the subway...
+'cruise',
+'flight'
+ );
+ 
+  create dictionary travel_transitplace_in_dict as
+('airport',
+'plane',
+'airplane',
+'aeroplane'
+ );
+ 
+ create dictionary travel_on_dict as
+ ('in',
+ 'on');
+ 
+create dictionary travel_nonPresentClues_dict as
+('when','til','until','till', 'every time', 'everytime','like','if');
+-- Do we need while here??
+
+create view travel_visiting as
+extract 
+	pattern 'visiting' ('a'|'the'|'my')? <D.indirectObject>  as keyPhrase 
+	with inline_match on travel_inputView.text from
+travel_tripOrDest D
+having Not(ContainsDict('travel_on_exclude_dict',CombineSpans(LeftContextTok(keyPhrase,1),keyPhrase))) and  -- protected via context
+	   Not(ContainsDict('travel_liveNotTravel_dict',LeftContext(keyPhrase,140))) and
+	   Not(ContainsDict('travel_pastclue',LeftContextTok(keyPhrase,2)));
+
+
+
+create view travel_at as
+extract 
+	pattern 'at' ('a'|'the'|'my')? <D.indirectObject>  as keyPhrase 
+	with inline_match on travel_inputView.text from
+travel_tripOrDest D
+having Or(ContainsDict('travel_destination_at_dict', keyPhrase),
+	ContainsDict('travel_transitplace_at_dict', keyPhrase)) and
+	Not(ContainsDict('travel_on_exclude_dict',CombineSpans(LeftContextTok(keyPhrase,1),keyPhrase))) and --protected via context
+	   Not(ContainsDict('travel_liveNotTravel_dict',LeftContext(keyPhrase,140))) and
+	   Not(ContainsDict('travel_pastclue',LeftContextTok(keyPhrase,2)))
+;
+
+-- You can't be "on ProperNoun", so you'll always need an article.
+create view travel_on as
+extract 
+	pattern 'on' ('a'|'the'|'my'|'our') <D.indirectObject>  as keyPhrase 
+	with inline_match on travel_inputView.text from
+travel_tripOrDest D
+having ContainsDict('travel_transitplace_on_dict',keyPhrase) and
+	Not(ContainsDict('travel_on_exclude_dict',CombineSpans(LeftContextTok(keyPhrase,1),keyPhrase))) and -- protected via context
+	   Not(ContainsDict('travel_liveNotTravel_dict',LeftContext(keyPhrase,140))) and
+	   Not(ContainsDict('travel_pastclue',LeftContextTok(keyPhrase,2)));
+	   
+create view travel_in as
+select CombineSpans(N.inWord,D.indirectObject) as keyPhrase
+, Or(MatchesDict('travel_destination_in_dict',D.indirectObject),
+		MatchesDict('travel_destination_case_dict','Exact',D.indirectObject),
+		MatchesDict('travel_transitplace_in_dict',D.indirectObject))  as inDict
+,  Not(ContainsDict('travel_on_exclude_dict',CombineSpans(LeftContextTok(D.indirectObject,3),D.indirectObject))) as noOnExclude
+, Not(ContainsDict('travel_liveNotTravel_dict',LeftContext(D.indirectObject,140))) as noLive
+, Not(ContainsDict('travel_pastclue',LeftContextTok(D.indirectObject,4))) as notPast
+from travel_inWord N, travel_tripOrDest D
+where FollowsTok(N.inWord,D.indirectObject,0,1)
+ 	and Or(MatchesDict('travel_destination_in_dict',D.indirectObject),
+		MatchesDict('travel_destination_case_dict','Exact',D.indirectObject),
+		MatchesDict('travel_transitplace_in_dict',D.indirectObject)) 
+	and  Not(ContainsDict('travel_on_exclude_dict',CombineSpans(LeftContextTok(D.indirectObject,3),D.indirectObject))) 
+	and Not(ContainsDict('travel_liveNotTravel_dict',LeftContext(D.indirectObject,140))) 
+	and Not(ContainsDict('travel_pastclue',LeftContextTok(D.indirectObject,4)))
+	
+  ;
+
+
+-- we just landed
+-- we finally landed
+-- finally landed
+-- we have finally
+-- I have 
+-- have just now landed
+create dictionary travel_ontrip_past_dict as
+(
+'landed',
+'arrived',
+'touched down'
+);
+
+create dictionary travel_ontrip_recentact_dict as
+('finally',
+'just',
+'jus',
+'just now');
+
+create dictionary travel_firstperson_past_dict as (
+'I',
+'ive',
+'i\'ve',
+'we',
+'we have'
+);
+
+create dictionary travel_firstperson_here_dict as
+('I am here',
+'im here',
+'i\'m here',
+'we are here',
+'we r here',
+'we\'re here');
+
+create view travel_firstperson_past as
+extract dictionary 'travel_firstperson_past_dict'  on D.text as firstPerson
+from travel_inputView D;
+
+create view travel_ontrip_past_word as
+extract dictionary 'travel_ontrip_past_dict'  on D.text as arrived
+from travel_inputView D;
+
+create view travel_firstperson_here as 
+extract dictionary 'travel_firstperson_here_dict' on D.text as firstPerson
+from travel_inputView D;
+
+create view travel_ontrip_just_subject as 
+select CombineSpans(F.firstPerson, A.arrived) as keyPhrase -- protected
+from travel_firstperson_past F, travel_ontrip_past_word A
+where Or(Equals(GetBegin(A.arrived), GetBegin(F.firstPerson)),
+	     GreaterThan(GetBegin(A.arrived),GetBegin(F.firstPerson))) and 
+MatchesDict('travel_ontrip_recentact_dict',SpanBetween(F.firstPerson,A.arrived));
+
+create view travel_ontrip_just_naked as 
+select CombineSpans(B.begin,A.arrived) as keyPhrase  -- protected
+from travel_ontrip_past_word A , travel_begin B
+where Or(Equals(GetBegin(B.begin),GetBegin(A.arrived)),
+		GreaterThan(GetBegin(A.arrived),GetBegin(B.begin))) and
+	Or(FollowsTok(B.begin,A.arrived,0,0),
+	     MatchesDict('travel_ontrip_recentact_dict',SpanBetween(B.begin,A.arrived)));
+
+create view travel_ontrip_just_mixed as 
+select CombineSpans(F.firstPerson, A.arrived) as keyPhrase -- protected
+from travel_firstperson_here F, travel_ontrip_past_word A
+where FollowsTok(F.firstPerson,A.arrived,0,5);
+
+create view travel_ontrip_just_mixed_1 as 
+select CombineSpans(A.arrived,F.firstPerson) as keyPhrase -- protected
+from travel_firstperson_here F, travel_ontrip_past_word A
+where FollowsTok(A.arrived,F.firstPerson,0,5);
+
+create view travel_ontrip_just as
+(select * from travel_ontrip_just_subject)
+union all
+(select * from travel_ontrip_just_naked);
+
+create view travel_ontrip_just_arrived as 
+(select CombineSpans(J.keyPhrase,D.keyPhrase)as keyPhrase --protected
+from travel_ontrip_just J, travel_in D
+where 
+Follows(J.keyPhrase,D.keyPhrase,0,140))
+union all
+(select * from travel_ontrip_just_mixed)
+union all
+(select * from travel_ontrip_just_mixed_1);
+
+
+
+--- I'm on vacation 
+create dictionary travel_vacation_dict as ('holiday','vacation','a trip','vacay');
+
+create view travel_vacation_matches as 
+extract dictionary 'travel_vacation_dict' on D.text as vacation
+from travel_inputView D;
+
+create dictionary travel_hypothetical as
+('feel like',
+'when',
+'if');
+
+
+
+
+create view travel_onvacation as
+select CombineSpans(I.firstPerson, V.vacation) as keyPhrase --protected
+--	FollowsTok(I.firstPerson,V.vacation,0,1) as followsTok,
+--	ContainsRegex(/[Oo][Nn]/,SpanBetween(I.firstPerson,V.vacation)) as containsRegex,
+--	Not(ContainsDict('travel_hypothetical', SpanBetween(B.begin, V.vacation))) as hypo,
+from travel_vacation_matches V, travel_I_present I, travel_begin B
+where And(FollowsTok(I.firstPerson,V.vacation,0,1),
+	MatchesDict('travel_ononly_dict',SpanBetween(I.firstPerson,V.vacation))) and
+	Not(ContainsDict('travel_hypothetical', SpanBetween(B.begin, V.vacation)))
+	;
+
+--output view travel_onvacation;
+
+
+-- vacationing
+/* Need modifiers to determine time frame, so excluding for now.
+create dictionary travel_vacationing_dict as
+('travelling',
+'traveling',
+'vacationing');
+
+create view travel_vacationing_words as
+extract dictionary 'travel_vacationing_dict' on D.text as keyPhrase
+from travel_inputView D;
+
+create view travel_vacationing as 
+select CombineSpans(I.firstPerson, D.keyPhrase) as keyPhrase
+from travel_I_present I, travel_vacationing_words V, 
+	((select A.keyPhrase as keyPhrase from travel_in A)
+	union all
+	 (select B.keyPHrase as keyPhrase from travel_at B)
+	 ) D
+where FollowsTok(I.firstPerson,V.vacationing,0,0) and
+	FollowsTok(V.vacationing,D.keyPhrase,0,0);
+*/
+
+
+-- anyone else {at/in} {the} {blah} airport
+-- anyone else {at/in} {airportname} 
+-- anyone else {flying to, travelling to} BLAH today?
+
+create dictionary travel_anyoneelse_dict as 
+('anyone else');
+
+create view travel_anyoneelse as 
+extract dictionary 'travel_anyoneelse_dict' on D.text as anyoneelse 
+from travel_inputView D;
+
+
+
+
+create view travel_anyone_airport as
+select CombineSpans(E.anyoneelse,A.airport) as keyPhrase  -- protected
+from travel_anyoneelse E, travel_airport A
+where FollowsTok(E.anyoneelse,A.airport,0,3) and
+	 ContainsDict('travel_atin_dict',RightContextTok(E.anyoneelse,1));
+
+
+
+create view travel_anyone_airport_name as
+select CombineSpans(A.anyoneelse,N.airportName) as keyPhrase -- protected
+from travel_airportname N, travel_anyoneelse A
+where FollowsTok(A.anyoneelse,N.airportName,0,2) and
+	ContainsDict('travel_atin_dict',RightContextTok(A.anyoneelse,1));
+
+create dictionary travel_flying_dict as 
+('travelling to',
+'traveling to',
+'flying to',
+'flying out to',
+'flying back to',
+'flying down to',
+'travelling 2',
+'traveling 2',
+'flying 2',
+'en route to',
+'en route 2'
+);
+
+create view travel_flying as 
+extract dictionary 'travel_flying_dict' on D.text as flyingTo
+from travel_inputView D;
+
+create view travel_anyone_flying_to as 
+select CombineSpans(A.anyoneelse,F.flyingTo) as keyPhrase -- protected
+from travel_flying F, travel_anyoneelse A
+where FollowsTok(A.anyoneelse,F.flyingTo,0,0);
+
+-- flying to BLAH today
+-- today I'm flying to BLAH
+create dictionary travel_today as
+('today');
+
+create view travel_I_flying_to as 
+select CombineSpans(I.firstPerson,F.flyingTo) as keyPhrase -- protected
+from travel_I_present I, travel_flying F, travel_inputView T
+where And(FollowsTok(I.firstPerson,F.flyingTo,0,0),
+	  ContainsDict('travel_today',T.text));
+
+--
+
+-- RULE #3: In a travel location.
+-- in airport, plane, or someone where indicating travel
+
+create dictionary travel_transit_article as 
+('the',
+'a',
+'my',
+'our');
+
+
+create view travel_transit_1 as 
+extract D.text as text,
+	dictionaries 'travel_transitplace_at_dict' and
+		'travel_transitplace_in_dict' and
+		'travel_transitplace_on_dict'
+	on D.text as transit
+from travel_inputView D
+--having MatchesDict('travel_transit_article',LeftContextTok(transit,1))
+;
+
+
+
+-- We need to exclude "Five people on plane reported..." news stories, so look for "I".
+-- But "I" isn't sometimes implied; one improvement is to change the I clause to I or sentence starts.
+--"Novelty. On plane...  only 1 hour late. Ish! #fb","plane"
+create view travel_transit_unfiltered as 
+select 
+	CombineSpans(I.firstPerson,D.transit) as keyPhrase
+from travel_transit_1 D, travel_I_present I
+where FollowsTok(I.firstPerson, D.transit,0,2);
+
+create view travel_onTransit as 
+	select CombineSpans(A.at,D.transit) as keyPhrase
+from travel_atWord A, travel_transit_1 D
+where FollowsTok(A.at,D.transit,0,1);
+
+create view travel_transit as
+select T.keyPhrase as keyPhrase
+from travel_transit_unfiltered T
+where 
+		Not(ContainsDict('travel_on_exclude_dict',T.keyPhrase)) and
+		Not(ContainsDict('travel_liveNotTravel_dict',T.keyPhrase)) and 
+		ContainsDict('travel_on_dict',T.keyPhrase);
+
+create dictionary travel_on_exclude_dict as 
+('as in',
+'only in' -- doesn't usually indicate an exciting destination.
+);
+
+
+-- <excited> to be at <destination>/vacation
+-- <excited> to go to <destiantion>
+-- at <destination>
+
+create dictionary travel_arrived_dictionary as
+('arrived',
+'touched down',
+'landed',
+'am here',
+'are here');
+
+create view travel_arrived_word as 
+extract K.text as text,
+dictionary 'travel_arrived_dictionary' on K.text as arrived
+from travel_inputView K;
+
+create view travel_arrived_1 as 
+	select 
+	CombineSpans(A.arrived, D.destination) as keyPhrase  -- protected
+from travel_destination_word D, travel_arrived_word A
+where FollowsTok(A.arrived,D.destination,0, 5);
+
+create view travel_arrived_2 as 
+	select 
+	CombineSpans(D.destination,A.arrived) as keyPhrase -- protected
+from travel_destination_word D, travel_arrived_word A
+where FollowsTok(D.destination,A.arrived,0,5);
+
+-- "staying in"
+create dictionary travel_sleepPlace_dict as (
+'hotel',
+'hotels',
+'hostel',
+'hostels',
+'motel',
+'motels',
+'Marriot',
+'Hilton',
+'sheraton');
+
+create view travel_sleepingPlace as
+--(
+extract dictionary 'travel_sleepPlace_dict' on D.text as destination
+from travel_inputView D
+--)
+--union all
+--(select D.destination as destination  from travel_destination_word D)
+;
+
+
+create dictionary travel_stayingin_dict as 
+('staying in',
+ 'checked into',
+ 'arrived at',
+ 'back to');
+ 
+create view travel_stayingin_word as 
+extract dictionary 'travel_stayingin_dict' on D.text as staying
+from travel_inputView D;
+
+create view travel_stayingin as 
+select CombineSpans(S.staying,D.destination) as keyPhrase
+from travel_stayingin_word S, travel_sleepingPlace D
+where FollowsTok(S.staying,D.destination,0,4) and
+	Not(ContainsDict('travel_noti_dict',LeftContextTok(S.staying,5)));
+
+-- Flight/delay
+create dictionary travel_means_dict as
+('flight',
+'flights');
+
+create dictionary travel_action_dict as
+(
+'cancelled',
+'canceled',
+'delayed',
+'delay',
+'missed',
+'miss',
+'caught',
+'made',
+--'make',  Doesn't seem to have great precision.
+'had to run',
+'waiting',
+'wait',
+'checked in for');
+
+create dictionary travel_notmy_dict as
+('your',
+'his',
+'her',
+'their');
+
+create view travel_means as 
+extract dictionary 'travel_means_dict' on I.text as flight
+from travel_inputView I
+having Not(MatchesDict('travel_notmy_dict',LeftContextTok(flight,1)));
+
+create view travel_delayed as
+extract dictionary 'travel_action_dict' on I.text as delayed
+from travel_inputView I;
+
+-- Just combine the flight and delay term
+create view travel_flight_delayed_raw as
+(select CombineSpans(F.flight,D.delayed) as keyPhrase
+from travel_means F, travel_delayed D
+where Follows(F.flight,D.delayed,0,140) 
+)
+union all
+(select CombineSpans(D.delayed, F.flight) as keyPhrase
+from travel_means F, travel_delayed D
+where Follows(D.delayed,F.flight,0,140)
+)
+;
+-- make sure there wasn't a sentence break
+create view travel_flight_delayed as
+select R.keyPhrase as keyPhrase 
+from travel_flight_delayed_raw R
+where Not(ContainsDict('travel_sentenceEnd_dict',R.keyPhrase));
+
+
+-- jetlag
+create dictionary travel_strong_present_dict as 
+('jetlag', 'airport people watching', 'airport people-watching','airport-people-watching');
+
+-- We have this pre-filter view so it can be in NotOutput,
+-- otherwise we'd just put the filter here.
+create view travel_strong_present_prefilter as 
+extract I.text as text,
+	dictionary 'travel_strong_present_dict' on I.text as jetlag
+from travel_inputView I;
+
+create view travel_strong_present as
+select J.jetlag as keyPhrase
+from  travel_strong_present_prefilter J
+where  Not(ContainsDict('travel_noti_dict', J.text)) and
+       Not(ContainsDict('travel_habitual_dict',J.text))
+;
+
+--free wifi
+create dictionary wifi_synonyms as 
+('wifi',
+'wireless',
+'WIFI',
+'Wireless',
+'Wireless internet',
+'wireless internet',
+'wi-fi'
+);
+
+create view wifi_dict as 
+extract dictionary 'wifi_synonyms'  on D.text as wifi_terms from
+travel_inputView D;
+
+
+create dictionary travel_free_dict as
+('free');
+
+create view travel_free as
+extract dictionary 'travel_free_dict' on D.text as free
+from travel_inputView D;
+
+create view airport_free_wifi as
+select CombineSpans(F.free,A.airport) as keyPhrase
+from wifi_dict W, travel_free F, travel_airportNameOrAirportWord A
+where FollowsTok(F.free,W.wifi_terms,0,0) and
+	FollowsTok(W.wifi_terms,A.airport,0,2);
+
+-- headed to
+create dictionary travel_headedTo_dict as 
+('headed to',
+'headed from');
+
+create view travel_headedTo as
+extract dictionary 'travel_headedTo_dict' on D.text as headedTo
+from travel_inputView D;
+
+create view airport_headed_to_pattern as
+select CombineSpans(H.headedTo,A.airport) as keyPhrase
+from  travel_airportNameOrAirportWord A, travel_headedTo H
+where FollowsTok(H.headedTo,A.airport,0,2);
+
+create view airport_headed_to_rev as
+select CombineSpans(LeftContextTok(A.airport,1),H.headedTo) as keyPhrase
+from travel_airportNameOrAirportWord A, travel_headedTo H
+where FollowsTok(A.airport,H.headedTo,0,0)
+ and
+	MatchesDict('travel_atin_dict',LeftContextTok(A.airport,1))
+	;
+	
+	
+-- airport activity at airport
+-- to appear before at
+create dictionary travel_airportActivity_dict as
+('people watching',
+'waiting',
+'waiting in security line',
+'waiting in tsa line',
+'short security line',
+'long security line',
+'short line',
+'long line',
+'short tsa line',
+'long tsa line',
+'line is short',
+'line is long',
+'checked in for'
+);
+
+create view travel_airportActivity as 
+extract dictionary 'travel_airportActivity_dict' on D.text as beforeAt
+from travel_inputView D;
+
+create view travel_peopleWatching as
+select CombineSpans(P.beforeAt,A.airport) as keyPhrase 
+from travel_airportActivity P, travel_airportNameOrAirportWord A
+where FollowsTok(P.beforeAt,A.airport,0,4) and
+ContainsDict('travel_atin_dict',SpanBetween(P.beforeAt,A.airport));
+
+create dictionary travel_customs_dict as
+('customs',
+'immigration');
+
+create view  travel_customs as
+extract dictionary 'travel_customs_dict' on I.text as customs
+from travel_inputView I;
+
+create view travel_customs_line as
+select CombineSpans(P.beforeAt,C.customs) as keyPhrase 
+from travel_airportActivity P, travel_customs C
+where FollowsTok(P.beforeAt,C.customs,0,4) and
+ContainsDict('travel_atin_dict',SpanBetween(P.beforeAt,C.customs));
+
+--
+
+create dictionary travel_power_dict as
+('power outlet',
+'power plug');
+
+create view travel_power as
+extract dictionary 'travel_power_dict' on I.text as powerPlug
+from travel_inputView I;
+
+create view travel_airport_power1 as
+select CombineSpans(A.airport,P.powerPlug) as keyPhrase
+from travel_power P, travel_airportNameOrAirportWord A
+where FollowsTok(A.airport,P.powerPlug,0,3);
+
+create view travel_airport_power2 as 
+select CombineSpans(P.powerPlug,A.airport) as keyPhrase
+from travel_power P, travel_airportNameOrAirportWord A
+where FollowsTok(P.powerPlug,A.airport,0,3);
+
+---
+-- had to run to the airport
+create dictionary travel_havetohadto_dict as 
+('had to',
+'have to');
+
+create dictionary travel_rush_dict as
+('run to',
+'rush to',
+'dash to');
+
+create view travel_havetohadto as
+extract dictionary 'travel_havetohadto_dict' on I.text as hadTo
+from travel_inputView I;
+
+create view travel_rushWord as
+extract dictionary 'travel_rush_dict' on I.text as rush
+from travel_inputView I;
+
+create view travel_rushToAirport as
+select CombineSpans(H.hadTo,A.airport) as keyPhrase
+from travel_havetohadto H, travel_rushWord R, travel_airportNameOrAirportWord A 
+where FollowsTok(H.hadTo,R.rush,0,0) and
+	FollowsTok(R.rush,A.airport,0,3) and
+	Not(ContainsDict('travel_noti_dict',LeftContextTok(H.hadTo,2)));
+--
+-- Rental cars! 
+
+--Create a dictionary for all the rental car companies within USA
+create dictionary travel_US_car_renters_dict from file 
+	'dictionaries/car_rental.dict';	
+	
+--Create a dictionary for first person possessive pronoun.
+create view travel_rentalCarCompanies as extract dictionary 'travel_US_car_renters_dict' on D.text as rental_names from travel_inputView D;
+
+create dictionary travel_rentalWords_dict as
+('rental car',
+'car rental',
+'rent a car');
+
+create view travel_rentalWords as
+extract dictionary 'travel_rentalWords_dict' on D.text as carRental
+from travel_inputView D;
+
+create dictionary travel_relatedToTrip_dict as
+('on',
+'during',
+'for',
+'while');
+
+-- car rental followed by trip but not 
+-- booked my car rental for my trip (also should excluded)
+create view travel_rentalTrip as
+select CombineSpans(A.carRental,T.tripWord) as keyPhrase from 
+travel_trip_word T, travel_rentalWords A 
+where FollowsTok(A.carRental,T.tripWord,0,9) and
+ContainsDict('travel_relatedToTrip_dict',LeftContextTok(T.tripWord,3)) and
+Not(ContainsDict('travel_bookWord_dict',LeftContext(A.carRental,140))) and
+Not(ContainsDict('travel_bookWord_dict',RightContext(A.carRental,140)));
+
+-- trip followed by car rental
+create view travel_tripRental as
+select CombineSpans(T.tripWord,A.carRental) as keyPhrase from
+travel_trip_word T, travel_rentalWords A
+where FollowsTok(T.tripWord,A.carRental,0,8) and
+ContainsDict('travel_to_word_dict',RightContextTok(T.tripWord,3))and
+Not(ContainsDict('travel_bookWord_dict',LeftContext(A.carRental,140)));
+
+-- at rental location
+
+create view travel_atRental as
+select CombineSpans(A.at,R.rental_names) as keyPhrase from
+travel_atWord A, travel_rentalCarCompanies R
+where FollowsTok(A.at,R.rental_names,0,0);
+
+create view travel_rentalCo_trip as
+select CombineSpans(R.rental_names,T.tripWord) as keyPhrase 
+from travel_rentalCarCompanies R, travel_trip_word T, travel_inputView I
+where ContainsDict('dictionaries/airport_travel_self_reference.dict',I.text) and
+Follows(R.rental_names,T.tripWord,0,140) and
+Not(ContainsDict('travel_bookWord_dict',I.text));
+
+create view travel_trip_rentalCo as
+select CombineSpans(T.tripWord,R.rental_names) as keyPhrase 
+from travel_rentalCarCompanies R, travel_trip_word T, travel_inputView I
+where ContainsDict('dictionaries/airport_travel_self_reference.dict',I.text) and
+Follows(T.tripWord,R.rental_names,0,140) and
+Not(ContainsDict('travel_bookWord_dict',I.text));
+
+create dictionary travel_thisThatThe_dict as
+('this',
+'that',
+'the');
+
+create view travel_thisThatThe as 
+extract dictionary 'travel_thisThatThe_dict' on I.text as this
+from travel_inputView I;
+
+create view travel_thisTripRental as
+select CombineSpans(T.this, R.rental_names) as keyPhrase
+from travel_thisThatThe T, travel_rentalCarCompanies R, travel_trip_word W where
+FollowsTok(T.this,W.tripWord,0,0) and
+Follows(W.tripWord,R.rental_names,0,140);
+
+create view travel_rentalThisTrip as
+select CombineSpans(R.rental_names,W.tripWord) as keyPhrase
+from travel_thisThatThe T, travel_rentalCarCompanies R, travel_trip_word W where
+FollowsTok(T.this,W.tripWord,0,0) and
+Follows(R.rental_names,W.tripWord,0,140);
+
+--- leaving on a jet plane, no pronoun.
+create view travel_ontrip_jetplane_naked as
+select L.travelAct as keyPhrase
+from travel_presentTravelIndicator  L, travel_begin B 
+where Overlaps(B.begin,L.travelAct);
+
+-- leaving on a jet plane, with pronoun.
+create view travel_ontrip_jetplane_pronoun as 
+select CombineSpans(I.firstPerson,L.travelAct) as keyPhrase
+from travel_presentTravelIndicator L,travel_I_present I
+where FollowsTok(I.firstPerson,L.travelAct,0,0) and
+	Not(ContainsDict('travel_nonPresentClues_dict',LeftContextTok(I.firstPerson,2)));
+	
+---
+--- process travel_at, travel_on, and travel_in.
+--- These are common patterns, but they are also common outside of travel, so we apply some rules.
+--- To pass, they have to be
+--- (1) <begin> adverb I pattern
+--- (2) <begin> I adverb pattern
+--- (3) <begin> <adverb>? pattern  + personal tweet indicator
+--- (4) I pattern <right now> indicator.
+
+create view travel_adverb as 
+extract dictionary 'travel_adverb_dict' on I.text as finally
+from travel_inputView I;
+
+
+
+create view travel_ontrip_atOnIn_all as
+(select A.keyPhrase as keyPhrase from travel_at A)
+union all
+(select B.keyPhrase as keyPhrase from travel_on B)
+union all
+(select C.keyPhrase as keyPhrase from travel_in C )
+union all
+(select D.keyPhrase as keyPhrase from travel_onTransit D)
+;
+
+create view travel_ontrip_atOnIn_adverb_I as
+select CombineSpans(A.finally,O.keyPhrase) as keyPhrase
+from travel_adverb A, travel_firstperson_present I, travel_ontrip_atOnIn_all O
+where FollowsTok(A.finally,I.firstPerson,0,0) and
+	  FollowsTok(I.firstPerson,O.keyPhrase,0,0);
+
+create view travel_ontrip_atOnIn_I_adverb as
+select CombineSpans(I.firstPerson,O.keyPhrase) as keyPhrase
+from travel_adverb A, travel_firstperson_present I, travel_ontrip_atOnIn_all O
+where FollowsTok(I.firstPerson, A.finally,0,0) and
+	  FollowsTok(A.finally,O.keyPhrase,0,0);
+
+create view travel_ontrip_atOnIn_I as
+select CombineSpans(I.firstPerson,O.keyPhrase) as keyPhrase
+from travel_firstperson_present I, travel_ontrip_atOnIn_all O 
+where FollowsTok(I.firstPerson,O.keyPhrase,0,0)
+;
+
+create view travel_ontrip_atOnIn_adverb as
+select CombineSpans(A.finally,O.keyPhrase) as keyPhrase
+from travel_adverb A,  travel_ontrip_atOnIn_all O
+where FollowsTok(A.finally,O.keyPhrase,0,0);
+
+
+create view travel_ontrip_atOnIn_personal as
+select O.keyPhrase as keyPhrase 
+from  ((select * from travel_ontrip_atOnIn_all) union all (select * from travel_ontrip_atOnIn_adverb)) O, 
+	travel_inputView I
+where ContainsDict('travel_personalTweetIndicators_dict',I.text);
+
+
+create view travel_ontrip_atOnIn_allAuthor as
+(select A.keyPhrase as keyPhrase from travel_ontrip_atOnIn_adverb_I A)
+union all
+(select B.keyPhrase as keyPhrase from travel_ontrip_atOnIn_I_adverb B)
+union all
+(select C.keyPhrase as keyPhrase from travel_ontrip_atOnIn_I C)
+;
+
+create view travel_ontrip_atOnIn_begin as
+select O.keyPhrase as keyPhrase from
+((select * from travel_ontrip_atOnIn_allAuthor) 
+	union all
+ (select * from travel_ontrip_atOnIn_personal)) O, travel_begin B
+where Overlaps(B.begin,O.keyPhrase);
+
+create view travel_ontrip_atOnIn_username as
+select O.keyPhrase as keyPhrase from
+ travel_ontrip_atOnIn_allAuthor  O, travel_username U
+where FollowsTok(U.username,O.keyPhrase,0,0);
+
+ 
+
+
+create dictionary travel_ontrip_now_dict as
+('now',
+'at this minute',
+'at the minute',
+'at the moment',
+'right now',
+'today',
+'till',
+'til',
+'until');
+
+create view travel_ontrip_now as 
+extract dictionary 'travel_ontrip_now_dict' on I.text as now from
+travel_inputView I;
+
+create view travel_ontrip_atOnIn_now as
+select CombineSpans(O.keyPhrase, N.now) as keyPhrase from
+travel_ontrip_now N, travel_ontrip_atOnIn_allAuthor O 
+where FollowsTok(O.keyPhrase,N.now,0,1);
+
+
+create dictionary travel_leftTemp_dict  as
+('while');
+
+create view travel_ontrip_atOnIn_while as
+select CombineSpans(LeftContextTok(O.keyPhrase,1),O.keyPhrase) as keyPhrase from
+travel_ontrip_atOnIn_allAuthor O 
+where MatchesDict('travel_leftTemp_dict',LeftContextTok(O.keyPhrase,1));
+
+create dictionary travel_stuck_dict as
+('stuck');
+
+create view travel_stuck as 
+extract dictionary 'travel_stuck_dict' on I.text as stuck
+from travel_inputView I;
+
+create view travel_ontrip_atOnIn_stuck as
+select CombineSpans(I.firstPerson,O.keyPhrase) as keyPhrase
+from travel_firstperson_present I, travel_ontrip_atOnIn_all O, travel_stuck S 
+where FollowsTok(I.firstPerson, S.stuck,0,0) and
+	  FollowsTok(S.stuck,O.keyPhrase,0,0) and
+	  Or(ContainsDict('Loc_Alias_Countries_Dict',O.keyPhrase),
+		ContainsDict('Loc_CountryDict',O.keyPhrase),
+		ContainsDict('Loc_CountryDict_Alias',O.keyPhrase))
+;
+
+---
+--- On my flight yesterday
+create dictionary travel_during_clue_dict  as 
+('today',
+'now',
+'bout to get on',
+'about to get on');
+
+create view travel_during_clue as
+extract dictionary 'travel_during_clue_dict' on I.text as today
+from travel_inputView I;
+
+create view travel_during_onMyFlight as
+select CombineSpans(A.onMyFlight, F.today) as keyPhrase
+from travel_onMyFlight A, travel_during_clue F
+where FollowsTok(A.onMyFlight,F.today,0,1);
+
+---
+create view travel_ontrip_output_all as
+(select GetString('transit') as rule,
+	A.keyPhrase  from travel_transit A)
+union all
+--(select GetString('at_on_in') as rule,
+--	B.* from travel_at B)
+--union all
+--(select GetString('at_on_in') as rule,
+--	C.* from travel_on C)
+--union all
+--(select GetString('at_on_in') as rule,
+--	D.keyPhrase as keyPhrase from travel_in D)
+--union all
+(select GetString('visiting') as rule,
+	E.* from travel_visiting E)
+union all
+(select GetString('arrived') as rule,
+	F.* from travel_arrived_1 F)
+union all
+(select GetString ('arrived') as rule,
+	G.* from travel_arrived_2 G)
+;
+
+-- may contain strong intent
+create view travel_ontrip_output_maybeintent as 
+select I.text as text,
+T.keyPhrase as keyPhrase,
+T.rule as rule from 
+travel_ontrip_output_all T, travel_inputView I, travel_I_all F
+where 
+Or(FollowsTok(F.firstPerson, T.keyPhrase, 0, 1),
+ContainsDict('travel_firstPerson_pronoun_dict',T.keyPhrase),
+ContainsDict('travel_my_dict',T.keyPhrase))
+consolidate on I.text;
+
+create view travel_ontrip_output_maybeintent_haswant as
+select I.text as text,
+I.keyPhrase as keyPhrase,
+I.rule as rule
+from travel_ontrip_output_maybeintent I, travel_wishful_all W
+where Contains(I.text, W.wishPhrase);
+
+--
+-- picture sharing
+
+create view travel_http as 
+extract dictionary 'travel_http_dict' on I.text as url 
+from travel_inputView I;
+
+create view travel_picture_sharing as
+select CombineSpans(A.at,U.url) as keyPhrase
+from travel_atWord A, travel_http U, travel_begin B, travel_destination_word D
+where And(FollowsTok(B.begin,A.at,0,2),
+		  FollowsTok(A.at, D.destination,0,1)) and
+	  FollowsTok(D.destination,U.url,0,1);
+	
+--- Raodtrip.
+-- if #roadtrip and no "going" -> during
+-- if #roadtrip and "going" -> intent
+-- if roadtrip and ! or :) or :D -> during
+
+
+
+create dictionary travel_smile_dict as
+(':)',
+ ':D',
+ ';)',
+ ';D',
+ ':-D',
+ ';-D',
+ '(:',
+ '(;',
+ ');',
+ '!',  -- not really a happy face, but no need to separate so far
+ '!!',
+ '!!!'
+ );
+ 
+ create view travel_happy as 
+ extract dictionary 'travel_smile_dict' on I.text as smile
+ from travel_inputView I;
+
+create view travel_during_roadtrip as
+select R.roadtrip as keyPhrase from
+travel_roadtrip R 
+where Not(ContainsDict('travel_going_dict',R.text)) and
+	ContainsRegex(/^#/,R.roadtrip);
+	
+create view travel_during_roadtrip_smile as
+select CombineSpans(R.roadtrip, T.smile) as keyPhrase
+from travel_happy T, travel_roadtrip R
+where Not(ContainsDict('travel_going_dict',R.text)) and
+	FollowsTok(R.roadtrip,T.smile,0,1);
+
+create view travel_during_roadtrip_short as
+select R.roadtrip as keyPhrase
+/*,B.begin as begin,
+E.end as end,
+Overlaps(B.begin,R.roadtrip) as overlapBegin,
+FollowsTok(B.begin, R.roadtrip,0,2) as followsBegin,
+Overlaps(R.roadtrip,E.end) as overlapEnd,
+FollowsTok(R.roadtrip,E.end,0,2) as followsTokEnd,
+Follows(R.roadtrip,E.end,0,2) as followsEnd */
+from travel_begin B, travel_roadtrip R, travel_end E
+where And(Or(Overlaps(B.begin,R.roadtrip),FollowsTok(B.begin, R.roadtrip,0,2)),
+	  Or(Overlaps(R.roadtrip,E.end),
+	  	FollowsTok(R.roadtrip,E.end,0,2),
+	  	Follows(R.roadtrip,E.end,0,2)))
+	  ;
+
+-- Trip is ending.
+-- could be expanded; probably not a dictionary to externalize.
+create dictionary travel_home_dict as 
+( 'coming home',
+'heading back',
+'ready for home',
+'ready to go home',
+'back from',
+'come home', --from 
+'Im home',
+'I am home',  -- from?
+'I\'m home' -- from?
+);
+
+
+-- Look for a 'coming home" and some sort of trip word or destination word.
+create view travel_home as
+extract D.text as text,
+	dictionary 'travel_home_dict' on D.text as keyPhrase
+from travel_inputView D having
+Or(ContainsDict('travel_trip_word_dict',text),
+	ContainsDict('travel_destination_at_dict',text),
+	ContainsDict('travel_destination_in_dict',text)
+	) and 
+	Not(ContainsDict('travel_boring_trip',RightContextTok(keyPhrase,3))) and
+	Not(ContainsDict('travel_boring_trip',LeftContextTok(keyPhrase,3))) and 
+	Not(ContainsDict('travel_if',LeftContextTok(keyPhrase,5)));
+
+create dictionary airport_headedBack_dict as 
+('headed back to',
+'headed back from');
+
+create view airport_headedBack as 
+extract dictionary 'airport_headedBack_dict' on D.text as headedBack
+from travel_inputView D;
+
+create view airport_headedBack_airportName as
+select CombineSpans(H.headedBack,A.airportName) as keyPhrase
+from  travel_airportname  A, airport_headedBack H
+where FollowsTok(H.headedBack,A.airportName,0,2);
+	
+create view airport_headedBack_airportWord as
+select CombineSpans(H.headedBack,A.airport) as keyPhrase
+from travel_airport  A, airport_headedBack H
+where FollowsTok(H.headedBack,A.airport,0,2);
+	
+
+
+--
+create view travel_ontrip_prefiltered as 
+(select GetString('onvacation') as rule,
+	A.keyPhrase as keyPhrase
+from travel_onvacation A)
+union all
+(select GetString('justarrived') as rule,
+	B.keyPhrase as keyPhrase
+from travel_ontrip_just_arrived B)
+union all
+(select GetString('anyone_else_in_airport') as rule,
+	C.keyPhrase as keyPhrase
+from travel_anyone_airport_name C)
+union all
+(select GetString('anyone_else_in_airportname') as rule,
+	D.keyPhrase as keyPhrase
+from travel_anyone_airport D)
+union all
+(select GetString('flying_to') as rule,
+	E.keyPhrase as keyPhrase 
+from travel_I_flying_to E)
+union all
+(select GetString('anyone_flying_to') as rule,
+	F.keyPhrase as keyPhrase
+from travel_anyone_flying_to F)
+union all
+(select GetString('visitingMyFriend') as rule,
+	G.* from travel_visitingMyFriendIn G)
+union all
+(select GetString ('stayinin') as rule,
+	H.* from  travel_stayingin H)
+union all
+(select GetString('flight_delay') as rule,
+	I.* from travel_flight_delayed I)
+union all
+(select GetString('jetlag') as rule,
+	J.keyPhrase as keyPhrase from travel_strong_present J)
+union all
+(select GetString('airport_free_wifi') as rule,
+	K.keyPhrase as keyPhrase from airport_free_wifi K)
+union all
+(select GetString('airport_headed_to_pattern') as rule,
+	L.keyPhrase as keyPhrase from airport_headed_to_pattern L)
+union all
+(select GetString('airport_headed_to_rev') as rule,
+	M.keyPhrase as keyPhrase from airport_headed_to_rev M)
+union all
+(select GetString('travel_customs_line') as rule,
+	N.keyPhrase as keyPhrase from travel_customs_line N)
+union all
+(select GetString('travel_peopleWatching') as rule,
+	O.keyPhrase as keyPhrase from travel_peopleWatching  O)
+union all
+(select GetString('travel_airport_power2') as rule,
+	P.keyPhrase as keyPhrase from travel_airport_power2 P)
+	union all
+(select GetString('travel_airport_power1') as rule,
+	Q.keyPhrase as keyPhrase from travel_airport_power1 Q)
+union all
+(select GetString('travel_rushToAirport') as rule,
+	R.keyPhrase as keyPhrase from travel_rushToAirport R)
+union all
+(select GetString('travel_rentalTrip') as rule,
+	S.keyPhrase as keyPhrase from travel_rentalTrip S)
+union all
+(select GetString('travel_tripRental') as rule,
+	T.keyPhrase as keyPhrase from travel_tripRental T)
+union all
+(select GetString('travel_atRental') as rule,
+	U.keyPhrase as keyPhrase from travel_atRental U)
+union all
+(select GetString('travel_rentalThisTrip') as rule,
+	V.keyPhrase as keyPhrase from travel_rentalThisTrip V)
+union all
+(select GetString('travel_thisTripRental') as rule,
+	W.keyPhrase as keyPhrase from travel_thisTripRental W)
+union all
+(select GetString('travel_trip_rentalCo') as rule,
+	X.keyPhrase as keyPhrase from travel_trip_rentalCo X)
+union all
+(select GetString('travel_rentalCo_trip') as rule,
+	Y.keyPhrase as keyPhrase from travel_rentalCo_trip Y)
+union all
+(select GetString('travel_ontrip_jetplane_pronoun') as rule,
+	Z.keyPhrase as keyPhrase from travel_ontrip_jetplane_pronoun  Z)
+union all
+(select GetString('travel_ontrip_jetplane_naked') as rule,
+	AA.keyPhrase as keyPhrase from travel_ontrip_jetplane_naked AA)	
+union all
+(select GetString('travel_ontrip_atOnIn_now') as rule,
+	AB.keyPhrase as keyPhrase from travel_ontrip_atOnIn_now AB)
+union all
+(select GetString('travel_ontrip_atOnIn_begin') as rule,
+	AC.keyPhrase as keyPhrase from travel_ontrip_atOnIn_begin AC )
+union all
+(select GetString('travel_ontrip_atOnIn_stuck') as rule,
+	AD.keyPhrase as keyPhrase from travel_ontrip_atOnIn_stuck AD)
+union all
+(select GetString('travel_ontrip_atOnIn_username') as rule,
+	AE.keyPhrase as keyPhrase from travel_ontrip_atOnIn_username AE)
+union all
+(select GetString('travel_ontrip_atOnIn_while') as rule,
+	AF.keyPhrase as keyPhrase from travel_ontrip_atOnIn_while AF)
+union all 
+(select GetString('travel_picture_sharing') as rule,
+	AG.keyPhrase as keyPhrase from travel_picture_sharing AG)
+union all
+(select GetString('travel_during_roadtrip') as rule,
+	AH.keyPhrase as keyPhrase from travel_during_roadtrip AH)
+union all
+(select GetString('travel_during_roadtrip_smile') as rule,
+	AI.keyPhrase as keyPhrase from travel_during_roadtrip_smile AI)
+union all
+(select GetString('travel_during_roadtrip') as rule,
+	AJ.keyPhrase as keyPhrase from travel_during_roadtrip AJ)
+union all
+(select GetString('travel_during_roadtrip_short') as rule,
+	AK.keyPhrase as keyPhrase from travel_during_roadtrip_short AK)
+union all
+(select GetString('travel_during_onMyFlight') as rule,
+	AL.keyPhrase as keyPhrase from travel_during_onMyFlight AL)
+union all
+(select GetString('travel_home') as rule, AM.keyPhrase as keyPhrase from  travel_home AM)
+union all
+(select GetString('travel_headedback_airportname') as rule, AN.keyPhrase as keyPhrase from airport_headedBack_airportName AN)
+union all
+(select GetString('travel_headedback_airportWord') as rule, AO.keyPhrase as keyPhrase from airport_headedBack_airportWord AO)
+;

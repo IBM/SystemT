@@ -1,0 +1,258 @@
+$Document = DocScan(
+  (
+    "text" => "Text",
+    "label" => "Text"
+  )
+);
+CreateDict(
+    "name" => "firstnames.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false",
+    "lemma_match" => "false"
+);
+
+$__Subquery__1__Temp =
+Project(
+  (
+    "@@genericModule@@__Subquery__1__Temp@@__auto__id" => "__auto__id",
+    "@@genericModule@@__Subquery__1__Temp@@__stmt__type" => "__stmt__type",
+    "@@genericModule@@__Subquery__1__Temp@@Document_____sep_____D____id" => "Document_____sep_____D____id",
+    "num" => "num"
+  ),
+  Union(
+    ApplyFunc(
+      IntConst(
+        -1
+      ) => "@@genericModule@@__Subquery__1__Temp@@Document_____sep_____D____id",
+      ApplyFunc(
+        StringConst(
+          "STMT_TYPE_EXTRACT_REGEX"
+        ) => "@@genericModule@@__Subquery__1__Temp@@__stmt__type",
+        ApplyFunc(
+          AutoID()
+ => "@@genericModule@@__Subquery__1__Temp@@__auto__id",
+          FastRegex(/\+?\([1-9]\d{2}\)\d{3}-\d{4}/, (0 => "num"), "DOTALL", "D.text",
+            Project(
+              (
+                "text" => "D.text"
+              ),
+              $Document
+            )
+          )
+        )
+      )
+    ),
+    ApplyFunc(
+      IntConst(
+        -1
+      ) => "@@genericModule@@__Subquery__1__Temp@@Document_____sep_____D____id",
+      ApplyFunc(
+        StringConst(
+          "STMT_TYPE_EXTRACT_REGEX"
+        ) => "@@genericModule@@__Subquery__1__Temp@@__stmt__type",
+        ApplyFunc(
+          AutoID()
+ => "@@genericModule@@__Subquery__1__Temp@@__auto__id",
+          FastRegex(/\+?[Xx]\.?\d{4,5}/, (0 => "num"), "DOTALL", "D.text",
+            Project(
+              (
+                "text" => "D.text"
+              ),
+              $Document
+            )
+          )
+        )
+      )
+    )
+  )
+);
+
+$__Subquery__2__Temp =
+Select(
+  MatchesRegex(
+    RegexConst(
+      /\A[A-Z][a-z]*\Z/,
+      "JavaRegex"
+    ),
+    GetCol(
+      "name"
+    )
+  ),
+  Project(
+    (
+      "@@genericModule@@__Subquery__2__Temp@@__auto__id" => "__auto__id",
+      "@@genericModule@@__Subquery__2__Temp@@__stmt__type" => "__stmt__type",
+      "@@genericModule@@__Subquery__2__Temp@@Document_____sep_____D____id" => "Document_____sep_____D____id",
+      "name" => "name"
+    ),
+    ApplyFunc(
+      IntConst(
+        -1
+      ) => "@@genericModule@@__Subquery__2__Temp@@Document_____sep_____D____id",
+      ApplyFunc(
+        StringConst(
+          "STMT_TYPE_EXTRACT_DICT"
+        ) => "@@genericModule@@__Subquery__2__Temp@@__stmt__type",
+        ApplyFunc(
+          AutoID()
+ => "@@genericModule@@__Subquery__2__Temp@@__auto__id",
+          Dictionary("firstnames.dict" => "Default" , "D.text", "name",
+            Project(
+              (
+                "text" => "D.text"
+              ),
+              $Document
+            )
+          )
+        )
+      )
+    )
+  )
+);
+
+$__Subquery__3__Temp =
+Project(
+  (
+    "@@genericModule@@__Subquery__3__Temp@@__auto__id" => "__auto__id",
+    "@@genericModule@@__Subquery__3__Temp@@__stmt__type" => "__stmt__type",
+    "@@genericModule@@__Subquery__3__Temp@@Document_____sep_____D____id" => "Document_____sep_____D____id",
+    "num" => "num"
+  ),
+  Union(
+    ApplyFunc(
+      IntConst(
+        -1
+      ) => "@@genericModule@@__Subquery__3__Temp@@Document_____sep_____D____id",
+      ApplyFunc(
+        StringConst(
+          "STMT_TYPE_EXTRACT_REGEX"
+        ) => "@@genericModule@@__Subquery__3__Temp@@__stmt__type",
+        ApplyFunc(
+          AutoID()
+ => "@@genericModule@@__Subquery__3__Temp@@__auto__id",
+          FastRegex(/\+?\([1-9]\d{2}\)\d{3}-\d{4}/, (0 => "num"), "DOTALL", "D.text",
+            Project(
+              (
+                "text" => "D.text"
+              ),
+              $Document
+            )
+          )
+        )
+      )
+    ),
+    ApplyFunc(
+      IntConst(
+        -1
+      ) => "@@genericModule@@__Subquery__3__Temp@@Document_____sep_____D____id",
+      ApplyFunc(
+        StringConst(
+          "STMT_TYPE_EXTRACT_REGEX"
+        ) => "@@genericModule@@__Subquery__3__Temp@@__stmt__type",
+        ApplyFunc(
+          AutoID()
+ => "@@genericModule@@__Subquery__3__Temp@@__auto__id",
+          FastRegex(/\+?[Xx]\.?\d{4,5}/, (0 => "num"), "DOTALL", "D.text",
+            Project(
+              (
+                "text" => "D.text"
+              ),
+              $Document
+            )
+          )
+        )
+      )
+    )
+  )
+);
+
+$PersonPhoneAll =
+Project(
+  (
+    "name.name" => "person",
+    "phone.num" => "phone",
+    "@@genericModule@@PersonPhoneAll@@personphone" => "personphone",
+    "@@genericModule@@PersonPhoneAll@@__auto__id" => "__auto__id",
+    "@@genericModule@@PersonPhoneAll@@__stmt__type" => "__stmt__type",
+    "name.__auto__id" => "__Subquery__2__Temp_____sep_____name____id",
+    "phone.__auto__id" => "__Subquery__3__Temp_____sep_____phone____id"
+  ),
+  ApplyFunc(
+    StringConst(
+      "STMT_TYPE_SELECT"
+    ) => "@@genericModule@@PersonPhoneAll@@__stmt__type",
+    ApplyFunc(
+      AutoID()
+ => "@@genericModule@@PersonPhoneAll@@__auto__id",
+      ApplyFunc(
+        CombineSpans(
+          GetCol(
+            "name.name"
+          ),
+          GetCol(
+            "phone.num"
+          )
+        ) => "@@genericModule@@PersonPhoneAll@@personphone",
+        SortMergeJoin(
+          Follows(
+            GetCol(
+              "name.name"
+            ),
+            GetCol(
+              "phone.num"
+            ),
+            IntConst(
+              0
+            ),
+            IntConst(
+              40
+            )
+          ),
+          Project(
+            (
+              "__auto__id" => "name.__auto__id",
+              "name" => "name.name"
+            ),
+            $__Subquery__2__Temp
+          ),
+          Project(
+            (
+              "__auto__id" => "phone.__auto__id",
+              "num" => "phone.num"
+            ),
+            $__Subquery__3__Temp
+          )
+        )
+      )
+    )
+  )
+);
+
+$PhoneNumber =
+Project(
+  (
+    "P.num" => "num",
+    "@@genericModule@@PhoneNumber@@__auto__id" => "__auto__id",
+    "@@genericModule@@PhoneNumber@@__stmt__type" => "__stmt__type",
+    "P.__auto__id" => "__Subquery__1__Temp_____sep_____P____id"
+  ),
+  ApplyFunc(
+    StringConst(
+      "STMT_TYPE_SELECT"
+    ) => "@@genericModule@@PhoneNumber@@__stmt__type",
+    ApplyFunc(
+      AutoID()
+ => "@@genericModule@@PhoneNumber@@__auto__id",
+      Project(
+        (
+          "__auto__id" => "P.__auto__id",
+          "num" => "P.num"
+        ),
+        $__Subquery__1__Temp
+      )
+    )
+  )
+);
+
+Output: $PersonPhoneAll, $PhoneNumber, $__Subquery__1__Temp, $__Subquery__2__Temp, $__Subquery__3__Temp;

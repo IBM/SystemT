@@ -1,0 +1,24 @@
+module Country;
+
+create view Country as
+select 
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text, 
+	C.continent as continent, 
+	C.extendedMatch as extendedMatch, C.extendedMatch_detag as extendedMatch_detag, GetText(C.extendedMatch) as extendedMatch_text, GetText(C.extendedMatch_detag) as extendedMatch_detag_text
+from
+(
+	select 
+		Remap(C.country) as match, C.country as match_detag, 
+		C.continent as continent, 
+		Remap(C.reference) as extendedMatch, C.reference as extendedMatch_detag	
+	from Country_ C
+) C
+;
+
+-- Export Candidate views
+export view CountryCandidateConsolidated;
+export view CapsPlaceAndCountry;
+
+-- Export Final views
+export view Country_;
+export view Country;

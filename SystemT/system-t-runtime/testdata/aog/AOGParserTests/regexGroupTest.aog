@@ -1,0 +1,26 @@
+###############################################################################
+# regexgroup.aog
+#
+# Test case for group extraction in the regular expression operator.
+###############################################################################
+
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+# Extract the area code and rest of phone number separately.
+# Output schema should be: <doc text, area code, rest of number, whole number>
+$Phone1 = 
+		Regex(/\+?(\([1-9][0-9]{2}\))[\-]?([0-9]{3}[\-\.]?[0-9]{4})/,
+		(1 => "areacode", 2 => "restofnum", 0 => "wholenum"), "text", $Document);
+	
+# Separate everything out.	
+$AreaCode = Project(("areacode" => "areacode"), $Phone1);
+$RestOfNum = Project(("restofnum" => "restofnum"), $Phone1);
+$WholeNum = Project(("wholenum" => "wholenum"), $Phone1);
+
+			
+# Specify the output.
+Output: $AreaCode, $RestOfNum, $WholeNum;

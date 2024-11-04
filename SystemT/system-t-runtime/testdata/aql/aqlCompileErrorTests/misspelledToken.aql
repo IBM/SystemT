@@ -1,0 +1,16 @@
+-------------------------------------------------------------------------------
+-- misspelledToken.aql
+
+-- Test for a defect# 13909 
+-- Incorrect error line number due to misspelled token.
+-------------------------------------------------------------------------------
+create view Phone as
+extract regexes /\d{3}-\d{4}/ and /\+?[Xx]\.?\d{4,5}/
+	on D.text as phone
+from Document D;
+
+vcreate view PhoneText as
+select GetText(P.phone) 
+from Phone P;
+
+output view PhoneText;

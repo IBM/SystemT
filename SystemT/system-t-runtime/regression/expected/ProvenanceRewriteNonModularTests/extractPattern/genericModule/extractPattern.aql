@@ -1,0 +1,132 @@
+module genericModule;
+
+
+create view CapsWord as
+  select  Op.type as type,
+          Op.match as match,
+          AutoID() as __auto__id
+  from  __Base__CapsWord__Temp Op;
+
+output view CapsWord;
+
+create dictionary "NameDict"
+with case insensitive
+as (
+  'Anna',
+  'John'
+);
+
+
+create view FirstName as
+  extract 'First' as type,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'NameDict'
+    on D.text as match
+  from Document D;
+
+output view FirstName;
+
+create view PersonSelect as
+  select  'Full' as type,
+          CombineSpans(F.match, C.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          F.__auto__id as FirstName_____sep_____F____id,
+          C.__auto__id as CapsWord_____sep_____C____id
+  from  FirstName F,
+        CapsWord C
+  where FollowsTok(F.match, C.match, 0, 0);
+
+output view PersonSelect;
+
+
+
+create view PersonPattern as
+  select  Op.type as type,
+          Op.ftype as ftype,
+          Op.ctype as ctype,
+          Op.match as match,
+          AutoID() as __auto__id
+  from  __Base__PersonPattern__Temp Op;
+
+output view PersonPattern;
+
+
+
+create view PersonSingleToken as
+  (select  Op.type as type,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__1__TempOp__0 Op)
+  union all
+  (select  Op.type as type,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__1__TempOp__1 Op)
+  union all
+  (select  Op.type as type,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__1__TempOp__2 Op);
+
+output view PersonSingleToken;
+
+
+
+create view __Base__CapsWord__Temp as
+  extract 'CapsWord' as type,
+          pattern   /[A-Z][a-z]+/
+  return group 0 as match
+  from  Document D;
+
+output view __Base__CapsWord__Temp;
+
+create view __Base__PersonPattern__Temp as
+  extract 'Full' as type,
+          F.type as ftype,
+          C.type as ctype,
+          pattern <F.match> <C.match>
+  return group 0 as match
+  from  FirstName F,
+        CapsWord C;
+
+output view __Base__PersonPattern__Temp;
+
+create view __Union__1__TempOp__0 as
+  select  FirstName.type as type,
+          FirstName.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          FirstName.__auto__id as FirstName_____sep_____FirstName____id
+  from  FirstName FirstName;
+
+output view __Union__1__TempOp__0;
+
+create view __Union__1__TempOp__1 as
+  select  PersonSelect.type as type,
+          PersonSelect.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          PersonSelect.__auto__id as PersonSelect_____sep_____PersonSelect____id
+  from  PersonSelect PersonSelect;
+
+output view __Union__1__TempOp__1;
+
+create view __Union__1__TempOp__2 as
+  select  P.type as type,
+          P.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonPattern_____sep_____P____id
+  from  PersonPattern P;
+
+output view __Union__1__TempOp__2;
+

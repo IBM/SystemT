@@ -1,0 +1,25 @@
+/*
+Test to verify, that the dictionaries are importable using the 'import module ...' statement.
+*/
+
+module importDictTest;
+
+-- import all the exported dictionaries
+import module exportDict;
+
+-- Find dictionary matches for all title initials
+create view Salutation as
+extract dictionary exportDict.SalutationDict
+on D.text as salutation
+from Document D;
+
+output view Salutation;
+
+-- Find dictionary matches for all last names
+create view LastName as
+extract dictionary exportDict.LastName
+on D.text as last
+from Document D
+having MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, last);
+
+output view LastName;

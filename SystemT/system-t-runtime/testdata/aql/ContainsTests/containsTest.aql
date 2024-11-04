@@ -1,0 +1,43 @@
+
+-- Extract span /[15](.*)[26]/ 
+-- Extract spans like 1a2, 5a6
+create view Matched1 as extract regex /[15](.*)[26]/ on D.text return group 1 as match
+from Document D;
+
+
+-- Extract span /[35](.*)[46]/
+-- Extract spans like 3a4, 5a6
+create view Matched2 as extract regex /[35](.*)[46]/ on D.text return group 1 as match
+from Document D;
+
+
+-- Test Contains(D,S)
+create view MatchedDS as select GetDocText(M1.match) as A, M2.match as B from Matched1 M1, Matched2 M2 where Contains(GetDocText(M1.match), M2.match);
+
+-- Test Contains(D,T)
+create view MatchedDT as select GetDocText(M1.match) as A, GetText(M2.match) as B from Matched1 M1, Matched2 M2 where Contains(GetDocText(M1.match), GetText(M2.match));
+
+-- Test Contains(S,S)
+create view MatchedSS as select M1.match as A, M2.match as B from Matched1 M1, Matched2 M2 where Contains(M1.match, M2.match);
+
+-- Test Contains(S,T)
+create view MatchedST as select M1.match as A, GetText(M2.match) as B from Matched1 M1, Matched2 M2 where Contains(M1.match, GetText(M2.match));
+
+-- Test Contains(T,S)
+create view MatchedTS as select GetText(M1.match) as A , M2.match as B from Matched1 M1, Matched2 M2 where Contains(GetText(M1.match), M2.match);
+
+-- Test Contains(T,T)
+create view MatchedTT as select GetText(M1.match) as A, GetText(M2.match) as B from Matched1 M1, Matched2 M2 where Contains(GetText(M1.match), GetText(M2.match));
+
+
+output view Matched1;
+output view Matched2;
+output view MatchedDS;
+output view MatchedDT;
+output view MatchedSS;
+output view MatchedST;
+output view MatchedTS;
+output view MatchedTT;
+
+
+

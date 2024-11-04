@@ -1,0 +1,111 @@
+--------------------------------------------------------
+--- GET ALL CANDIDATES FOR CLASS MENTIONS 
+--------------------------------------------------------
+create view AllClassesInTrace as 
+     extract 
+      regex /((?:[a-z])*)\.((?:\w|-|_|\.)*)\.(_?[A-Za-z](?:(\w|\$))+)(\._?[a-z](\w|\d)+)?/ on D.text as match
+    from Doc D ;
+
+--------------------------------------------------------
+--- CLASS MENTIONS THAT ARE NOT FIRST ERROR MSG, START 
+--- WITH "at" AND END WITH PARANTHESIS
+--------------------------------------------------------
+create view SubsequentClassInTraceCands as
+    select D.match as match, RightContextTok(D.match,11) as r_ctx
+    from AllClassesInTrace D
+    where MatchesRegex(/(at)\s+/, LeftContextTok(D.match,1));
+    
+create view SubsequentClassInTraceFiltered as 
+    extract D.match as match, regex /\(\w(\w|\d|\.|\:|\s)+\)/ on D.r_ctx as pars
+    from SubsequentClassInTraceCands D;
+        
+create view SubsequentClassInTrace as
+    select CombineSpans(D.match, D.pars) as match
+    from  SubsequentClassInTraceFiltered D
+    where Follows(D.match,D.pars,0,1);     
+     
+--------------------------------------------------------
+--- FIRST PACKAGE MENTIONS WILL END WITH "Exception" or "Error"
+--------------------------------------------------------        
+create view FirstClassInTraceCands as
+    (
+    select D.match as match
+    from  AllClassesInTrace D
+    )
+    minus
+    (
+    select D.match as match
+    from SubsequentClassInTrace D
+    );
+ 
+-- there are two patterns for first line of error mention: either
+--followed by a ":" and some info or followed directly by the list of 
+-- classes 
+create view FirstClassInTraceWithInfo as
+    select  D.match as match
+    from FirstClassInTraceCands D
+    where MatchesRegex(/(.)*((Exception)|(Error))/, D.match);
+   -- and MatchesRegex(/:/,RightContextTok(D.match, 1));
+
+	
+--------------------------------------------------------
+--- PACKAGE BLOCKS END WITH "Exception" or "Error". 
+--------------------------------------------------------       
+create view ClassBlock as
+extract blocks
+    with count between 2 and 70
+    and separation between 0 and 4 tokens
+    --and separation between 0 and 20 tokens
+    on D.match as cblock
+from SubsequentClassInTrace D
+consolidate on cblock using 'ContainedWithin';
+
+create view TraceBlockPreConsolidate as
+    select CombineSpans(F.match, B.cblock) as tblock, F.match as first_class 
+    from ClassBlock B, FirstClassInTraceWithInfo F
+    where FollowsTok(F.match, B.cblock, 0, 150);
+    
+create view TraceBlock as
+    select T.tblock as tblock,
+    T.first_class 
+    from   TraceBlockPreConsolidate T 
+    consolidate on T.tblock using 'ContainedWithin';
+    
+create view TraceBlockOutput as
+    select T.cblock as span,
+    GetString(T.cblock) as text,
+--    T.first_class as categorySpan,
+    GetString ('ExceptionStack') as field_type
+--    GetString(T.first_class) as category
+    from   ClassBlock T ;
+    
+/*create view TraceBlockPreConsolidate as
+    select CombineSpans(F.match, B.cblock) as tblock, F.match as first_class 
+    from ClassBlock B, FirstClassInTraceWithInfo F
+    where FollowsTok(F.match, B.cblock, 0, 150);
+    
+create view TraceBlock as
+    select T.tblock as tblock,
+    T.first_class 
+    from   TraceBlockPreConsolidate T 
+    consolidate on T.tblock using 'ContainedWithin';
+    
+create view TraceBlockOutput as
+    select T.tblock as span,
+    GetString(T.tblock) as text,
+--    T.first_class as categorySpan,
+    GetString ('ExceptionStack') as field_type
+--    GetString(T.first_class) as category
+    from   TraceBlock T ;
+*/
+
+  /*  
+output view AllClassesInTrace;  
+output view SubsequentClassInTraceCands;
+output view SubsequentClassInTraceFiltered;
+output view SubsequentClassInTrace;
+output view FirstClassInTraceWithInfo;
+output view ClassBlock;*/
+
+ 
+     

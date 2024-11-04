@@ -1,0 +1,94 @@
+-------------------------------------------------------------------------------
+--
+-- Test case for defect# 29267: Explain button enabled when provenance rewrite 
+-- fails. Provenance rewrite exception: Schema [anonymous] does not contain field
+-- name '__auto__id'. Turns out it was a problem with the SDM rewrite in the 
+-- postprocessor.
+--
+-------------------------------------------------------------------------------
+create dictionary TheDict as(
+'the'
+);
+
+create dictionary ADict as (
+'a'
+);
+
+create dictionary AnDict as (
+'an'
+);
+
+create dictionary OfDict as (
+'of'
+);
+
+-- Copy of the view Document with an extra attribute
+create view DocCopy as 
+	select D.text as text, 'extra' as extra
+	from Document D;	
+
+-- First dictionary on DocCopy.text, extract has a non empty select list
+create view ExtractDictThe as
+extract D.extra as extra, dictionary 'TheDict' on D.text as aWord 
+from DocCopy D;
+
+-- Secod dictionary on Doc.text, extract has a list identical to that of ExtractDict1
+-- to make sure we don't have any problems with exact duplicate select list items
+-- Also, some StringConst in the select list
+create view ExtractDictA as
+extract D.extra as extra, 'extra' as someExtra, dictionary 'ADict' on D.text as aWord 
+from DocCopy D;
+
+-- Third dictionary on Doc.text, extract has a select col as ExtractDict1
+-- but a different name. Also a different alias for DocCopy in the from clause
+--Also, throw a StringConst into the mix
+create view ExtractDictAn as
+extract D1.extra as extraCopy, 'anExtra' as moreExtra, dictionary 'AnDict' on D1.text as aWord 
+from DocCopy D1;
+
+-- Forth dictionary on Doc.text, extract has an empty select list that was overriding 
+-- the non-empty select list set in the the previous statements
+create view ExtractDictOf as
+extract dictionary 'OfDict' on D.text as aWord 
+from DocCopy D;
+
+output view ExtractDictThe;
+output view ExtractDictA;
+output view ExtractDictAn;
+output view ExtractDictOf;
+
+-- Now do the same sequence to test SRM, although SRM didn't exibit the problem, because
+-- it is much more restrictive in the way it is implemented 
+-- There is one SRM node for each distinct combination of 
+-- select list ColRefNodes of the target view and extraction target attribute,
+-- therefore, in our statements, there is one SRM for ExtractRegexThe, ExtractRegexA, ExtractRegexAn
+-- and another one for ExtractRegexOf
+
+-- First regex on DocCopy.text, extract has a non empty select list
+create view ExtractRegexThe as
+extract D.extra as extra, regex /the/ on 1 token in D.text as aWord 
+from DocCopy D;
+
+-- Secod regex on Doc.text, extract has a list identical to that of ExtractRegex1
+-- to make sure we don't have any problems with exact duplicate select list items
+-- Also, some StringConst in the select list
+create view ExtractRegexA as
+extract D.extra as extra, 'extra' as someExtra, regex /a/ on 1 token in D.text as aWord 
+from DocCopy D;
+
+-- Third regex on Doc.text, extract has a select col as ExtractRegex1
+-- but a different name. Also, throw a StringConst into the mix
+create view ExtractRegexAn as
+extract GetString(D.extra) as extraStr, 'anExtra' as moreExtra, regex /an/ on 1 token in D.text as aWord 
+from DocCopy D;
+
+-- Forth regex on Doc.text, extract has an empty select list that was overriding 
+-- the non-empty select list set in the the previous statements
+create view ExtractRegexOf as
+extract regex /of/ on 1 token in D.text as aWord 
+from DocCopy D;
+
+output view ExtractRegexThe;
+output view ExtractRegexA;
+output view ExtractRegexAn;
+output view ExtractRegexOf;

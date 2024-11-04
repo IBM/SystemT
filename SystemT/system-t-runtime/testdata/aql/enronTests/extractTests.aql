@@ -1,0 +1,209 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- extract.aql
+--
+-- Various tests of the extract statement in AQL.
+-------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
+-- Test 1: Find capitalized words that aren't first names
+
+-- Old way
+create view NotFirstNameOld as
+select R.match as word 
+from Regex(/\w[A-Z][a-z]*\w/, Document.text) R
+where Not(ContainsDict('dictionaries/first.dict', R.match));
+
+-- New way
+create view NotFirstName as
+extract regex /\w[A-Z][a-z]*\w/ on D.text as word from Document D
+having Not(ContainsDict('dictionaries/first.dict', word));
+
+output view NotFirstNameOld;
+output view NotFirstName;
+
+-------------------------------------------------------------------------------
+-- Test 2: Find capitalized words on token boundaries 
+
+-- Old way
+create view CapsWordOld as
+select R.match as word 
+from RegexTok(/[A-Z][a-z]*/, 'CANON_EQ', 1, Document.text) R;
+
+-- New way
+create view CapsWord as
+extract 
+    regex /[A-Z][a-z]*/ 
+		with flags 'CANON_EQ'
+        on 1 token in D.text 
+        as word 
+from Document D;
+
+output view CapsWordOld;
+output view CapsWord;
+
+-------------------------------------------------------------------------------
+-- Test 3:  Extract fields of a phone number, using capturing groups
+
+create view Phone as
+extract regex /(\d{3})-(\d{3}-\d{4})/ 
+	-- Token ranges are inclusive
+    on between 4 and 5 tokens in D.text 
+    return 
+        group 1 as areaCode 
+        and group 2 as restOfNumber
+        and group 0 as fullNumber
+from Document D;
+
+create view TollFree as
+select P.fullNumber as num
+from Phone P
+where Equals(GetText(P.areaCode), '800');
+
+output view Phone;
+output view TollFree;
+
+-------------------------------------------------------------------------------
+-- Test 4: Run multiple regular expressions
+
+-- Old way
+create view PhoneNumOld as
+(
+    select R.match as num 
+    from Regex(/(\d{3})-(\d{3}-\d{4})/, Document.text) R
+) union all
+(
+	select R.match as num 
+    from Regex(/\w[Xx]\d{3,5}\w/, Document.text) R 
+);
+
+-- New way
+create view PhoneNum as
+extract regexes 
+	/(\d{3})-(\d{3}-\d{4})/ and /\w[Xx]\d{3,5}\w/
+	on D.text as num 
+from Document D;
+
+output view PhoneNumOld;
+output view PhoneNum;
+
+-------------------------------------------------------------------------------
+-- Test 5: Run some dictionaries
+
+-- Old way
+create view NameOld as
+(
+    select D.match as name 
+    from Dictionary('dictionaries/lotus/strictfirst.dict', Document.text) D
+) union all
+(
+    select D.match as name 
+    from Dictionary('dictionaries/lotus/strictlast.dict', Document.text) D
+);
+
+-- New way
+create view Name as
+extract
+    dictionaries
+        'dictionaries/lotus/strictfirst.dict' 
+		and 'dictionaries/lotus/strictlast.dict'
+        on D.text   
+        as name
+from Document D;
+
+
+-- Alternative (to make sure that single dictionary extraction works)
+create view NameUnion as
+(
+    extract dictionary 'dictionaries/lotus/strictfirst.dict' on D.text as name
+    from Document D
+) union all (
+    extract dictionary 'dictionaries/lotus/strictlast.dict'  on D.text as name
+    from Document D
+);
+
+-- Case-sensitive match
+create view LCName as
+extract
+	dictionaries
+        'dictionaries/lotus/strictfirst.dict' 
+		and 'dictionaries/lotus/strictlast.dict'
+		with flags 'Exact'
+        on D.text   
+        as name
+from Document D;
+
+output view NameOld;
+output view Name;
+output view NameUnion;
+output view LCName;
+
+-------------------------------------------------------------------------------
+-- Test 6: Find sentences, using a regex for sentence boundaries.
+
+create view Sentences as
+extract 
+    split using B.boundary 
+        retain right split point
+        on B.text
+        as sentence
+from (
+    extract 
+        D.text as text,
+        regex /(([\.\?!]+\s)|(\n\s*\n))/ on D.text as boundary
+        from Document D
+		-- Filter the candidate boundaries.
+		having Not(ContainsDict('dictionaries/abbreviations.dict', 
+            CombineSpans(LeftContextTok(boundary, 1), boundary)))
+) B;
+
+output view Sentences;
+
+-------------------------------------------------------------------------------
+-- Test 7: Find blocks of phone numbers.
+
+-- Old way:
+create view PhoneBlocksOld as
+select B.block as block
+from Block(
+	-- Distance (chars):
+	100,
+	-- Min block size:
+	2,
+	-- Max block size:
+	5,
+	-- Input (generated in Test 3):
+	Phone.fullNumber) B;
+	
+create view PhoneBlockTokOld as
+select B.block as block
+from BlockTok(
+	-- Max distance (tokens): 
+	10,
+	-- Min block size:
+	2,
+	-- Max block size:
+	5,
+	-- Input (generated in Test 3):
+	Phone.fullNumber) B;
+	
+-- New way:
+create view PhoneBlocks as
+extract blocks
+	with count between 2 and 5
+	and separation between 0 and 100 characters
+	on P.fullNumber as numbers
+from Phone P;
+
+create view PhoneBlockTok as
+extract blocks
+	with count between 2 and 5
+	and separation between 0 and 10 tokens
+	on P.fullNumber as numbers
+from Phone P;
+
+output view PhoneBlocksOld;
+output view PhoneBlocks;
+output view PhoneBlockTokOld;
+output view PhoneBlockTok;

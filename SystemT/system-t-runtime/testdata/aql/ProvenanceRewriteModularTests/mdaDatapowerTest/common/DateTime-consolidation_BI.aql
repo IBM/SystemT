@@ -1,0 +1,78 @@
+module common;
+
+create view DateTime1 as
+select CombineSpans(D.match, T.match) as match
+from DatesBuildingBlock D, Times T
+where FollowsTok(D.match, T.match, 0, 0);
+
+create view DateTime2 as
+select CombineSpans(D.match, T.match) as match
+from DateISOExtended D, Times T
+where FollowsTok(D.match, T.match, 0, 0);
+
+-- Date time plus optional millisecond plus optional timezone - ISO format 
+create view dateTimeOptMsTz as
+extract 
+regex
+/(-?(?:[1-9][0-9]*)?[0-9]{4})[-\.](1[0-2]|0[1-9])[-\.](3[0-1]|0[1-9]|[1-2][0-9])T(2[0-3]|[0-1][0-9]):([0-5][0-9]):([0-5][0-9])(\.[0-9]+)?(Z|[+-](?:2[0-3]|[0-1][0-9]):?[0-5][0-9])?/
+	on D.text as match
+from Document D;
+
+-- 17/May/2011:00:07:45
+create view DateTime3 as
+select CombineSpans(D.match, T.match) as match
+from Date7a D, TimeOptMsTz_a T
+where Follows(D.match, T.match, 0, 0);
+
+-- 11/Jun/2012:00:00:00 +0540
+create view DateTime4 as
+select CombineSpans(D.match, T.match) as match
+from Date7a D, TimeOptMsTz_c T
+where Follows(D.match, T.match, 0, 0);
+
+create view DateTimesAll as
+	(select DT.match as match from DateTime1 DT)
+	union all
+	(select DT2.match as match from DateTime2 DT2)
+	union all
+	(select Dti.match as match from dateTimeOptMsTz Dti)
+	union all
+	(select DT3.match as match from DateTime3 DT3)
+	union all
+	(select DT4.match as match from DateTime4 DT4);
+
+create view DateTimesBuildingBlock as
+select R.match as match 
+--from Consolidate('LeftToRight',DateTimesAll.match) R; 
+from DateTimesAll R
+consolidate on R.match
+using 'LeftToRight';
+
+create view TimesBuildingBlock as
+	select 	
+		t.match
+	from DateTimesBuildingBlock dt, Times t
+	where Overlaps(dt.match, t.match);
+
+create view TimesInterim as 
+select D.match as Times_Span, GetText(D.match) as Times_Text
+from TimesBuildingBlock D;
+
+create view DateTimes4RecSplit as 
+select D.match as match
+from DateTimesBuildingBlock D;
+
+create view DateTimesInterim as 
+select D.match as DateTimes_Span, GetText(D.match) as DateTimes_Text
+from DateTimesBuildingBlock D;
+
+create view DateTimeOutput as 
+select 
+	D.DateTimes_Span as span,
+	D.DateTimes_Text as text,
+	GetString('DateTime') as field_type
+from DateTimesInterim D;
+
+export view DateTimeOutput;
+
+

@@ -1,0 +1,35 @@
+module genericModule;
+
+
+create view Revenue as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /((.\s*)?(first|second|third|fourth)\s*-\s*quarter)?\s*(revenues?)/
+    with flags 'CASE_INSENSITIVE'
+    on between 1 and 5 tokens in D.text
+    return group 0 as match
+  from Document D;
+
+output view Revenue;
+
+
+
+create dictionary "UnitDict" from file 'unit.dict'
+with case insensitive
+  and language as 'en';
+
+
+create view Unit as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'UnitDict'
+    with flags 'Exact'
+    on D.text as match
+  from Document D;
+
+output view Unit;
+
+
+

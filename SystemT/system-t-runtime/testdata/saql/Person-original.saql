@@ -1,0 +1,172 @@
+---------------------------------------
+--   Person Feature Extraction
+---------------------------------------
+
+<Initial> 		As	Dictionary('InitialDict.dict');
+<PersonSuffix> 	As	Dictionary('PersonSuffixDict.dict');
+
+<CapsPerson>	As	RegexTok(/\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}/,4);
+Filter	<CapsPerson>	If	ContainsDict('FilterPersonDict.dict', 'filterPerson_german.dict',
+									 'InitialDict.dict', 'StrongPhoneVariantDictionary.dict',
+		                             'stateList.dict', 
+--		                             'organization_suffix.dict', 'industryType_suffix.dict',
+   		                             'industry_types_retained.dict', 'streetSuffix_forPerson.dict');
+
+Filter 	<CapsPerson>	If MatchesRegex(/(\p{Lu}\p{M}*)+-.*([\p{Ll}\p{Lo}]\p{M}*).*/,
+										/.*([\p{Ll}\p{Lo}]\p{M}*).*-(\p{Lu}\p{M}*)+/);
+										
+
+<CapsPersonNoP>	As	<CapsPerson>;
+Filter	<CapsPersonNoP>	If	ContainsRegex(/'/);
+
+
+<StrictCapsPersonR>	As	RegexTok(/\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}/, 1) On	<CapsPersonNoP>;
+
+<StrictCapsPerson>	As <StrictCapsPersonR>;
+Retain <StrictCapsPerson>	If	MatchesRegex(/\b\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){1,20}\b/);   		                             
+
+<StrictLastName>	As	Dictionary('strictLast.dict','strictLast_german.dict',
+								   'strictLast_german_bluePages.dict', 'uniqMostCommonSurname.dict',
+								   'names/strictLast_italy.dict','names/strictLast_france.dict',
+								   'names/strictLast_spain.dict','names/strictLast_india.partial.dict',
+								   'names/strictLast_israel.dict');
+Retain <StrictLastName>	If	MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/);		
+
+<RelaxedLastName1>	As	<StrictLastName>'-'<StrictCapsPerson>;		
+<RelaxedLastName2>	As	<StrictCapsPerson>'-'<StrictLastName>;	
+
+<LastName>		As		Union(<StrictLastName>,<RelaxedLastName1>,<RelaxedLastName2>);
+Filter	<LastName>	If	MatchesRegex(/(\p{Lu}\p{M}*)+-.*([\p{Ll}\p{Lo}]\p{M}*).*/,
+									 /.*([\p{Ll}\p{Lo}]\p{M}*).*-(\p{Lu}\p{M}*)+/);		
+
+Consolidate <LastName>;	
+
+<StrictFirstName>	As	Dictionary('strictFirst.dict','strictFirst_german.dict',
+								   'strictNickName.dict','strictFirst_german_bluePages.dict', 
+								   'names/strictFirst_italy.dict','names/strictFirst_france.dict',
+								   'names/strictFirst_spain.dict','names/strictFirst_india.partial.dict',
+								   'names/strictFirst_israel.dict');
+Retain <StrictFirstName>	If	MatchesRegex(/\p{Lu}\p{M}*.{1,20}/);		
+
+<RelaxedFirstName1>	As	<StrictFirstName>'-'<StrictCapsPerson>;		
+<RelaxedFirstName2>	As	<StrictCapsPerson>'-'<StrictFirstName>;	
+
+<FirstName>		As		Union(<StrictFirstName>,<RelaxedFirstName1>,<RelaxedFirstName2>);
+Filter	<FirstName>	If	MatchesRegex(/(\p{Lu}\p{M}*)+-.*([\p{Ll}\p{Lo}]\p{M}*).*/,
+									 /.*([\p{Ll}\p{Lo}]\p{M}*).*-(\p{Lu}\p{M}*)+/);		
+
+Consolidate <FirstName>;	
+
+
+<AllNames>	As			Dictionary('names.dict','names/name_italy.dict',
+                                   'names/name_france.dict','names/name_spain.dict',
+                                   'names/name_israel.dict');
+Retain	<AllNames>	If	MatchesRegex(/\p{Lu}\p{M}*.{1,20}/);
+Add	<FirstName>	To	<AllNames>;
+Add	<LastName>	To	<AllNames>;
+Consolidate	<AllNames>;
+
+<InitialWord>	As	RegexTok(/([\p{Upper}]\.\s*){1,5}/, 10);
+Filter	<InitialWord>	If	MatchesRegex(/M\.D\./);
+
+<WeakInitialWord>	As	RegexTok(/([\p{Upper}]\.?\s*){1,5}/, 10);
+Filter	<WeakInitialWord>	If	ContainsRegex(/[\p{Upper}]{3}/);
+
+
+---------------------------------------
+--   Person Candidate Rules
+---------------------------------------
+
+<PRule3Part1>	As	<StrictFirstName><StrictCapsPerson><StrictLastName>;
+-- missing distinct value check on all parts of the name
+Filter 	<PRule3Part1>	If	ContainsRegex(/[\n\r\t]/);
+
+<PRule3Part2>	As	<AllNames><StrictCapsPersonR><StrictLastName>;
+-- missing distinct value check on all parts of the name
+Filter 	<PRule3Part2>	If	ContainsRegex(/[\n\r\t]/);
+
+<PRule3Part3>	As	<StrictFirstName><StrictCapsPersonR><AllNames>;
+-- missing distinct value check on all parts of the name
+Filter 	<PRule3Part3>	If	ContainsRegex(/[\n\r\t]/);
+
+<PRule1>	As	<Initial> <CapsPerson> <InitialWord> <CapsPerson>;
+
+<PRule1a>	As	<Initial> <CapsPerson>;
+<PRule1a1>	As	<Initial> <InitialWord>{1,2} <CapsPerson>;
+Add	<PRule1a1>	To	<PRule1a>;
+Filter <PRule1a>	If	ContainsRegex(/[\n\r\t]/);
+
+
+<PRule1amore>	As	<Initial> <CapsPerson>{2,3};
+Filter 	<PRule1amore>	If	ContainsRegex(/[\n\r\t]/);
+
+<PRule3>	As	<AllNames> <WeakInitialWord> <AllNames>;
+-- missing distinct value check on the two parts of the name
+<PRule3r1> 	As	<FirstName> <InitialWord> <CapsPerson>;
+<PRule3r2>	As 	<CapsPerson> <InitialWord> <LastName>;
+
+<PRule4>	As	<FirstName> <LastName>;
+Filter	<PRule4>	If	ContainsRegex(/[\n\r\t]/);
+-- missing distinct value check on the two parts of the name
+
+<PRule4a>	As	<LastName> ',' <FirstName>;
+<PRule4ar1>	As	<CapsPerson> ',' <FirstName>;
+Filter <PRule4ar1>	If	MatchesRegex(/(?i)(.+fully),.+/);
+-- missing checks on left context of capsperson and offset of match
+<PRule4ar2>	As	<LastName> ',' <CapsPerson>;
+
+<PRule2>	As	<InitialWord> <AllNames> <CapsPerson>;
+<PRule2a>   As  <InitialWord> <CapsPerson> <LastName>;
+
+<PRule4r1>  As  <FirstName> <CapsPerson>;
+<PRule4r2>	As 	<CapsPerson> <LastName>;
+
+<PRule5>	As	<InitialWord> <FirstName>;
+<PRule6>	As	<InitialWord> <LastName>;
+
+---------------------------------------
+--   Merge results and Consolidate
+---------------------------------------
+
+<StrongP>	As	Union(<PRule1>, <PRule1amore>, <PRule3>, <PRule4>, <PRule3Part1>);
+Filter <StrongP>	If	ContainsRegex(/[\n\r]/);
+
+<StrongPST>	As	Union(<PRule1a>, <PRule5>, <PRule6>, <FirstName>, <LastName>);
+<StrongPSTExpanded>	As	<StrongPST> <PersonSuffix>;
+Add	<StrongPSTExpanded>	To	<StrongPST>;
+
+<WeakP>	As	Union(<PRule2>, <PRule2a>, <PRule3r1>, <PRule3r2>, <PRule3Part2>, <PRule3Part3>,
+                  <PRule4r1>, <PRule4r2>);
+Filter	<WeakP>	If	ContainsRegex(/[\n\r]/);
+
+<WeakPLnFn>	As	Union(<PRule4a>, <PRule4ar1>, <PRule4ar2>);
+Filter <WeakPLnFn>	If	ContainsDict('GreetingsDict.dict');
+Filter <WeakPLnFn>	If	ContainsRegex(/[\n\r]/);
+-- missing checks on left and right context  
+Filter <WeakPLnFn>	If	Overlaps(<StrongP>, <WeakP>);
+
+Filter <WeakP>	If 	Overlaps(<StrongP>);
+
+<Person>	As	Union(<StrongP>, <WeakP>, <WeakPLnFn>);
+Filter <Person>	If	MatchesRegex(/((\p{Lu}\p{M}*)|-)+[,\s]+\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*.*/,
+								 /\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*.*[,\s]+((\p{Lu}\p{M}*)|-)+/,
+								 /U\.\s*S\.\s*.+/);
+
+<PersonWithSuffix>	As	<Person> <PersonSuffix>;
+Add <PersonWithSuffix>	To 	<Person>;
+
+-- Filter	<Person>	If	Contains(<SentenceBoundary>);
+Consolidate 	<Person>	Using	'LeftToRight';
+
+---------------------------------------
+--   Output
+---------------------------------------
+
+Output(<Person>);
+
+
+
+								    
+								 
+									 
+									 			   

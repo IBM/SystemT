@@ -1,0 +1,30 @@
+-------------------------------------------------------------------------------
+-- personphone_demo1.aql
+--
+-- Simple person-phone annotator for demo
+-------------------------------------------------------------------------------
+
+-- Find first names, using an exhaustive dictionary.
+create view FirstName as 
+extract 
+    dictionary 'firstnames.dict' on D.text as name
+from Document D
+having MatchesRegex(/\A[A-Z][a-z]*\Z/, name);
+
+-- Find phone numbers, using a pair of regular expressions.
+create view PhoneNumber as
+extract 
+    regexes /\+?\([1-9]\d{2}\)\d{3}-\d{4}/ and /\+?[Xx]\.?\d{4,5}/
+    on D.text as num
+from Document D;
+
+-- Find instances of first name followed within 40 chars by phone number
+create view PersonPhoneAll as
+select name.name as person, phone.num as phone,
+       CombineSpans(name.name, phone.num) as personphone
+from FirstName name, PhoneNumber phone
+where Follows(name.name, phone.num, 0, 40);
+
+output view FirstName;
+output view PhoneNumber;
+output view PersonPhoneAll;

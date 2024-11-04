@@ -1,0 +1,57 @@
+-------------------------------------------------------------------------------
+-- validateDuplicateColumnName.aql
+
+-- Test for a defect# 19429 and defect# 19190: AQL Compiler does not validate 
+-- column names for extract statements
+-- Aql with duplicate column names in extract and select stmt
+-------------------------------------------------------------------------------
+create dictionary Dict1 as (
+	'the'
+);
+
+create dictionary Dict2 as (
+	'the'
+);
+
+-- duplicate column name match in extract stmt
+create view Test1 as
+extract 'some string' as match, 
+	    'another string' as evidence,
+    dictionaries 'Dict1' and 'Dict2' on D.text as match
+from Document D;
+
+output view Test1; 
+
+-- duplicate column name match in extract stmt
+create view Test2 as
+extract 'some string' as match,
+    regex /.*/ on D.text as match
+from Document D;
+
+output view Test2;
+
+-- M.* and M1.* expands to duplicate column name
+create view TestRuntimeException as
+( select M.text, M1.text from Document M, Document M1 )
+union all
+( select M.text, M1.text from Document M, Document M1 ); 
+
+output view TestRuntimeException;
+
+-- duplicate column name match in select stmt
+create view Test3 as
+select 'str1' as duplicateName,
+	   'str2' as duplicateName,
+	   D.text as originalText
+from Document D;
+
+output view Test3;
+
+-- compiler inferring duplicate alias name in select list
+create view TestRuntimeExceptionMinus as
+( select M.text, M1.text from Document M, Document M1 )
+minus 
+( select M.text, M1.text from Document M, Document M1 ); 
+
+output view TestRuntimeExceptionMinus;
+	   	   

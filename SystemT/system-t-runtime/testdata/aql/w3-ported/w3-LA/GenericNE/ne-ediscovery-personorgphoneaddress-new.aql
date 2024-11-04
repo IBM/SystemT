@@ -1,0 +1,108 @@
+include 'DictsForPlace.aql';
+include 'AdditionalDictsForPlace.aql';
+--include 'DictsForPhoneNumber.aql';
+include 'Sentence.aql';
+include 'MacrosForTimeDates.aql';
+include 'Date.aql';
+include 'Time.aql';
+include 'PhoneNumber.aql';
+include 'Place.aql';
+include 'CityStateCountry.aql';
+include 'OrgWithinNotesEmail.aql';
+include 'Organization.aql';
+include 'Person-new.aql';
+
+include 'Place-simplecons.aql';
+include 'Organization-complexcons.aql';
+include 'Person-cons-new.aql';
+
+---------------------------------------------
+-- Consolidation:
+-- For now, we just remove annotations that are completely
+-- contained within other annotations.
+
+
+create view CityStateCountryInvalid1 as
+select C.match as match
+from   AllCityStateCountry C,
+	   PersonFinalAllWithoutDots P
+where  Contains(P.person, C.match);   
+
+create view CityStateCountryInvalid2 as
+select C.match as match
+from   AllCityStateCountry C,
+	   FinalOrgConsolidatedWithoutDots O 
+where  Contains(O.org, C.match);   
+
+create view CityStateCountryInvalid as
+	(select C.match as loc from CityStateCountryInvalid1 C)
+	union all
+	(select C.match as loc from CityStateCountryInvalid2 C);
+
+create view CityStateCountryValid as
+	(select C.match as loc from AllCityStateCountry C)
+	minus
+	(select C.loc as loc from CityStateCountryInvalid C);
+	
+ 
+select P.num as num
+into "com.ibm.systemT.PhoneNumber"
+from PhoneNumOnly P
+-- disallow multiple new line
+where Not(ContainsRegex(/[\n\r]{2,}/, P.num));
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Output section <<<<<<<<<<<<<<<<
+-- ===========================================================================		
+
+-- change output to remove unwanted types
+-- select P.loc as loc
+-- into Place
+-- from Consolidate('OverlapOrdered',FinalPlaceConsolidated.loc) P;
+ 
+	
+select P.loc as loc
+into "com.ibm.systemT.Address"
+-- change output to remove unwanted types
+-- from Place P;
+--from Consolidate('OverlapOrdered',FinalPlaceConsolidated.loc) P;
+from FinalPlaceConsolidated P
+consolidate on P.loc
+using 'LeftToRight';
+
+select P.loc as loc
+into "com.ibm.systemT.Location"
+from CityStateCountryValid P
+consolidate on P.loc;
+
+select O.org as org
+into "com.ibm.systemT.Organization"
+--from Consolidate('OverlapOrdered',FinalOrgConsolidatedWithoutDots.org) O;
+from FinalOrgConsolidatedWithoutDots O
+consolidate on O.org
+using 'LeftToRight';
+ 
+--select P.person as person into
+--PersonFinalAllWithDotsOutput
+--from PersonFinalAllWithDots P;
+
+-- end block change
+--- end changing this block
+select P.person as name
+into "com.ibm.systemT.Person" 
+--from Consolidate(PersonFinalAllWithoutDots.person) P;
+from PersonFinalAllWithoutDots P
+consolidate on P.person;
+
+-- change output to remove types
+--select S.match as loc
+--into AllStates
+--from StateStrongAll S;
+
+
+
+-- change output to remove types	
+--select C.match as loc
+--into AllCities
+--from Consolidate(CitiesAll.match) C;
+

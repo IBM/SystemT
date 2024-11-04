@@ -1,0 +1,39 @@
+-- Overview: This section of the AQL is mainly used to disambiguate between US and non-US locations
+ 
+
+-- All US locations mapped to the appropriate abbreviations
+create view Loc_AllCityStateNamesMappedToAbbrv as 
+    (
+    select GetString(D.match) as match, D.prov as prov, D.fullspan as fullspan, 'city' as semantics, D.orig_match as orig_match
+    from Loc_AllNames D
+    where Equals(GetString(D.prov), 'city')
+    )
+    union all
+    (
+    select GetString(SA.abbrv) as match , D.prov as prov, D.fullspan as fullspan, 'state' as semantics, D.orig_match as orig_match
+    from Loc_AllNames D, Loc_StateToAbbrv SA
+    where Equals(GetString(D.prov), 'state')
+    and equalsIgnoreCaseSmarc(GetString(D.match),GetString(SA.state))
+    );
+
+create view Loc_AllCityStateNamesUpper as
+    select toUpperCase(GetString(D.match)) as city, D.fullspan as fullspan, D.orig_match as orig_match
+    from Loc_AllCityStateNamesMappedToAbbrv D
+    where Equals (GetString(D.prov),'city');
+ 
+ -- GIVEN THE CITY, GET THE STATE FROM MAP   
+create view Loc_CityStateFromMap as
+	select D.city as city, M.state as state, D.fullspan as fullspan, D.orig_match as orig_match
+    from Loc_AllCityStateNamesUpper D, Loc_CityToState M
+    where Equals(GetString(D.city),GetString(M.city));
+output view Loc_AllCityStateNamesMappedToAbbrv;
+
+ --- COMPARE THE STATE FOUND FROM MAP TO STATE IN INPUT   
+create view Loc_CityState as
+    select M.city as city, M.state as state, M.fullspan as fullspan
+    from  Loc_CityStateFromMap M, Loc_AllCityStateNamesMappedToAbbrv D
+    where equalsIgnoreCaseSmarc(GetString(M.state), GetString(D.match))
+    and Equals(GetString(D.prov), 'state')
+    and Overlaps(D.fullspan, M.fullspan)
+    consolidate on M.fullspan
+    using 'ExactMatch'; 

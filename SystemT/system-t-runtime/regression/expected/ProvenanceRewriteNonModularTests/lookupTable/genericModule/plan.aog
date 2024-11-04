@@ -1,0 +1,135 @@
+CreateTable("FirstSegMappingTable",
+  (
+    "isExternal" => "false"
+  ),
+  (
+    "str" => "Text",
+    "label" => "Text"
+  ),
+  ("Community Source", "sites_communitysource")
+);
+$FirstSegMappingTable = TableScan("FirstSegMappingTable");
+CreateTable("LookupTable",
+  (
+    "isExternal" => "false"
+  ),
+  (
+    "str" => "Text",
+    "label" => "Integer"
+  ),
+  ("Ã⁐LAND ISLANDS", "0"),
+  ("Bookmarks", "1"),
+  ("B'ookmarks", "2")
+);
+$LookupTable = TableScan("LookupTable");
+$Document = DocScan(
+  (
+    "text" => "Text",
+    "label" => "Text"
+  )
+);
+CreateDict(
+    "name" => "LookupDict",
+    "table" => "LookupTable",
+    "column" => "str",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false",
+    "lemma_match" => "false"
+);
+
+$ExtractLookup =
+Project(
+  (
+    "@@genericModule@@ExtractLookup@@__auto__id" => "__auto__id",
+    "@@genericModule@@ExtractLookup@@__stmt__type" => "__stmt__type",
+    "@@genericModule@@ExtractLookup@@Document_____sep_____D____id" => "Document_____sep_____D____id",
+    "match" => "match"
+  ),
+  ApplyFunc(
+    IntConst(
+      -1
+    ) => "@@genericModule@@ExtractLookup@@Document_____sep_____D____id",
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_EXTRACT_DICT"
+      ) => "@@genericModule@@ExtractLookup@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@ExtractLookup@@__auto__id",
+        Dictionary("LookupDict" => "Default" , "D.text", "match",
+          Project(
+            (
+              "text" => "D.text"
+            ),
+            $Document
+          )
+        )
+      )
+    )
+  )
+);
+
+$SelectLookup =
+Project(
+  (
+    "LookupTable.str" => "str",
+    "LookupTable.label" => "label",
+    "@@genericModule@@SelectLookup@@__auto__id" => "__auto__id",
+    "@@genericModule@@SelectLookup@@__stmt__type" => "__stmt__type",
+    "@@genericModule@@SelectLookup@@LookupTable_____sep_____LookupTable____id" => "LookupTable_____sep_____LookupTable____id"
+  ),
+  ApplyFunc(
+    IntConst(
+      -1
+    ) => "@@genericModule@@SelectLookup@@LookupTable_____sep_____LookupTable____id",
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_SELECT"
+      ) => "@@genericModule@@SelectLookup@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@SelectLookup@@__auto__id",
+        Project(
+          (
+            "label" => "LookupTable.label",
+            "str" => "LookupTable.str"
+          ),
+          $LookupTable
+        )
+      )
+    )
+  )
+);
+
+$Test =
+Project(
+  (
+    "F.label" => "label",
+    "@@genericModule@@Test@@__auto__id" => "__auto__id",
+    "@@genericModule@@Test@@__stmt__type" => "__stmt__type",
+    "@@genericModule@@Test@@FirstSegMappingTable_____sep_____F____id" => "FirstSegMappingTable_____sep_____F____id"
+  ),
+  ApplyFunc(
+    IntConst(
+      -1
+    ) => "@@genericModule@@Test@@FirstSegMappingTable_____sep_____F____id",
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_SELECT"
+      ) => "@@genericModule@@Test@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@Test@@__auto__id",
+        Project(
+          (
+            "label" => "F.label"
+          ),
+          $FirstSegMappingTable
+        )
+      )
+    )
+  )
+);
+
+Output: $ExtractLookup, $SelectLookup, $Test;

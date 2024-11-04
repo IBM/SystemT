@@ -1,0 +1,27 @@
+module genericModule;
+
+
+create view OrgChartWithPerson as
+  extract D.label as url,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /meatwad.rchland.ibm.com\/security\/orgchart(?:.*&)?name=([^&]+)&/
+    with flags 'DOTALL'
+    on D.label
+    return group 1 as person
+  from Document D;
+
+output view OrgChartWithPerson;
+
+create view OrgChart as
+  select  GetBegin(O.person) as begin,
+          GetEnd(O.person) as end,
+          UnescapeHTML(GetText(O.person)) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          O.__auto__id as OrgChartWithPerson_____sep_____O____id
+  from  OrgChartWithPerson O;
+
+output view OrgChart;
+

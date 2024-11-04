@@ -1,0 +1,67 @@
+module genericModule;
+
+
+create view PhoneNumber as
+  select  P.num as num,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as __Subquery__1__Temp_____sep_____P____id
+  from  __Subquery__1__Temp P;
+
+output view PhoneNumber;
+
+
+
+create view PersonPhoneAll as
+  select  name.name as person,
+          phone.num as phone,
+          CombineSpans(name.name, phone.num) as personphone,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          name.__auto__id as __Subquery__2__Temp_____sep_____name____id,
+          phone.__auto__id as __Subquery__3__Temp_____sep_____phone____id
+  from  __Subquery__2__Temp name,
+        __Subquery__3__Temp phone
+  where Follows(name.name, phone.num, 0, 40);
+
+output view PersonPhoneAll;
+
+
+
+create view __Subquery__1__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regexes /\+?\([1-9]\d{2}\)\d{3}-\d{4}/
+    and /\+?[Xx]\.?\d{4,5}/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as num
+  from Document D;
+
+output view __Subquery__1__Temp;
+
+create view __Subquery__2__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'firstnames.dict'
+    on D.text as name
+  from Document D
+  having MatchesRegex(/\A[A-Z][a-z]*\Z/, name);
+
+output view __Subquery__2__Temp;
+
+create view __Subquery__3__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regexes /\+?\([1-9]\d{2}\)\d{3}-\d{4}/
+    and /\+?[Xx]\.?\d{4,5}/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as num
+  from Document D;
+
+output view __Subquery__3__Temp;
+

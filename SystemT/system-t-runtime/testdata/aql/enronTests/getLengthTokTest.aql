@@ -1,0 +1,29 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- getLengthTokTest.aql
+--
+-- Test cases for queries that use the GetLengthTok() function
+-------------------------------------------------------------------------------
+
+create view MatchWithContext as
+select R.match as match, RightContext(R.match, 20) as rc
+from
+	(extract regex /enron/ on D.text as match from Document D) R
+;
+
+-- Test 1:
+-- Length of the context in tokens
+create view MatchWithContextTokLength as
+select GetLengthTok(M.rc) as rc_tok_length, M.*
+from MatchWithContext M;
+
+
+-- Test 2:
+-- Length of the document text in tokens
+create view DocumentTokLength as
+select GetLengthTok(D.text) as tok_length
+from Document D;
+
+output view MatchWithContextTokLength;
+output view DocumentTokLength;

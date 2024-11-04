@@ -1,0 +1,70 @@
+module CurrencyAmount; 
+
+-------------------------------------------------------------------------------
+-- Identify Currency candidates based on Number and Currency Symbol views
+-------------------------------------------------------------------------------
+
+import view Number from module Number as Number;
+
+create view CurrencyAmount1 as
+  select CombineSpans(CS.match,N.number) as amount
+  from CurrencySymbol CS, Number N
+  where FollowsTok(CS.match,N.number,0,0);
+
+create view CurrencyAmount2 as
+  select CombineSpans(N.number,CS.match) as amount
+  from CurrencySymbolSuffix CS, Number N
+  where FollowsTok(N.number,CS.match,0,0);
+
+create view CurrencyAmount as
+  (select R.amount as amount from CurrencyAmount1 R)
+  union all
+  (select R.amount as amount from CurrencyAmount2 R);
+  
+
+create view CurrencyAmountWithDenomination as
+  select CombineSpans(CA.amount,D.match) as amount
+  from CurrencyAmount CA, Denomination D
+  where FollowsTok(CA.amount,D.match,0,1) and MatchesRegex(/\W*/,SpanBetween(CA.amount,D.match));
+
+create view CurrencyAmountOptionalDenominationCandidates as
+  (select R.amount as amount from CurrencyAmount R)
+  union all
+  (select R.amount as amount from CurrencyAmountWithDenomination R);
+
+create view CurrencyAmountOptionalDenomination as
+  select R.amount as amount
+  from CurrencyAmountOptionalDenominationCandidates R
+  consolidate on R.amount;
+
+create view CurrencyAmountRange as
+  select CombineSpans(CA1.amount,CA2.amount) as amountrange
+  from CurrencyAmountOptionalDenomination CA1, CurrencyAmountOptionalDenomination CA2
+  -- Sudarshan regex : 10/13/2011 - backreference on line 59
+  where FollowsTok(CA1.amount, CA2.amount,1,1) and MatchesRegex(/[ ]*(-|to)[ ]*/,SpanBetween(CA1.amount,CA2.amount));
+
+create view CurrencyAmountOptionalRangeCandidates as
+  (select R.amount as amountrange from CurrencyAmountOptionalDenomination R)
+  union all
+  (select R.amountrange as amountrange from CurrencyAmountRange R);
+
+create view CurrencyAmountOptionalRange as
+  select R.amountrange as amountrange
+  from CurrencyAmountOptionalRangeCandidates R
+  consolidate on R.amountrange;
+  
+create view CurrencyAmountOptionalRangePairCandidates as
+  select R1.amountrange as amountrange1, R2.amountrange as amountrange2, CombineSpans(R1.amountrange,R2.amountrange) as amountrange
+  from CurrencyAmountOptionalRangeCandidates R1, CurrencyAmountOptionalRangeCandidates R2 
+  where FollowsTok(R1.amountrange, R2.amountrange, 0,1) and ContainsRegex(/\bto\b/,SpanBetween(R1.amountrange,R2.amountrange))
+  and ContainsRegex(/\bfrom\b/,LeftContextTok(R1.amountrange,3));
+ 
+create view CurrencyAmountOptionalRangePairAll as
+  (select R.amountrange as amountrange1, '' as amountrange2, R.amountrange as amountrange from CurrencyAmountOptionalRange R)
+  union all
+  (select R.amountrange1 as amountrange1, R.amountrange2 as amountrange2, R.amountrange as amountrange from CurrencyAmountOptionalRangePairCandidates R);
+  
+create view CurrencyAmountOptionalRangePair as
+  select R.amountrange1 as amountrange1, R.amountrange2 as amountrange2, R.amountrange as amountrange
+  from CurrencyAmountOptionalRangePairAll R
+  consolidate on R.amountrange;

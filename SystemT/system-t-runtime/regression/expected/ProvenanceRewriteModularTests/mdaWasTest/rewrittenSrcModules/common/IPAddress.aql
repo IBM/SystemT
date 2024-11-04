@@ -1,0 +1,56 @@
+module common;
+
+
+create view IPAddressBuildingBlock as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__17__Temp_____sep_____R____id
+  from  __Subquery__17__Temp R;
+
+output view IPAddressBuildingBlock;
+
+export view common.IPAddressBuildingBlock;
+
+
+
+
+create view IPAddressInterim as
+  select  D.match as ipAddress_Span,
+          GetText(D.match) as ipAddress_Text,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as IPAddressBuildingBlock_____sep_____D____id
+  from  IPAddressBuildingBlock D;
+
+output view IPAddressInterim;
+
+export view common.IPAddressInterim;
+
+
+create view IPAddressOutput as
+  select  D.ipAddress_Span as span,
+          D.ipAddress_Text as text,
+          GetString('IPAddress') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as IPAddressInterim_____sep_____D____id
+  from  IPAddressInterim D;
+
+output view IPAddressOutput;
+
+export view common.IPAddressOutput;
+
+
+create view __Subquery__17__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____Document____id,
+    regex /(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/
+    with flags 'DOTALL'
+    on Document.text
+    return group 0 as match
+  from Document Document;
+
+output view __Subquery__17__Temp;
+

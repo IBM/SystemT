@@ -1,0 +1,257 @@
+module genericModule;
+
+
+create function CalculateOverride(
+  urlPath Text)
+return Text
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.GeoUDF!CalculateOverride'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create dictionary "IgnoreURLPathCountriesDict"
+with case insensitive
+as (
+  'ag',
+  'cc',
+  'cm',
+  'do',
+  'gp',
+  'hr',
+  'it',
+  'km',
+  'ls',
+  'pg',
+  'sd',
+  'sj',
+  'so',
+  'st',
+  'ws'
+);
+
+
+create view URLPathSplit as
+  select  Op.match as match,
+          AutoID() as __auto__id
+  from  __Base__URLPathSplit__Temp Op;
+
+output view URLPathSplit;
+
+create view URLPathSeg as
+  select  P.seg as seg,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as __Subquery__55__Temp_____sep_____P____id
+  from  __Subquery__55__Temp P
+  limit 3;
+
+output view URLPathSeg;
+
+create view URLPathFirst3Seg as
+  select  P.seg as seg,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as URLPathSeg_____sep_____P____id
+  from  URLPathSeg P
+  where MatchesRegex(/[a-zA-Z]{2}/, P.seg)
+     and Not(MatchesDict('IgnoreURLPathCountriesDict', P.seg));
+
+output view URLPathFirst3Seg;
+
+create dictionary "IgnoreCountriesDict"
+with case insensitive
+as (
+  'US',
+  'GB'
+);
+
+
+create view MetaCountrySplit as
+  select  Op.country as country,
+          AutoID() as __auto__id
+  from  __Base__MetaCountrySplit__Temp Op;
+
+output view MetaCountrySplit;
+
+create view MetaCountryWithCountryCand as
+  (select  Op.country as country,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__56__TempOp__0 Op)
+  union all
+  (select  Op.country as country,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__56__TempOp__1 Op);
+
+output view MetaCountryWithCountryCand;
+
+create view Country_MetaCountry_2letters as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    C.__auto__id as MetaCountryWithCountryCand_____sep_____C____id,
+    dictionary 'GeoCountryCodeDict'
+    on C.country as match
+  from MetaCountryWithCountryCand C
+  having MatchesRegex(/[a-zA-Z]{2}/, match)
+     and Not(MatchesDict('IgnoreCountriesDict', match));
+
+output view Country_MetaCountry_2letters;
+
+create view Country_MetaLanguage_2letters as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    L.__auto__id as MetaLanguage_____sep_____L____id,
+    regex /(\w{2})[-_](\w{2})/
+    with flags 'DOTALL'
+    on L.content
+    return group 2 as match
+  from MetaLanguage L
+  having Not(MatchesDict('IgnoreCountriesDict', match))
+     and MatchesDict('GeoCountryCodeDict', match);
+
+output view Country_MetaLanguage_2letters;
+
+create dictionary "IgnoreURLHostCountriesDict"
+with case insensitive
+as (
+  'DE'
+);
+
+
+create view Country_URLHost_2letters as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    U.__auto__id as PageURL_____sep_____U____id,
+    regex /\b(\w{2})(|\.ibm\.com|\.lotus\.com|\.cognos\.com)$/
+    with flags 'DOTALL'
+    on U.host
+    return group 1 as match
+  from PageURL U
+  having MatchesDict('GeoCountryCodeDict', match);
+
+output view Country_URLHost_2letters;
+
+create view IsIBMHost as
+  select  U.host as host,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as PageURL_____sep_____U____id
+  from  PageURL U
+  where MatchesRegex(/(.+)\.(ibm|lotus|cognos)\.com/, U.host);
+
+output view IsIBMHost;
+
+create view GeoHQ as
+  extract O.regioncountry as regioncountry,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    O.__auto__id as __Subquery__57__Temp_____sep_____O____id,
+    regex /([^\|]*)\|(.*)/
+    with flags 'DOTALL'
+    on O.regioncountry
+    return group 1 as region
+       and group 2 as country
+  from __Subquery__57__Temp O
+  having Not(Equals('|', GetText(regioncountry)));
+
+output view GeoHQ;
+
+create view __Base__MetaCountrySplit__Temp as
+  extract split using S2.comma
+    on S2.content as country
+  from 
+(extract C.content as content,
+  regex /,\s*/
+  with flags 'DOTALL'
+  on C.content
+  return group 0 as comma
+from MetaCountry C
+) S2;
+
+output view __Base__MetaCountrySplit__Temp;
+
+create view __Base__URLPathSplit__Temp as
+  extract split using U.slash
+    on U.path as match
+  from 
+(extract U.actualPath as path,
+  regex /\//
+  with flags 'DOTALL'
+  on U.actualPath
+  return group 0 as slash
+from PageURL U
+) U;
+
+output view __Base__URLPathSplit__Temp;
+
+create view __Subquery__55__Temp as
+  (select  Op.seg as seg,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__54__TempOp__0 Op)
+  union all
+  (select  Op.seg as seg,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__54__TempOp__1 Op);
+
+output view __Subquery__55__Temp;
+
+create view __Subquery__57__Temp as
+  select  CalculateOverride(U.actualPath) as regioncountry,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          IsIBMHost.__auto__id as IsIBMHost_____sep_____IsIBMHost____id,
+          U.__auto__id as PageURL_____sep_____U____id
+  from  IsIBMHost IsIBMHost,
+        PageURL U
+  where NotNull(U.actualPath);
+
+output view __Subquery__57__Temp;
+
+create view __Union__54__TempOp__0 as
+  select  U.actualPath as seg,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as PageURL_____sep_____U____id
+  from  PageURL U
+  where Not(ContainsRegex(/\//, U.actualPath));
+
+output view __Union__54__TempOp__0;
+
+create view __Union__54__TempOp__1 as
+  select  S.match as seg,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as URLPathSplit_____sep_____S____id
+  from  URLPathSplit S;
+
+output view __Union__54__TempOp__1;
+
+create view __Union__56__TempOp__0 as
+  select  M.content as country,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          M.__auto__id as MetaCountry_____sep_____M____id
+  from  MetaCountry M
+  where Not(ContainsRegex(/,/, M.content));
+
+output view __Union__56__TempOp__0;
+
+create view __Union__56__TempOp__1 as
+  select  S.country as country,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as MetaCountrySplit_____sep_____S____id
+  from  MetaCountrySplit S;
+
+output view __Union__56__TempOp__1;
+

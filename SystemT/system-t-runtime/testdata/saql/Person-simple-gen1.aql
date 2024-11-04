@@ -1,0 +1,128 @@
+create view Initial__1 as 
+select D.match as match
+from Dictionary('InitialDict.dict', DocScan.text) D 
+;
+
+create view CapsPerson__1 as 
+select R.match as match
+from Regex(/\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}/, DocScan.text) R 
+;
+
+create view StrictLastName__1 as 
+(select D.match as match
+from Dictionary('strictLast.dict', DocScan.text) D )
+union all 
+(select D.match as match
+from Dictionary('strictLast_german.dict', DocScan.text) D )
+;
+
+create view RelaxedLastName1__1 as 
+select CombineSpans(R0.match,R1.match) as match
+from StrictLastName__1 R0 ,CapsPerson__1 R1 
+where FollowsTok(R0.match,R1.match,0,1) and MatchesRegex(/-/, SpanBetween(R0.match,R1.match));
+
+create view RelaxedLastName2__1 as 
+select CombineSpans(R0.match,R1.match) as match
+from CapsPerson__1 R0 ,StrictLastName__1 R1 
+where FollowsTok(R0.match,R1.match,0,1) and MatchesRegex(/-/, SpanBetween(R0.match,R1.match));
+
+create view LastName__1 as 
+(select R.match as match
+from StrictLastName__1 R )
+union all 
+(select R.match as match
+from RelaxedLastName1__1 R )
+union all 
+(select R.match as match
+from RelaxedLastName2__1 R )
+;
+
+create view LastName__2 as 
+select C.match as match
+from LastName__1 C 
+consolidate on C.match;
+
+create view StrictFirstName__1 as 
+(select D.match as match
+from Dictionary('strictFirst.dict', DocScan.text) D )
+union all 
+(select D.match as match
+from Dictionary('strictFirst_german.dict', DocScan.text) D )
+;
+
+create view RelaxedFirstName1__1 as 
+select CombineSpans(R0.match,R1.match) as match
+from StrictFirstName__1 R0 ,CapsPerson__1 R1 
+where FollowsTok(R0.match,R1.match,0,1) and MatchesRegex(/-/, SpanBetween(R0.match,R1.match));
+
+create view RelaxedFirstName2__1 as 
+select CombineSpans(R0.match,R1.match) as match
+from CapsPerson__1 R0 ,StrictFirstName__1 R1 
+where FollowsTok(R0.match,R1.match,0,1) and MatchesRegex(/-/, SpanBetween(R0.match,R1.match));
+
+create view FirstName__1 as 
+(select R.match as match
+from StrictFirstName__1 R )
+union all 
+(select R.match as match
+from RelaxedFirstName1__1 R )
+union all 
+(select R.match as match
+from RelaxedFirstName2__1 R )
+;
+
+create view FirstName__2 as 
+select C.match as match
+from FirstName__1 C 
+consolidate on C.match;
+
+create view PRule1a__1 as 
+select CombineSpans(R0.match,R1.match) as match
+from Initial__1 R0 ,CapsPerson__1 R1 
+where FollowsTok(R0.match,R1.match,0,0);
+
+create view PRule4__1 as 
+select CombineSpans(R0.match,R1.match) as match
+from FirstName__2 R0 ,LastName__2 R1 
+where FollowsTok(R0.match,R1.match,0,0);
+
+create view PRule4a__1 as 
+select CombineSpans(R0.match,R1.match) as match
+from LastName__2 R0 ,FirstName__2 R1 
+where FollowsTok(R0.match,R1.match,0,1) and MatchesRegex(/,/, SpanBetween(R0.match,R1.match));
+
+create view PRule4r1__1 as 
+select CombineSpans(R0.match,R1.match) as match
+from FirstName__2 R0 ,CapsPerson__1 R1 
+where FollowsTok(R0.match,R1.match,0,0);
+
+create view PRule4r2__1 as 
+select CombineSpans(R0.match,R1.match) as match
+from CapsPerson__1 R0 ,LastName__2 R1 
+where FollowsTok(R0.match,R1.match,0,0);
+
+create view Person__1 as 
+(select R.match as match
+from PRule4r2__1 R )
+union all 
+(select R.match as match
+from PRule1a__1 R )
+union all 
+(select R.match as match
+from PRule4r1__1 R )
+union all 
+(select R.match as match
+from PRule4__1 R )
+union all 
+(select R.match as match
+from PRule4a__1 R )
+;
+
+create view Person__2 as 
+select C.match as match
+from Person__1 C 
+consolidate on C.match using 'LeftToRight';
+
+select R.match as match
+into Person 
+from Person__2 R; 

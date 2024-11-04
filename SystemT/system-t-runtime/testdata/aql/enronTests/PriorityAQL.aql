@@ -1,0 +1,6717 @@
+require document with columns text Text;
+-- =======================================================================================================
+-- 1. Take all phrases with test_priority 1, and put them into the opinion set OS1
+-- 2. Add all phrases with test_priority 2 to OS2, except the ones that overlap with the phrases that are currently in OS1
+-- 3. Add all phrases with test_priority 3 to OS3, except the ones that overlap with the phrases that are currently in OS2
+-- 4. ......
+-- =======================================================================================================
+
+create view opinionEnglishUnion_unconsolidated as
+(select 'c11' as concept_1, 't11' as type_1, 'c21' as concept_2, 't21' as type_2 , 'c31' as concept_3, 't31' as type_3, 'how are you' as pattern_val, '1' as patternName, '1' as test_priority
+from Document X
+)
+union all
+(select 'c11' as concept_1, 't11' as type_1, 'c21' as concept_2, 't21' as type_2 , 'c31' as concept_3, 't31' as type_3, 'how are you' as pattern_val, '1' as patternName, '1' as test_priority 
+from Document X
+)
+union all
+(select 'c11' as concept_1, 't11' as type_1, 'c21' as concept_2, 't21' as type_2 , 'c31' as concept_3, 't31' as type_3, 'how are you' as pattern_val, '1' as patternName, '1' as test_priority
+from Document X
+)
+union all
+(select 'c11' as concept_1, 't11' as type_1, 'c21' as concept_2, 't21' as type_2 , 'c31' as concept_3, 't31' as type_3, 'how are you' as pattern_val, '1' as patternName, '1' as test_priority
+from Document X
+)
+union all
+(select 'c11' as concept_1, 't11' as type_1, 'c21' as concept_2, 't21' as type_2 , 'c31' as concept_3, 't31' as type_3, 'how are you' as pattern_val, '1' as patternName, '1' as test_priority
+from Document X
+)
+union all
+(select 'c114' as concept_1, 't114' as type_1, 'c214' as concept_2, 't214' as type_2 , 'c314' as concept_3, 't314' as type_3, 'wow' as pattern_val, '14' as patternName, '14' as test_priority 
+from Document X
+)
+union all
+(select 'c114' as concept_1, 't114' as type_1, 'c214' as concept_2, 't214' as type_2 , 'c314' as concept_3, 't314' as type_3, 'wow' as pattern_val, '14' as patternName, '14' as test_priority 
+from Document X
+)
+union all
+(select 'c127' as concept_1, 't127' as type_1, 'c227' as concept_2, 't227' as type_2 , 'c327' as concept_3, 't327' as type_3, 'how are you' as pattern_val, '27' as patternName, '27' as test_priority 
+from Document X
+)
+union all
+(select 'c127' as concept_1, 't127' as type_1, 'c227' as concept_2, 't227' as type_2 , 'c327' as concept_3, 't327' as type_3, 'how are you' as pattern_val, '27' as patternName, '27' as test_priority 
+from Document X
+)
+union all
+(select 'c127' as concept_1, 't127' as type_1, 'c227' as concept_2, 't227' as type_2 , 'c327' as concept_3, 't327' as type_3, 'how are you' as pattern_val, '27' as patternName, '27' as test_priority
+from Document X
+)
+union all
+(select 'c1134' as concept_1, 't1134' as type_1, 'c2134' as concept_2, 't2134' as type_2 , 'c3134' as concept_3, 't3134' as type_3, 'wow' as pattern_val, '134' as patternName, '134' as test_priority 
+from Document X
+)
+union all
+(select 'c1134' as concept_1, 't1134' as type_1, 'c2134' as concept_2, 't2134' as type_2 , 'c3134' as concept_3, 't3134' as type_3, 'wow' as pattern_val, '134' as patternName, '134' as test_priority 
+from Document X
+)
+union all
+(select 'c1225' as concept_1, 't1225' as type_1, 'c2225' as concept_2, 't2225' as type_2 , 'c3225' as concept_3, 't3225' as type_3, 'two' as pattern_val, '225' as patternName, '225' as test_priority 
+from Document X
+)
+union all
+(select 'c1225' as concept_1, 't1225' as type_1, 'c2225' as concept_2, 't2225' as type_2 , 'c3225' as concept_3, 't3225' as type_3, 'two' as pattern_val, '225' as patternName, '225' as test_priority 
+from Document X
+)
+union all
+(select 'c1260' as concept_1, 't1260' as type_1, 'c2260' as concept_2, 't2260' as type_2 , 'c3260' as concept_3, 't3260' as type_3, 'two' as pattern_val, '260' as patternName, '260' as test_priority
+from Document X
+)
+;
+
+
+create view OpinionEnglish_Set_1 as
+(select N.*
+from opinionEnglishUnion_unconsolidated N
+	where Equals(GetText(N.test_priority), '1'))
+union all
+--Null tuple added to resolve zero results while taking JOIN 
+(select '' as concept_1, '' as type_1, '' as concept_2, '' as type_2 , '' as concept_3, '' as type_3, '' as pattern_val, '' as patternName, '-1'as test_priority
+from Document X
+)
+;
+
+create view OpinionEnglish_Set_2_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '2')
+;
+create view OpinionEnglish_Set_2_Overlapping as
+select X.* from OpinionEnglish_Set_2_Candidate X, OpinionEnglish_Set_1 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_2_FilterOverlap as
+(select X.* from OpinionEnglish_Set_2_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_2_Overlapping X)
+;
+create view OpinionEnglish_Set_2 as
+(select X.* from OpinionEnglish_Set_1 X)
+	union all
+(select X.* from OpinionEnglish_Set_2_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_3_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '3')
+;
+create view OpinionEnglish_Set_3_Overlapping as
+select X.* from OpinionEnglish_Set_3_Candidate X, OpinionEnglish_Set_2 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_3_FilterOverlap as
+(select X.* from OpinionEnglish_Set_3_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_3_Overlapping X)
+;
+create view OpinionEnglish_Set_3 as
+(select X.* from OpinionEnglish_Set_2 X)
+	union all
+(select X.* from OpinionEnglish_Set_3_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_4_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '4')
+;
+create view OpinionEnglish_Set_4_Overlapping as
+select X.* from OpinionEnglish_Set_4_Candidate X, OpinionEnglish_Set_3 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_4_FilterOverlap as
+(select X.* from OpinionEnglish_Set_4_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_4_Overlapping X)
+;
+create view OpinionEnglish_Set_4 as
+(select X.* from OpinionEnglish_Set_3 X)
+	union all
+(select X.* from OpinionEnglish_Set_4_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_5_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '5')
+;
+create view OpinionEnglish_Set_5_Overlapping as
+select X.* from OpinionEnglish_Set_5_Candidate X, OpinionEnglish_Set_4 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_5_FilterOverlap as
+(select X.* from OpinionEnglish_Set_5_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_5_Overlapping X)
+;
+create view OpinionEnglish_Set_5 as
+(select X.* from OpinionEnglish_Set_4 X)
+	union all
+(select X.* from OpinionEnglish_Set_5_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_6_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '6')
+;
+create view OpinionEnglish_Set_6_Overlapping as
+select X.* from OpinionEnglish_Set_6_Candidate X, OpinionEnglish_Set_5 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_6_FilterOverlap as
+(select X.* from OpinionEnglish_Set_6_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_6_Overlapping X)
+;
+create view OpinionEnglish_Set_6 as
+(select X.* from OpinionEnglish_Set_5 X)
+	union all
+(select X.* from OpinionEnglish_Set_6_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_7_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '7')
+;
+create view OpinionEnglish_Set_7_Overlapping as
+select X.* from OpinionEnglish_Set_7_Candidate X, OpinionEnglish_Set_6 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_7_FilterOverlap as
+(select X.* from OpinionEnglish_Set_7_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_7_Overlapping X)
+;
+create view OpinionEnglish_Set_7 as
+(select X.* from OpinionEnglish_Set_6 X)
+	union all
+(select X.* from OpinionEnglish_Set_7_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_8_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '8')
+;
+create view OpinionEnglish_Set_8_Overlapping as
+select X.* from OpinionEnglish_Set_8_Candidate X, OpinionEnglish_Set_7 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_8_FilterOverlap as
+(select X.* from OpinionEnglish_Set_8_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_8_Overlapping X)
+;
+create view OpinionEnglish_Set_8 as
+(select X.* from OpinionEnglish_Set_7 X)
+	union all
+(select X.* from OpinionEnglish_Set_8_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_9_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '9')
+;
+create view OpinionEnglish_Set_9_Overlapping as
+select X.* from OpinionEnglish_Set_9_Candidate X, OpinionEnglish_Set_8 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_9_FilterOverlap as
+(select X.* from OpinionEnglish_Set_9_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_9_Overlapping X)
+;
+create view OpinionEnglish_Set_9 as
+(select X.* from OpinionEnglish_Set_8 X)
+	union all
+(select X.* from OpinionEnglish_Set_9_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_10_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '10')
+;
+create view OpinionEnglish_Set_10_Overlapping as
+select X.* from OpinionEnglish_Set_10_Candidate X, OpinionEnglish_Set_9 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_10_FilterOverlap as
+(select X.* from OpinionEnglish_Set_10_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_10_Overlapping X)
+;
+create view OpinionEnglish_Set_10 as
+(select X.* from OpinionEnglish_Set_9 X)
+	union all
+(select X.* from OpinionEnglish_Set_10_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_11_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '11')
+;
+create view OpinionEnglish_Set_11_Overlapping as
+select X.* from OpinionEnglish_Set_11_Candidate X, OpinionEnglish_Set_10 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_11_FilterOverlap as
+(select X.* from OpinionEnglish_Set_11_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_11_Overlapping X)
+;
+create view OpinionEnglish_Set_11 as
+(select X.* from OpinionEnglish_Set_10 X)
+	union all
+(select X.* from OpinionEnglish_Set_11_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_12_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '12')
+;
+create view OpinionEnglish_Set_12_Overlapping as
+select X.* from OpinionEnglish_Set_12_Candidate X, OpinionEnglish_Set_11 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_12_FilterOverlap as
+(select X.* from OpinionEnglish_Set_12_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_12_Overlapping X)
+;
+create view OpinionEnglish_Set_12 as
+(select X.* from OpinionEnglish_Set_11 X)
+	union all
+(select X.* from OpinionEnglish_Set_12_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_13_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '13')
+;
+create view OpinionEnglish_Set_13_Overlapping as
+select X.* from OpinionEnglish_Set_13_Candidate X, OpinionEnglish_Set_12 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_13_FilterOverlap as
+(select X.* from OpinionEnglish_Set_13_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_13_Overlapping X)
+;
+create view OpinionEnglish_Set_13 as
+(select X.* from OpinionEnglish_Set_12 X)
+	union all
+(select X.* from OpinionEnglish_Set_13_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_14_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '14')
+;
+create view OpinionEnglish_Set_14_Overlapping as
+select X.* from OpinionEnglish_Set_14_Candidate X, OpinionEnglish_Set_13 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_14_FilterOverlap as
+(select X.* from OpinionEnglish_Set_14_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_14_Overlapping X)
+;
+create view OpinionEnglish_Set_14 as
+(select X.* from OpinionEnglish_Set_13 X)
+	union all
+(select X.* from OpinionEnglish_Set_14_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_15_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '15')
+;
+create view OpinionEnglish_Set_15_Overlapping as
+select X.* from OpinionEnglish_Set_15_Candidate X, OpinionEnglish_Set_14 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_15_FilterOverlap as
+(select X.* from OpinionEnglish_Set_15_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_15_Overlapping X)
+;
+create view OpinionEnglish_Set_15 as
+(select X.* from OpinionEnglish_Set_14 X)
+	union all
+(select X.* from OpinionEnglish_Set_15_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_16_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '16')
+;
+create view OpinionEnglish_Set_16_Overlapping as
+select X.* from OpinionEnglish_Set_16_Candidate X, OpinionEnglish_Set_15 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_16_FilterOverlap as
+(select X.* from OpinionEnglish_Set_16_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_16_Overlapping X)
+;
+create view OpinionEnglish_Set_16 as
+(select X.* from OpinionEnglish_Set_15 X)
+	union all
+(select X.* from OpinionEnglish_Set_16_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_17_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '17')
+;
+create view OpinionEnglish_Set_17_Overlapping as
+select X.* from OpinionEnglish_Set_17_Candidate X, OpinionEnglish_Set_16 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_17_FilterOverlap as
+(select X.* from OpinionEnglish_Set_17_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_17_Overlapping X)
+;
+create view OpinionEnglish_Set_17 as
+(select X.* from OpinionEnglish_Set_16 X)
+	union all
+(select X.* from OpinionEnglish_Set_17_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_18_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '18')
+;
+create view OpinionEnglish_Set_18_Overlapping as
+select X.* from OpinionEnglish_Set_18_Candidate X, OpinionEnglish_Set_17 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_18_FilterOverlap as
+(select X.* from OpinionEnglish_Set_18_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_18_Overlapping X)
+;
+create view OpinionEnglish_Set_18 as
+(select X.* from OpinionEnglish_Set_17 X)
+	union all
+(select X.* from OpinionEnglish_Set_18_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_19_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '19')
+;
+create view OpinionEnglish_Set_19_Overlapping as
+select X.* from OpinionEnglish_Set_19_Candidate X, OpinionEnglish_Set_18 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_19_FilterOverlap as
+(select X.* from OpinionEnglish_Set_19_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_19_Overlapping X)
+;
+create view OpinionEnglish_Set_19 as
+(select X.* from OpinionEnglish_Set_18 X)
+	union all
+(select X.* from OpinionEnglish_Set_19_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_20_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '20')
+;
+create view OpinionEnglish_Set_20_Overlapping as
+select X.* from OpinionEnglish_Set_20_Candidate X, OpinionEnglish_Set_19 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_20_FilterOverlap as
+(select X.* from OpinionEnglish_Set_20_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_20_Overlapping X)
+;
+create view OpinionEnglish_Set_20 as
+(select X.* from OpinionEnglish_Set_19 X)
+	union all
+(select X.* from OpinionEnglish_Set_20_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_21_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '21')
+;
+create view OpinionEnglish_Set_21_Overlapping as
+select X.* from OpinionEnglish_Set_21_Candidate X, OpinionEnglish_Set_20 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_21_FilterOverlap as
+(select X.* from OpinionEnglish_Set_21_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_21_Overlapping X)
+;
+create view OpinionEnglish_Set_21 as
+(select X.* from OpinionEnglish_Set_20 X)
+	union all
+(select X.* from OpinionEnglish_Set_21_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_22_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '22')
+;
+create view OpinionEnglish_Set_22_Overlapping as
+select X.* from OpinionEnglish_Set_22_Candidate X, OpinionEnglish_Set_21 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_22_FilterOverlap as
+(select X.* from OpinionEnglish_Set_22_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_22_Overlapping X)
+;
+create view OpinionEnglish_Set_22 as
+(select X.* from OpinionEnglish_Set_21 X)
+	union all
+(select X.* from OpinionEnglish_Set_22_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_23_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '23')
+;
+create view OpinionEnglish_Set_23_Overlapping as
+select X.* from OpinionEnglish_Set_23_Candidate X, OpinionEnglish_Set_22 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_23_FilterOverlap as
+(select X.* from OpinionEnglish_Set_23_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_23_Overlapping X)
+;
+create view OpinionEnglish_Set_23 as
+(select X.* from OpinionEnglish_Set_22 X)
+	union all
+(select X.* from OpinionEnglish_Set_23_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_24_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '24')
+;
+create view OpinionEnglish_Set_24_Overlapping as
+select X.* from OpinionEnglish_Set_24_Candidate X, OpinionEnglish_Set_23 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_24_FilterOverlap as
+(select X.* from OpinionEnglish_Set_24_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_24_Overlapping X)
+;
+create view OpinionEnglish_Set_24 as
+(select X.* from OpinionEnglish_Set_23 X)
+	union all
+(select X.* from OpinionEnglish_Set_24_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_25_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '25')
+;
+create view OpinionEnglish_Set_25_Overlapping as
+select X.* from OpinionEnglish_Set_25_Candidate X, OpinionEnglish_Set_24 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_25_FilterOverlap as
+(select X.* from OpinionEnglish_Set_25_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_25_Overlapping X)
+;
+create view OpinionEnglish_Set_25 as
+(select X.* from OpinionEnglish_Set_24 X)
+	union all
+(select X.* from OpinionEnglish_Set_25_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_26_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '26')
+;
+create view OpinionEnglish_Set_26_Overlapping as
+select X.* from OpinionEnglish_Set_26_Candidate X, OpinionEnglish_Set_25 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_26_FilterOverlap as
+(select X.* from OpinionEnglish_Set_26_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_26_Overlapping X)
+;
+create view OpinionEnglish_Set_26 as
+(select X.* from OpinionEnglish_Set_25 X)
+	union all
+(select X.* from OpinionEnglish_Set_26_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_27_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '27')
+;
+create view OpinionEnglish_Set_27_Overlapping as
+select X.* from OpinionEnglish_Set_27_Candidate X, OpinionEnglish_Set_26 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_27_FilterOverlap as
+(select X.* from OpinionEnglish_Set_27_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_27_Overlapping X)
+;
+create view OpinionEnglish_Set_27 as
+(select X.* from OpinionEnglish_Set_26 X)
+	union all
+(select X.* from OpinionEnglish_Set_27_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_28_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '28')
+;
+create view OpinionEnglish_Set_28_Overlapping as
+select X.* from OpinionEnglish_Set_28_Candidate X, OpinionEnglish_Set_27 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_28_FilterOverlap as
+(select X.* from OpinionEnglish_Set_28_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_28_Overlapping X)
+;
+create view OpinionEnglish_Set_28 as
+(select X.* from OpinionEnglish_Set_27 X)
+	union all
+(select X.* from OpinionEnglish_Set_28_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_29_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '29')
+;
+create view OpinionEnglish_Set_29_Overlapping as
+select X.* from OpinionEnglish_Set_29_Candidate X, OpinionEnglish_Set_28 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_29_FilterOverlap as
+(select X.* from OpinionEnglish_Set_29_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_29_Overlapping X)
+;
+create view OpinionEnglish_Set_29 as
+(select X.* from OpinionEnglish_Set_28 X)
+	union all
+(select X.* from OpinionEnglish_Set_29_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_30_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '30')
+;
+create view OpinionEnglish_Set_30_Overlapping as
+select X.* from OpinionEnglish_Set_30_Candidate X, OpinionEnglish_Set_29 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_30_FilterOverlap as
+(select X.* from OpinionEnglish_Set_30_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_30_Overlapping X)
+;
+create view OpinionEnglish_Set_30 as
+(select X.* from OpinionEnglish_Set_29 X)
+	union all
+(select X.* from OpinionEnglish_Set_30_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_31_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '31')
+;
+create view OpinionEnglish_Set_31_Overlapping as
+select X.* from OpinionEnglish_Set_31_Candidate X, OpinionEnglish_Set_30 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_31_FilterOverlap as
+(select X.* from OpinionEnglish_Set_31_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_31_Overlapping X)
+;
+create view OpinionEnglish_Set_31 as
+(select X.* from OpinionEnglish_Set_30 X)
+	union all
+(select X.* from OpinionEnglish_Set_31_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_32_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '32')
+;
+create view OpinionEnglish_Set_32_Overlapping as
+select X.* from OpinionEnglish_Set_32_Candidate X, OpinionEnglish_Set_31 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_32_FilterOverlap as
+(select X.* from OpinionEnglish_Set_32_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_32_Overlapping X)
+;
+create view OpinionEnglish_Set_32 as
+(select X.* from OpinionEnglish_Set_31 X)
+	union all
+(select X.* from OpinionEnglish_Set_32_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_33_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '33')
+;
+create view OpinionEnglish_Set_33_Overlapping as
+select X.* from OpinionEnglish_Set_33_Candidate X, OpinionEnglish_Set_32 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_33_FilterOverlap as
+(select X.* from OpinionEnglish_Set_33_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_33_Overlapping X)
+;
+create view OpinionEnglish_Set_33 as
+(select X.* from OpinionEnglish_Set_32 X)
+	union all
+(select X.* from OpinionEnglish_Set_33_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_34_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '34')
+;
+create view OpinionEnglish_Set_34_Overlapping as
+select X.* from OpinionEnglish_Set_34_Candidate X, OpinionEnglish_Set_33 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_34_FilterOverlap as
+(select X.* from OpinionEnglish_Set_34_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_34_Overlapping X)
+;
+create view OpinionEnglish_Set_34 as
+(select X.* from OpinionEnglish_Set_33 X)
+	union all
+(select X.* from OpinionEnglish_Set_34_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_35_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '35')
+;
+create view OpinionEnglish_Set_35_Overlapping as
+select X.* from OpinionEnglish_Set_35_Candidate X, OpinionEnglish_Set_34 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_35_FilterOverlap as
+(select X.* from OpinionEnglish_Set_35_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_35_Overlapping X)
+;
+create view OpinionEnglish_Set_35 as
+(select X.* from OpinionEnglish_Set_34 X)
+	union all
+(select X.* from OpinionEnglish_Set_35_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_36_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '36')
+;
+create view OpinionEnglish_Set_36_Overlapping as
+select X.* from OpinionEnglish_Set_36_Candidate X, OpinionEnglish_Set_35 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_36_FilterOverlap as
+(select X.* from OpinionEnglish_Set_36_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_36_Overlapping X)
+;
+create view OpinionEnglish_Set_36 as
+(select X.* from OpinionEnglish_Set_35 X)
+	union all
+(select X.* from OpinionEnglish_Set_36_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_37_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '37')
+;
+create view OpinionEnglish_Set_37_Overlapping as
+select X.* from OpinionEnglish_Set_37_Candidate X, OpinionEnglish_Set_36 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_37_FilterOverlap as
+(select X.* from OpinionEnglish_Set_37_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_37_Overlapping X)
+;
+create view OpinionEnglish_Set_37 as
+(select X.* from OpinionEnglish_Set_36 X)
+	union all
+(select X.* from OpinionEnglish_Set_37_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_38_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '38')
+;
+create view OpinionEnglish_Set_38_Overlapping as
+select X.* from OpinionEnglish_Set_38_Candidate X, OpinionEnglish_Set_37 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_38_FilterOverlap as
+(select X.* from OpinionEnglish_Set_38_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_38_Overlapping X)
+;
+create view OpinionEnglish_Set_38 as
+(select X.* from OpinionEnglish_Set_37 X)
+	union all
+(select X.* from OpinionEnglish_Set_38_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_39_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '39')
+;
+create view OpinionEnglish_Set_39_Overlapping as
+select X.* from OpinionEnglish_Set_39_Candidate X, OpinionEnglish_Set_38 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_39_FilterOverlap as
+(select X.* from OpinionEnglish_Set_39_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_39_Overlapping X)
+;
+create view OpinionEnglish_Set_39 as
+(select X.* from OpinionEnglish_Set_38 X)
+	union all
+(select X.* from OpinionEnglish_Set_39_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_40_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '40')
+;
+create view OpinionEnglish_Set_40_Overlapping as
+select X.* from OpinionEnglish_Set_40_Candidate X, OpinionEnglish_Set_39 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_40_FilterOverlap as
+(select X.* from OpinionEnglish_Set_40_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_40_Overlapping X)
+;
+create view OpinionEnglish_Set_40 as
+(select X.* from OpinionEnglish_Set_39 X)
+	union all
+(select X.* from OpinionEnglish_Set_40_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_41_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '41')
+;
+create view OpinionEnglish_Set_41_Overlapping as
+select X.* from OpinionEnglish_Set_41_Candidate X, OpinionEnglish_Set_40 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_41_FilterOverlap as
+(select X.* from OpinionEnglish_Set_41_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_41_Overlapping X)
+;
+create view OpinionEnglish_Set_41 as
+(select X.* from OpinionEnglish_Set_40 X)
+	union all
+(select X.* from OpinionEnglish_Set_41_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_42_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '42')
+;
+create view OpinionEnglish_Set_42_Overlapping as
+select X.* from OpinionEnglish_Set_42_Candidate X, OpinionEnglish_Set_41 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_42_FilterOverlap as
+(select X.* from OpinionEnglish_Set_42_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_42_Overlapping X)
+;
+create view OpinionEnglish_Set_42 as
+(select X.* from OpinionEnglish_Set_41 X)
+	union all
+(select X.* from OpinionEnglish_Set_42_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_43_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '43')
+;
+create view OpinionEnglish_Set_43_Overlapping as
+select X.* from OpinionEnglish_Set_43_Candidate X, OpinionEnglish_Set_42 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_43_FilterOverlap as
+(select X.* from OpinionEnglish_Set_43_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_43_Overlapping X)
+;
+create view OpinionEnglish_Set_43 as
+(select X.* from OpinionEnglish_Set_42 X)
+	union all
+(select X.* from OpinionEnglish_Set_43_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_44_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '44')
+;
+create view OpinionEnglish_Set_44_Overlapping as
+select X.* from OpinionEnglish_Set_44_Candidate X, OpinionEnglish_Set_43 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_44_FilterOverlap as
+(select X.* from OpinionEnglish_Set_44_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_44_Overlapping X)
+;
+create view OpinionEnglish_Set_44 as
+(select X.* from OpinionEnglish_Set_43 X)
+	union all
+(select X.* from OpinionEnglish_Set_44_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_45_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '45')
+;
+create view OpinionEnglish_Set_45_Overlapping as
+select X.* from OpinionEnglish_Set_45_Candidate X, OpinionEnglish_Set_44 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_45_FilterOverlap as
+(select X.* from OpinionEnglish_Set_45_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_45_Overlapping X)
+;
+create view OpinionEnglish_Set_45 as
+(select X.* from OpinionEnglish_Set_44 X)
+	union all
+(select X.* from OpinionEnglish_Set_45_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_46_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '46')
+;
+create view OpinionEnglish_Set_46_Overlapping as
+select X.* from OpinionEnglish_Set_46_Candidate X, OpinionEnglish_Set_45 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_46_FilterOverlap as
+(select X.* from OpinionEnglish_Set_46_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_46_Overlapping X)
+;
+create view OpinionEnglish_Set_46 as
+(select X.* from OpinionEnglish_Set_45 X)
+	union all
+(select X.* from OpinionEnglish_Set_46_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_47_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '47')
+;
+create view OpinionEnglish_Set_47_Overlapping as
+select X.* from OpinionEnglish_Set_47_Candidate X, OpinionEnglish_Set_46 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_47_FilterOverlap as
+(select X.* from OpinionEnglish_Set_47_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_47_Overlapping X)
+;
+create view OpinionEnglish_Set_47 as
+(select X.* from OpinionEnglish_Set_46 X)
+	union all
+(select X.* from OpinionEnglish_Set_47_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_48_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '48')
+;
+create view OpinionEnglish_Set_48_Overlapping as
+select X.* from OpinionEnglish_Set_48_Candidate X, OpinionEnglish_Set_47 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_48_FilterOverlap as
+(select X.* from OpinionEnglish_Set_48_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_48_Overlapping X)
+;
+create view OpinionEnglish_Set_48 as
+(select X.* from OpinionEnglish_Set_47 X)
+	union all
+(select X.* from OpinionEnglish_Set_48_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_49_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '49')
+;
+create view OpinionEnglish_Set_49_Overlapping as
+select X.* from OpinionEnglish_Set_49_Candidate X, OpinionEnglish_Set_48 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_49_FilterOverlap as
+(select X.* from OpinionEnglish_Set_49_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_49_Overlapping X)
+;
+create view OpinionEnglish_Set_49 as
+(select X.* from OpinionEnglish_Set_48 X)
+	union all
+(select X.* from OpinionEnglish_Set_49_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_50_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '50')
+;
+create view OpinionEnglish_Set_50_Overlapping as
+select X.* from OpinionEnglish_Set_50_Candidate X, OpinionEnglish_Set_49 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_50_FilterOverlap as
+(select X.* from OpinionEnglish_Set_50_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_50_Overlapping X)
+;
+create view OpinionEnglish_Set_50 as
+(select X.* from OpinionEnglish_Set_49 X)
+	union all
+(select X.* from OpinionEnglish_Set_50_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_51_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '51')
+;
+create view OpinionEnglish_Set_51_Overlapping as
+select X.* from OpinionEnglish_Set_51_Candidate X, OpinionEnglish_Set_50 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_51_FilterOverlap as
+(select X.* from OpinionEnglish_Set_51_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_51_Overlapping X)
+;
+create view OpinionEnglish_Set_51 as
+(select X.* from OpinionEnglish_Set_50 X)
+	union all
+(select X.* from OpinionEnglish_Set_51_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_52_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '52')
+;
+create view OpinionEnglish_Set_52_Overlapping as
+select X.* from OpinionEnglish_Set_52_Candidate X, OpinionEnglish_Set_51 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_52_FilterOverlap as
+(select X.* from OpinionEnglish_Set_52_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_52_Overlapping X)
+;
+create view OpinionEnglish_Set_52 as
+(select X.* from OpinionEnglish_Set_51 X)
+	union all
+(select X.* from OpinionEnglish_Set_52_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_53_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '53')
+;
+create view OpinionEnglish_Set_53_Overlapping as
+select X.* from OpinionEnglish_Set_53_Candidate X, OpinionEnglish_Set_52 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_53_FilterOverlap as
+(select X.* from OpinionEnglish_Set_53_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_53_Overlapping X)
+;
+create view OpinionEnglish_Set_53 as
+(select X.* from OpinionEnglish_Set_52 X)
+	union all
+(select X.* from OpinionEnglish_Set_53_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_54_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '54')
+;
+create view OpinionEnglish_Set_54_Overlapping as
+select X.* from OpinionEnglish_Set_54_Candidate X, OpinionEnglish_Set_53 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_54_FilterOverlap as
+(select X.* from OpinionEnglish_Set_54_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_54_Overlapping X)
+;
+create view OpinionEnglish_Set_54 as
+(select X.* from OpinionEnglish_Set_53 X)
+	union all
+(select X.* from OpinionEnglish_Set_54_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_55_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '55')
+;
+create view OpinionEnglish_Set_55_Overlapping as
+select X.* from OpinionEnglish_Set_55_Candidate X, OpinionEnglish_Set_54 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_55_FilterOverlap as
+(select X.* from OpinionEnglish_Set_55_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_55_Overlapping X)
+;
+create view OpinionEnglish_Set_55 as
+(select X.* from OpinionEnglish_Set_54 X)
+	union all
+(select X.* from OpinionEnglish_Set_55_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_56_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '56')
+;
+create view OpinionEnglish_Set_56_Overlapping as
+select X.* from OpinionEnglish_Set_56_Candidate X, OpinionEnglish_Set_55 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_56_FilterOverlap as
+(select X.* from OpinionEnglish_Set_56_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_56_Overlapping X)
+;
+create view OpinionEnglish_Set_56 as
+(select X.* from OpinionEnglish_Set_55 X)
+	union all
+(select X.* from OpinionEnglish_Set_56_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_57_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '57')
+;
+create view OpinionEnglish_Set_57_Overlapping as
+select X.* from OpinionEnglish_Set_57_Candidate X, OpinionEnglish_Set_56 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_57_FilterOverlap as
+(select X.* from OpinionEnglish_Set_57_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_57_Overlapping X)
+;
+create view OpinionEnglish_Set_57 as
+(select X.* from OpinionEnglish_Set_56 X)
+	union all
+(select X.* from OpinionEnglish_Set_57_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_58_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '58')
+;
+create view OpinionEnglish_Set_58_Overlapping as
+select X.* from OpinionEnglish_Set_58_Candidate X, OpinionEnglish_Set_57 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_58_FilterOverlap as
+(select X.* from OpinionEnglish_Set_58_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_58_Overlapping X)
+;
+create view OpinionEnglish_Set_58 as
+(select X.* from OpinionEnglish_Set_57 X)
+	union all
+(select X.* from OpinionEnglish_Set_58_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_59_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '59')
+;
+create view OpinionEnglish_Set_59_Overlapping as
+select X.* from OpinionEnglish_Set_59_Candidate X, OpinionEnglish_Set_58 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_59_FilterOverlap as
+(select X.* from OpinionEnglish_Set_59_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_59_Overlapping X)
+;
+create view OpinionEnglish_Set_59 as
+(select X.* from OpinionEnglish_Set_58 X)
+	union all
+(select X.* from OpinionEnglish_Set_59_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_60_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '60')
+;
+create view OpinionEnglish_Set_60_Overlapping as
+select X.* from OpinionEnglish_Set_60_Candidate X, OpinionEnglish_Set_59 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_60_FilterOverlap as
+(select X.* from OpinionEnglish_Set_60_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_60_Overlapping X)
+;
+create view OpinionEnglish_Set_60 as
+(select X.* from OpinionEnglish_Set_59 X)
+	union all
+(select X.* from OpinionEnglish_Set_60_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_61_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '61')
+;
+create view OpinionEnglish_Set_61_Overlapping as
+select X.* from OpinionEnglish_Set_61_Candidate X, OpinionEnglish_Set_60 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_61_FilterOverlap as
+(select X.* from OpinionEnglish_Set_61_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_61_Overlapping X)
+;
+create view OpinionEnglish_Set_61 as
+(select X.* from OpinionEnglish_Set_60 X)
+	union all
+(select X.* from OpinionEnglish_Set_61_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_62_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '62')
+;
+create view OpinionEnglish_Set_62_Overlapping as
+select X.* from OpinionEnglish_Set_62_Candidate X, OpinionEnglish_Set_61 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_62_FilterOverlap as
+(select X.* from OpinionEnglish_Set_62_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_62_Overlapping X)
+;
+create view OpinionEnglish_Set_62 as
+(select X.* from OpinionEnglish_Set_61 X)
+	union all
+(select X.* from OpinionEnglish_Set_62_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_63_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '63')
+;
+create view OpinionEnglish_Set_63_Overlapping as
+select X.* from OpinionEnglish_Set_63_Candidate X, OpinionEnglish_Set_62 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_63_FilterOverlap as
+(select X.* from OpinionEnglish_Set_63_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_63_Overlapping X)
+;
+create view OpinionEnglish_Set_63 as
+(select X.* from OpinionEnglish_Set_62 X)
+	union all
+(select X.* from OpinionEnglish_Set_63_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_64_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '64')
+;
+create view OpinionEnglish_Set_64_Overlapping as
+select X.* from OpinionEnglish_Set_64_Candidate X, OpinionEnglish_Set_63 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_64_FilterOverlap as
+(select X.* from OpinionEnglish_Set_64_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_64_Overlapping X)
+;
+create view OpinionEnglish_Set_64 as
+(select X.* from OpinionEnglish_Set_63 X)
+	union all
+(select X.* from OpinionEnglish_Set_64_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_65_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '65')
+;
+create view OpinionEnglish_Set_65_Overlapping as
+select X.* from OpinionEnglish_Set_65_Candidate X, OpinionEnglish_Set_64 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_65_FilterOverlap as
+(select X.* from OpinionEnglish_Set_65_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_65_Overlapping X)
+;
+create view OpinionEnglish_Set_65 as
+(select X.* from OpinionEnglish_Set_64 X)
+	union all
+(select X.* from OpinionEnglish_Set_65_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_66_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '66')
+;
+create view OpinionEnglish_Set_66_Overlapping as
+select X.* from OpinionEnglish_Set_66_Candidate X, OpinionEnglish_Set_65 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_66_FilterOverlap as
+(select X.* from OpinionEnglish_Set_66_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_66_Overlapping X)
+;
+create view OpinionEnglish_Set_66 as
+(select X.* from OpinionEnglish_Set_65 X)
+	union all
+(select X.* from OpinionEnglish_Set_66_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_67_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '67')
+;
+create view OpinionEnglish_Set_67_Overlapping as
+select X.* from OpinionEnglish_Set_67_Candidate X, OpinionEnglish_Set_66 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_67_FilterOverlap as
+(select X.* from OpinionEnglish_Set_67_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_67_Overlapping X)
+;
+create view OpinionEnglish_Set_67 as
+(select X.* from OpinionEnglish_Set_66 X)
+	union all
+(select X.* from OpinionEnglish_Set_67_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_68_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '68')
+;
+create view OpinionEnglish_Set_68_Overlapping as
+select X.* from OpinionEnglish_Set_68_Candidate X, OpinionEnglish_Set_67 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_68_FilterOverlap as
+(select X.* from OpinionEnglish_Set_68_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_68_Overlapping X)
+;
+create view OpinionEnglish_Set_68 as
+(select X.* from OpinionEnglish_Set_67 X)
+	union all
+(select X.* from OpinionEnglish_Set_68_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_69_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '69')
+;
+create view OpinionEnglish_Set_69_Overlapping as
+select X.* from OpinionEnglish_Set_69_Candidate X, OpinionEnglish_Set_68 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_69_FilterOverlap as
+(select X.* from OpinionEnglish_Set_69_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_69_Overlapping X)
+;
+create view OpinionEnglish_Set_69 as
+(select X.* from OpinionEnglish_Set_68 X)
+	union all
+(select X.* from OpinionEnglish_Set_69_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_70_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '70')
+;
+create view OpinionEnglish_Set_70_Overlapping as
+select X.* from OpinionEnglish_Set_70_Candidate X, OpinionEnglish_Set_69 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_70_FilterOverlap as
+(select X.* from OpinionEnglish_Set_70_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_70_Overlapping X)
+;
+create view OpinionEnglish_Set_70 as
+(select X.* from OpinionEnglish_Set_69 X)
+	union all
+(select X.* from OpinionEnglish_Set_70_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_71_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '71')
+;
+create view OpinionEnglish_Set_71_Overlapping as
+select X.* from OpinionEnglish_Set_71_Candidate X, OpinionEnglish_Set_70 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_71_FilterOverlap as
+(select X.* from OpinionEnglish_Set_71_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_71_Overlapping X)
+;
+create view OpinionEnglish_Set_71 as
+(select X.* from OpinionEnglish_Set_70 X)
+	union all
+(select X.* from OpinionEnglish_Set_71_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_72_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '72')
+;
+create view OpinionEnglish_Set_72_Overlapping as
+select X.* from OpinionEnglish_Set_72_Candidate X, OpinionEnglish_Set_71 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_72_FilterOverlap as
+(select X.* from OpinionEnglish_Set_72_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_72_Overlapping X)
+;
+create view OpinionEnglish_Set_72 as
+(select X.* from OpinionEnglish_Set_71 X)
+	union all
+(select X.* from OpinionEnglish_Set_72_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_73_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '73')
+;
+create view OpinionEnglish_Set_73_Overlapping as
+select X.* from OpinionEnglish_Set_73_Candidate X, OpinionEnglish_Set_72 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_73_FilterOverlap as
+(select X.* from OpinionEnglish_Set_73_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_73_Overlapping X)
+;
+create view OpinionEnglish_Set_73 as
+(select X.* from OpinionEnglish_Set_72 X)
+	union all
+(select X.* from OpinionEnglish_Set_73_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_74_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '74')
+;
+create view OpinionEnglish_Set_74_Overlapping as
+select X.* from OpinionEnglish_Set_74_Candidate X, OpinionEnglish_Set_73 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_74_FilterOverlap as
+(select X.* from OpinionEnglish_Set_74_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_74_Overlapping X)
+;
+create view OpinionEnglish_Set_74 as
+(select X.* from OpinionEnglish_Set_73 X)
+	union all
+(select X.* from OpinionEnglish_Set_74_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_75_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '75')
+;
+create view OpinionEnglish_Set_75_Overlapping as
+select X.* from OpinionEnglish_Set_75_Candidate X, OpinionEnglish_Set_74 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_75_FilterOverlap as
+(select X.* from OpinionEnglish_Set_75_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_75_Overlapping X)
+;
+create view OpinionEnglish_Set_75 as
+(select X.* from OpinionEnglish_Set_74 X)
+	union all
+(select X.* from OpinionEnglish_Set_75_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_76_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '76')
+;
+create view OpinionEnglish_Set_76_Overlapping as
+select X.* from OpinionEnglish_Set_76_Candidate X, OpinionEnglish_Set_75 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_76_FilterOverlap as
+(select X.* from OpinionEnglish_Set_76_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_76_Overlapping X)
+;
+create view OpinionEnglish_Set_76 as
+(select X.* from OpinionEnglish_Set_75 X)
+	union all
+(select X.* from OpinionEnglish_Set_76_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_77_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '77')
+;
+create view OpinionEnglish_Set_77_Overlapping as
+select X.* from OpinionEnglish_Set_77_Candidate X, OpinionEnglish_Set_76 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_77_FilterOverlap as
+(select X.* from OpinionEnglish_Set_77_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_77_Overlapping X)
+;
+create view OpinionEnglish_Set_77 as
+(select X.* from OpinionEnglish_Set_76 X)
+	union all
+(select X.* from OpinionEnglish_Set_77_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_78_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '78')
+;
+create view OpinionEnglish_Set_78_Overlapping as
+select X.* from OpinionEnglish_Set_78_Candidate X, OpinionEnglish_Set_77 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_78_FilterOverlap as
+(select X.* from OpinionEnglish_Set_78_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_78_Overlapping X)
+;
+create view OpinionEnglish_Set_78 as
+(select X.* from OpinionEnglish_Set_77 X)
+	union all
+(select X.* from OpinionEnglish_Set_78_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_79_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '79')
+;
+create view OpinionEnglish_Set_79_Overlapping as
+select X.* from OpinionEnglish_Set_79_Candidate X, OpinionEnglish_Set_78 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_79_FilterOverlap as
+(select X.* from OpinionEnglish_Set_79_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_79_Overlapping X)
+;
+create view OpinionEnglish_Set_79 as
+(select X.* from OpinionEnglish_Set_78 X)
+	union all
+(select X.* from OpinionEnglish_Set_79_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_80_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '80')
+;
+create view OpinionEnglish_Set_80_Overlapping as
+select X.* from OpinionEnglish_Set_80_Candidate X, OpinionEnglish_Set_79 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_80_FilterOverlap as
+(select X.* from OpinionEnglish_Set_80_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_80_Overlapping X)
+;
+create view OpinionEnglish_Set_80 as
+(select X.* from OpinionEnglish_Set_79 X)
+	union all
+(select X.* from OpinionEnglish_Set_80_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_81_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '81')
+;
+create view OpinionEnglish_Set_81_Overlapping as
+select X.* from OpinionEnglish_Set_81_Candidate X, OpinionEnglish_Set_80 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_81_FilterOverlap as
+(select X.* from OpinionEnglish_Set_81_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_81_Overlapping X)
+;
+create view OpinionEnglish_Set_81 as
+(select X.* from OpinionEnglish_Set_80 X)
+	union all
+(select X.* from OpinionEnglish_Set_81_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_82_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '82')
+;
+create view OpinionEnglish_Set_82_Overlapping as
+select X.* from OpinionEnglish_Set_82_Candidate X, OpinionEnglish_Set_81 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_82_FilterOverlap as
+(select X.* from OpinionEnglish_Set_82_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_82_Overlapping X)
+;
+create view OpinionEnglish_Set_82 as
+(select X.* from OpinionEnglish_Set_81 X)
+	union all
+(select X.* from OpinionEnglish_Set_82_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_83_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '83')
+;
+create view OpinionEnglish_Set_83_Overlapping as
+select X.* from OpinionEnglish_Set_83_Candidate X, OpinionEnglish_Set_82 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_83_FilterOverlap as
+(select X.* from OpinionEnglish_Set_83_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_83_Overlapping X)
+;
+create view OpinionEnglish_Set_83 as
+(select X.* from OpinionEnglish_Set_82 X)
+	union all
+(select X.* from OpinionEnglish_Set_83_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_84_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '84')
+;
+create view OpinionEnglish_Set_84_Overlapping as
+select X.* from OpinionEnglish_Set_84_Candidate X, OpinionEnglish_Set_83 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_84_FilterOverlap as
+(select X.* from OpinionEnglish_Set_84_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_84_Overlapping X)
+;
+create view OpinionEnglish_Set_84 as
+(select X.* from OpinionEnglish_Set_83 X)
+	union all
+(select X.* from OpinionEnglish_Set_84_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_85_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '85')
+;
+create view OpinionEnglish_Set_85_Overlapping as
+select X.* from OpinionEnglish_Set_85_Candidate X, OpinionEnglish_Set_84 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_85_FilterOverlap as
+(select X.* from OpinionEnglish_Set_85_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_85_Overlapping X)
+;
+create view OpinionEnglish_Set_85 as
+(select X.* from OpinionEnglish_Set_84 X)
+	union all
+(select X.* from OpinionEnglish_Set_85_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_86_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '86')
+;
+create view OpinionEnglish_Set_86_Overlapping as
+select X.* from OpinionEnglish_Set_86_Candidate X, OpinionEnglish_Set_85 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_86_FilterOverlap as
+(select X.* from OpinionEnglish_Set_86_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_86_Overlapping X)
+;
+create view OpinionEnglish_Set_86 as
+(select X.* from OpinionEnglish_Set_85 X)
+	union all
+(select X.* from OpinionEnglish_Set_86_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_87_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '87')
+;
+create view OpinionEnglish_Set_87_Overlapping as
+select X.* from OpinionEnglish_Set_87_Candidate X, OpinionEnglish_Set_86 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_87_FilterOverlap as
+(select X.* from OpinionEnglish_Set_87_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_87_Overlapping X)
+;
+create view OpinionEnglish_Set_87 as
+(select X.* from OpinionEnglish_Set_86 X)
+	union all
+(select X.* from OpinionEnglish_Set_87_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_88_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '88')
+;
+create view OpinionEnglish_Set_88_Overlapping as
+select X.* from OpinionEnglish_Set_88_Candidate X, OpinionEnglish_Set_87 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_88_FilterOverlap as
+(select X.* from OpinionEnglish_Set_88_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_88_Overlapping X)
+;
+create view OpinionEnglish_Set_88 as
+(select X.* from OpinionEnglish_Set_87 X)
+	union all
+(select X.* from OpinionEnglish_Set_88_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_89_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '89')
+;
+create view OpinionEnglish_Set_89_Overlapping as
+select X.* from OpinionEnglish_Set_89_Candidate X, OpinionEnglish_Set_88 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_89_FilterOverlap as
+(select X.* from OpinionEnglish_Set_89_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_89_Overlapping X)
+;
+create view OpinionEnglish_Set_89 as
+(select X.* from OpinionEnglish_Set_88 X)
+	union all
+(select X.* from OpinionEnglish_Set_89_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_90_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '90')
+;
+create view OpinionEnglish_Set_90_Overlapping as
+select X.* from OpinionEnglish_Set_90_Candidate X, OpinionEnglish_Set_89 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_90_FilterOverlap as
+(select X.* from OpinionEnglish_Set_90_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_90_Overlapping X)
+;
+create view OpinionEnglish_Set_90 as
+(select X.* from OpinionEnglish_Set_89 X)
+	union all
+(select X.* from OpinionEnglish_Set_90_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_91_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '91')
+;
+create view OpinionEnglish_Set_91_Overlapping as
+select X.* from OpinionEnglish_Set_91_Candidate X, OpinionEnglish_Set_90 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_91_FilterOverlap as
+(select X.* from OpinionEnglish_Set_91_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_91_Overlapping X)
+;
+create view OpinionEnglish_Set_91 as
+(select X.* from OpinionEnglish_Set_90 X)
+	union all
+(select X.* from OpinionEnglish_Set_91_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_92_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '92')
+;
+create view OpinionEnglish_Set_92_Overlapping as
+select X.* from OpinionEnglish_Set_92_Candidate X, OpinionEnglish_Set_91 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_92_FilterOverlap as
+(select X.* from OpinionEnglish_Set_92_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_92_Overlapping X)
+;
+create view OpinionEnglish_Set_92 as
+(select X.* from OpinionEnglish_Set_91 X)
+	union all
+(select X.* from OpinionEnglish_Set_92_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_93_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '93')
+;
+create view OpinionEnglish_Set_93_Overlapping as
+select X.* from OpinionEnglish_Set_93_Candidate X, OpinionEnglish_Set_92 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_93_FilterOverlap as
+(select X.* from OpinionEnglish_Set_93_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_93_Overlapping X)
+;
+create view OpinionEnglish_Set_93 as
+(select X.* from OpinionEnglish_Set_92 X)
+	union all
+(select X.* from OpinionEnglish_Set_93_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_94_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '94')
+;
+create view OpinionEnglish_Set_94_Overlapping as
+select X.* from OpinionEnglish_Set_94_Candidate X, OpinionEnglish_Set_93 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_94_FilterOverlap as
+(select X.* from OpinionEnglish_Set_94_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_94_Overlapping X)
+;
+create view OpinionEnglish_Set_94 as
+(select X.* from OpinionEnglish_Set_93 X)
+	union all
+(select X.* from OpinionEnglish_Set_94_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_95_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '95')
+;
+create view OpinionEnglish_Set_95_Overlapping as
+select X.* from OpinionEnglish_Set_95_Candidate X, OpinionEnglish_Set_94 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_95_FilterOverlap as
+(select X.* from OpinionEnglish_Set_95_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_95_Overlapping X)
+;
+create view OpinionEnglish_Set_95 as
+(select X.* from OpinionEnglish_Set_94 X)
+	union all
+(select X.* from OpinionEnglish_Set_95_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_96_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '96')
+;
+create view OpinionEnglish_Set_96_Overlapping as
+select X.* from OpinionEnglish_Set_96_Candidate X, OpinionEnglish_Set_95 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_96_FilterOverlap as
+(select X.* from OpinionEnglish_Set_96_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_96_Overlapping X)
+;
+create view OpinionEnglish_Set_96 as
+(select X.* from OpinionEnglish_Set_95 X)
+	union all
+(select X.* from OpinionEnglish_Set_96_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_97_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '97')--97
+;
+create view OpinionEnglish_Set_97_Overlapping as
+select X.* from OpinionEnglish_Set_97_Candidate X, OpinionEnglish_Set_96 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_97_FilterOverlap as
+(select X.* from OpinionEnglish_Set_97_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_97_Overlapping X)
+;
+create view OpinionEnglish_Set_97 as
+(select X.* from OpinionEnglish_Set_96 X)
+	union all
+(select X.* from OpinionEnglish_Set_97_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_98_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '98')--98
+;
+create view OpinionEnglish_Set_98_Overlapping as
+select X.* from OpinionEnglish_Set_98_Candidate X, OpinionEnglish_Set_97 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_98_FilterOverlap as
+(select X.* from OpinionEnglish_Set_98_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_98_Overlapping X)
+;
+create view OpinionEnglish_Set_98 as
+(select X.* from OpinionEnglish_Set_97 X)
+	union all
+(select X.* from OpinionEnglish_Set_98_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_99_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '99') --99
+;
+create view OpinionEnglish_Set_99_Overlapping as
+select X.* from OpinionEnglish_Set_99_Candidate X, OpinionEnglish_Set_98 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_99_FilterOverlap as
+(select X.* from OpinionEnglish_Set_99_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_99_Overlapping X)
+;
+create view OpinionEnglish_Set_99 as
+(select X.* from OpinionEnglish_Set_98 X)
+	union all
+(select X.* from OpinionEnglish_Set_99_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_100_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '100')
+;
+create view OpinionEnglish_Set_100_Overlapping as
+select X.* from OpinionEnglish_Set_100_Candidate X, OpinionEnglish_Set_99 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_100_FilterOverlap as
+(select X.* from OpinionEnglish_Set_100_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_100_Overlapping X)
+;
+create view OpinionEnglish_Set_100 as
+(select X.* from OpinionEnglish_Set_99 X)
+	union all
+(select X.* from OpinionEnglish_Set_100_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_101_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '101')
+;
+create view OpinionEnglish_Set_101_Overlapping as
+select X.* from OpinionEnglish_Set_101_Candidate X, OpinionEnglish_Set_100 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_101_FilterOverlap as
+(select X.* from OpinionEnglish_Set_101_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_101_Overlapping X)
+;
+create view OpinionEnglish_Set_101 as
+(select X.* from OpinionEnglish_Set_100 X)
+	union all
+(select X.* from OpinionEnglish_Set_101_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_102_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '102')
+;
+create view OpinionEnglish_Set_102_Overlapping as
+select X.* from OpinionEnglish_Set_102_Candidate X, OpinionEnglish_Set_101 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_102_FilterOverlap as
+(select X.* from OpinionEnglish_Set_102_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_102_Overlapping X)
+;
+create view OpinionEnglish_Set_102 as
+(select X.* from OpinionEnglish_Set_101 X)
+	union all
+(select X.* from OpinionEnglish_Set_102_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_103_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '103')
+;
+create view OpinionEnglish_Set_103_Overlapping as
+select X.* from OpinionEnglish_Set_103_Candidate X, OpinionEnglish_Set_102 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_103_FilterOverlap as
+(select X.* from OpinionEnglish_Set_103_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_103_Overlapping X)
+;
+create view OpinionEnglish_Set_103 as
+(select X.* from OpinionEnglish_Set_102 X)
+	union all
+(select X.* from OpinionEnglish_Set_103_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_104_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '104')
+;
+create view OpinionEnglish_Set_104_Overlapping as
+select X.* from OpinionEnglish_Set_104_Candidate X, OpinionEnglish_Set_103 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_104_FilterOverlap as
+(select X.* from OpinionEnglish_Set_104_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_104_Overlapping X)
+;
+create view OpinionEnglish_Set_104 as
+(select X.* from OpinionEnglish_Set_103 X)
+	union all
+(select X.* from OpinionEnglish_Set_104_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_105_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '105')
+;
+create view OpinionEnglish_Set_105_Overlapping as
+select X.* from OpinionEnglish_Set_105_Candidate X, OpinionEnglish_Set_104 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_105_FilterOverlap as
+(select X.* from OpinionEnglish_Set_105_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_105_Overlapping X)
+;
+create view OpinionEnglish_Set_105 as
+(select X.* from OpinionEnglish_Set_104 X)
+	union all
+(select X.* from OpinionEnglish_Set_105_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_106_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '106')
+;
+create view OpinionEnglish_Set_106_Overlapping as
+select X.* from OpinionEnglish_Set_106_Candidate X, OpinionEnglish_Set_105 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_106_FilterOverlap as
+(select X.* from OpinionEnglish_Set_106_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_106_Overlapping X)
+;
+create view OpinionEnglish_Set_106 as
+(select X.* from OpinionEnglish_Set_105 X)
+	union all
+(select X.* from OpinionEnglish_Set_106_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_107_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '107')
+;
+create view OpinionEnglish_Set_107_Overlapping as
+select X.* from OpinionEnglish_Set_107_Candidate X, OpinionEnglish_Set_106 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_107_FilterOverlap as
+(select X.* from OpinionEnglish_Set_107_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_107_Overlapping X)
+;
+create view OpinionEnglish_Set_107 as
+(select X.* from OpinionEnglish_Set_106 X)
+	union all
+(select X.* from OpinionEnglish_Set_107_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_108_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '108')
+;
+create view OpinionEnglish_Set_108_Overlapping as
+select X.* from OpinionEnglish_Set_108_Candidate X, OpinionEnglish_Set_107 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_108_FilterOverlap as
+(select X.* from OpinionEnglish_Set_108_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_108_Overlapping X)
+;
+create view OpinionEnglish_Set_108 as
+(select X.* from OpinionEnglish_Set_107 X)
+	union all
+(select X.* from OpinionEnglish_Set_108_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_109_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '109')
+;
+create view OpinionEnglish_Set_109_Overlapping as
+select X.* from OpinionEnglish_Set_109_Candidate X, OpinionEnglish_Set_108 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_109_FilterOverlap as
+(select X.* from OpinionEnglish_Set_109_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_109_Overlapping X)
+;
+create view OpinionEnglish_Set_109 as
+(select X.* from OpinionEnglish_Set_108 X)
+	union all
+(select X.* from OpinionEnglish_Set_109_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_110_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '110')
+;
+create view OpinionEnglish_Set_110_Overlapping as
+select X.* from OpinionEnglish_Set_110_Candidate X, OpinionEnglish_Set_109 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_110_FilterOverlap as
+(select X.* from OpinionEnglish_Set_110_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_110_Overlapping X)
+;
+create view OpinionEnglish_Set_110 as
+(select X.* from OpinionEnglish_Set_109 X)
+	union all
+(select X.* from OpinionEnglish_Set_110_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_111_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '111')
+;
+create view OpinionEnglish_Set_111_Overlapping as
+select X.* from OpinionEnglish_Set_111_Candidate X, OpinionEnglish_Set_110 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_111_FilterOverlap as
+(select X.* from OpinionEnglish_Set_111_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_111_Overlapping X)
+;
+create view OpinionEnglish_Set_111 as
+(select X.* from OpinionEnglish_Set_110 X)
+	union all
+(select X.* from OpinionEnglish_Set_111_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_112_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '112')
+;
+create view OpinionEnglish_Set_112_Overlapping as
+select X.* from OpinionEnglish_Set_112_Candidate X, OpinionEnglish_Set_111 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_112_FilterOverlap as
+(select X.* from OpinionEnglish_Set_112_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_112_Overlapping X)
+;
+create view OpinionEnglish_Set_112 as
+(select X.* from OpinionEnglish_Set_111 X)
+	union all
+(select X.* from OpinionEnglish_Set_112_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_113_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '113')
+;
+create view OpinionEnglish_Set_113_Overlapping as
+select X.* from OpinionEnglish_Set_113_Candidate X, OpinionEnglish_Set_112 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_113_FilterOverlap as
+(select X.* from OpinionEnglish_Set_113_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_113_Overlapping X)
+;
+create view OpinionEnglish_Set_113 as
+(select X.* from OpinionEnglish_Set_112 X)
+	union all
+(select X.* from OpinionEnglish_Set_113_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_114_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '114')
+;
+create view OpinionEnglish_Set_114_Overlapping as
+select X.* from OpinionEnglish_Set_114_Candidate X, OpinionEnglish_Set_113 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_114_FilterOverlap as
+(select X.* from OpinionEnglish_Set_114_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_114_Overlapping X)
+;
+create view OpinionEnglish_Set_114 as
+(select X.* from OpinionEnglish_Set_113 X)
+	union all
+(select X.* from OpinionEnglish_Set_114_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_115_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '115')
+;
+create view OpinionEnglish_Set_115_Overlapping as
+select X.* from OpinionEnglish_Set_115_Candidate X, OpinionEnglish_Set_114 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_115_FilterOverlap as
+(select X.* from OpinionEnglish_Set_115_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_115_Overlapping X)
+;
+create view OpinionEnglish_Set_115 as
+(select X.* from OpinionEnglish_Set_114 X)
+	union all
+(select X.* from OpinionEnglish_Set_115_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_116_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '116')
+;
+create view OpinionEnglish_Set_116_Overlapping as
+select X.* from OpinionEnglish_Set_116_Candidate X, OpinionEnglish_Set_115 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_116_FilterOverlap as
+(select X.* from OpinionEnglish_Set_116_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_116_Overlapping X)
+;
+create view OpinionEnglish_Set_116 as
+(select X.* from OpinionEnglish_Set_115 X)
+	union all
+(select X.* from OpinionEnglish_Set_116_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_117_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '117')
+;
+create view OpinionEnglish_Set_117_Overlapping as
+select X.* from OpinionEnglish_Set_117_Candidate X, OpinionEnglish_Set_116 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_117_FilterOverlap as
+(select X.* from OpinionEnglish_Set_117_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_117_Overlapping X)
+;
+create view OpinionEnglish_Set_117 as
+(select X.* from OpinionEnglish_Set_116 X)
+	union all
+(select X.* from OpinionEnglish_Set_117_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_118_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '118')
+;
+create view OpinionEnglish_Set_118_Overlapping as
+select X.* from OpinionEnglish_Set_118_Candidate X, OpinionEnglish_Set_117 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_118_FilterOverlap as
+(select X.* from OpinionEnglish_Set_118_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_118_Overlapping X)
+;
+create view OpinionEnglish_Set_118 as
+(select X.* from OpinionEnglish_Set_117 X)
+	union all
+(select X.* from OpinionEnglish_Set_118_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_119_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '119')
+;
+create view OpinionEnglish_Set_119_Overlapping as
+select X.* from OpinionEnglish_Set_119_Candidate X, OpinionEnglish_Set_118 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_119_FilterOverlap as
+(select X.* from OpinionEnglish_Set_119_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_119_Overlapping X)
+;
+create view OpinionEnglish_Set_119 as
+(select X.* from OpinionEnglish_Set_118 X)
+	union all
+(select X.* from OpinionEnglish_Set_119_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_120_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '120')
+;
+create view OpinionEnglish_Set_120_Overlapping as
+select X.* from OpinionEnglish_Set_120_Candidate X, OpinionEnglish_Set_119 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_120_FilterOverlap as
+(select X.* from OpinionEnglish_Set_120_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_120_Overlapping X)
+;
+create view OpinionEnglish_Set_120 as
+(select X.* from OpinionEnglish_Set_119 X)
+	union all
+(select X.* from OpinionEnglish_Set_120_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_121_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '121')
+;
+create view OpinionEnglish_Set_121_Overlapping as
+select X.* from OpinionEnglish_Set_121_Candidate X, OpinionEnglish_Set_120 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_121_FilterOverlap as
+(select X.* from OpinionEnglish_Set_121_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_121_Overlapping X)
+;
+create view OpinionEnglish_Set_121 as
+(select X.* from OpinionEnglish_Set_120 X)
+	union all
+(select X.* from OpinionEnglish_Set_121_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_122_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '122')
+;
+create view OpinionEnglish_Set_122_Overlapping as
+select X.* from OpinionEnglish_Set_122_Candidate X, OpinionEnglish_Set_121 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_122_FilterOverlap as
+(select X.* from OpinionEnglish_Set_122_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_122_Overlapping X)
+;
+create view OpinionEnglish_Set_122 as
+(select X.* from OpinionEnglish_Set_121 X)
+	union all
+(select X.* from OpinionEnglish_Set_122_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_123_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '123')
+;
+create view OpinionEnglish_Set_123_Overlapping as
+select X.* from OpinionEnglish_Set_123_Candidate X, OpinionEnglish_Set_122 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_123_FilterOverlap as
+(select X.* from OpinionEnglish_Set_123_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_123_Overlapping X)
+;
+create view OpinionEnglish_Set_123 as
+(select X.* from OpinionEnglish_Set_122 X)
+	union all
+(select X.* from OpinionEnglish_Set_123_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_124_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '124')
+;
+create view OpinionEnglish_Set_124_Overlapping as
+select X.* from OpinionEnglish_Set_124_Candidate X, OpinionEnglish_Set_123 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_124_FilterOverlap as
+(select X.* from OpinionEnglish_Set_124_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_124_Overlapping X)
+;
+create view OpinionEnglish_Set_124 as
+(select X.* from OpinionEnglish_Set_123 X)
+	union all
+(select X.* from OpinionEnglish_Set_124_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_125_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '125')
+;
+create view OpinionEnglish_Set_125_Overlapping as
+select X.* from OpinionEnglish_Set_125_Candidate X, OpinionEnglish_Set_124 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_125_FilterOverlap as
+(select X.* from OpinionEnglish_Set_125_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_125_Overlapping X)
+;
+create view OpinionEnglish_Set_125 as
+(select X.* from OpinionEnglish_Set_124 X)
+	union all
+(select X.* from OpinionEnglish_Set_125_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_126_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '126')
+;
+create view OpinionEnglish_Set_126_Overlapping as
+select X.* from OpinionEnglish_Set_126_Candidate X, OpinionEnglish_Set_125 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_126_FilterOverlap as
+(select X.* from OpinionEnglish_Set_126_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_126_Overlapping X)
+;
+create view OpinionEnglish_Set_126 as
+(select X.* from OpinionEnglish_Set_125 X)
+	union all
+(select X.* from OpinionEnglish_Set_126_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_127_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '127')
+;
+create view OpinionEnglish_Set_127_Overlapping as
+select X.* from OpinionEnglish_Set_127_Candidate X, OpinionEnglish_Set_126 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_127_FilterOverlap as
+(select X.* from OpinionEnglish_Set_127_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_127_Overlapping X)
+;
+create view OpinionEnglish_Set_127 as
+(select X.* from OpinionEnglish_Set_126 X)
+	union all
+(select X.* from OpinionEnglish_Set_127_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_128_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '128')
+;
+create view OpinionEnglish_Set_128_Overlapping as
+select X.* from OpinionEnglish_Set_128_Candidate X, OpinionEnglish_Set_127 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_128_FilterOverlap as
+(select X.* from OpinionEnglish_Set_128_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_128_Overlapping X)
+;
+create view OpinionEnglish_Set_128 as
+(select X.* from OpinionEnglish_Set_127 X)
+	union all
+(select X.* from OpinionEnglish_Set_128_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_129_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '129')
+;
+create view OpinionEnglish_Set_129_Overlapping as
+select X.* from OpinionEnglish_Set_129_Candidate X, OpinionEnglish_Set_128 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_129_FilterOverlap as
+(select X.* from OpinionEnglish_Set_129_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_129_Overlapping X)
+;
+create view OpinionEnglish_Set_129 as
+(select X.* from OpinionEnglish_Set_128 X)
+	union all
+(select X.* from OpinionEnglish_Set_129_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_130_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '130')
+;
+create view OpinionEnglish_Set_130_Overlapping as
+select X.* from OpinionEnglish_Set_130_Candidate X, OpinionEnglish_Set_129 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_130_FilterOverlap as
+(select X.* from OpinionEnglish_Set_130_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_130_Overlapping X)
+;
+create view OpinionEnglish_Set_130 as
+(select X.* from OpinionEnglish_Set_129 X)
+	union all
+(select X.* from OpinionEnglish_Set_130_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_131_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '131')
+;
+create view OpinionEnglish_Set_131_Overlapping as
+select X.* from OpinionEnglish_Set_131_Candidate X, OpinionEnglish_Set_130 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_131_FilterOverlap as
+(select X.* from OpinionEnglish_Set_131_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_131_Overlapping X)
+;
+create view OpinionEnglish_Set_131 as
+(select X.* from OpinionEnglish_Set_130 X)
+	union all
+(select X.* from OpinionEnglish_Set_131_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_132_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '132')
+;
+create view OpinionEnglish_Set_132_Overlapping as
+select X.* from OpinionEnglish_Set_132_Candidate X, OpinionEnglish_Set_131 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_132_FilterOverlap as
+(select X.* from OpinionEnglish_Set_132_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_132_Overlapping X)
+;
+create view OpinionEnglish_Set_132 as
+(select X.* from OpinionEnglish_Set_131 X)
+	union all
+(select X.* from OpinionEnglish_Set_132_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_133_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '133')
+;
+create view OpinionEnglish_Set_133_Overlapping as
+select X.* from OpinionEnglish_Set_133_Candidate X, OpinionEnglish_Set_132 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_133_FilterOverlap as
+(select X.* from OpinionEnglish_Set_133_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_133_Overlapping X)
+;
+create view OpinionEnglish_Set_133 as
+(select X.* from OpinionEnglish_Set_132 X)
+	union all
+(select X.* from OpinionEnglish_Set_133_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_134_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '134')
+;
+create view OpinionEnglish_Set_134_Overlapping as
+select X.* from OpinionEnglish_Set_134_Candidate X, OpinionEnglish_Set_133 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_134_FilterOverlap as
+(select X.* from OpinionEnglish_Set_134_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_134_Overlapping X)
+;
+create view OpinionEnglish_Set_134 as
+(select X.* from OpinionEnglish_Set_133 X)
+	union all
+(select X.* from OpinionEnglish_Set_134_FilterOverlap X)
+;
+
+
+
+create view OpinionEnglish_Set_135_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '135')
+;
+create view OpinionEnglish_Set_135_Overlapping as
+select X.* from OpinionEnglish_Set_135_Candidate X, OpinionEnglish_Set_134 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_135_FilterOverlap as
+(select X.* from OpinionEnglish_Set_135_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_135_Overlapping X)
+;
+create view OpinionEnglish_Set_135 as
+(select X.* from OpinionEnglish_Set_134 X)
+	union all
+(select X.* from OpinionEnglish_Set_135_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_136_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '136')
+;
+create view OpinionEnglish_Set_136_Overlapping as
+select X.* from OpinionEnglish_Set_136_Candidate X, OpinionEnglish_Set_135 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_136_FilterOverlap as
+(select X.* from OpinionEnglish_Set_136_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_136_Overlapping X)
+;
+create view OpinionEnglish_Set_136 as
+(select X.* from OpinionEnglish_Set_135 X)
+	union all
+(select X.* from OpinionEnglish_Set_136_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_137_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '137')
+;
+create view OpinionEnglish_Set_137_Overlapping as
+select X.* from OpinionEnglish_Set_137_Candidate X, OpinionEnglish_Set_136 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_137_FilterOverlap as
+(select X.* from OpinionEnglish_Set_137_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_137_Overlapping X)
+;
+create view OpinionEnglish_Set_137 as
+(select X.* from OpinionEnglish_Set_136 X)
+	union all
+(select X.* from OpinionEnglish_Set_137_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_138_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '138')
+;
+create view OpinionEnglish_Set_138_Overlapping as
+select X.* from OpinionEnglish_Set_138_Candidate X, OpinionEnglish_Set_137 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_138_FilterOverlap as
+(select X.* from OpinionEnglish_Set_138_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_138_Overlapping X)
+;
+create view OpinionEnglish_Set_138 as
+(select X.* from OpinionEnglish_Set_137 X)
+	union all
+(select X.* from OpinionEnglish_Set_138_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_139_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '139')
+;
+create view OpinionEnglish_Set_139_Overlapping as
+select X.* from OpinionEnglish_Set_139_Candidate X, OpinionEnglish_Set_138 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_139_FilterOverlap as
+(select X.* from OpinionEnglish_Set_139_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_139_Overlapping X)
+;
+create view OpinionEnglish_Set_139 as
+(select X.* from OpinionEnglish_Set_138 X)
+	union all
+(select X.* from OpinionEnglish_Set_139_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_140_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '140')
+;
+create view OpinionEnglish_Set_140_Overlapping as
+select X.* from OpinionEnglish_Set_140_Candidate X, OpinionEnglish_Set_139 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_140_FilterOverlap as
+(select X.* from OpinionEnglish_Set_140_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_140_Overlapping X)
+;
+create view OpinionEnglish_Set_140 as
+(select X.* from OpinionEnglish_Set_139 X)
+	union all
+(select X.* from OpinionEnglish_Set_140_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_141_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '141')
+;
+create view OpinionEnglish_Set_141_Overlapping as
+select X.* from OpinionEnglish_Set_141_Candidate X, OpinionEnglish_Set_140 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_141_FilterOverlap as
+(select X.* from OpinionEnglish_Set_141_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_141_Overlapping X)
+;
+create view OpinionEnglish_Set_141 as
+(select X.* from OpinionEnglish_Set_140 X)
+	union all
+(select X.* from OpinionEnglish_Set_141_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_142_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '142')
+;
+create view OpinionEnglish_Set_142_Overlapping as
+select X.* from OpinionEnglish_Set_142_Candidate X, OpinionEnglish_Set_141 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_142_FilterOverlap as
+(select X.* from OpinionEnglish_Set_142_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_142_Overlapping X)
+;
+create view OpinionEnglish_Set_142 as
+(select X.* from OpinionEnglish_Set_141 X)
+	union all
+(select X.* from OpinionEnglish_Set_142_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_143_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '143')
+;
+create view OpinionEnglish_Set_143_Overlapping as
+select X.* from OpinionEnglish_Set_143_Candidate X, OpinionEnglish_Set_142 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_143_FilterOverlap as
+(select X.* from OpinionEnglish_Set_143_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_143_Overlapping X)
+;
+create view OpinionEnglish_Set_143 as
+(select X.* from OpinionEnglish_Set_142 X)
+	union all
+(select X.* from OpinionEnglish_Set_143_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_144_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '144')
+;
+create view OpinionEnglish_Set_144_Overlapping as
+select X.* from OpinionEnglish_Set_144_Candidate X, OpinionEnglish_Set_143 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_144_FilterOverlap as
+(select X.* from OpinionEnglish_Set_144_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_144_Overlapping X)
+;
+create view OpinionEnglish_Set_144 as
+(select X.* from OpinionEnglish_Set_143 X)
+	union all
+(select X.* from OpinionEnglish_Set_144_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_145_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '145')
+;
+create view OpinionEnglish_Set_145_Overlapping as
+select X.* from OpinionEnglish_Set_145_Candidate X, OpinionEnglish_Set_144 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_145_FilterOverlap as
+(select X.* from OpinionEnglish_Set_145_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_145_Overlapping X)
+;
+create view OpinionEnglish_Set_145 as
+(select X.* from OpinionEnglish_Set_144 X)
+	union all
+(select X.* from OpinionEnglish_Set_145_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_146_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '146')
+;
+create view OpinionEnglish_Set_146_Overlapping as
+select X.* from OpinionEnglish_Set_146_Candidate X, OpinionEnglish_Set_145 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_146_FilterOverlap as
+(select X.* from OpinionEnglish_Set_146_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_146_Overlapping X)
+;
+create view OpinionEnglish_Set_146 as
+(select X.* from OpinionEnglish_Set_145 X)
+	union all
+(select X.* from OpinionEnglish_Set_146_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_147_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '147')
+;
+create view OpinionEnglish_Set_147_Overlapping as
+select X.* from OpinionEnglish_Set_147_Candidate X, OpinionEnglish_Set_146 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_147_FilterOverlap as
+(select X.* from OpinionEnglish_Set_147_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_147_Overlapping X)
+;
+create view OpinionEnglish_Set_147 as
+(select X.* from OpinionEnglish_Set_146 X)
+	union all
+(select X.* from OpinionEnglish_Set_147_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_148_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '148')
+;
+create view OpinionEnglish_Set_148_Overlapping as
+select X.* from OpinionEnglish_Set_148_Candidate X, OpinionEnglish_Set_147 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_148_FilterOverlap as
+(select X.* from OpinionEnglish_Set_148_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_148_Overlapping X)
+;
+create view OpinionEnglish_Set_148 as
+(select X.* from OpinionEnglish_Set_147 X)
+	union all
+(select X.* from OpinionEnglish_Set_148_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_149_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '149')
+;
+create view OpinionEnglish_Set_149_Overlapping as
+select X.* from OpinionEnglish_Set_149_Candidate X, OpinionEnglish_Set_148 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_149_FilterOverlap as
+(select X.* from OpinionEnglish_Set_149_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_149_Overlapping X)
+;
+create view OpinionEnglish_Set_149 as
+(select X.* from OpinionEnglish_Set_148 X)
+	union all
+(select X.* from OpinionEnglish_Set_149_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_150_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '150')
+;
+create view OpinionEnglish_Set_150_Overlapping as
+select X.* from OpinionEnglish_Set_150_Candidate X, OpinionEnglish_Set_149 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_150_FilterOverlap as
+(select X.* from OpinionEnglish_Set_150_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_150_Overlapping X)
+;
+create view OpinionEnglish_Set_150 as
+(select X.* from OpinionEnglish_Set_149 X)
+	union all
+(select X.* from OpinionEnglish_Set_150_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_151_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '151')
+;
+create view OpinionEnglish_Set_151_Overlapping as
+select X.* from OpinionEnglish_Set_151_Candidate X, OpinionEnglish_Set_150 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_151_FilterOverlap as
+(select X.* from OpinionEnglish_Set_151_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_151_Overlapping X)
+;
+create view OpinionEnglish_Set_151 as
+(select X.* from OpinionEnglish_Set_150 X)
+	union all
+(select X.* from OpinionEnglish_Set_151_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_152_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '152')
+;
+create view OpinionEnglish_Set_152_Overlapping as
+select X.* from OpinionEnglish_Set_152_Candidate X, OpinionEnglish_Set_151 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_152_FilterOverlap as
+(select X.* from OpinionEnglish_Set_152_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_152_Overlapping X)
+;
+create view OpinionEnglish_Set_152 as
+(select X.* from OpinionEnglish_Set_151 X)
+	union all
+(select X.* from OpinionEnglish_Set_152_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_153_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '153')
+;
+create view OpinionEnglish_Set_153_Overlapping as
+select X.* from OpinionEnglish_Set_153_Candidate X, OpinionEnglish_Set_152 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_153_FilterOverlap as
+(select X.* from OpinionEnglish_Set_153_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_153_Overlapping X)
+;
+create view OpinionEnglish_Set_153 as
+(select X.* from OpinionEnglish_Set_152 X)
+	union all
+(select X.* from OpinionEnglish_Set_153_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_154_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '154')
+;
+create view OpinionEnglish_Set_154_Overlapping as
+select X.* from OpinionEnglish_Set_154_Candidate X, OpinionEnglish_Set_153 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_154_FilterOverlap as
+(select X.* from OpinionEnglish_Set_154_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_154_Overlapping X)
+;
+create view OpinionEnglish_Set_154 as
+(select X.* from OpinionEnglish_Set_153 X)
+	union all
+(select X.* from OpinionEnglish_Set_154_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_155_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '155')
+;
+create view OpinionEnglish_Set_155_Overlapping as
+select X.* from OpinionEnglish_Set_155_Candidate X, OpinionEnglish_Set_154 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_155_FilterOverlap as
+(select X.* from OpinionEnglish_Set_155_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_155_Overlapping X)
+;
+create view OpinionEnglish_Set_155 as
+(select X.* from OpinionEnglish_Set_154 X)
+	union all
+(select X.* from OpinionEnglish_Set_155_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_156_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '156')
+;
+create view OpinionEnglish_Set_156_Overlapping as
+select X.* from OpinionEnglish_Set_156_Candidate X, OpinionEnglish_Set_155 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_156_FilterOverlap as
+(select X.* from OpinionEnglish_Set_156_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_156_Overlapping X)
+;
+create view OpinionEnglish_Set_156 as
+(select X.* from OpinionEnglish_Set_155 X)
+	union all
+(select X.* from OpinionEnglish_Set_156_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_157_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '157')
+;
+create view OpinionEnglish_Set_157_Overlapping as
+select X.* from OpinionEnglish_Set_157_Candidate X, OpinionEnglish_Set_156 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_157_FilterOverlap as
+(select X.* from OpinionEnglish_Set_157_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_157_Overlapping X)
+;
+create view OpinionEnglish_Set_157 as
+(select X.* from OpinionEnglish_Set_156 X)
+	union all
+(select X.* from OpinionEnglish_Set_157_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_158_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '158')
+;
+create view OpinionEnglish_Set_158_Overlapping as
+select X.* from OpinionEnglish_Set_158_Candidate X, OpinionEnglish_Set_157 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_158_FilterOverlap as
+(select X.* from OpinionEnglish_Set_158_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_158_Overlapping X)
+;
+create view OpinionEnglish_Set_158 as
+(select X.* from OpinionEnglish_Set_157 X)
+	union all
+(select X.* from OpinionEnglish_Set_158_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_159_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '159')
+;
+create view OpinionEnglish_Set_159_Overlapping as
+select X.* from OpinionEnglish_Set_159_Candidate X, OpinionEnglish_Set_158 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_159_FilterOverlap as
+(select X.* from OpinionEnglish_Set_159_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_159_Overlapping X)
+;
+create view OpinionEnglish_Set_159 as
+(select X.* from OpinionEnglish_Set_158 X)
+	union all
+(select X.* from OpinionEnglish_Set_159_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_160_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '160')
+;
+create view OpinionEnglish_Set_160_Overlapping as
+select X.* from OpinionEnglish_Set_160_Candidate X, OpinionEnglish_Set_159 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_160_FilterOverlap as
+(select X.* from OpinionEnglish_Set_160_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_160_Overlapping X)
+;
+create view OpinionEnglish_Set_160 as
+(select X.* from OpinionEnglish_Set_159 X)
+	union all
+(select X.* from OpinionEnglish_Set_160_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_161_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '161')
+;
+create view OpinionEnglish_Set_161_Overlapping as
+select X.* from OpinionEnglish_Set_161_Candidate X, OpinionEnglish_Set_160 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_161_FilterOverlap as
+(select X.* from OpinionEnglish_Set_161_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_161_Overlapping X)
+;
+create view OpinionEnglish_Set_161 as
+(select X.* from OpinionEnglish_Set_160 X)
+	union all
+(select X.* from OpinionEnglish_Set_161_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_162_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '162')
+;
+create view OpinionEnglish_Set_162_Overlapping as
+select X.* from OpinionEnglish_Set_162_Candidate X, OpinionEnglish_Set_161 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_162_FilterOverlap as
+(select X.* from OpinionEnglish_Set_162_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_162_Overlapping X)
+;
+create view OpinionEnglish_Set_162 as
+(select X.* from OpinionEnglish_Set_161 X)
+	union all
+(select X.* from OpinionEnglish_Set_162_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_163_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '163')
+;
+create view OpinionEnglish_Set_163_Overlapping as
+select X.* from OpinionEnglish_Set_163_Candidate X, OpinionEnglish_Set_162 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_163_FilterOverlap as
+(select X.* from OpinionEnglish_Set_163_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_163_Overlapping X)
+;
+create view OpinionEnglish_Set_163 as
+(select X.* from OpinionEnglish_Set_162 X)
+	union all
+(select X.* from OpinionEnglish_Set_163_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_164_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '164')
+;
+create view OpinionEnglish_Set_164_Overlapping as
+select X.* from OpinionEnglish_Set_164_Candidate X, OpinionEnglish_Set_163 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_164_FilterOverlap as
+(select X.* from OpinionEnglish_Set_164_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_164_Overlapping X)
+;
+create view OpinionEnglish_Set_164 as
+(select X.* from OpinionEnglish_Set_163 X)
+	union all
+(select X.* from OpinionEnglish_Set_164_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_165_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '165')
+;
+create view OpinionEnglish_Set_165_Overlapping as
+select X.* from OpinionEnglish_Set_165_Candidate X, OpinionEnglish_Set_164 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_165_FilterOverlap as
+(select X.* from OpinionEnglish_Set_165_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_165_Overlapping X)
+;
+create view OpinionEnglish_Set_165 as
+(select X.* from OpinionEnglish_Set_164 X)
+	union all
+(select X.* from OpinionEnglish_Set_165_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_166_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '166')
+;
+create view OpinionEnglish_Set_166_Overlapping as
+select X.* from OpinionEnglish_Set_166_Candidate X, OpinionEnglish_Set_165 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_166_FilterOverlap as
+(select X.* from OpinionEnglish_Set_166_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_166_Overlapping X)
+;
+create view OpinionEnglish_Set_166 as
+(select X.* from OpinionEnglish_Set_165 X)
+	union all
+(select X.* from OpinionEnglish_Set_166_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_167_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '167')
+;
+create view OpinionEnglish_Set_167_Overlapping as
+select X.* from OpinionEnglish_Set_167_Candidate X, OpinionEnglish_Set_166 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_167_FilterOverlap as
+(select X.* from OpinionEnglish_Set_167_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_167_Overlapping X)
+;
+create view OpinionEnglish_Set_167 as
+(select X.* from OpinionEnglish_Set_166 X)
+	union all
+(select X.* from OpinionEnglish_Set_167_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_168_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '168')
+;
+create view OpinionEnglish_Set_168_Overlapping as
+select X.* from OpinionEnglish_Set_168_Candidate X, OpinionEnglish_Set_167 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_168_FilterOverlap as
+(select X.* from OpinionEnglish_Set_168_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_168_Overlapping X)
+;
+create view OpinionEnglish_Set_168 as
+(select X.* from OpinionEnglish_Set_167 X)
+	union all
+(select X.* from OpinionEnglish_Set_168_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_169_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '169')
+;
+create view OpinionEnglish_Set_169_Overlapping as
+select X.* from OpinionEnglish_Set_169_Candidate X, OpinionEnglish_Set_168 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_169_FilterOverlap as
+(select X.* from OpinionEnglish_Set_169_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_169_Overlapping X)
+;
+create view OpinionEnglish_Set_169 as
+(select X.* from OpinionEnglish_Set_168 X)
+	union all
+(select X.* from OpinionEnglish_Set_169_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_170_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '170')
+;
+create view OpinionEnglish_Set_170_Overlapping as
+select X.* from OpinionEnglish_Set_170_Candidate X, OpinionEnglish_Set_169 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_170_FilterOverlap as
+(select X.* from OpinionEnglish_Set_170_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_170_Overlapping X)
+;
+create view OpinionEnglish_Set_170 as
+(select X.* from OpinionEnglish_Set_169 X)
+	union all
+(select X.* from OpinionEnglish_Set_170_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_171_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '171')
+;
+create view OpinionEnglish_Set_171_Overlapping as
+select X.* from OpinionEnglish_Set_171_Candidate X, OpinionEnglish_Set_170 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_171_FilterOverlap as
+(select X.* from OpinionEnglish_Set_171_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_171_Overlapping X)
+;
+create view OpinionEnglish_Set_171 as
+(select X.* from OpinionEnglish_Set_170 X)
+	union all
+(select X.* from OpinionEnglish_Set_171_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_172_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '172')
+;
+create view OpinionEnglish_Set_172_Overlapping as
+select X.* from OpinionEnglish_Set_172_Candidate X, OpinionEnglish_Set_171 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_172_FilterOverlap as
+(select X.* from OpinionEnglish_Set_172_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_172_Overlapping X)
+;
+create view OpinionEnglish_Set_172 as
+(select X.* from OpinionEnglish_Set_171 X)
+	union all
+(select X.* from OpinionEnglish_Set_172_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_173_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '173')
+;
+create view OpinionEnglish_Set_173_Overlapping as
+select X.* from OpinionEnglish_Set_173_Candidate X, OpinionEnglish_Set_172 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_173_FilterOverlap as
+(select X.* from OpinionEnglish_Set_173_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_173_Overlapping X)
+;
+create view OpinionEnglish_Set_173 as
+(select X.* from OpinionEnglish_Set_172 X)
+	union all
+(select X.* from OpinionEnglish_Set_173_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_174_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '174')
+;
+create view OpinionEnglish_Set_174_Overlapping as
+select X.* from OpinionEnglish_Set_174_Candidate X, OpinionEnglish_Set_173 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_174_FilterOverlap as
+(select X.* from OpinionEnglish_Set_174_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_174_Overlapping X)
+;
+create view OpinionEnglish_Set_174 as
+(select X.* from OpinionEnglish_Set_173 X)
+	union all
+(select X.* from OpinionEnglish_Set_174_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_175_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '175')
+;
+create view OpinionEnglish_Set_175_Overlapping as
+select X.* from OpinionEnglish_Set_175_Candidate X, OpinionEnglish_Set_174 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_175_FilterOverlap as
+(select X.* from OpinionEnglish_Set_175_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_175_Overlapping X)
+;
+create view OpinionEnglish_Set_175 as
+(select X.* from OpinionEnglish_Set_174 X)
+	union all
+(select X.* from OpinionEnglish_Set_175_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_176_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '176')
+;
+create view OpinionEnglish_Set_176_Overlapping as
+select X.* from OpinionEnglish_Set_176_Candidate X, OpinionEnglish_Set_175 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_176_FilterOverlap as
+(select X.* from OpinionEnglish_Set_176_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_176_Overlapping X)
+;
+create view OpinionEnglish_Set_176 as
+(select X.* from OpinionEnglish_Set_175 X)
+	union all
+(select X.* from OpinionEnglish_Set_176_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_177_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '177')
+;
+create view OpinionEnglish_Set_177_Overlapping as
+select X.* from OpinionEnglish_Set_177_Candidate X, OpinionEnglish_Set_176 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_177_FilterOverlap as
+(select X.* from OpinionEnglish_Set_177_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_177_Overlapping X)
+;
+create view OpinionEnglish_Set_177 as
+(select X.* from OpinionEnglish_Set_176 X)
+	union all
+(select X.* from OpinionEnglish_Set_177_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_178_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '178')
+;
+create view OpinionEnglish_Set_178_Overlapping as
+select X.* from OpinionEnglish_Set_178_Candidate X, OpinionEnglish_Set_177 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_178_FilterOverlap as
+(select X.* from OpinionEnglish_Set_178_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_178_Overlapping X)
+;
+create view OpinionEnglish_Set_178 as
+(select X.* from OpinionEnglish_Set_177 X)
+	union all
+(select X.* from OpinionEnglish_Set_178_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_179_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '179')
+;
+create view OpinionEnglish_Set_179_Overlapping as
+select X.* from OpinionEnglish_Set_179_Candidate X, OpinionEnglish_Set_178 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_179_FilterOverlap as
+(select X.* from OpinionEnglish_Set_179_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_179_Overlapping X)
+;
+create view OpinionEnglish_Set_179 as
+(select X.* from OpinionEnglish_Set_178 X)
+	union all
+(select X.* from OpinionEnglish_Set_179_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_180_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '180')
+;
+create view OpinionEnglish_Set_180_Overlapping as
+select X.* from OpinionEnglish_Set_180_Candidate X, OpinionEnglish_Set_179 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_180_FilterOverlap as
+(select X.* from OpinionEnglish_Set_180_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_180_Overlapping X)
+;
+create view OpinionEnglish_Set_180 as
+(select X.* from OpinionEnglish_Set_179 X)
+	union all
+(select X.* from OpinionEnglish_Set_180_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_181_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '181')
+;
+create view OpinionEnglish_Set_181_Overlapping as
+select X.* from OpinionEnglish_Set_181_Candidate X, OpinionEnglish_Set_180 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_181_FilterOverlap as
+(select X.* from OpinionEnglish_Set_181_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_181_Overlapping X)
+;
+create view OpinionEnglish_Set_181 as
+(select X.* from OpinionEnglish_Set_180 X)
+	union all
+(select X.* from OpinionEnglish_Set_181_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_182_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '182')
+;
+create view OpinionEnglish_Set_182_Overlapping as
+select X.* from OpinionEnglish_Set_182_Candidate X, OpinionEnglish_Set_181 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_182_FilterOverlap as
+(select X.* from OpinionEnglish_Set_182_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_182_Overlapping X)
+;
+create view OpinionEnglish_Set_182 as
+(select X.* from OpinionEnglish_Set_181 X)
+	union all
+(select X.* from OpinionEnglish_Set_182_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_183_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '183')
+;
+create view OpinionEnglish_Set_183_Overlapping as
+select X.* from OpinionEnglish_Set_183_Candidate X, OpinionEnglish_Set_182 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_183_FilterOverlap as
+(select X.* from OpinionEnglish_Set_183_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_183_Overlapping X)
+;
+create view OpinionEnglish_Set_183 as
+(select X.* from OpinionEnglish_Set_182 X)
+	union all
+(select X.* from OpinionEnglish_Set_183_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_184_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '184')
+;
+create view OpinionEnglish_Set_184_Overlapping as
+select X.* from OpinionEnglish_Set_184_Candidate X, OpinionEnglish_Set_183 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_184_FilterOverlap as
+(select X.* from OpinionEnglish_Set_184_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_184_Overlapping X)
+;
+create view OpinionEnglish_Set_184 as
+(select X.* from OpinionEnglish_Set_183 X)
+	union all
+(select X.* from OpinionEnglish_Set_184_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_185_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '185')
+;
+create view OpinionEnglish_Set_185_Overlapping as
+select X.* from OpinionEnglish_Set_185_Candidate X, OpinionEnglish_Set_184 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_185_FilterOverlap as
+(select X.* from OpinionEnglish_Set_185_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_185_Overlapping X)
+;
+create view OpinionEnglish_Set_185 as
+(select X.* from OpinionEnglish_Set_184 X)
+	union all
+(select X.* from OpinionEnglish_Set_185_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_186_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '186')
+;
+create view OpinionEnglish_Set_186_Overlapping as
+select X.* from OpinionEnglish_Set_186_Candidate X, OpinionEnglish_Set_185 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_186_FilterOverlap as
+(select X.* from OpinionEnglish_Set_186_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_186_Overlapping X)
+;
+create view OpinionEnglish_Set_186 as
+(select X.* from OpinionEnglish_Set_185 X)
+	union all
+(select X.* from OpinionEnglish_Set_186_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_187_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '187')
+;
+create view OpinionEnglish_Set_187_Overlapping as
+select X.* from OpinionEnglish_Set_187_Candidate X, OpinionEnglish_Set_186 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_187_FilterOverlap as
+(select X.* from OpinionEnglish_Set_187_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_187_Overlapping X)
+;
+create view OpinionEnglish_Set_187 as
+(select X.* from OpinionEnglish_Set_186 X)
+	union all
+(select X.* from OpinionEnglish_Set_187_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_188_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '188')
+;
+create view OpinionEnglish_Set_188_Overlapping as
+select X.* from OpinionEnglish_Set_188_Candidate X, OpinionEnglish_Set_187 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_188_FilterOverlap as
+(select X.* from OpinionEnglish_Set_188_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_188_Overlapping X)
+;
+create view OpinionEnglish_Set_188 as
+(select X.* from OpinionEnglish_Set_187 X)
+	union all
+(select X.* from OpinionEnglish_Set_188_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_189_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '189')
+;
+create view OpinionEnglish_Set_189_Overlapping as
+select X.* from OpinionEnglish_Set_189_Candidate X, OpinionEnglish_Set_188 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_189_FilterOverlap as
+(select X.* from OpinionEnglish_Set_189_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_189_Overlapping X)
+;
+create view OpinionEnglish_Set_189 as
+(select X.* from OpinionEnglish_Set_188 X)
+	union all
+(select X.* from OpinionEnglish_Set_189_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_190_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '190')
+;
+create view OpinionEnglish_Set_190_Overlapping as
+select X.* from OpinionEnglish_Set_190_Candidate X, OpinionEnglish_Set_189 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_190_FilterOverlap as
+(select X.* from OpinionEnglish_Set_190_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_190_Overlapping X)
+;
+create view OpinionEnglish_Set_190 as
+(select X.* from OpinionEnglish_Set_189 X)
+	union all
+(select X.* from OpinionEnglish_Set_190_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_191_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '191')
+;
+create view OpinionEnglish_Set_191_Overlapping as
+select X.* from OpinionEnglish_Set_191_Candidate X, OpinionEnglish_Set_190 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_191_FilterOverlap as
+(select X.* from OpinionEnglish_Set_191_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_191_Overlapping X)
+;
+create view OpinionEnglish_Set_191 as
+(select X.* from OpinionEnglish_Set_190 X)
+	union all
+(select X.* from OpinionEnglish_Set_191_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_192_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '192')
+;
+create view OpinionEnglish_Set_192_Overlapping as
+select X.* from OpinionEnglish_Set_192_Candidate X, OpinionEnglish_Set_191 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_192_FilterOverlap as
+(select X.* from OpinionEnglish_Set_192_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_192_Overlapping X)
+;
+create view OpinionEnglish_Set_192 as
+(select X.* from OpinionEnglish_Set_191 X)
+	union all
+(select X.* from OpinionEnglish_Set_192_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_193_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '193')
+;
+create view OpinionEnglish_Set_193_Overlapping as
+select X.* from OpinionEnglish_Set_193_Candidate X, OpinionEnglish_Set_192 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_193_FilterOverlap as
+(select X.* from OpinionEnglish_Set_193_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_193_Overlapping X)
+;
+create view OpinionEnglish_Set_193 as
+(select X.* from OpinionEnglish_Set_192 X)
+	union all
+(select X.* from OpinionEnglish_Set_193_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_194_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '194')
+;
+create view OpinionEnglish_Set_194_Overlapping as
+select X.* from OpinionEnglish_Set_194_Candidate X, OpinionEnglish_Set_193 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_194_FilterOverlap as
+(select X.* from OpinionEnglish_Set_194_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_194_Overlapping X)
+;
+create view OpinionEnglish_Set_194 as
+(select X.* from OpinionEnglish_Set_193 X)
+	union all
+(select X.* from OpinionEnglish_Set_194_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_195_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '195')
+;
+create view OpinionEnglish_Set_195_Overlapping as
+select X.* from OpinionEnglish_Set_195_Candidate X, OpinionEnglish_Set_194 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_195_FilterOverlap as
+(select X.* from OpinionEnglish_Set_195_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_195_Overlapping X)
+;
+create view OpinionEnglish_Set_195 as
+(select X.* from OpinionEnglish_Set_194 X)
+	union all
+(select X.* from OpinionEnglish_Set_195_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_196_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '196')
+;
+create view OpinionEnglish_Set_196_Overlapping as
+select X.* from OpinionEnglish_Set_196_Candidate X, OpinionEnglish_Set_195 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_196_FilterOverlap as
+(select X.* from OpinionEnglish_Set_196_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_196_Overlapping X)
+;
+create view OpinionEnglish_Set_196 as
+(select X.* from OpinionEnglish_Set_195 X)
+	union all
+(select X.* from OpinionEnglish_Set_196_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_197_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '197')
+;
+create view OpinionEnglish_Set_197_Overlapping as
+select X.* from OpinionEnglish_Set_197_Candidate X, OpinionEnglish_Set_196 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_197_FilterOverlap as
+(select X.* from OpinionEnglish_Set_197_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_197_Overlapping X)
+;
+create view OpinionEnglish_Set_197 as
+(select X.* from OpinionEnglish_Set_196 X)
+	union all
+(select X.* from OpinionEnglish_Set_197_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_198_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '198')
+;
+create view OpinionEnglish_Set_198_Overlapping as
+select X.* from OpinionEnglish_Set_198_Candidate X, OpinionEnglish_Set_197 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_198_FilterOverlap as
+(select X.* from OpinionEnglish_Set_198_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_198_Overlapping X)
+;
+create view OpinionEnglish_Set_198 as
+(select X.* from OpinionEnglish_Set_197 X)
+	union all
+(select X.* from OpinionEnglish_Set_198_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_199_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '199')
+;
+create view OpinionEnglish_Set_199_Overlapping as
+select X.* from OpinionEnglish_Set_199_Candidate X, OpinionEnglish_Set_198 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_199_FilterOverlap as
+(select X.* from OpinionEnglish_Set_199_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_199_Overlapping X)
+;
+create view OpinionEnglish_Set_199 as
+(select X.* from OpinionEnglish_Set_198 X)
+	union all
+(select X.* from OpinionEnglish_Set_199_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_200_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '200')
+;
+create view OpinionEnglish_Set_200_Overlapping as
+select X.* from OpinionEnglish_Set_200_Candidate X, OpinionEnglish_Set_199 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_200_FilterOverlap as
+(select X.* from OpinionEnglish_Set_200_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_200_Overlapping X)
+;
+create view OpinionEnglish_Set_200 as
+(select X.* from OpinionEnglish_Set_199 X)
+	union all
+(select X.* from OpinionEnglish_Set_200_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_201_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '201')
+;
+create view OpinionEnglish_Set_201_Overlapping as
+select X.* from OpinionEnglish_Set_201_Candidate X, OpinionEnglish_Set_200 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_201_FilterOverlap as
+(select X.* from OpinionEnglish_Set_201_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_201_Overlapping X)
+;
+create view OpinionEnglish_Set_201 as
+(select X.* from OpinionEnglish_Set_200 X)
+	union all
+(select X.* from OpinionEnglish_Set_201_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_202_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '202')
+;
+create view OpinionEnglish_Set_202_Overlapping as
+select X.* from OpinionEnglish_Set_202_Candidate X, OpinionEnglish_Set_201 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_202_FilterOverlap as
+(select X.* from OpinionEnglish_Set_202_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_202_Overlapping X)
+;
+create view OpinionEnglish_Set_202 as
+(select X.* from OpinionEnglish_Set_201 X)
+	union all
+(select X.* from OpinionEnglish_Set_202_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_203_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '203')
+;
+create view OpinionEnglish_Set_203_Overlapping as
+select X.* from OpinionEnglish_Set_203_Candidate X, OpinionEnglish_Set_202 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_203_FilterOverlap as
+(select X.* from OpinionEnglish_Set_203_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_203_Overlapping X)
+;
+create view OpinionEnglish_Set_203 as
+(select X.* from OpinionEnglish_Set_202 X)
+	union all
+(select X.* from OpinionEnglish_Set_203_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_204_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '204')
+;
+create view OpinionEnglish_Set_204_Overlapping as
+select X.* from OpinionEnglish_Set_204_Candidate X, OpinionEnglish_Set_203 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_204_FilterOverlap as
+(select X.* from OpinionEnglish_Set_204_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_204_Overlapping X)
+;
+create view OpinionEnglish_Set_204 as
+(select X.* from OpinionEnglish_Set_203 X)
+	union all
+(select X.* from OpinionEnglish_Set_204_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_205_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '205')
+;
+create view OpinionEnglish_Set_205_Overlapping as
+select X.* from OpinionEnglish_Set_205_Candidate X, OpinionEnglish_Set_204 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_205_FilterOverlap as
+(select X.* from OpinionEnglish_Set_205_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_205_Overlapping X)
+;
+create view OpinionEnglish_Set_205 as
+(select X.* from OpinionEnglish_Set_204 X)
+	union all
+(select X.* from OpinionEnglish_Set_205_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_206_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '206')
+;
+create view OpinionEnglish_Set_206_Overlapping as
+select X.* from OpinionEnglish_Set_206_Candidate X, OpinionEnglish_Set_205 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_206_FilterOverlap as
+(select X.* from OpinionEnglish_Set_206_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_206_Overlapping X)
+;
+create view OpinionEnglish_Set_206 as
+(select X.* from OpinionEnglish_Set_205 X)
+	union all
+(select X.* from OpinionEnglish_Set_206_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_207_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '207')
+;
+create view OpinionEnglish_Set_207_Overlapping as
+select X.* from OpinionEnglish_Set_207_Candidate X, OpinionEnglish_Set_206 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_207_FilterOverlap as
+(select X.* from OpinionEnglish_Set_207_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_207_Overlapping X)
+;
+create view OpinionEnglish_Set_207 as
+(select X.* from OpinionEnglish_Set_206 X)
+	union all
+(select X.* from OpinionEnglish_Set_207_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_208_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '208')
+;
+create view OpinionEnglish_Set_208_Overlapping as
+select X.* from OpinionEnglish_Set_208_Candidate X, OpinionEnglish_Set_207 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_208_FilterOverlap as
+(select X.* from OpinionEnglish_Set_208_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_208_Overlapping X)
+;
+create view OpinionEnglish_Set_208 as
+(select X.* from OpinionEnglish_Set_207 X)
+	union all
+(select X.* from OpinionEnglish_Set_208_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_209_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '209')
+;
+create view OpinionEnglish_Set_209_Overlapping as
+select X.* from OpinionEnglish_Set_209_Candidate X, OpinionEnglish_Set_208 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_209_FilterOverlap as
+(select X.* from OpinionEnglish_Set_209_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_209_Overlapping X)
+;
+create view OpinionEnglish_Set_209 as
+(select X.* from OpinionEnglish_Set_208 X)
+	union all
+(select X.* from OpinionEnglish_Set_209_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_210_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '210')
+;
+create view OpinionEnglish_Set_210_Overlapping as
+select X.* from OpinionEnglish_Set_210_Candidate X, OpinionEnglish_Set_209 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_210_FilterOverlap as
+(select X.* from OpinionEnglish_Set_210_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_210_Overlapping X)
+;
+create view OpinionEnglish_Set_210 as
+(select X.* from OpinionEnglish_Set_209 X)
+	union all
+(select X.* from OpinionEnglish_Set_210_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_211_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '211')
+;
+create view OpinionEnglish_Set_211_Overlapping as
+select X.* from OpinionEnglish_Set_211_Candidate X, OpinionEnglish_Set_210 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_211_FilterOverlap as
+(select X.* from OpinionEnglish_Set_211_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_211_Overlapping X)
+;
+create view OpinionEnglish_Set_211 as
+(select X.* from OpinionEnglish_Set_210 X)
+	union all
+(select X.* from OpinionEnglish_Set_211_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_212_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '212')
+;
+create view OpinionEnglish_Set_212_Overlapping as
+select X.* from OpinionEnglish_Set_212_Candidate X, OpinionEnglish_Set_211 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_212_FilterOverlap as
+(select X.* from OpinionEnglish_Set_212_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_212_Overlapping X)
+;
+create view OpinionEnglish_Set_212 as
+(select X.* from OpinionEnglish_Set_211 X)
+	union all
+(select X.* from OpinionEnglish_Set_212_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_213_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '213')
+;
+create view OpinionEnglish_Set_213_Overlapping as
+select X.* from OpinionEnglish_Set_213_Candidate X, OpinionEnglish_Set_212 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_213_FilterOverlap as
+(select X.* from OpinionEnglish_Set_213_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_213_Overlapping X)
+;
+create view OpinionEnglish_Set_213 as
+(select X.* from OpinionEnglish_Set_212 X)
+	union all
+(select X.* from OpinionEnglish_Set_213_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_214_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '214')
+;
+create view OpinionEnglish_Set_214_Overlapping as
+select X.* from OpinionEnglish_Set_214_Candidate X, OpinionEnglish_Set_213 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_214_FilterOverlap as
+(select X.* from OpinionEnglish_Set_214_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_214_Overlapping X)
+;
+create view OpinionEnglish_Set_214 as
+(select X.* from OpinionEnglish_Set_213 X)
+	union all
+(select X.* from OpinionEnglish_Set_214_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_215_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '215')
+;
+create view OpinionEnglish_Set_215_Overlapping as
+select X.* from OpinionEnglish_Set_215_Candidate X, OpinionEnglish_Set_214 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_215_FilterOverlap as
+(select X.* from OpinionEnglish_Set_215_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_215_Overlapping X)
+;
+create view OpinionEnglish_Set_215 as
+(select X.* from OpinionEnglish_Set_214 X)
+	union all
+(select X.* from OpinionEnglish_Set_215_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_216_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '216')
+;
+create view OpinionEnglish_Set_216_Overlapping as
+select X.* from OpinionEnglish_Set_216_Candidate X, OpinionEnglish_Set_215 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_216_FilterOverlap as
+(select X.* from OpinionEnglish_Set_216_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_216_Overlapping X)
+;
+create view OpinionEnglish_Set_216 as
+(select X.* from OpinionEnglish_Set_215 X)
+	union all
+(select X.* from OpinionEnglish_Set_216_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_217_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '217')
+;
+create view OpinionEnglish_Set_217_Overlapping as
+select X.* from OpinionEnglish_Set_217_Candidate X, OpinionEnglish_Set_216 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_217_FilterOverlap as
+(select X.* from OpinionEnglish_Set_217_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_217_Overlapping X)
+;
+create view OpinionEnglish_Set_217 as
+(select X.* from OpinionEnglish_Set_216 X)
+	union all
+(select X.* from OpinionEnglish_Set_217_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_218_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '218')
+;
+create view OpinionEnglish_Set_218_Overlapping as
+select X.* from OpinionEnglish_Set_218_Candidate X, OpinionEnglish_Set_217 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_218_FilterOverlap as
+(select X.* from OpinionEnglish_Set_218_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_218_Overlapping X)
+;
+create view OpinionEnglish_Set_218 as
+(select X.* from OpinionEnglish_Set_217 X)
+	union all
+(select X.* from OpinionEnglish_Set_218_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_219_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '219')
+;
+create view OpinionEnglish_Set_219_Overlapping as
+select X.* from OpinionEnglish_Set_219_Candidate X, OpinionEnglish_Set_218 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_219_FilterOverlap as
+(select X.* from OpinionEnglish_Set_219_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_219_Overlapping X)
+;
+create view OpinionEnglish_Set_219 as
+(select X.* from OpinionEnglish_Set_218 X)
+	union all
+(select X.* from OpinionEnglish_Set_219_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_220_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '220')
+;
+create view OpinionEnglish_Set_220_Overlapping as
+select X.* from OpinionEnglish_Set_220_Candidate X, OpinionEnglish_Set_219 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_220_FilterOverlap as
+(select X.* from OpinionEnglish_Set_220_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_220_Overlapping X)
+;
+create view OpinionEnglish_Set_220 as
+(select X.* from OpinionEnglish_Set_219 X)
+	union all
+(select X.* from OpinionEnglish_Set_220_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_221_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '221')
+;
+create view OpinionEnglish_Set_221_Overlapping as
+select X.* from OpinionEnglish_Set_221_Candidate X, OpinionEnglish_Set_220 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_221_FilterOverlap as
+(select X.* from OpinionEnglish_Set_221_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_221_Overlapping X)
+;
+create view OpinionEnglish_Set_221 as
+(select X.* from OpinionEnglish_Set_220 X)
+	union all
+(select X.* from OpinionEnglish_Set_221_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_222_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '222')
+;
+create view OpinionEnglish_Set_222_Overlapping as
+select X.* from OpinionEnglish_Set_222_Candidate X, OpinionEnglish_Set_221 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_222_FilterOverlap as
+(select X.* from OpinionEnglish_Set_222_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_222_Overlapping X)
+;
+create view OpinionEnglish_Set_222 as
+(select X.* from OpinionEnglish_Set_221 X)
+	union all
+(select X.* from OpinionEnglish_Set_222_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_223_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '223')
+;
+create view OpinionEnglish_Set_223_Overlapping as
+select X.* from OpinionEnglish_Set_223_Candidate X, OpinionEnglish_Set_222 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_223_FilterOverlap as
+(select X.* from OpinionEnglish_Set_223_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_223_Overlapping X)
+;
+create view OpinionEnglish_Set_223 as
+(select X.* from OpinionEnglish_Set_222 X)
+	union all
+(select X.* from OpinionEnglish_Set_223_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_224_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '224')
+;
+create view OpinionEnglish_Set_224_Overlapping as
+select X.* from OpinionEnglish_Set_224_Candidate X, OpinionEnglish_Set_223 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_224_FilterOverlap as
+(select X.* from OpinionEnglish_Set_224_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_224_Overlapping X)
+;
+create view OpinionEnglish_Set_224 as
+(select X.* from OpinionEnglish_Set_223 X)
+	union all
+(select X.* from OpinionEnglish_Set_224_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_225_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '225')
+;
+create view OpinionEnglish_Set_225_Overlapping as
+select X.* from OpinionEnglish_Set_225_Candidate X, OpinionEnglish_Set_224 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_225_FilterOverlap as
+(select X.* from OpinionEnglish_Set_225_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_225_Overlapping X)
+;
+create view OpinionEnglish_Set_225 as
+(select X.* from OpinionEnglish_Set_224 X)
+	union all
+(select X.* from OpinionEnglish_Set_225_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_226_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '226')
+;
+create view OpinionEnglish_Set_226_Overlapping as
+select X.* from OpinionEnglish_Set_226_Candidate X, OpinionEnglish_Set_225 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_226_FilterOverlap as
+(select X.* from OpinionEnglish_Set_226_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_226_Overlapping X)
+;
+create view OpinionEnglish_Set_226 as
+(select X.* from OpinionEnglish_Set_225 X)
+	union all
+(select X.* from OpinionEnglish_Set_226_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_227_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '227')
+;
+create view OpinionEnglish_Set_227_Overlapping as
+select X.* from OpinionEnglish_Set_227_Candidate X, OpinionEnglish_Set_226 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_227_FilterOverlap as
+(select X.* from OpinionEnglish_Set_227_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_227_Overlapping X)
+;
+create view OpinionEnglish_Set_227 as
+(select X.* from OpinionEnglish_Set_226 X)
+	union all
+(select X.* from OpinionEnglish_Set_227_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_228_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '228')
+;
+create view OpinionEnglish_Set_228_Overlapping as
+select X.* from OpinionEnglish_Set_228_Candidate X, OpinionEnglish_Set_227 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_228_FilterOverlap as
+(select X.* from OpinionEnglish_Set_228_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_228_Overlapping X)
+;
+create view OpinionEnglish_Set_228 as
+(select X.* from OpinionEnglish_Set_227 X)
+	union all
+(select X.* from OpinionEnglish_Set_228_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_229_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '229')
+;
+create view OpinionEnglish_Set_229_Overlapping as
+select X.* from OpinionEnglish_Set_229_Candidate X, OpinionEnglish_Set_228 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_229_FilterOverlap as
+(select X.* from OpinionEnglish_Set_229_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_229_Overlapping X)
+;
+create view OpinionEnglish_Set_229 as
+(select X.* from OpinionEnglish_Set_228 X)
+	union all
+(select X.* from OpinionEnglish_Set_229_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_230_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '230')
+;
+create view OpinionEnglish_Set_230_Overlapping as
+select X.* from OpinionEnglish_Set_230_Candidate X, OpinionEnglish_Set_229 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_230_FilterOverlap as
+(select X.* from OpinionEnglish_Set_230_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_230_Overlapping X)
+;
+create view OpinionEnglish_Set_230 as
+(select X.* from OpinionEnglish_Set_229 X)
+	union all
+(select X.* from OpinionEnglish_Set_230_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_231_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '231')
+;
+create view OpinionEnglish_Set_231_Overlapping as
+select X.* from OpinionEnglish_Set_231_Candidate X, OpinionEnglish_Set_230 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_231_FilterOverlap as
+(select X.* from OpinionEnglish_Set_231_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_231_Overlapping X)
+;
+create view OpinionEnglish_Set_231 as
+(select X.* from OpinionEnglish_Set_230 X)
+	union all
+(select X.* from OpinionEnglish_Set_231_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_232_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '232')
+;
+create view OpinionEnglish_Set_232_Overlapping as
+select X.* from OpinionEnglish_Set_232_Candidate X, OpinionEnglish_Set_231 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_232_FilterOverlap as
+(select X.* from OpinionEnglish_Set_232_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_232_Overlapping X)
+;
+create view OpinionEnglish_Set_232 as
+(select X.* from OpinionEnglish_Set_231 X)
+	union all
+(select X.* from OpinionEnglish_Set_232_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_233_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '233')
+;
+create view OpinionEnglish_Set_233_Overlapping as
+select X.* from OpinionEnglish_Set_233_Candidate X, OpinionEnglish_Set_232 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_233_FilterOverlap as
+(select X.* from OpinionEnglish_Set_233_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_233_Overlapping X)
+;
+create view OpinionEnglish_Set_233 as
+(select X.* from OpinionEnglish_Set_232 X)
+	union all
+(select X.* from OpinionEnglish_Set_233_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_234_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '234')
+;
+create view OpinionEnglish_Set_234_Overlapping as
+select X.* from OpinionEnglish_Set_234_Candidate X, OpinionEnglish_Set_233 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_234_FilterOverlap as
+(select X.* from OpinionEnglish_Set_234_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_234_Overlapping X)
+;
+create view OpinionEnglish_Set_234 as
+(select X.* from OpinionEnglish_Set_233 X)
+	union all
+(select X.* from OpinionEnglish_Set_234_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_235_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '235')
+;
+create view OpinionEnglish_Set_235_Overlapping as
+select X.* from OpinionEnglish_Set_235_Candidate X, OpinionEnglish_Set_234 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_235_FilterOverlap as
+(select X.* from OpinionEnglish_Set_235_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_235_Overlapping X)
+;
+create view OpinionEnglish_Set_235 as
+(select X.* from OpinionEnglish_Set_234 X)
+	union all
+(select X.* from OpinionEnglish_Set_235_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_236_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '236')
+;
+create view OpinionEnglish_Set_236_Overlapping as
+select X.* from OpinionEnglish_Set_236_Candidate X, OpinionEnglish_Set_235 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_236_FilterOverlap as
+(select X.* from OpinionEnglish_Set_236_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_236_Overlapping X)
+;
+create view OpinionEnglish_Set_236 as
+(select X.* from OpinionEnglish_Set_235 X)
+	union all
+(select X.* from OpinionEnglish_Set_236_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_237_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '237')
+;
+create view OpinionEnglish_Set_237_Overlapping as
+select X.* from OpinionEnglish_Set_237_Candidate X, OpinionEnglish_Set_236 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_237_FilterOverlap as
+(select X.* from OpinionEnglish_Set_237_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_237_Overlapping X)
+;
+create view OpinionEnglish_Set_237 as
+(select X.* from OpinionEnglish_Set_236 X)
+	union all
+(select X.* from OpinionEnglish_Set_237_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_238_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '238')
+;
+create view OpinionEnglish_Set_238_Overlapping as
+select X.* from OpinionEnglish_Set_238_Candidate X, OpinionEnglish_Set_237 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_238_FilterOverlap as
+(select X.* from OpinionEnglish_Set_238_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_238_Overlapping X)
+;
+create view OpinionEnglish_Set_238 as
+(select X.* from OpinionEnglish_Set_237 X)
+	union all
+(select X.* from OpinionEnglish_Set_238_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_239_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '239')
+;
+create view OpinionEnglish_Set_239_Overlapping as
+select X.* from OpinionEnglish_Set_239_Candidate X, OpinionEnglish_Set_238 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_239_FilterOverlap as
+(select X.* from OpinionEnglish_Set_239_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_239_Overlapping X)
+;
+create view OpinionEnglish_Set_239 as
+(select X.* from OpinionEnglish_Set_238 X)
+	union all
+(select X.* from OpinionEnglish_Set_239_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_240_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '240')
+;
+create view OpinionEnglish_Set_240_Overlapping as
+select X.* from OpinionEnglish_Set_240_Candidate X, OpinionEnglish_Set_239 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_240_FilterOverlap as
+(select X.* from OpinionEnglish_Set_240_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_240_Overlapping X)
+;
+create view OpinionEnglish_Set_240 as
+(select X.* from OpinionEnglish_Set_239 X)
+	union all
+(select X.* from OpinionEnglish_Set_240_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_241_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '241')
+;
+create view OpinionEnglish_Set_241_Overlapping as
+select X.* from OpinionEnglish_Set_241_Candidate X, OpinionEnglish_Set_240 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_241_FilterOverlap as
+(select X.* from OpinionEnglish_Set_241_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_241_Overlapping X)
+;
+create view OpinionEnglish_Set_241 as
+(select X.* from OpinionEnglish_Set_240 X)
+	union all
+(select X.* from OpinionEnglish_Set_241_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_242_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '242')
+;
+create view OpinionEnglish_Set_242_Overlapping as
+select X.* from OpinionEnglish_Set_242_Candidate X, OpinionEnglish_Set_241 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_242_FilterOverlap as
+(select X.* from OpinionEnglish_Set_242_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_242_Overlapping X)
+;
+create view OpinionEnglish_Set_242 as
+(select X.* from OpinionEnglish_Set_241 X)
+	union all
+(select X.* from OpinionEnglish_Set_242_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_243_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '243')
+;
+create view OpinionEnglish_Set_243_Overlapping as
+select X.* from OpinionEnglish_Set_243_Candidate X, OpinionEnglish_Set_242 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_243_FilterOverlap as
+(select X.* from OpinionEnglish_Set_243_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_243_Overlapping X)
+;
+create view OpinionEnglish_Set_243 as
+(select X.* from OpinionEnglish_Set_242 X)
+	union all
+(select X.* from OpinionEnglish_Set_243_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_244_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '244')
+;
+create view OpinionEnglish_Set_244_Overlapping as
+select X.* from OpinionEnglish_Set_244_Candidate X, OpinionEnglish_Set_243 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_244_FilterOverlap as
+(select X.* from OpinionEnglish_Set_244_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_244_Overlapping X)
+;
+create view OpinionEnglish_Set_244 as
+(select X.* from OpinionEnglish_Set_243 X)
+	union all
+(select X.* from OpinionEnglish_Set_244_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_245_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '245')
+;
+create view OpinionEnglish_Set_245_Overlapping as
+select X.* from OpinionEnglish_Set_245_Candidate X, OpinionEnglish_Set_244 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_245_FilterOverlap as
+(select X.* from OpinionEnglish_Set_245_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_245_Overlapping X)
+;
+create view OpinionEnglish_Set_245 as
+(select X.* from OpinionEnglish_Set_244 X)
+	union all
+(select X.* from OpinionEnglish_Set_245_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_246_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '246')
+;
+create view OpinionEnglish_Set_246_Overlapping as
+select X.* from OpinionEnglish_Set_246_Candidate X, OpinionEnglish_Set_245 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_246_FilterOverlap as
+(select X.* from OpinionEnglish_Set_246_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_246_Overlapping X)
+;
+create view OpinionEnglish_Set_246 as
+(select X.* from OpinionEnglish_Set_245 X)
+	union all
+(select X.* from OpinionEnglish_Set_246_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_247_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '247')
+;
+create view OpinionEnglish_Set_247_Overlapping as
+select X.* from OpinionEnglish_Set_247_Candidate X, OpinionEnglish_Set_246 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_247_FilterOverlap as
+(select X.* from OpinionEnglish_Set_247_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_247_Overlapping X)
+;
+create view OpinionEnglish_Set_247 as
+(select X.* from OpinionEnglish_Set_246 X)
+	union all
+(select X.* from OpinionEnglish_Set_247_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_248_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '248')
+;
+create view OpinionEnglish_Set_248_Overlapping as
+select X.* from OpinionEnglish_Set_248_Candidate X, OpinionEnglish_Set_247 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_248_FilterOverlap as
+(select X.* from OpinionEnglish_Set_248_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_248_Overlapping X)
+;
+create view OpinionEnglish_Set_248 as
+(select X.* from OpinionEnglish_Set_247 X)
+	union all
+(select X.* from OpinionEnglish_Set_248_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_249_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '249')
+;
+create view OpinionEnglish_Set_249_Overlapping as
+select X.* from OpinionEnglish_Set_249_Candidate X, OpinionEnglish_Set_248 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_249_FilterOverlap as
+(select X.* from OpinionEnglish_Set_249_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_249_Overlapping X)
+;
+create view OpinionEnglish_Set_249 as
+(select X.* from OpinionEnglish_Set_248 X)
+	union all
+(select X.* from OpinionEnglish_Set_249_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_250_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '250')
+;
+create view OpinionEnglish_Set_250_Overlapping as
+select X.* from OpinionEnglish_Set_250_Candidate X, OpinionEnglish_Set_249 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_250_FilterOverlap as
+(select X.* from OpinionEnglish_Set_250_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_250_Overlapping X)
+;
+create view OpinionEnglish_Set_250 as
+(select X.* from OpinionEnglish_Set_249 X)
+	union all
+(select X.* from OpinionEnglish_Set_250_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_251_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '251')
+;
+create view OpinionEnglish_Set_251_Overlapping as
+select X.* from OpinionEnglish_Set_251_Candidate X, OpinionEnglish_Set_250 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_251_FilterOverlap as
+(select X.* from OpinionEnglish_Set_251_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_251_Overlapping X)
+;
+create view OpinionEnglish_Set_251 as
+(select X.* from OpinionEnglish_Set_250 X)
+	union all
+(select X.* from OpinionEnglish_Set_251_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_252_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '252')
+;
+create view OpinionEnglish_Set_252_Overlapping as
+select X.* from OpinionEnglish_Set_252_Candidate X, OpinionEnglish_Set_251 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_252_FilterOverlap as
+(select X.* from OpinionEnglish_Set_252_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_252_Overlapping X)
+;
+create view OpinionEnglish_Set_252 as
+(select X.* from OpinionEnglish_Set_251 X)
+	union all
+(select X.* from OpinionEnglish_Set_252_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_253_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '253')
+;
+create view OpinionEnglish_Set_253_Overlapping as
+select X.* from OpinionEnglish_Set_253_Candidate X, OpinionEnglish_Set_252 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_253_FilterOverlap as
+(select X.* from OpinionEnglish_Set_253_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_253_Overlapping X)
+;
+create view OpinionEnglish_Set_253 as
+(select X.* from OpinionEnglish_Set_252 X)
+	union all
+(select X.* from OpinionEnglish_Set_253_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_254_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '254')
+;
+create view OpinionEnglish_Set_254_Overlapping as
+select X.* from OpinionEnglish_Set_254_Candidate X, OpinionEnglish_Set_253 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_254_FilterOverlap as
+(select X.* from OpinionEnglish_Set_254_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_254_Overlapping X)
+;
+create view OpinionEnglish_Set_254 as
+(select X.* from OpinionEnglish_Set_253 X)
+	union all
+(select X.* from OpinionEnglish_Set_254_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_255_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '255')
+;
+create view OpinionEnglish_Set_255_Overlapping as
+select X.* from OpinionEnglish_Set_255_Candidate X, OpinionEnglish_Set_254 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_255_FilterOverlap as
+(select X.* from OpinionEnglish_Set_255_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_255_Overlapping X)
+;
+create view OpinionEnglish_Set_255 as
+(select X.* from OpinionEnglish_Set_254 X)
+	union all
+(select X.* from OpinionEnglish_Set_255_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_256_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '256')
+;
+create view OpinionEnglish_Set_256_Overlapping as
+select X.* from OpinionEnglish_Set_256_Candidate X, OpinionEnglish_Set_255 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_256_FilterOverlap as
+(select X.* from OpinionEnglish_Set_256_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_256_Overlapping X)
+;
+create view OpinionEnglish_Set_256 as
+(select X.* from OpinionEnglish_Set_255 X)
+	union all
+(select X.* from OpinionEnglish_Set_256_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_257_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '257')
+;
+create view OpinionEnglish_Set_257_Overlapping as
+select X.* from OpinionEnglish_Set_257_Candidate X, OpinionEnglish_Set_256 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_257_FilterOverlap as
+(select X.* from OpinionEnglish_Set_257_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_257_Overlapping X)
+;
+create view OpinionEnglish_Set_257 as
+(select X.* from OpinionEnglish_Set_256 X)
+	union all
+(select X.* from OpinionEnglish_Set_257_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_258_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '258')
+;
+create view OpinionEnglish_Set_258_Overlapping as
+select X.* from OpinionEnglish_Set_258_Candidate X, OpinionEnglish_Set_257 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_258_FilterOverlap as
+(select X.* from OpinionEnglish_Set_258_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_258_Overlapping X)
+;
+create view OpinionEnglish_Set_258 as
+(select X.* from OpinionEnglish_Set_257 X)
+	union all
+(select X.* from OpinionEnglish_Set_258_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_259_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '259')
+;
+create view OpinionEnglish_Set_259_Overlapping as
+select X.* from OpinionEnglish_Set_259_Candidate X, OpinionEnglish_Set_258 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_259_FilterOverlap as
+(select X.* from OpinionEnglish_Set_259_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_259_Overlapping X)
+;
+create view OpinionEnglish_Set_259 as
+(select X.* from OpinionEnglish_Set_258 X)
+	union all
+(select X.* from OpinionEnglish_Set_259_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_260_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '260')
+;
+create view OpinionEnglish_Set_260_Overlapping as
+select X.* from OpinionEnglish_Set_260_Candidate X, OpinionEnglish_Set_259 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_260_FilterOverlap as
+(select X.* from OpinionEnglish_Set_260_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_260_Overlapping X)
+;
+create view OpinionEnglish_Set_260 as
+(select X.* from OpinionEnglish_Set_259 X)
+	union all
+(select X.* from OpinionEnglish_Set_260_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_261_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '261')
+;
+create view OpinionEnglish_Set_261_Overlapping as
+select X.* from OpinionEnglish_Set_261_Candidate X, OpinionEnglish_Set_260 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_261_FilterOverlap as
+(select X.* from OpinionEnglish_Set_261_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_261_Overlapping X)
+;
+create view OpinionEnglish_Set_261 as
+(select X.* from OpinionEnglish_Set_260 X)
+	union all
+(select X.* from OpinionEnglish_Set_261_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_262_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '262')
+;
+create view OpinionEnglish_Set_262_Overlapping as
+select X.* from OpinionEnglish_Set_262_Candidate X, OpinionEnglish_Set_261 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_262_FilterOverlap as
+(select X.* from OpinionEnglish_Set_262_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_262_Overlapping X)
+;
+create view OpinionEnglish_Set_262 as
+(select X.* from OpinionEnglish_Set_261 X)
+	union all
+(select X.* from OpinionEnglish_Set_262_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_263_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '263')
+;
+create view OpinionEnglish_Set_263_Overlapping as
+select X.* from OpinionEnglish_Set_263_Candidate X, OpinionEnglish_Set_262 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_263_FilterOverlap as
+(select X.* from OpinionEnglish_Set_263_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_263_Overlapping X)
+;
+create view OpinionEnglish_Set_263 as
+(select X.* from OpinionEnglish_Set_262 X)
+	union all
+(select X.* from OpinionEnglish_Set_263_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_264_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '264')
+;
+create view OpinionEnglish_Set_264_Overlapping as
+select X.* from OpinionEnglish_Set_264_Candidate X, OpinionEnglish_Set_263 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_264_FilterOverlap as
+(select X.* from OpinionEnglish_Set_264_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_264_Overlapping X)
+;
+create view OpinionEnglish_Set_264 as
+(select X.* from OpinionEnglish_Set_263 X)
+	union all
+(select X.* from OpinionEnglish_Set_264_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_265_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '265')
+;
+create view OpinionEnglish_Set_265_Overlapping as
+select X.* from OpinionEnglish_Set_265_Candidate X, OpinionEnglish_Set_264 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_265_FilterOverlap as
+(select X.* from OpinionEnglish_Set_265_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_265_Overlapping X)
+;
+create view OpinionEnglish_Set_265 as
+(select X.* from OpinionEnglish_Set_264 X)
+	union all
+(select X.* from OpinionEnglish_Set_265_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_266_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '266')
+;
+create view OpinionEnglish_Set_266_Overlapping as
+select X.* from OpinionEnglish_Set_266_Candidate X, OpinionEnglish_Set_265 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_266_FilterOverlap as
+(select X.* from OpinionEnglish_Set_266_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_266_Overlapping X)
+;
+create view OpinionEnglish_Set_266 as
+(select X.* from OpinionEnglish_Set_265 X)
+	union all
+(select X.* from OpinionEnglish_Set_266_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_267_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '267')
+;
+create view OpinionEnglish_Set_267_Overlapping as
+select X.* from OpinionEnglish_Set_267_Candidate X, OpinionEnglish_Set_266 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_267_FilterOverlap as
+(select X.* from OpinionEnglish_Set_267_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_267_Overlapping X)
+;
+create view OpinionEnglish_Set_267 as
+(select X.* from OpinionEnglish_Set_266 X)
+	union all
+(select X.* from OpinionEnglish_Set_267_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_268_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '268')
+;
+create view OpinionEnglish_Set_268_Overlapping as
+select X.* from OpinionEnglish_Set_268_Candidate X, OpinionEnglish_Set_267 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_268_FilterOverlap as
+(select X.* from OpinionEnglish_Set_268_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_268_Overlapping X)
+;
+create view OpinionEnglish_Set_268 as
+(select X.* from OpinionEnglish_Set_267 X)
+	union all
+(select X.* from OpinionEnglish_Set_268_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_269_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '269')
+;
+create view OpinionEnglish_Set_269_Overlapping as
+select X.* from OpinionEnglish_Set_269_Candidate X, OpinionEnglish_Set_268 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_269_FilterOverlap as
+(select X.* from OpinionEnglish_Set_269_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_269_Overlapping X)
+;
+create view OpinionEnglish_Set_269 as
+(select X.* from OpinionEnglish_Set_268 X)
+	union all
+(select X.* from OpinionEnglish_Set_269_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_270_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '270')
+;
+create view OpinionEnglish_Set_270_Overlapping as
+select X.* from OpinionEnglish_Set_270_Candidate X, OpinionEnglish_Set_269 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_270_FilterOverlap as
+(select X.* from OpinionEnglish_Set_270_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_270_Overlapping X)
+;
+create view OpinionEnglish_Set_270 as
+(select X.* from OpinionEnglish_Set_269 X)
+	union all
+(select X.* from OpinionEnglish_Set_270_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_271_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '271')
+;
+create view OpinionEnglish_Set_271_Overlapping as
+select X.* from OpinionEnglish_Set_271_Candidate X, OpinionEnglish_Set_270 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_271_FilterOverlap as
+(select X.* from OpinionEnglish_Set_271_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_271_Overlapping X)
+;
+create view OpinionEnglish_Set_271 as
+(select X.* from OpinionEnglish_Set_270 X)
+	union all
+(select X.* from OpinionEnglish_Set_271_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_272_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '272')
+;
+create view OpinionEnglish_Set_272_Overlapping as
+select X.* from OpinionEnglish_Set_272_Candidate X, OpinionEnglish_Set_271 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_272_FilterOverlap as
+(select X.* from OpinionEnglish_Set_272_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_272_Overlapping X)
+;
+create view OpinionEnglish_Set_272 as
+(select X.* from OpinionEnglish_Set_271 X)
+	union all
+(select X.* from OpinionEnglish_Set_272_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_273_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '273')
+;
+create view OpinionEnglish_Set_273_Overlapping as
+select X.* from OpinionEnglish_Set_273_Candidate X, OpinionEnglish_Set_272 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_273_FilterOverlap as
+(select X.* from OpinionEnglish_Set_273_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_273_Overlapping X)
+;
+create view OpinionEnglish_Set_273 as
+(select X.* from OpinionEnglish_Set_272 X)
+	union all
+(select X.* from OpinionEnglish_Set_273_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_274_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '274')
+;
+create view OpinionEnglish_Set_274_Overlapping as
+select X.* from OpinionEnglish_Set_274_Candidate X, OpinionEnglish_Set_273 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_274_FilterOverlap as
+(select X.* from OpinionEnglish_Set_274_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_274_Overlapping X)
+;
+create view OpinionEnglish_Set_274 as
+(select X.* from OpinionEnglish_Set_273 X)
+	union all
+(select X.* from OpinionEnglish_Set_274_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_275_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '275')
+;
+create view OpinionEnglish_Set_275_Overlapping as
+select X.* from OpinionEnglish_Set_275_Candidate X, OpinionEnglish_Set_274 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_275_FilterOverlap as
+(select X.* from OpinionEnglish_Set_275_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_275_Overlapping X)
+;
+create view OpinionEnglish_Set_275 as
+(select X.* from OpinionEnglish_Set_274 X)
+	union all
+(select X.* from OpinionEnglish_Set_275_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_276_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '276')
+;
+create view OpinionEnglish_Set_276_Overlapping as
+select X.* from OpinionEnglish_Set_276_Candidate X, OpinionEnglish_Set_275 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_276_FilterOverlap as
+(select X.* from OpinionEnglish_Set_276_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_276_Overlapping X)
+;
+create view OpinionEnglish_Set_276 as
+(select X.* from OpinionEnglish_Set_275 X)
+	union all
+(select X.* from OpinionEnglish_Set_276_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_277_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '277')
+;
+create view OpinionEnglish_Set_277_Overlapping as
+select X.* from OpinionEnglish_Set_277_Candidate X, OpinionEnglish_Set_276 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_277_FilterOverlap as
+(select X.* from OpinionEnglish_Set_277_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_277_Overlapping X)
+;
+create view OpinionEnglish_Set_277 as
+(select X.* from OpinionEnglish_Set_276 X)
+	union all
+(select X.* from OpinionEnglish_Set_277_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_278_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '278')
+;
+create view OpinionEnglish_Set_278_Overlapping as
+select X.* from OpinionEnglish_Set_278_Candidate X, OpinionEnglish_Set_277 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_278_FilterOverlap as
+(select X.* from OpinionEnglish_Set_278_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_278_Overlapping X)
+;
+create view OpinionEnglish_Set_278 as
+(select X.* from OpinionEnglish_Set_277 X)
+	union all
+(select X.* from OpinionEnglish_Set_278_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_279_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '279')
+;
+create view OpinionEnglish_Set_279_Overlapping as
+select X.* from OpinionEnglish_Set_279_Candidate X, OpinionEnglish_Set_278 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_279_FilterOverlap as
+(select X.* from OpinionEnglish_Set_279_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_279_Overlapping X)
+;
+create view OpinionEnglish_Set_279 as
+(select X.* from OpinionEnglish_Set_278 X)
+	union all
+(select X.* from OpinionEnglish_Set_279_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_280_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '280')
+;
+create view OpinionEnglish_Set_280_Overlapping as
+select X.* from OpinionEnglish_Set_280_Candidate X, OpinionEnglish_Set_279 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_280_FilterOverlap as
+(select X.* from OpinionEnglish_Set_280_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_280_Overlapping X)
+;
+create view OpinionEnglish_Set_280 as
+(select X.* from OpinionEnglish_Set_279 X)
+	union all
+(select X.* from OpinionEnglish_Set_280_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_281_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '281')
+;
+create view OpinionEnglish_Set_281_Overlapping as
+select X.* from OpinionEnglish_Set_281_Candidate X, OpinionEnglish_Set_280 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_281_FilterOverlap as
+(select X.* from OpinionEnglish_Set_281_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_281_Overlapping X)
+;
+create view OpinionEnglish_Set_281 as
+(select X.* from OpinionEnglish_Set_280 X)
+	union all
+(select X.* from OpinionEnglish_Set_281_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_282_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '282')
+;
+create view OpinionEnglish_Set_282_Overlapping as
+select X.* from OpinionEnglish_Set_282_Candidate X, OpinionEnglish_Set_281 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_282_FilterOverlap as
+(select X.* from OpinionEnglish_Set_282_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_282_Overlapping X)
+;
+create view OpinionEnglish_Set_282 as
+(select X.* from OpinionEnglish_Set_281 X)
+	union all
+(select X.* from OpinionEnglish_Set_282_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_283_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '283')
+;
+create view OpinionEnglish_Set_283_Overlapping as
+select X.* from OpinionEnglish_Set_283_Candidate X, OpinionEnglish_Set_282 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_283_FilterOverlap as
+(select X.* from OpinionEnglish_Set_283_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_283_Overlapping X)
+;
+create view OpinionEnglish_Set_283 as
+(select X.* from OpinionEnglish_Set_282 X)
+	union all
+(select X.* from OpinionEnglish_Set_283_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_284_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '284')
+;
+create view OpinionEnglish_Set_284_Overlapping as
+select X.* from OpinionEnglish_Set_284_Candidate X, OpinionEnglish_Set_283 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_284_FilterOverlap as
+(select X.* from OpinionEnglish_Set_284_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_284_Overlapping X)
+;
+create view OpinionEnglish_Set_284 as
+(select X.* from OpinionEnglish_Set_283 X)
+	union all
+(select X.* from OpinionEnglish_Set_284_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_285_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '285')
+;
+create view OpinionEnglish_Set_285_Overlapping as
+select X.* from OpinionEnglish_Set_285_Candidate X, OpinionEnglish_Set_284 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_285_FilterOverlap as
+(select X.* from OpinionEnglish_Set_285_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_285_Overlapping X)
+;
+create view OpinionEnglish_Set_285 as
+(select X.* from OpinionEnglish_Set_284 X)
+	union all
+(select X.* from OpinionEnglish_Set_285_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_286_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '286')
+;
+create view OpinionEnglish_Set_286_Overlapping as
+select X.* from OpinionEnglish_Set_286_Candidate X, OpinionEnglish_Set_285 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_286_FilterOverlap as
+(select X.* from OpinionEnglish_Set_286_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_286_Overlapping X)
+;
+create view OpinionEnglish_Set_286 as
+(select X.* from OpinionEnglish_Set_285 X)
+	union all
+(select X.* from OpinionEnglish_Set_286_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_287_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '287')
+;
+create view OpinionEnglish_Set_287_Overlapping as
+select X.* from OpinionEnglish_Set_287_Candidate X, OpinionEnglish_Set_286 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_287_FilterOverlap as
+(select X.* from OpinionEnglish_Set_287_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_287_Overlapping X)
+;
+create view OpinionEnglish_Set_287 as
+(select X.* from OpinionEnglish_Set_286 X)
+	union all
+(select X.* from OpinionEnglish_Set_287_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_288_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '288')
+;
+create view OpinionEnglish_Set_288_Overlapping as
+select X.* from OpinionEnglish_Set_288_Candidate X, OpinionEnglish_Set_287 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_288_FilterOverlap as
+(select X.* from OpinionEnglish_Set_288_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_288_Overlapping X)
+;
+create view OpinionEnglish_Set_288 as
+(select X.* from OpinionEnglish_Set_287 X)
+	union all
+(select X.* from OpinionEnglish_Set_288_FilterOverlap X)
+;
+
+
+create view OpinionEnglish_Set_289_Candidate as
+select X.*
+from opinionEnglishUnion_unconsolidated X
+where
+	Equals(GetText(X.test_priority), '289')
+;
+create view OpinionEnglish_Set_289_Overlapping as
+select X.* from OpinionEnglish_Set_289_Candidate X, OpinionEnglish_Set_288 Y
+where
+	Overlaps(Y.pattern_val,X.pattern_val)
+;
+create view OpinionEnglish_Set_289_FilterOverlap as
+(select X.* from OpinionEnglish_Set_289_Candidate X)
+	minus
+(select X.* from OpinionEnglish_Set_289_Overlapping X)
+;
+create view OpinionEnglish_Set_289 as
+(select X.* from OpinionEnglish_Set_288 X)
+	union all
+(select X.* from OpinionEnglish_Set_289_FilterOverlap X)
+;
+
+create view opinionEnglishUnion as
+select N.concept_1 as concept_1, N.type_1 as type_1, N.concept_2 as concept_2, N.type_2 as type_2 , N.concept_3 as concept_3, N.type_3 as type_3, N.pattern_val as pattern_val, N.patternName as patternName, N.test_priority as test_priority
+from OpinionEnglish_Set_289 N
+where 
+	Not(Equals(GetText(N.pattern_val),''))
+;
+
+output view opinionEnglishUnion;
+
+
+

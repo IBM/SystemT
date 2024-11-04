@@ -1,0 +1,306 @@
+/************************************************
+	Empty / Non-Empty Lines
+************************************************/
+create view EmptyLine as
+    extract regex /\r?\n([\t >]*\r?\n)/
+    on D.text
+	return group 1 as match
+    from Document D;
+
+create view NonEmptyLine as
+	extract
+	regex /^.*\S+.*$/ with flags 'MULTILINE'
+	on D.text as match
+	from Document D;
+	
+create view Line as
+	extract regex /[-*][-*][-*]+/
+	on D.text as match
+	from Document D;
+
+
+/***************************************************************************************
+	HEADER INDICATORS
+	= Lines that start with something usually indicating a header.
+	So far implemented for the most common patterns in English and German.
+		e.g. "To:", ">> From:",...
+	- DateLine:			e.g. "Sent: March 10, 2010 16:11"
+	- ReplyBegin: 		e.g. "---- Original Message ----"
+	- FromLine:			e.g. "From:", ">> Von:"
+	- SentByLine:		e.g. "Sent By: Thomas Hampp <thampp@de.ibm.com>"
+	- PleaseRespondToLine: e.g. "Please respond to: Germany/Betriebsrat@IBMDE"
+	- ToLine:			e.g. "> To:", "An"
+	- CcLine:			e.g. "Cc:", "cc"
+	- FwLine:			e.g. "--- Forwarded by Thomas Hampp/Germany/IBM@IBMDE on ... ---"
+	- SubjectLine:		e.g. "Subject:", "Betreff:"
+****************************************************************************************/
+create view DateLine as
+	select D.match as match, D.complete as complete from
+	(extract
+		pattern (/(Date|Gesendet|Sent|Datum)/? ':'? />/{0,10} (<D.match> ('um'|'at')? <T.match>?) (/.+/?))
+		return group 2 as match and group 1 as complete and group 4 as chinese
+		from Dates D, Times T
+		having And(	ContainsRegex(/[\r\n]/, LeftContext(complete, 6)),
+					ContainsRegex(/[\r\n]/, RightContext(complete, 6)),
+					Not(ContainsRegex(/\b(to|To|From|from|An|Von|Betreff|Subject)\b/, chinese)))) D
+	consolidate on D.match using 'ContainedWithin';	
+
+create view ReplyBegin as
+	extract
+		regex /^[-* >]*(Original Message|Urspr.ngliche Nachricht)[- ]*[\r\n\t ]*/ with flags 'MULTILINE|CASE_INSENSITIVE'
+		on D.text return group 0 as match and group 0 as complete
+		from Document D;
+		
+-- FROM --
+create dictionary FromWords
+	with case insensitive
+	as ('from', 'von');
+	
+create view FromWordMatch as
+extract dictionary 'FromWords' on D.text
+as match
+from Document D;
+
+create view FromLine as
+   select CombineSpans(F.match, RightContext(F.match, 1)) as match
+   from FromWordMatch F
+   where MatchesRegex(/(:|\r|\n)/, RightContext(F.match, 1));
+  
+-- SENT BY --
+create dictionary SentByWords
+	with case insensitive
+	as ('Sent  by');
+	
+create view SentByMatch as
+extract dictionary 'SentByWords' on D.text
+as match
+from Document D;
+
+create view SentByLine as
+   select CombineSpans(F.match, RightContext(F.match, 1)) as match
+   from SentByMatch F
+   where MatchesRegex(/(:|\r|\n)/, RightContext(F.match, 1));
+   
+-- SENDERS --
+create view SenderLine as
+	(select S.* from SentByLine S)
+	union all
+	(select F.* from FromLine F);
+	
+-- PLEASE RESPOND TO --
+create dictionary PleaseRespondToWords
+	with case insensitive
+	as ('Please respond to', 'Please Respond To');
+	
+create view PleaseRespondToWordMatch as
+extract dictionary 'PleaseRespondToWords' on D.text
+as match
+from Document D;
+
+create view PleaseRespondToLine as
+   select CombineSpans(F.match, RightContext(F.match, 1)) as match
+   from PleaseRespondToWordMatch F
+   where MatchesRegex(/(\r|\n)/, LeftContext(F.match, 1));
+
+-- TO / RECIPIENTS --
+create dictionary ToWords
+	with case insensitive
+	as ('to', 'an', 'To', 'An');
+	
+create view ToWordMatch as
+extract dictionary 'ToWords' on D.text
+as match
+from Document D;
+
+create view ToLine as
+   select CombineSpans(F.match, RightContext(F.match, 1)) as match
+   from ToWordMatch F
+   where MatchesRegex(/(:|\r|\n)/, RightContext(F.match, 1));
+
+-- CC / RECIPIENTS --
+create dictionary CcWords
+	with case insensitive
+	as ('Cc', 'Kopie', 'cc', 'CC');
+	
+create view CcWordMatch as
+	extract dictionary 'CcWords' on D.text
+	as match
+	from Document D;
+
+create view CcLine as
+   select CombineSpans(F.match, RightContext(F.match, 1)) as match
+   from CcWordMatch F
+   where MatchesRegex(/(:|\r|\n)/, RightContext(F.match, 1));
+		 
+-- FORWARDED BY --
+create dictionary FwWords
+	with case insensitive
+	as ('Forwarded by', 'Forwarded By', 'Forwarded Message', 'Forwarded message');
+	
+create view FwWordMatch as
+	extract dictionary 'FwWords' on D.text
+	as match
+	from Document D;
+	
+create view FwLine as
+	select CombineSpans(L1.match, L2.match) as match
+	from FwWordMatch F, Line L1, Line L2
+	where 	FollowsTok(L1.match, F.match, 0, 1) and
+			FollowsTok(F.match, L2.match, 0, 20)
+	consolidate on F.match using 'ContainedWithin';
+	
+-- SUBEJECT --
+create dictionary SubjectWords_1
+	with case insensitive
+	as ('Subject', 'subject', 'SUBJECT', 'Betreff', 'BETREFF');
+	
+create view SubjectWordMatch_1 as
+extract dictionary 'SubjectWords_1' on D.text
+as match
+from Document D;
+
+create view SubjectLine_1 as
+   select F.match as match
+   from SubjectWordMatch_1 F
+   where MatchesRegex(/(\r|\n)/, RightContext(F.match, 1));
+		 
+create dictionary SubjectWords_2
+	with case insensitive
+	as ('Subject:', 'subject:', 'SUBJECT:', 'Betreff:', 'BETREFF:');
+	
+create view SubjectWordMatch_2 as
+extract dictionary 'SubjectWords_2' on D.text
+as match
+from Document D;
+
+create view SubjectLine_2 as
+   select F.match as match
+   from SubjectWordMatch_2 F;
+   --where ContainsRegex(/\r?\n[\r\n\t> ]*/, LeftContext(F.match, 5));
+
+create view SubjectLine as
+	(select S.* from SubjectLine_1 S)
+	union all
+	(select S.* from SubjectLine_2 S);
+
+/***************************************************
+	TODO:
+	BCC Header Content
+****************************************/
+-- Only example found in corpus: "cc: (bcc: Carla Hoffman/PDX/ECT)"
+-- in cc ?
+	
+	
+/********************************************************
+	Header Begin / End Indicators
+	--> create unions of the indicators specified above.
+********************************************************/
+create view HeaderBeginIndicator as
+	(select S.match as match from SenderLine S)
+	union all
+	(select T.match as match from ToLine T)
+	union all
+	(select C.match as match from CcLine C)
+	union all
+	(select S.match as match from SubjectLine S)
+	union all
+	(select P.match as match from PleaseRespondToLine P)
+	union all
+	(select R.match as match from ReplyBegin R)
+	union all
+	(select D.complete as match from DateLine D);
+
+create view HeaderEndIndicator as
+	(select H.match as match from HeaderBeginIndicator H)
+	union all
+    (select E.match as match from EmptyLine E);
+	
+
+/***************************************************************************************************
+	FINDING HEADER FIELDS:
+	A HeaderField is a span containing a part of a header, e.g.
+	the sender ("From: Thomas Hampp"),
+	the recipients ("To: afriedr@de.ibm.com, Thilo W Goetz/Germany/IBM@IBMDE"),
+	the subject ("Subject: Email Structure AQL"),...
+	--> Find all spans that start at some HeaderBeginIndicator and end at some
+		HeaderEndIndicator. Then use only the smallest spans as HeaderFields.
+	--> HeaderBeginIndicators indicate the start of a HeaderField, e.g. "To:", "Subject",..
+	--> HeaderEndIndicators are any HeaderBeginIndicators or Empty Lines.
+		
+	!!! consolidate on CombineSpans(HB.match, LeftContext(HE.match, 0)) using 'NotContainedWithin'
+		resulted in performance problems.
+		"consolidate on HB.match" seems to work, only produces the smallest spans as HeaderFields.
+		We assume that now the optimizer for each HeaderBeginIndicator only checks for the next
+		HeaderEndIndicator.
+	??? Is this stable or might this behavior of System T change?!??
+		
+*****************************************************************************************************/
+create view HeaderFieldUnion as
+select 
+    -- Return the span that goes from the beginning of the "beginning of header"
+    -- match to the *beginning* of the "end of header" match
+    CombineSpans(S.hBegin, LeftContext(S.hEnd, 0)) as match
+from 
+-- For each match of the "beginning of header" view, the following subquery
+-- identifies the first span in the "end of header" view that comes up to
+-- 2000 characters after the "beginning of header" match.
+( 
+	select 
+		HB.match as hBegin, 
+		Min(HE.match) as hEnd
+		    -- The "Min" aggregate, applied to a Span, returns the span with
+		    -- the earliest "begin" offset.  If there is a tie on the "begin"
+		    -- offset, the "end" offset is used to break the tie.
+	from
+	    HeaderBeginIndicator HB, HeaderEndIndicator HE
+	where Follows(HB.match, HE.match, 0, 2000)
+	group by HB.match
+) S;
+
+output view HeaderFieldUnion;
+
+create view HeaderFieldUnion_before as
+	select CombineSpans(HB.match, LeftContext(HE.match, 0)) as match
+	from
+	HeaderBeginIndicator HB, HeaderEndIndicator HE
+	where Follows(HB.match, HE.match, 0, 2000)
+	consolidate on HB.match;
+
+output view HeaderFieldUnion_before;
+
+/*******************************************************************
+	Combined Header Fields
+	= Header fields that don't contain specific markers and thus
+		can only be found in context.
+********************************************************************/
+-- From lines with e-mail address and date following immediately
+create view FromLineField_1 as
+	extract
+		pattern ('on' <D.match> <T.match>?)
+		return 	group 1 as match and
+				group 1 as complete
+		from Dates D, Times T
+		having Not(ContainsRegex(/(Forwarded|Weitergeleitet)/, LeftContext(complete, 50)));
+
+create view FromLineField as
+	select N.match
+	from NonEmptyLine N, FromLineField_1 F
+	where Contains(N.match, F.match);
+
+-- Lotus Notes Style Headers:
+-- From lines without "From" (only E-mail address / name followed by a date line or a "Sent By:" line)
+create view FromLineLotusNotes as
+	extract
+	pattern (<E.match> (<N.match>) (<D.complete>|<S.match>))
+	return group 2 as match and group 2 as sender
+	from EmptyLine E, NonEmptyLine N, DateLine D, SentByLine S
+	having And(Not(ContainsRegex(/\r?\n\r?\n/, match)),
+				Not(ContainsRegex(/(from|From)/, match)));	
+
+-- Add the combined Header fields to the HeaderFields.
+create view HeaderField as
+	(select H.* from HeaderFieldUnion H)
+	union all
+	(select F.match as match from FromLineField F)
+	union all
+	(select F.match as match from FromLineLotusNotes F);

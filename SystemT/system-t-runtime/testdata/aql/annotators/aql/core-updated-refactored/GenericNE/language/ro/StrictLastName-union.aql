@@ -1,0 +1,37 @@
+create view StrictLastName_ro as
+--extract dictionaries 'person/strictLastNames-ro.dict' and 'person/strictLastNames-ro-NoD.dict'
+extract dictionaries 'person/per_name_last_romania_ro.dict' and 'person/per_name_last_romania_noDiac_ro.dict'
+on D.text as lastname
+from Doc D
+-- Sudarshan regex : 10/13/2011 - backreference on line 6
+having MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, lastname);
+
+
+create view StrictLastNameAll as
+(
+	(select S.lastname as lastname from StrictLastName1 S)
+	union all
+	(select S.lastname as lastname from StrictLastName2 S)
+	union all
+	(select S.lastname as lastname from StrictLastName3 S)
+	union all
+	(select S.lastname as lastname from StrictLastName4 S)
+	union all
+	(select S.lastname as lastname from StrictLastName5 S)
+	union all
+	(select S.lastname as lastname from StrictLastName6 S)
+	union all
+	(select S.lastname as lastname from StrictLastName7 S)
+	union all
+	(select S.lastname as lastname from StrictLastName8 S)
+	union all
+	(select S.lastname as lastname from StrictLastName9 S)
+	union all
+	(select S.lastname as lastname from StrictLastName_ro S)
+)
+minus
+(
+	select S.name as lastname from InvalidNames_ro S
+);
+	
+	

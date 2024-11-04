@@ -1,0 +1,74 @@
+module UnescapeDoubleQuotes;
+
+
+create dictionary "billingDict"
+with case insensitive
+as (
+  'billing',
+  '\'billing\''
+);
+
+
+create view billing as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'billingDict'
+    on D.text as match
+  from Document D;
+
+output view billing;
+
+create dictionary "newBillingDict"
+with case insensitive
+as (
+  'newBilling',
+  '\'newBilling\''
+);
+
+
+create view newBilling as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'newBillingDict'
+    on D.text as match
+  from Document D;
+
+output view newBilling;
+
+create view response as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /="(\w*)"/
+    with flags 'DOTALL'
+    on D.text
+    return group 1 as match
+  from Document D;
+
+output view response;
+
+create view billingInfo as
+  select  Op.match as match,
+          Op.billing as billing,
+          Op.newBilling as newBilling,
+          AutoID() as __auto__id
+  from  __Base__UnescapeDoubleQuotes__billingInfo__Temp Op;
+
+output view billingInfo;
+
+
+
+create view __Base__UnescapeDoubleQuotes__billingInfo__Temp as
+  extract pattern <B.match> '="' (<R1.match>) '"' <NB.match> '="' (<R2.match>) '"'
+  return group 0 as match
+     and group 1 as billing
+     and group 2 as newBilling
+  from  billing B,
+        newBilling NB,
+        response R1,
+        response R2;
+
+output view __Base__UnescapeDoubleQuotes__billingInfo__Temp;
+

@@ -1,0 +1,11 @@
+module PhoneNumber;
+
+-- Assign attributes to an extracted phone number instance
+
+create view PhoneNumber_ as
+	(select P.num as phone, '' as type, P.num as reference from PhoneNumOnly P
+	where Not(ContainsRegex(/[\n\r]{2,}/, P.num)))
+	union all
+	(select P.num as phone, 'fax' as type, P.num as reference from NonPhoneNum P
+	where Not(ContainsRegex(/[\n\r]{2,}/, P.num)));
+

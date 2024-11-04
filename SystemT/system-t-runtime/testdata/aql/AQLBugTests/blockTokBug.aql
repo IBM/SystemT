@@ -1,0 +1,23 @@
+-------------------------------------------------------------------------------
+-- blockTokBug.aql
+-- File that was used to try out a fix to a bug in the BlockTok operator.
+-- In particular, a query that was supposed to return all blocks of 1-3 
+-- capitalized words only returns blocks of 1-2.
+-------------------------------------------------------------------------------
+require document with columns text Text;
+
+-- Simplified CapsOrg rule from Notes named entity annotator.
+create view CapsOrg as
+select
+	R.match as match
+from
+	--Regex(/\b\p{Upper}[\p{Lower}\&\.\-\,]+\b/, Document.text) R;
+	-- Allow matches such as 'the Children's Hospital of Pittsburgh' 
+	--Regex(/\b\p{Upper}[\p{Lower}\&\.'\-\,]+\b/, Document.text) R;
+	-- Allow unicode matches
+	Regex(/\b\p{Lu}\p{M}*[[\p{Ll}\p{Lo}]\p{M}*\&\.'\-\,]+\b/, Document.text) R;
+
+select B.block as match
+into Coonetothree
+from BlockTok(0, 1, 3, CapsOrg.match) B;
+

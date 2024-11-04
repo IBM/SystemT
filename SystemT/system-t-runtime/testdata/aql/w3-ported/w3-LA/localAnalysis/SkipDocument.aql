@@ -1,0 +1,34 @@
+------------------------------------------------------------------------------
+-- SkipDocument.aql 
+--
+-- Generates the following LA output:
+-- 	a. SkipDocument
+--
+-- Depends on HTML.aql
+--
+-- Based on Huiayu's original Java implementation.
+-------------------------------------------------------------------------------
+
+-- If skipDocument() returns a non-null result, create a SkipDocument annotation
+create view SkipDocumentNoHtml as
+select getElementFromList(S.skipResult, 0) as reason,
+	   getElementFromList(S.skipResult, 1) as content
+from SkipDocumentAll S
+where NotNull(S.skipResult);
+
+-- String msg = String.format("HashTitlePath: first annot not %s: ", _title_type);
+-- Laura 7/8: by default make content='Document', although in Java we have annot.add_str("text", title_annot.type());
+-- TODO: might need to change the value of text later
+create view SkipDocumentNoTitle as
+select 'HashTitlePath: no Title' as reason,
+	   'no title' as content
+from Document D,
+	 (select Count(*) as cnt from Title) C
+where Equals(C.cnt, 0);
+
+create view SkipDocument as
+(select * from SkipDocumentNoHtml S)
+union all
+(select * from SkipDocumentNoTitle S);
+
+

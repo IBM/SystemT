@@ -1,0 +1,24 @@
+-------------------------------------------------------------------------------
+-- OrgChart.aql from Java Revision No 130 for URLNamePatterns.java
+
+-- Based on Huiayu's original Java implementation.
+
+-------------------------------------------------------------------------------
+
+--extracting person name for URLs matching orgchart_host,orgchart_path and orgchart_query patterns
+--i/p:http://meatwad.rchland.ibm.com/security/orgchart?printView=true&showPhoto=true&showChain=true&showDept=true&name=Uraba%2C+Akihiro&cnum=145243760&showDeptName=true&runQuery=true&showJobTitle=true
+--o/p:Person-->Uraba%2C+Akihiro
+create view OrgChartWithPerson as
+extract
+		D.label as url,
+		regex /meatwad.rchland.ibm.com\/security\/orgchart(?:.*&)?name=([^&]+)&/ on D.label
+		return group 1 as person
+		from Document D;
+
+--extracting Begin and End index for Person name from URL.
+--Unescaping HTML charactes from Person name using UDF UnescapeHTML
+--i/p:Person-->Uraba%2C+Akihiro
+--o/p:begin-->113;end-->129;Person-->Uraba, Akihiro
+create view OrgChart as
+select GetBegin(O.person) as begin,GetEnd(O.person) as end,UnescapeHTML(GetText(O.person)) as person
+from OrgChartWithPerson O;

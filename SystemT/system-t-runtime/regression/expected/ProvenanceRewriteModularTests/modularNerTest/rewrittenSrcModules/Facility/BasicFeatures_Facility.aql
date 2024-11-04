@@ -1,0 +1,110 @@
+module Facility;
+
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText
+;
+
+
+import dictionary BuildingsAsFacilitySuffixes from module Dictionaries as BuildingsAsFacilitySuffixes
+;
+
+
+import dictionary CommercialVenuesAsFacilitySuffixes from module Dictionaries as CommercialVenuesAsFacilitySuffixes
+;
+
+
+import dictionary PublicVenuesAsFacilitySuffixes from module Dictionaries as PublicVenuesAsFacilitySuffixes
+;
+
+
+import dictionary ConstructionStructuresAsFacilitySuffixes from module Dictionaries as ConstructionStructuresAsFacilitySuffixes
+;
+
+
+import dictionary FacilityNegativeCluesOne from module Dictionaries as FacilityNegativeCluesOne
+;
+
+
+require document with columns
+  text Text;
+
+create view FacilitySuffix as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionaries 'BuildingsAsFacilitySuffixes'
+                   and 'CommercialVenuesAsFacilitySuffixes'
+                   and 'PublicVenuesAsFacilitySuffixes'
+                   and 'ConstructionStructuresAsFacilitySuffixes'
+    on D.text as match
+  from DocumentText D
+  having MatchesRegex(/\p{Lu}\p{M}*.*/, match);
+
+output view FacilitySuffix;
+
+create view FacilitySuffixLowerCase as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionaries 'BuildingsAsFacilitySuffixes'
+                   and 'CommercialVenuesAsFacilitySuffixes'
+                   and 'PublicVenuesAsFacilitySuffixes'
+                   and 'ConstructionStructuresAsFacilitySuffixes'
+    on D.text as match
+  from DocumentText D
+  having MatchesRegex(/\p{Ll}\p{M}*.*/, match);
+
+output view FacilitySuffixLowerCase;
+
+create view CapsFacilityCandidate1 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__109__Temp_____sep_____R____id
+  from  __Subquery__109__Temp R;
+
+output view CapsFacilityCandidate1;
+
+create view CapsFacilityCandidate2 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__110__Temp_____sep_____R____id
+  from  __Subquery__110__Temp R;
+
+output view CapsFacilityCandidate2;
+
+create view FacilityFilter1 as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'FacilityNegativeCluesOne'
+    on D.text as match
+  from DocumentText D;
+
+output view FacilityFilter1;
+
+create view __Subquery__109__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    regex /(\p{Lu}\p{M}*([\p{Lu}\&\.-\/]\p{M}*){1,20})/
+    with flags 'DOTALL'
+    on between 1 and 25 tokens in D.text
+    return group 0 as match
+  from DocumentText D;
+
+output view __Subquery__109__Temp;
+
+create view __Subquery__110__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    regex /(\p{Lu}\p{M}*([\p{Lu}\&\.-\/]\p{M}*){1,20})(\s+(\p{Lu}\p{M}*([\p{Lu}\&\.-\/]\p{M}*){1,20}))/
+    with flags 'DOTALL'
+    on between 1 and 25 tokens in D.text
+    return group 0 as match
+  from DocumentText D;
+
+output view __Subquery__110__Temp;
+

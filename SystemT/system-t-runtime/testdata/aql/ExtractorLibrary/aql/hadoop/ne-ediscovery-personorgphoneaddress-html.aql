@@ -1,0 +1,136 @@
+---------------------------------------
+-- Document Preprocessing
+---------------------------------------
+include 'core/detag.aql';
+
+----------------------------------------
+-- Basic Named Entity Annotators
+----------------------------------------
+
+--------------------------------------------------------------------------------
+-- First, include the server side version of certain dictionaries
+include 'core/GenericNE/serverSideSpecific/AdditionalDictsForAddress.aql';
+include 'core/GenericNE/serverSideSpecific/AdditionalDictsForOrganization.aql';
+--------------------------------------------------------------------------------
+
+
+include 'core/GenericNE/DictsForAddress.aql';
+--include 'core/GenericNE/DictsForPhoneNumber.aql';
+include 'core/GenericNE/Sentence.aql';
+include 'core/GenericNE/MacrosForTimeDates.aql';
+include 'core/GenericNE/Date.aql';
+include 'core/GenericNE/Time.aql';
+include 'core/GenericNE/PhoneNumber.aql';
+include 'core/GenericNE/Address.aql';
+include 'core/GenericNE/CityStateCountry.aql';
+include 'core/GenericNE/StockExchangeAndTicker.aql';
+include 'core/GenericNE/URL.aql';
+include 'core/GenericNE/EmailAddress.aql';
+include 'core/GenericNE/NotesEmailAddress.aql';
+include 'core/GenericNE/Organization.aql';
+include 'core/GenericNE/Organization-FilterSingleNewLineTab.aql';
+include 'core/GenericNE/Organization-Sentence.aql';
+include 'core/GenericNE/Person.aql';
+include 'core/GenericNE/Person-FilterSingleNewLineTab.aql';
+include 'core/GenericNE/Person-Filter.aql';
+
+include 'core/GenericNE/Address-consolidation.aql';
+include 'core/GenericNE/OrgWithinNotesEmail.aql';
+include 'core/GenericNE/Organization-FilterAddress.aql';
+include 'core/GenericNE/Organization-consolidation.aql';
+include 'core/GenericNE/Person-consolidation.aql';
+
+---------------------------------------------
+-- Consolidation:
+-- For now, we just remove annotations that are completely
+-- contained within other annotations.
+
+
+create view CityStateCountryInvalid1 as
+select C.match as match
+from   AllCityStateCountry C,
+	   PersonFinalAllWithoutDots P
+where  Contains(P.person, C.match);   
+
+create view CityStateCountryInvalid2 as
+select C.match as match
+from   AllCityStateCountry C,
+	   FinalOrgConsolidatedWithoutDots O 
+where  Contains(O.org, C.match);   
+
+create view CityStateCountryInvalid as
+	(select C.match as loc from CityStateCountryInvalid1 C)
+	union all
+	(select C.match as loc from CityStateCountryInvalid2 C);
+
+create view CityStateCountryValid as
+	(select C.match as loc from AllCityStateCountry C)
+	minus
+	(select C.loc as loc from CityStateCountryInvalid C);
+	
+ 
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Output section <<<<<<<<<<<<<<<<
+-- ===========================================================================		
+
+ 
+-- Output the detagged documents.
+select M.text as text
+into DetaggedDoc
+from Doc M;
+
+
+
+-- 1. Address	
+-- Laura 05/05/2009: globally replaced Place with Address
+
+/*
+select P.loc as loc
+into "com.ibm.systemT.Address"
+-- change output to remove unwanted types
+-- from Place P;
+--from Consolidate('OverlapOrdered',FinalPlaceConsolidated.loc) P;
+from FinalPlaceConsolidated P
+consolidate on P.loc
+using 'LeftToRight';
+*/
+
+select A.reference as loc
+into "com.ibm.systemT.Address"
+from AddressFinal A;
+
+
+-- 2. Location
+
+select P.loc as loc
+into "com.ibm.systemT.Location"
+from CityStateCountryValid P
+consolidate on P.loc;
+
+
+-- 3. Organization
+
+select O.org as org
+into "com.ibm.systemT.Organization"
+from FinalOrgConsolidatedWithoutDots O
+consolidate on O.org
+using 'LeftToRight';
+
+
+-- 4. Person
+
+select P.person as name
+into "com.ibm.systemT.Person" 
+from PersonFinalAllWithoutDots P
+consolidate on P.person;
+
+
+
+-- 5. PhoneNumber
+
+select P.num as num
+into "com.ibm.systemT.PhoneNumber"
+from PhoneNumOnly P
+-- disallow multiple new line
+where Not(ContainsRegex(/[\n\r]{2,}/, P.num));
+

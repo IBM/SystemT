@@ -1,0 +1,200 @@
+-------------------------------------------------------------------------------
+-- Simple AQL file to exemplify the TLA translation. Illustrates the current 
+-- AQL syntax, as well as the final syntax after items T2 and T3 are delivered. 
+
+-- In summary, the translation consists of the following steps:
+-- 1. Declare external views, one for each type extracted in Extraction
+-- 2. Attach type info to each of the external views
+-- 3. Translate TLA rules
+-- 4. Union the output from all rules
+-- 5. Consolidate the outputs based on rule priority
+-- 6. Generate type and leadTerm information for each concept slot in the output
+
+-------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
+-- STEP 1:
+----------
+-- Declare external views, one for each type extracted in Extraction
+-------------------------------------------------------------------------------
+create external view Noun(match Span, leadTerm Text) 
+external_name 'Noun'; 
+
+create external view Verb(match Span, leadTerm Text) 
+external_name 'Verb'; 
+
+
+-------------------------------------------------------------------------------
+-- STEP 2:
+----------
+-- Attach type info to each of the external views
+-------------------------------------------------------------------------------
+create view NounTyped as 
+select N.*, 'Noun' as type 
+from Noun N, Document D; 
+
+create view VerbTyped as 
+select V.*, 'Verb' as type 
+from Verb V, Document D;
+
+-- Union together all typed entities
+create view Types as
+(select * from NounTyped)
+union all
+(select * from VerbTyped);
+
+
+-------------------------------------------------------------------------------
+-- STEP 3:
+----------
+-- Translation of TLA rules
+-------------------------------------------------------------------------------
+
+-- pattern(1) dynamic typing for concept_2
+-- value=A_$Noun
+-- output(1)=$2\t#2
+-- "a quick brown fox", "the lazy dog"
+create view Rule1 as
+extract pattern ('a'|'the') (<N.match>)
+	return group 0 as fullMatch
+	   and group 2 as concept2
+from NounTyped N;
+
+-- pattern(2): dynamic typing for concept_1 and concept_2
+-- value=$Noun_jumps
+-- output(1)=$1\t#1\t$2\t#2
+-- "quick brown fox jumps"
+create view Rule2 as
+extract pattern (<N.match>) (<V.match>)
+	return group 0 as fullMatch
+	   and group 1 as concept1
+	   and group 2 as concept2
+from NounTyped N, VerbTyped V;
+
+
+-------------------------------------------------------------------------------
+-- STEP 4:
+----------
+-- Union together TLA outputs, assigning priorities in the process
+-- To make sure that schemas of union operands are compatible, we pad any
+-- missing concept matches with the empty string
+-------------------------------------------------------------------------------
+create view OutputAll as
+(select 1 as ruleid,         '' as concept1, R.concept2 as concept2, R.fullMatch as fullMatch from Rule1 R)
+union all
+(select 2 as ruleid, R.concept1 as concept1, R.concept2 as concept2, R.fullMatch as fullMatch from Rule2 R);
+
+
+-------------------------------------------------------------------------------
+-- STEP 5:
+----------
+-- Consolidate TLA outputs, in order to remove overlap
+-------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
+-- ****** TEMPORARY SYNTAX !! ******
+-------------------------------------------------------------------------------
+create view OutputWithoutType as
+select *
+from OutputAll T
+consolidate on T.fullMatch using 'LeftToRight';
+
+
+-------------------------------------------------------------------------------
+-- ****** FINAL SYNTAX !! ******
+-------------------------------------------------------------------------------
+/* 
+ * Once T2 is implemented, we will use "Consolidate with priority"
+ * to implement exact TLA semantics as follows: */
+/* 
+create view OutputWithoutType as
+select *
+from OutputAll T
+consolidate on T.fullMatch using 'LeftToRight'
+			with priority from T.ruleid ascending;
+*/
+
+
+-------------------------------------------------------------------------------
+-- STEP 6:
+----------
+-- Join back with Types to obtain type information for individual concepts
+-- Essentially we need a LEFT OUTER JOIN for each concept slot 
+-- (slots 1and 2 in this case)
+-- 
+-- AQL already provides support for implementing LEFT OUTER JOIN using a 
+-- sequence of Join/Minus/Union. However we are implementing the LEFT OUTER JOIN 
+-- syntax for simplicity (this is T3). 
+-------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
+-- **** TEMPORARY SYNTAX (simulate left outer join using Join/Minus/Union) ****
+-------------------------------------------------------------------------------
+
+-- Step (a): Obtain type/leadTerm for concept1 by joining with Type on the value of concept1
+create view OutputWithType1 as
+select O.*, T.type as type1, T.leadTerm as leadTerm1
+from OutputWithoutType O, Types T
+where Equals(O.concept1, T.match);
+
+-- Step (b): Not all concept1 values have a type, make sure we know who they are
+create view OutputWithoutType1 as
+(select O.* from OutputWithoutType O)
+minus
+(select O.ruleid, O.concept1, O.concept2, O.fullMatch from OutputWithType1 O);
+
+-- Step (c): Merge tuples for which we found a type1, with those for which we did not
+create view Output1 as
+(select O.ruleid, O.concept1, O.concept2, O.type1 as type1, O.leadTerm1 as leadTerm1, O.fullMatch from OutputWithType1 O)
+union all
+(select O.ruleid, O.concept1, O.concept2,      '' as type1, 	     '' as leadTerm1, O.fullMatch from OutputWithoutType1 O);
+
+
+-- Obtain type/leadTerm for concept2 by repeating Steps (a)-(c) above
+create view OutputWithType2 as
+select O.*, T.type as type2, T.leadTerm as leadTerm2
+from Output1 O, Types T
+where Equals(O.concept2, T.match);
+
+create view OutputWithoutType2 as
+(select O.* from Output1 O)
+minus
+(select O.ruleid, O.concept1, O.concept2, O.type1, O.leadTerm1 as leadTerm1, O.fullMatch from OutputWithType2 O);
+
+-- Final output
+create view OutputWithType as
+(select O.ruleid, O.concept1, O.concept2, O.type1 as type1, O.leadTerm1 as leadTerm1, O.type2 as type2, O.leadTerm2 as leadTerm2, O.fullMatch from OutputWithType2 O)
+union all
+(select O.ruleid, O.concept1, O.concept2, O.type1 as type1, O.leadTerm1 as leadTerm1,      '' as type2,  	    '' as leadTerm2, O.fullMatch from OutputWithoutType2 O);
+
+
+-------------------------------------------------------------------------------
+-- **** FINAL SYNTAX (with left outer join) ****
+-------------------------------------------------------------------------------
+/* 
+ * Once T3 is implemented, we will use the much simpler "LEFT OUTER JOIN"
+ * syntax to obtain the type and leadTerm information for concept slots as follows: */
+/* 
+-- Obtain type/leadTerm for concept1
+create view Output1 as
+select O.*, T.type as type1, T.leadTerm as leadTerm1
+from OutputWithoutType O LEFT OUTER JOIN Types T
+on ( Equals(O.concept1, T.match) );
+
+-- Obtain type/leadTerm for concept2
+create view OutputWithType as
+select O.*, T.type as type2, T.leadTerm as leadTerm2
+from Output1 O, LEFT OUTER JOIN Types T
+on ( Equals(O.concept2, T.match) );
+*/
+
+
+-------------------------------------------------------------------------------
+-- Output section
+-------------------------------------------------------------------------------
+output view Types;
+output view OutputAll;
+output view OutputWithoutType;
+output view OutputWithType;
+
+

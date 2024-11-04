@@ -1,0 +1,442 @@
+ -- Yunyao: Added 06/01/2008 to capture addresses in forwarded email 
+ -- For example:
+ -- 	>>>>>>929 E. El Camino Real
+ --		>>>>>>Apt. 428J
+ --		>>>>>>Sunnyvale, CA 94087
+ 
+ create view OptionalGapBlock as
+ select
+ 	R.match as match
+ from 
+ 	RegexTok(/(>>)+/, 12, DocScan.text) R;
+ 	
+ create view CapsPlace as
+	select
+		R.match as match
+	from
+		--Regex(/\b\p{Upper}[\p{Lower}\&]{1,20}\b/, DocScan.text) R;
+	 	--Regex(/\b\p{Upper}[\p{Lower}\&\.-\/]{1,20}\b/, DocScan.text) R;
+	   RegexTok(/\p{Upper}[\p{Lower}\&\.-\/]{1,20}/, 25, DocScan.text) R;
+	 
+
+ create view CapsPlaceTwo as
+	select
+ 		CombineSpans(cp1.match, cp2.match) as match
+	from
+		CapsPlace cp1,
+		CapsPlace cp2
+ 	where
+		FollowsTok(cp1.match, cp2.match, 0, 0);	
+		
+  create view CapsPlaceOnetoTwo
+	as 
+	 (select R.match as match from CapsPlace R)
+	union all 
+	 (select R.match as match from CapsPlaceTwo R);
+
+ 
+   create view StreetSuffixNoCase  as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/streetSuffix.dict',  DocScan.text) D;
+	
+  create view StreetSuffix as 
+ 	select S.match as match 
+ 	from StreetSuffixNoCase S
+	where 
+		MatchesRegex(/^\p{Upper}[\p{Lower}\&]{1,20}.?/, S.match);		
+	
+  create view StreetSuffixWeakNoCase  as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/streetSuffix_weak.dict',   DocScan.text) D;
+		
+	create view StreetSuffixWeak as 
+ 	select S.match as match 
+ 	from StreetSuffixWeakNoCase S
+	where 
+		MatchesRegex(/^\p{Upper}[\p{Lower}\&]{1,20}/, S.match);		
+	
+   create view StreetSuffixAll
+	as
+	(select S.match as match from StreetSuffix S)
+	union all 
+	 (select S.match as match from StreetSuffixWeak S)	;
+	
+	
+  create view SecondaryUnitNoCase  as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/secondaryUnit.dict', DocScan.text) D;   
+		
+  create view SecondaryUnit as 
+ 	select S.match as match 
+ 	from SecondaryUnitNoCase S
+	where 
+		MatchesRegex(/(\#)|(\p{Upper}[\p{Lower}\&]{1,20})/, S.match);			
+	
+	 
+	create view Zipcode as
+	select
+		R.match as match
+	from
+	--	Regex(/\b[0-9]{5}(\-[0-9]{4})?\b/, DocScan.text) R;
+		RegexTok(/[0-9]{5}(\-[0-9]{4})?/, 3, DocScan.text) R;
+	 
+ 
+		
+-- Rule 4
+
+--streetaddress
+
+ -- Yunyao: block change made to clarify annotator semantics and speedup processing time 
+	-- start block change 
+	
+	create view NumCP as
+	select
+		R.match as match
+	from
+	--	Regex(/\b(([1-9\p{Alpha}][\d\p{Alpha}\-\,]*)?\d[\d\p{Alpha}\-\,]*)\b/, DocScan.text) R
+		RegexTok(/(([1-9\p{Alpha}][\d\p{Alpha}\-\,]*)?\d[\d\p{Alpha}\-\,]*)\b/, 20, DocScan.text) R				
+	where Not(MatchesRegex(/[1-9]\d{3}[,-]\s+.*/, R.match));
+		
+		
+	create view StreetAddressAll as
+	select
+ 		CombineSpans(nc.match, ssw.match) as match
+	from
+		NumCP nc,
+		StreetSuffixAll ssw
+ 	where
+		FollowsTok(nc.match,ssw.match, 1, 7)  and
+		--MatchesRegex(/\s*(\p{Upper}\.?\s+){0,2}(\p{Upper}[\p{Lower}\&]{1,20}|\d{1,3}(st|nd|rd|th))\s*(\p{Upper}[\p{Lower}\&]+\s*){0,3}/, SpanBetween(nc.match,ssw.match)) and
+		MatchesRegex(/\s*((\p{Upper}\.?\s*){1,2})?(\p{Upper}[\p{Lower}\&]{1,20}|\d{1,3}(st|nd|rd|th))\s*(\p{Upper}[\p{Lower}\&]+\s*){0,3}/, SpanBetween(nc.match,ssw.match)) and
+		Not(ContainsRegex(/[\n\r]/, CombineSpans(nc.match,ssw.match)));
+	-- end block change
+
+		
+	
+/*	create view StreetAddressStrong as
+	select
+ 		CombineSpans(nc.match, ss.match) as match
+	from
+		NumCP nc,
+		StreetSuffix ss
+ 	where
+		FollowsTok(nc.match,ss.match, 0, 2)  and
+		MatchesRegex(/\s*(\p{Upper}[\p{Lower}\&]+\s*){0,3}/, SpanBetween(nc.match,ss.match)) and
+		-- Yunyao: updated on 02/01/2008
+		-- No new lines allowed between 
+		Not(ContainsRegex(/[\n\r]/, SpanBetween(nc.match,ss.match))); 
+*/
+		
+----- highway address
+create view NumForHighwayAddress as
+	select
+		R.match as match
+	from
+	-- 	Regex(/\b\d{1,5}-?[A-Z]?\b/, DocScan.text) R;
+	 	RegexTok(/\d{1,5}-?[A-Z]?/, 3, DocScan.text) R;
+			
+create dictionary HighwayDict as
+(
+   'Route', 'Rte', 'US', 'Hwy', 'Highway', 'SR'
+);
+
+create view HighwayDictionary as 
+select D.match as match
+from Dictionary('HighwayDict', 'Exact', DocScan.text) D;
+	
+	
+create view HighwayStateDictionary as 
+(select R.match as match from HighwayDictionary R)
+union all
+(select R.match as match from StateStrongAbbrev R);
+	
+create view HighwayNum as 
+select R.match as match
+--from Regex(/\b\d{1,3}(\s*(N|S|E|W))?(\s*(N|S|E|W))?\b/,DocScan.text) R;
+--from Regex(/\b[1-9]\d{0,2}(\s*(N|S|E|W))?(\s*(N|S|E|W))?\b/,DocScan.text) R;
+from RegexTok(/[1-9]\d{0,2}(\s*(N|S|E|W))?(\s*(N|S|E|W))?/,3, DocScan.text) R;
+
+create view HighwayAddressPart as
+	select
+ 		CombineSpans(nc.match, rs.match) as match
+	from
+		NumForHighwayAddress nc,
+		HighwayStateDictionary rs
+ 	where
+		FollowsTok(nc.match,rs.match, 0, 2)  and
+		MatchesRegex(/\W+((N|S|E|W)\W+)?/, SpanBetween(nc.match,rs.match)) and
+		Not(ContainsRegex(/[\n\r]/, CombineSpans(nc.match,rs.match)));
+
+create view HighwayAddress as
+	select
+ 		CombineSpans(ra.match, hn.match) as match
+	from
+		HighwayAddressPart ra,
+		HighwayNum hn
+ 	where
+		FollowsTok(ra.match,hn.match, 0, 1)  and
+		MatchesRegex(/\W+/, SpanBetween(ra.match,hn.match)) and
+		-- Yunyao: updated on 02/01/2008
+		-- No new lines allowed between 
+		Not(ContainsRegex(/[\n\r]/, CombineSpans(ra.match,hn.match)));
+				
+-- unit
+     	
+     		create view StreetHighwayAddressAll as
+		(select S.match as match from StreetAddressAll S)
+		union all
+		(select S.match as match from HighwayAddress S);
+     		
+	create view StreetAddressUnit  as
+	select
+ 		CombineSpans(S.match, Su.match) as match
+	from
+		StreetHighwayAddressAll S,
+		SecondaryUnit Su
+  	where
+		FollowsTok(S.match,Su.match, 0, 2) and
+		MatchesRegex(/\s*\d*\s*,?\s*$/, SpanBetween(S.match,Su.match));
+	
+	-- Yunyao: added 06/01/2008
+	create view StreetAddressUnitWithGap  as
+	select
+		CombineSpans(S.match, Su.match) as match
+	from
+		StreetHighwayAddressAll S,
+		OptionalGapBlock G,
+		SecondaryUnit Su 
+	where
+		FollowsTok(S.match, G.match, 0, 0) and
+		FollowsTok(G.match, Su.match, 0, 0);
+		
+	create view StreetAddressOptionalUnit
+	as
+	(select S.match as match from StreetHighwayAddressAll S)
+	union all 
+	 (select S.match as match from StreetAddressUnit S)
+	-- Yunyao: added 06/01/2008
+	union all
+	 (select S.match as match from StreetAddressUnitWithGap S);
+	
+	create view StreetAddressWithCityNoGap as
+	select
+ 		CombineSpans(S.match, cp.match) as match
+	from
+		StreetAddressOptionalUnit S,
+		CapsPlaceOnetoTwo cp
+ 	where
+		FollowsTok(S.match,cp.match, 0, 5)
+--FollowsTok(S.match,cp.match, 0, 3)
+--		and
+--		MatchesRegex(/\s*,?\s*[\d\p{Alpha}]{1,20}([\.\ \-\,\d\p{Alpha}]{0,10}\s*){0,2},?\s*/, SpanBetween(S.match,cp.match))
+		;
+
+   -- Yunyao: added 06/01/2008
+	create view StreetAddressWithCityWithGap as
+	select
+ 		CombineSpans(S.match, cp.match) as match
+	from
+		StreetAddressOptionalUnit S,
+		OptionalGapBlock G,
+		CapsPlaceOnetoTwo cp
+ 	where
+		FollowsTok(S.match,G.match, 0, 5) and
+		FollowsTok(G.match, cp.match, 0, 0);
+		
+	create view StreetAddressWithCity as
+		(select C.match as match from StreetAddressWithCityNoGap C)
+		union all
+		(select C.match as match from StreetAddressWithCityWithGap C);
+			
+--  addresswithstate
+
+    create view StreetAddressWithCityStrongState as
+	select
+ 		CombineSpans(Sawc.match, Sa.match) as match
+	from
+		StreetAddressWithCity Sawc,
+		StateStrongAll Sa
+ 	where
+		FollowsTok(Sawc.match,Sa.match, 0, 1)  and
+		MatchesRegex(/\s*,?\s*/, SpanBetween(Sawc.match,Sa.match));
+	
+	create view StreetAddressWithCityWeakState as
+	select
+ 		CombineSpans(Sawc.match, Sa.match) as match
+	from
+		StreetAddressWithCity Sawc,
+		StateWeakAll Sa
+ 	where
+		FollowsTok(Sawc.match,Sa.match, 0, 1)  and
+		MatchesRegex(/\s*,?\s*/, SpanBetween(Sawc.match,Sa.match));
+		
+/*	create view StreetAddressWithCityOptionalStrongState
+	as
+	(select S.match as match from StreetAddressWithCity S)
+	union all 
+	 (select S.match as match from StreetAddressWithCityStrongState S);   
+*/
+	 
+	 create view StreetAddressWithCityOptionalWeakState
+	 as
+	 (select S.match as match from StreetAddressWithCity S)
+	union all 
+	 (select S.match as match from StreetAddressWithCityWeakState S);
+	 
+	create view StreetAddressWithCityOptionalStateZipcode as
+	select
+ 		CombineSpans(Sawcos.match, z.match) as match
+	from
+		StreetAddressWithCityOptionalWeakState Sawcos,
+		Zipcode z
+ 	where
+		FollowsTok(Sawcos.match,z.match, 0, 1)  and
+		-- allow both dot and comma in between
+		ContainsRegex(/^\s*[,\.]?\s*$/, SpanBetween(Sawcos.match,z.match));
+	
+	
+	-- ===========================================================================
+-- >>>>>>>>>>>>>>> Aggregation/Consolidation section <<<<<<<<<<<<<<<<
+-- ===========================================================================
+
+-- Merge all the different rules.
+
+-- Yunyao: added 02/01/2007
+-- Prefer (street address, city, state, zipcode over just city, strong state)
+create view WrongPlaces as
+select R1.match as loc
+from StreetAddressWithCityOptionalStateZipcode R1,
+	 StreetAddressWithCityStrongState R2
+where Contains(R2.match, R1.match);
+
+-------------------------------
+ ---     German Address
+ -------------------------------
+ create view GermanZipcode as
+	select
+		R.match as match
+	from
+	--	Regex(/\b(D-)?[0-9]{4,5}\b/, DocScan.text) R;
+ 		RegexTok(/(D-)?[0-9]{4,5}/, 3, DocScan.text) R;
+ 
+	
+   create view GermanCityZipcode1 as
+	select
+ 		CombineSpans(GZ.match, GC.match) as match
+	from
+		GermanZipcode GZ,
+		GermanCities GC
+ 	where
+		FollowsTok(GZ.match, GC.match, 0, 2)
+		and  MatchesRegex(/\s*[,\.]?\s*/, SpanBetween(GZ.match, GC.match));		
+
+	create view GermanCityZipcode2 as
+	select
+ 		CombineSpans(GC.match, GZ.match) as match
+	from
+		GermanZipcode GZ,
+		GermanCities GC
+ 	where
+		FollowsTok(GC.match, GZ.match, 0, 3)
+		and  MatchesRegex(/\s*((am Main)|([\-\/]?\p{Lu}\p{M}*(\p{L}\p{M}*)+))?\s*,?\s*/, SpanBetween(GC.match, GZ.match));
+
+	 create view GermanCityZipcode as  
+	 (select GCZ1.match as match from GermanCityZipcode1 GCZ1)
+ 	union all
+ 	(select GCZ2.match as match from GermanCityZipcode2 GCZ2);
+
+   
+-- need to support street numbers such as 1/3
+-- allow hyphenated street names in the beginning	
+-- allow park/bridge mentions
+-- no newline in streetname
+
+create view GermanStreetAddressSuffix1 as
+ select R.match as match
+-- from   Regex(/\b(\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20})?([Aa]llee|[Bb]erg|[Cc]haussee|[Dd]amm|[Dd]ämme|[Gg]asse|[Gg]aerten|[Gg]ärten|[Hh]alde|[Hh]öfe|[Hh]of|[Hh]oefe|[Ll]andstraße|[Ll]andstrasse|[Mm]ärkte|[Mm]arkt|[Mm]aerkte|[Pp]fad|[Pp]latz|[Pp]lätze|[Rr]ing|[Ss]teig|[Ss]tr\.|[Ss]traße|[Ss]trasse|[Uu]fer|[Ww]eg|[Zz]eile)\s*,?\s*([[1-9]\p{L}\p{M}*\-\,])*\d([\d\p{L}\p{M}*\/\-\,])*/, DocScan.text) R ;
+from   RegexTok(/(\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20})?([Aa]llee|[Bb]erg|[Cc]haussee|[Dd]amm|[Dd]ämme|[Gg]asse|[Gg]aerten|[Gg]ärten|[Hh]alde|[Hh]öfe|[Hh]of|[Hh]oefe|[Ll]andstraße|[Ll]andstrasse|[Mm]ärkte|[Mm]arkt|[Mm]aerkte|[Pp]fad|[Pp]latz|[Pp]lätze|[Rr]ing|[Ss]teig|[Ss]tr\.|[Ss]traße|[Ss]trasse|[Uu]fer|[Ww]eg|[Zz]eile)\s*,?\s*([[1-9]\p{L}\p{M}*\-\,])*\d([\d\p{L}\p{M}*\/\-\,])*/, 25, DocScan.text) R ;
+
+create view GermanStreetAddressSuffix2 as
+ select R.match as match
+-- from   Regex(/\b(An [dD]er|[Aa]m|[dD]ie|[dD]er|[dD]as)?[ \t]*(Brücke|Park|Postfach|Hauptbahnhof)\b\s*,?\s*([[1-9]\p{L}\p{M}*\-\,])*\d([\d\p{L}\p{M}*\/\-\,])*/, DocScan.text) R ;
+from   RegexTok(/(An [dD]er|[Aa]m|[dD]ie|[dD]er|[dD]as)?[ \t]*(Brücke|Park|Postfach|Hauptbahnhof)\b\s*,?\s*([[1-9]\p{L}\p{M}*\-\,])*\d([\d\p{L}\p{M}*\/\-\,])*/, 25, DocScan.text) R ;
+
+create view GermanStreetAddressSuffix as
+(select R.match as match from GermanStreetAddressSuffix1 R)
+union all
+(select R.match as match from GermanStreetAddressSuffix2 R);
+
+create view GermanCapsPlace as
+select R.match as match
+--from Regex(/\b\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}/,DocScan.text) R ;
+from RegexTok(/\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}/,25, DocScan.text) R ;
+
+create view GermanCapsPlaceTwo as
+select CombineSpans(R1.match,R2.match) as match
+from GermanCapsPlace R1, GermanCapsPlace R2
+where FollowsTok(R1.match,R2.match,0,1) and
+      MatchesRegex(/[ \t]*(\-[ \t]*)?/,SpanBetween(R1.match,R2.match));
+      
+create view GermanCapsPlaceOneOrTwo as 
+(select R.match as match from GermanCapsPlace R)
+union all 
+(select R.match as match from GermanCapsPlaceTwo R);
+
+create view GermanStreetNameWithSuffix as 
+select CombineSpans(R1.match,R2.match) as match
+from GermanCapsPlaceOneOrTwo R1, GermanStreetAddressSuffix R2
+where FollowsTok(R1.match, R2.match,0,1) and
+       MatchesRegex(/[ \t]*(\-[ \t]*)?/,SpanBetween(R1.match,R2.match));
+
+ create view GermanStreetOptionalNameWithSuffix as 
+(select R.match as match from GermanStreetNameWithSuffix R)
+union all 
+(select R.match as match from GermanStreetAddressSuffix R);
+
+create view GermanStreetAddress1 as
+select R.match as match
+--from Consolidate(GermanStreetOptionalNameWithSuffix.match) R;
+from  GermanStreetOptionalNameWithSuffix  R
+consolidate on R.match;
+
+-- create view GermanStreetAddress1 as
+-- select R.match as match
+-- from   Regex(/\b\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}[ \t]*(-(\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}-){1,2})?[ \t]*([Aa]n [dD]er|[Aa]m|[dD]ie|[dD]er|[dD]as)?[ \t]*([Aa]llee|[Bb]erg|[Cc]haussee|[Dd]amm|[Dd]ämme|[Gg]asse|[Gg]aerten|[Gg]ärten|[Hh]alde|[Hh]öfe|[Hh]of|[Hh]oefe|[Ll]andstraße|[Ll]andstrasse|[Mm]ärkte|[Mm]arkt|[Mm]aerkte|[Pp]fad|[Pp]latz|[Pp]lätze|[Rr]ing|[Ss]teig|[Ss]tr\.|[Ss]traße|[Ss]trasse|[Uu]fer|[Ww]eg|[Zz]eile)\s*,?\s*([[1-9]\p{L}\p{M}*\-\,])*\d([\d\p{L}\p{M}*\/\-\,])*/, DocScan.text) R ;
+ 
+ create view GermanStreetAddress2 as
+ select R.match as match
+-- from   Regex(/\b([Aa]llee|[Bb]erg|[Cc]haussee|[Dd]amm|[Dd]ämme|[Gg]asse|[Gg]aerten|[Gg]ärten|[Hh]alde|[Hh]öfe|[Hh]of|[Hh]oefe|[Ll]andstraße|[Ll]andstrasse|[Mm]ärkte|[Mm]arkt|[Mm]aerkte|[Pp]fad|[Pp]latz|[Pp]lätze|[Pp]laetze|[Rr]ing|[Ss]teig|[Ss]tr\.|[Ss]traße|[Ss]trasse|[Uu]fer|[Ww]eg|[Zz]eile)[ \t]+([Aa]n [dD]er|[Aa]m|[dD]ie|[dD]er|[dD]as)?[ \t]*\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}\s*,?\s*([[1-9]\p{L}\p{M}*\-\,]*\d[\d\p{L}\p{M}*\/\-\,]*)/, DocScan.text) R ;
+ from   RegexTok(/([Aa]llee|[Bb]erg|[Cc]haussee|[Dd]amm|[Dd]ämme|[Gg]asse|[Gg]aerten|[Gg]ärten|[Hh]alde|[Hh]öfe|[Hh]of|[Hh]oefe|[Ll]andstraße|[Ll]andstrasse|[Mm]ärkte|[Mm]arkt|[Mm]aerkte|[Pp]fad|[Pp]latz|[Pp]lätze|[Pp]laetze|[Rr]ing|[Ss]teig|[Ss]tr\.|[Ss]traße|[Ss]trasse|[Uu]fer|[Ww]eg|[Zz]eile)[ \t]+([Aa]n [dD]er|[Aa]m|[dD]ie|[dD]er|[dD]as)?[ \t]*\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}\s*,?\s*([[1-9]\p{L}\p{M}*\-\,]*\d[\d\p{L}\p{M}*\/\-\,]*)/, 25, DocScan.text) R ;
+ 
+-- create view GermanStreetAddress3 as
+-- select R.match as match
+-- from   Regex(/(\b\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}[ \t]*(-(\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}-){1,2})?[ \t]*)?(An [dD]er|[Aa]m|[dD]ie|[dD]er|[dD]as)?[ \t]*(Brücke|Park|Postfach|Hauptbahnhof)\b\s*,?\s*([[1-9]\p{L}\p{M}*\-\,]*\d[\d\p{L}\p{M}*\/\-\,]*)/, DocScan.text) R ;
+ 
+ create view GermanStreetAddress as 
+ 
+ (select GSA1.match as match from GermanStreetAddress1 GSA1)
+ union all
+ (select GSA2.match as match from GermanStreetAddress2 GSA2);
+  
+ create view GermanAddress as
+	select
+ 		CombineSpans(GSA.match, GCZ.match) as match
+	from
+		GermanCityZipcode GCZ,
+		GermanStreetAddress GSA
+ 	where
+		FollowsTok(GSA.match, GCZ.match, 0, 3)
+		and  MatchesRegex(/\W*([Gg]ermany|Deutsch\s*[Ll]and)?.{0,5}\W*/, SpanBetween(GSA.match, GCZ.match));
+
+create view PlaceAll as
+	(select R.match as loc from StreetAddressWithCityOptionalStateZipcode R)
+    union all 
+ 	(select R.match as loc from StreetAddressWithCityStrongState R)
+ 	union all
+ 	(select R.match as loc from GermanAddress R);

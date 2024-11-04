@@ -1,0 +1,107 @@
+##############################################################################
+# newdict.aog
+#
+# Tests of new dictionary/table declaration statements in AOG.
+##############################################################################
+
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+# Create a table to hold a dictionary of company names
+CreateTable(
+    # Table name
+    "__CompanyDict_tab",
+    # Table attributes
+    ( "isExternal" => "false"),
+    # Schema
+    ("entry" => "Text"),
+    # Tuples
+    ("IBM"),
+    ("Enron"),
+    ("Yahoo")
+);
+
+# Define a dictionary over the table we just created.
+CreateDict(
+    # Dictionary definition is via Perl hash syntax. "name" argument is
+    # required, as is either "table" or "file"; others are optional
+    "name" => "dictionaries/aogParserTests/companyDict.dict",
+    "table" => "__CompanyDict_tab",
+    "column" => "entry",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "isExternal" => "false"
+);
+
+# Define a second dictionary, this one using a dictionary file.
+CreateDict(
+    # Dictionary definition is via Perl hash syntax. "name" argument is
+    # required, as is either "table" or "file"; others are optional
+    "name" => "dictionaries/first.dict",
+    "file" => "dictionaries/first.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+
+# Create a lookup table that maps countries to regions
+CreateTable(
+    # Table name
+    "CountryToRegion",
+    # Table attributes
+    ( "isExternal" => "false"),    
+    # Schema
+    ("name" => "Text", "location" => "Text"),
+    # Tuples
+    ("United States", "North America"),
+    ("China", "Asia"),
+    ("Saudi Arabia", "Middle East")
+);
+
+# Create a dictionary out of *one* column of the lookup table.
+CreateDict(
+    "name" => "dictionaries/aogParserTests/CountryDict.dict",
+    "table" => "CountryToRegion",
+	# Get dictionary entries out of the "name" column
+    "column" => "name",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+# Extract company names.
+$Company = Dictionary("dictionaries/aogParserTests/companyDict.dict" => "IgnoreCase", "text", $Document);
+
+# Extract first names.
+$FirstName = Dictionary("dictionaries/first.dict", "text", $Document);
+
+# Create a scan over the lookup table.
+$CountryToRegion = TableScan( "CountryToRegion" );
+
+# Use the first column of the lookup table as a dictionary
+$Country = Dictionary("dictionaries/aogParserTests/CountryDict.dict", "text", $Document);
+
+
+# Join the lookup table with the dictionary matches
+$Region =  
+Project(
+    (
+         "location" => "location",
+            "match" => "company"
+    ),
+    SortMergeJoin(
+            Equals(
+            GetText(GetCol("match")),
+            GetText(GetCol("name"))
+        ),
+        $Country,
+        $CountryToRegion
+    )
+);
+
+
+Output: $Company, $FirstName, $CountryToRegion, $Country;
+

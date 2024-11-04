@@ -1,0 +1,57 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module PhoneNumber;
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText;
+
+import dictionary PhoneWordsAsCluesOne from module Dictionaries as PhoneWordsAsCluesOne;
+import dictionary PhoneWordsAsCluesTwo from module Dictionaries as PhoneWordsAsCluesTwo; 
+import dictionary PhoneWordsAsFilters from module Dictionaries as PhoneWordsAsFilters;
+
+require document with columns
+text Text;
+
+
+-- This file contains all basic features used in eventually extracting a PhoneNumber entity instance from input text.
+
+create view StrongPhoneVariant as 
+select D.match as match
+from (extract dictionary 'PhoneWordsAsCluesTwo' on D.text as match from DocumentText D) D;
+
+create view PhoneNumberInstance as
+select R.match as match
+from (extract regex /(\+\s*){0,2}[\p{Nd}(]([\p{Nd} ()\-.\/]){9,20}\p{Nd}/
+		on between 1 and 10 tokens in D.text
+		as match from DocumentText D) R;
+
+create view CorrectPhoneNumberInstance as
+select R.match as match
+from PhoneNumberInstance R
+where Not(ContainsRegex(/(\(.+\()|(\).+\)|(\/.+\/)|(\([^)]*$))/,R.match));
+
+--===========================================================================
+-- Dictionary Matches
+--===========================================================================
+create view PhoneVariant as 
+select D.match as annot
+from (extract dictionary 'PhoneWordsAsCluesOne' on D.text as match from DocumentText D) D;
+
+create view PhoneFilter as
+select D.match as annot
+from (extract dictionary 'PhoneWordsAsFilters' on D.text as match from DocumentText D) D;
+
+

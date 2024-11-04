@@ -1,0 +1,35 @@
+-------------------------------------------------------------------------------
+-- homepage.aql
+--
+-- Various annotators to identify features that are used during global analysis
+-- to find home pages.
+--
+-- Depends on HTML.aql.
+--
+-- This file produces the contents of the following local analysis outputs:
+--      a. AnchorHome
+--		   Targets of links, where the anchor text contains a string like
+--         "IBM home page".
+--
+-- Based on Huiayu's original Java implementation.
+-- Author: Fred Reiss <frreiss@us.ibm.com>
+-------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
+-- AnchorHome rules
+
+-- Look at anchor text to identify markers of possible home pages.
+create view AnchorHome as
+extract
+	A.target as target,
+	regexes 
+		/\A[\W\d]*(.*)'s? (?:Home\s*Page|Intranet Site|Intranet Page)/  --'
+		and /\b(?:Home\s*Page|Intranet Site|Intranet Page) of (.*)[\W\d]*\Z/
+		and /\A\W*(.*) Info Page[\W\d]*\Z/
+		and /\A\W*(.*) (?:Home\s*Page|Intranet Site|Intranet Page)[\W\d]*\Z/
+		and /\A\W*(.*) Home[\W\d]*\Z/
+			with flags 'CASE_INSENSITIVE'
+		on A.match
+			return group 1 as name
+from Anchor A;
+

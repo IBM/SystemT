@@ -1,0 +1,48 @@
+package PACKAGE_NAME_GOES_HERE;
+
+import com.ibm.avatar.algebra.datamodel.TupleList;
+import com.ibm.avatar.algebra.util.pmml.ScoringTableFuncBase;
+import com.ibm.avatar.api.exceptions.TableUDFException;
+import com.ibm.avatar.api.exceptions.TextAnalyticsException;
+import java.io.InputStream;
+
+/**
+ * Template for Java UDFs that the PMML support code generates to wrap around
+ * 
+ */
+public class CLASS_NAME_GOES_HERE extends ScoringTableFuncBase
+{
+
+  @Override
+  protected InputStream getPMMLStream () throws TableUDFException
+  {
+    ClassLoader localClassLoader = getClass ().getClassLoader ();
+
+    String pkgName = "PACKAGE_NAME_GOES_HERE";
+    String className = "CLASS_NAME_GOES_HERE";
+
+    // Compute the name of the resource (should be in the same jar file) containing the PMML description of the model
+    String pmmlRsrcLoc = String.format ("%s/%s_model.xml", pkgName.replace ('.', '/'), className);
+
+    InputStream localInputStream = localClassLoader.getResourceAsStream (pmmlRsrcLoc);
+    if (null == localInputStream)
+      throw new TableUDFException (
+        "PMML data not found at %s. Check for a damaged TAM file or a nonstandard class loading environment.",
+        pmmlRsrcLoc);
+
+    return localInputStream;
+  }
+
+  /**
+   * Main entry point. Implementation is in superclass, but this class needs to have this method for the table UDF
+   * loader to recognize it as valid.
+   * 
+   * @param param input table containing one or more tuples to be scored
+   * @return results of scoring, in the schema specified in the "create function" statement
+   * @throws TextAnalyticsException
+   */
+  public TupleList eval (TupleList param) throws TextAnalyticsException
+  {
+    return super.evalImpl (param);
+  }
+}

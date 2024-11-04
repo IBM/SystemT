@@ -1,0 +1,195 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module OrganizationCandidates;
+
+create view DotCom as
+	select CombineSpans(R1.match,R2.anchor) as match
+	from   DotComLC R1, DotComAnchor R2
+	where FollowsTok(R1.match, R2.anchor,0,0);
+
+create view OrgClueStSuffixCaps as
+ select S.match as match
+ from OrgClueStSuffixCapsCand S
+ where Not(ContainsRegex(/\s+\./, S.match));
+ 
+create view OrgClueSuffixAux as
+(select C.match as match from CountryCandidate C)
+union all
+(select C.match as match from Continents C)
+union all
+(select C.match as match from OrgClueStSuffixAuxCaps C);
+
+create view OrgClueSuffixAuxExtended as
+extract pattern '('? <SA.match> ')'? as match
+	with inline_match on DocumentText.text
+from OrgClueSuffixAux SA;
+
+-- Extend org suffixes with all industry suffixes, including  weak ones
+create view OrgClueStSuffixCapsExtended as
+extract pattern (<SS.match>|<SW.match>|<SA.match>){0,2} <S.match> as match
+from OrgClueStIndCaps SS, OrgClueStIndSuffixWeakCaps SW, OrgClueSuffixAuxExtended SA, OrgClueStSuffixCaps S
+consolidate on match; 
+
+	
+ create view OrgClueStCaps
+ as
+	(select OCSIC.match as match from OrgClueStIndCaps OCSIC)
+ union all
+    (select OCSSC.match as match from OrgClueStSuffixCapsExtended OCSSC)
+ union all
+ 	(select O.match as match from OrgCluePartnershipSuffix O);
+ 
+
+create view OrgFullCase as 
+	(select O.match as match from OrgFullCase1 O)
+	union all
+	(select O.match as match from OrgFullCase2 O)
+	union all
+	(select O.match as match from OrganizationFortune1000_2000_2008_Case O);		
+		
+		
+ create view OrgFull
+	as 
+	 (select R.match as match from OrgFullNoCase R)
+	union all 
+	 (select R.match as match from OrgFullCase R);	
+	 
+
+create view NonOrgDictMatches as
+	(select D.match as match from Continents D)
+	union all
+	(select D.match as match from Nationalities D)
+	union all
+	(select D.match as match from CountryCandidate D)
+	union all
+	(select D.match as match from StateCandidate D
+	-- to avoid partial matches such as Michigan [State University]
+	where Not(ContainsDict('SuffixesForStateBasedGovernmentOrganizations', RightContextTok(D.match,2)))
+	)
+	union all
+	(select D.match as match from OrgToAvoid D);
+
+create view NonOrgs as
+select CombineSpans(NO.match, OC.match) as match
+from   NonOrgDictMatches NO,
+ 	   OrgClueStCaps OC
+where
+	FollowsTok(NO.match, OC.match, 0, 1)
+	and MatchesRegex(/\s*\W*\s*/, SpanBetween(NO.match, OC.match))
+	-- to avoid filtering out matches of the type <Location> <IndustrySuffix> for certain industries
+	and Not(MatchesDict('SuffixesForGovernmentOrganizations', OC.match))
+	and Not(MatchesDict('SuffixesForMediaAndEntertainmentOrganizations', OC.match))
+	and Not(MatchesDict('SuffixesForNewspaperOrganizations', OC.match)); 
+	
+
+create view NonOrgsOrgClueStCaps as
+(select D.match as match from NonOrgDictMatches D)
+union all
+(select OC.match as match from OrgClueStCaps OC);
+
+create view CompanyInfoStrong as
+  extract R.exchange as exchange, R.ticker as ticker, 
+     regex /((\p{Lu}\p{M}*(\p{L}\p{M}*|-)+[ ]+){0,2}\p{Lu}\p{M}*(\p{L}\p{M}*|-)+)[ ]*\($/ on R.lc 
+    return group 1 as companyname
+  from StockExchangeAndTicker R;
+
+-- Prefix and Suffix of governmental orgs might be orgs in themselves
+
+create view OrgGov as
+( select * from OrgGovSuffix )
+union all
+( select * from OrgGovPrefix );
+
+create view OrgMagazineCand as
+extract dictionary 'PopularNationalMagazinesByCirculation'
+	on D.text as match
+from DocumentText D
+having MatchesRegex(/\p{Lu}\p{M}*.+/, match);
+
+create view OrgMagazine as
+	-- strong matches with two or more tokens
+	(select * from OrgMagazineCand O where ContainsRegex(/\s+/,O.match))
+	union all
+    -- weaker matches with a single token require a magazine clue to the left or right
+	(
+		select * 
+		from OrgMagazineCand O 
+		where Not(ContainsRegex(/\s+/,O.match)) 
+		  and ContainsDict('PositiveCluesForMagazines', RightContextTok(O.match,1))
+	);
+
+
+-- Customization 2: Location/Nationality + 'Stock/Securities Exchange' = Organization
+
+create view LocationStockEx as
+select CombineSpans(L.match, S.match)  as match
+from MajorCity L, StockEx S
+where FollowsTok(L.match, S.match, 0, 0);
+
+create view NationalityStockEx as
+select CombineSpans(N.match, S.match)  as match
+from Nationalities N, StockEx S
+where FollowsTok(N.match, S.match, 0, 0)
+  and Not(ContainsRegex(/[\n\r\t]{2,}/, SpanBetween(N.match, S.match)));
+
+create view StockExchangeOrg as
+( select O.match from LocationStockEx O)
+union all
+( select O.match from NationalityStockEx O); 
+
+-- Capture organization names mentioned in NotesEmail
+
+	create view OrgWithinNotesEmail1 as
+	select
+		R.match as match
+	from
+		(extract regex /\p{L}\p{M}*+/ on 1 token in N.annot as match from NotesEmailConsolidated N) R 
+	where
+		MatchesRegex(/[\/]/, LeftContext(R.match, 1)) and
+		MatchesRegex(/[\s@]/, RightContext(R.match, 1));  	 
+
+	create view OrgWithinNotesEmail2 as
+	select
+		R.match as match
+	from
+		(extract regex /\p{L}\p{M}*+/ on 1 token in N.annot as match from NotesEmailConsolidated N) R
+	where
+		MatchesRegex(/[@]/, LeftContext(R.match, 1));  
+
+
+-- Patterns to identify Sports teams
+  
+create view OrgSportsTeamCand as
+select O.org as org
+from
+(
+	(select O.org from SoccerTeam O)
+	union all
+	(select O.org from BaseballTeam O)
+	union all
+	(select O.org from BasketballTeam O)
+	union all
+	(select O.org from HockeyTeam O)
+	union all
+	(select O.org from AmericanFootballTeam O)
+) O
+consolidate on O.org;
+
+
+create view OrgSportsTeamAll as
+select O.org as org from OrgSportsTeamCand O;
+

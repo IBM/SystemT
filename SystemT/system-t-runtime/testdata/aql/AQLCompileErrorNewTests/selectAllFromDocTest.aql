@@ -1,0 +1,24 @@
+--- Test to check if we throw exception on selecting * from the special Document view
+
+
+--- This section of AQL should not compile because we forbid select * from Document
+
+create view dumpDoc as
+select * from Document d;
+
+output view dumpDoc;
+
+--- This section is okay
+
+create view SomeOtherView as 
+select Document.text from Document;
+
+output view SomeOtherView;
+
+--- This section should not compile because we forbid select D.* from Document D
+
+create view SelectStarFromDocument as
+select V.*, D.*
+from Document D, SomeOtherView V;
+
+output view SelectStarFromDocument;

@@ -1,0 +1,1895 @@
+require document with columns text Text;
+
+-- ****************************************************************************
+--
+-- Created By : Yunyao Li (yunyaoli@us.ibm.com)
+-- 
+-- Annotator type : Built-in
+-- 
+-- Purpose : Extract email addresses from plain text
+-- Examples :
+--			joe@abc.com
+--          124.344@xyz.com
+--
+-- This is a translation based on EmailRecognizer
+-- ****************************************************************************
+/**
+ * Rule 1: identifies emails
+ * Examples: 
+ *          joe@abc.com
+ *          jane@xyz.org
+ */
+create view Email1 as
+select R.match as annot
+from Regex(/((?i)([_a-zA-Z0-9-]+(\.[_a-zA-Z0-9-]+)*@[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*\.(([0-9]{1,3})|([a-zA-Z]{2,3})|(aero|coop|info|museum|name))))/, Document.text) R;
+
+/**
+ * Rule 2: identifies emails in Lotus Notes format
+ * Examples: 
+ *           John Doe/Almaden/IBM
+ *
+ */
+create view Email2 as
+select R.match as annot
+from   Regex(/(([A-Z]\w{1,20}\s+)?([A-Z]\s+)?([A-Z]\w{1,20}\s*[\/]\s*){2,3}[A-Z]{2,20})/, Document.text) R;
+
+/**
+ * Combine all the matches identified so far
+ */
+create view EmailAll as
+  (select Email1.annot as annot from Email1)
+union all
+  (select Email2.annot as annot from Email2);
+
+/**
+ *  Output all the email address found so far
+ *  NOTE: 
+ *      There is no need for consolidation as matches by both rules do not overlap
+ */
+select EmailAll.annot as url
+into Email
+from EmailAll;
+
+-- ****************************************************************************
+--
+-- Created By : Yunyao Li (yunyaoli@us.ibm.com)
+-- 
+-- Annotator type : Built-in
+-- 
+-- Purpose : Extract urls from plain text
+-- Examples :
+--			http://explorer.msn.com
+--          www.BlackBerry.net
+--
+-- This is a translation based on UrlRecognizer
+-- ****************************************************************************
+/**
+ * Rule 1: identifies urls that begins with protocol names http or ftp
+ * Examples: http://explorer.msn.com
+ *           ftp://cvs.ibm.com
+ */
+create view URL1 as
+select R.match as annot
+from Regex(/((ht|f)tps?:\/\/\w+[\w\-:&=_?\/~.<>@]+[\w\-:&=_?\/~]{2,})/, Document.text) R;
+
+/**
+ * Rule 2: identifies urls that are not necessarily begin with protocol names http or ftp
+ * Examples: http://explorer.msn.com
+ *           w3.ibm.com
+ *           http://172.17.172.62/rt/tips/index.html
+ */
+create view URL2 as
+select R.match as annot
+from   Regex(/(((([\w]+:)\/\/)|(w\w+\.))(([\d\w]|%[a-fA-f\d]{2,2})+(:([\d\w]|%[a-fA-f\d]{2,2})+)?@)?([\d\w][-\d\w]{0,253}[\d\w]\.)+[\w]{2,4}(:[\d]+)?(\/([-+_~.\d\w]|%[a-fA-f\d]{2,2})*)*(\?(&?([-+_~.\d\w]|%[a-fA-f\d]{2,2})=?)*)?(#([-+_~.\d\w]|%[a-fA-f\d]{2,2})*)?)/, Document.text) R;
+
+/**
+ * Combine all the matches identified so far
+ */
+create view URLAll as
+  (select URL1.annot as annot from URL1)
+union all
+  (select URL2.annot as annot from URL2);
+
+/**
+ * Consolidate all the matches and output them
+ */
+select C.annot as url
+into URL
+from URLAll C
+consolidate on C.annot;
+--from Consolidate(URLAll.annot) C;
+
+-- ****************************************************************************
+--
+-- Created By : Yunyao Li (yunyaoli@us.ibm.com)
+-- 
+-- Annotator type : Built-in
+-- 
+-- Purpose : Extract phone numbers from plain text
+-- Examples :
+--			408-927-1234
+--			x1234
+--			1-800-COMCAST
+--
+-- This is a translation based on telnumber.xml and fax-filer.xml
+-- ****************************************************************************
+
+--===========================================================================
+-- Dictionaries
+--===========================================================================
+-- Strong patterns indicating the existence of a phone number
+create dictionary PhoneVariants as (
+	'+',
+	'phone:',
+	'phone :',
+	'cell:',
+	'cell :',
+	'contact:',
+	'contact :',
+	'direct:',
+	'direct :',
+	'office:',
+	'office :'
+);
+
+/*create dictionary PlusSymbol as (
+    '+'
+)*/
+
+-- Strong patterns indicating the existence of a fax number
+create dictionary FilterPhoneNum as (
+	'fax',
+	'efax',
+	'pager'
+);
+
+--===========================================================================
+-- Dictionary Matches
+--===========================================================================
+create view PhoneVariant as 
+select D.match as annot
+from   Dictionary('PhoneVariants', Document.text) D;
+
+/*
+create view Plus as
+select D.match as annot
+from   Dictionary('PlusSymbol', Document.text) D;
+*/
+
+create view PhoneFilter as
+select D.match as annot
+from Dictionary('FilterPhoneNum', Document.text) D;
+
+--===========================================================================
+-- Sentence annotator
+--===========================================================================
+create view sentence as
+extract 
+    split using B.boundary 
+        retain right split point
+        on B.text
+        as sentence
+from (
+    extract 
+        D.text as text,
+        regex /(?:(?:[\;\.\?!]+\s)|(\n\s*\n))/ on D.text as boundary 
+        from Document D
+    having Not(ContainsDict('dictionaries/abbreviations.dict', 
+    CombineSpans(LeftContextTok(boundary, 1), boundary)))
+) B;
+
+--===========================================================================
+-- Translation for individual rules in telnumber.xml
+--===========================================================================
+--- Rule 1a ---
+-----------------------------------
+-- Purpose:
+--        Matching International phone numbers (most European phone numbers)
+-- Example:
+--        +12 123 123 12
+-----------------------------------
+/**----------------------------------------------------------
+    NOTE: Updated the original rule so that all the strong clues in the dictionary 
+    are considered, instead of only considering '+'. The catch is that the 
+    strong clues including '+' will not appear in the annotations 
+   ----------------------------------------------------------**/
+
+/*----------------------------------
+- <rule id='1a' name='PhoneNumber'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  </token>
+- <token>
+  <regex>\d{2}\d?\d?</regex> 
+  <repeatOperator>{3,4}</repeatOperator> 
+  </token>
+  </internal>
+  </rule>
+-----------------------------------*/
+
+create view PhoneNumber_R1a as
+select R.match as num
+from Regex(/\b\d{2}\d?\d?(\s+\d{2}\d?\d?){3,4}\b/, Document.text) R,
+     PhoneVariant Var
+where FollowsTok(Var.annot, R.match, 0, 0);
+
+--------------
+-- Rule 1b and 2
+--
+-- Purpose: 
+--       Match US phone number
+--
+-- Example:
+--       +(734) 1231245
+--       (890)124.4568
+--------------
+/*--------------------------------
+- <rule id='1b' name='PhoneNumber'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>\(</regex> 
+  </token>
+- <token>
+  <regex>[1-9]\d{2}</regex> 
+  </token>
+- <token>
+  <regex>\)</regex> 
+  </token>
+- <token>
+  <regex>[\-]?\d{3}[\-\.]?\d{4}</regex> 
+  </token>
+  </internal>
+  </rule>
+  
+  - <rule id='2' name='PhoneNumber'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>\(</regex> 
+  </token>
+- <token>
+  <regex>[1-9]\d{2}</regex> 
+  </token>
+- <token>
+  <regex>\)</regex> 
+  </token>
+- <token>
+  <regex>\d{3}</regex> 
+  </token>
+- <token>
+  <regex>\d{4}</regex> 
+  </token>
+  </internal>
+  </rule>
+------------------------------------*/
+
+create view PhoneNumber_R1b_2 as
+select R.match as num
+from Regex(/(\+\s*)?\(\s*[1-9]\d{2}\s*\)\s*[\-\.]?\d{3}[\-\.\s*]?\d{4}\b/, Document.text) R;
+
+--------------
+-- Rule 2a
+--
+-- Purpose: 
+--       Match US phone number
+--
+-- Example:
+--       +(734) 123-1245
+--       (124)465 7890
+--------------
+/*----------------------------------------------
+  NOTE: Updated to allow [\-\.] between \d{3} and \d{4}
+ -----------------------------------------------*/  
+/*
+- <rule id='2a' name='PhoneNumber'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>[1-9]\d{2}</regex> 
+  </token>
+- <token>
+  <regex>\d{3}</regex> 
+  </token>
+- <token>
+  <regex>\d{4}</regex> 
+  </token>
+  </internal>
+  </rule>
+*/
+
+create view PhoneNumber_R2a as
+select R.match as num
+from Regex(/\b\+?\s*[1-9]\d{2}\s*[\-\.]?\d{3}[\-\.\s]\s*\d{4}\b/, Document.text) R;
+
+---------------------
+-- Rule 3a
+-- Purpose: 
+--    Find US numbers begin with country code 1
+--
+-- Example
+--    1-234-456-8908
+---------------------
+/**----------------------------------------------------------
+ NOTE: Added option '()' around area code '[1-9]\d{2}' 
+ -----------------------------------------------------------**/
+/*
+- <rule id='3' name='PhoneNumber'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>(1\-)?[1-9]\d{2}[\-\.]\d{3}[\-\.]\d{4}</regex> 
+  </token>
+  </internal>
+  </rule>
+*/
+
+create view PhoneNumber_R3 as
+select R.match as num
+from Regex(/\b\+?(1[\-\.\s]\s*)?\s*\(?[1-9]\d{2}\)?[\-\. ]\d{3}[\-\. ]\d{4}\b/, Document.text) R;
+
+---------------------
+-- Rule 3a
+-- Purpose: 
+--    Find 1-800 numbers with alphabet
+--
+-- Example
+--    1-800-COMCAST
+---------------------
+/*
+- <rule id='3a' name='PhoneNumber'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>1\-8\d{2}</regex> 
+  </token>
+- <token>
+  <regex>[\-]</regex> 
+  </token>
+- <token>
+  <regex>[A-Z]{7}</regex> 
+  </token>
+  </internal>
+  </rule>
+*/
+
+create view PhoneNumber_R3a as
+select R.match as num
+from Regex(/\b\+?1[\-\.\s]8\d{2}\s+[\s\-\.][A-Z]{7}\b/, Document.text) R;
+
+----------------
+-- Rule 4
+--
+-- Purpose:
+--       Find extension numbers
+--
+-- Example:
+--       x12456
+--------------------
+/*
+- <rule id='4' name='PhoneNumber'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>[Xx]\.?\d{4,5}</regex> 
+  </token>
+  </internal>
+  </rule>
+*/
+
+create view PhoneNumber_R4 as
+select R.match as num
+from Regex(/\b[Xx][\.\-]?\d{4,5}\b/, Document.text) R;
+
+----------------
+-- Rule 5
+--
+-- Purpose:
+--       Find extension numbers
+--
+-- Example:
+--       Ext: 1245
+--------------------
+/*
+- <rule id='5' name='PhoneNumber'>
+- <context>
+- <token>
+  <regex>[Ee][Xx][Tt]</regex> 
+  </token>
+- <token>
+  <regex>[\.\:]</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+  </context>
+- <internal>
+- <token>
+  <regex>\d{4,5}</regex> 
+  </token>
+  </internal>
+  </rule>
+*/
+create view PhoneNumber_R5 as
+select R.match as num
+from Regex(/\bext\s*[\.\-\:]?\s*\d{4,5}\b/, Document.text) R;
+
+---------------------------------
+-- Rule 7a, 7b, 7c
+--
+-- Purpose:
+--     Identify Indian phone numbers
+--
+-- Example: 
+--     12 34 5678
+--     123 456 7890 
+---------------------------------
+/*
+- <rule id='7a' name='PhoneNumber'>
+- <context>
+- <token>
+  <regex>PHONEWORD</regex> 
+  <attribute>PHONE:VARIANTS</attribute> 
+  </token>
+  </context>
+- <internal>
+- <token>
+  <regex>[1-9]\d{1,2}</regex> 
+  </token>
+- <token>
+  <regex>\d{2}</regex> 
+  </token>
+- <token>
+  <regex>\d{8}</regex> 
+  </token>
+  </internal>
+  </rule>
+- <rule id='7b' name='PhoneNumber'>
+- <context>
+- <token>
+  <regex>PHONEWORD</regex> 
+  <attribute>PHONE:VARIANTS</attribute> 
+  </token>
+  </context>
+- <internal>
+- <token>
+  <regex>[1-9]\d{1,2}</regex> 
+  </token>
+- <token>
+  <regex>\d{5,5}</regex> 
+  </token>
+- <token>
+  <regex>\d{5,5}</regex> 
+  </token>
+  </internal>
+  </rule>
+- <rule id='7c' name='PhoneNumber'>
+- <context>
+- <token>
+  <regex>PHONEWORD</regex> 
+  <attribute>PHONE:VARIANTS</attribute> 
+  </token>
+  </context>
+- <internal>
+- <token>
+  <regex>[1-9]\d{1,2}</regex> 
+  </token>
+- <token>
+  <regex>\d{2}</regex> 
+  </token>
+- <token>
+  <regex>\d{4}</regex> 
+  </token>
+- <token>
+  <regex>\d{4}</regex> 
+  </token>
+  </internal>
+  </rule>
+- <rule id='IndiaPhone1' name='PhoneNumber'>
+- <context>
+- <token>
+  <regex>PHONEWORD</regex> 
+  <attribute>PHONE:VARIANTS</attribute> 
+  </token>
+  </context>
+- <internal>
+- <token>
+  <regex>[1-9]\d{1,2}[\-]((\d{5}[\-]\d{5})|(\d{2}[\-]\d{4}[\-]\d{4})|(\d{2}[\-]\d{8}))</regex> 
+  </token>
+  </internal>
+  </rule>
+  */
+  
+create view PhoneNumber_R7a_7b_7c as
+select R.match as num
+from Regex(/\b([1-9]\d{1,2}\s*[\s\-\.]((\d{2}\s*[\s\-\.]\d{8}})|(\d{5}\s*[\s\-\.]\d{5})|(\d{2}\s*[\s\-\.]\d{4}\s*[\s\-\.]\d{4})))\b/, Document.text) R;
+
+-------------------------------------
+-- Rule 8ILPhone
+-- 
+-- Purpose: 
+--     Identify Isael Phone numbers
+--
+-- Example:
+--     972-89-1234567
+--------------------------------------
+/*
+- <rule id='8ILPhone' name='PhoneNumber'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  </token>
+- <token>
+  <regex>972\-\d{1,2}\-\d{7}</regex> 
+  </token>
+  </internal>
+  </rule>
+  </rules>
+ */
+ 
+create view PhoneNumber_R8ILPhone as
+select R.match as num
+from Regex(/\b(972[\-\.]\d{1,2}[\-\.]\d{7})\b/, Document.text) R;
+
+-- ===========================================================================
+-- Rules for identifying fax numbers
+-- ===========================================================================
+/**---------------------------------------------------------------------------
+ NOTE: Instead translating the individual rules, we simple identify later phone
+       numbers that follows or are followed by the filter words 
+ ----------------------------------------------------------------------------**/
+/*
+  <?xml version='1.0' encoding='ISO-8859-1' ?> 
+- <rules>
+- <rule id='1a' name='FLT:FAXNO'>
+- <context>
+- <token>
+  <attribute>FLT:PhoneNumber</attribute> 
+  <regex>ANYWORD</regex> 
+  </token>
+- <token>
+  <regex>[\=\/\:\.\-]</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+  </context>
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  </token>
+- <token>
+  <regex>\d{2}\d?\d?</regex> 
+  <repeatOperator>{3,4}</repeatOperator> 
+  </token>
+  </internal>
+  </rule>
+- <rule id='1b' name='FLT:FAXNO'>
+- <context>
+- <token>
+  <attribute>FLT:PhoneNumber</attribute> 
+  <regex>ANYWORD</regex> 
+  </token>
+- <token>
+  <regex>[\=\/\:\.\-]</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+  </context>
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>\(</regex> 
+  </token>
+- <token>
+  <regex>[1-9]\d{2}</regex> 
+  </token>
+- <token>
+  <regex>\)</regex> 
+  </token>
+- <token>
+  <regex>[\-]?\d{3}[\-\.]?\d{4}</regex> 
+  </token>
+  </internal>
+  </rule>
+- <rule id='2' name='FLT:FAXNO'>
+- <context>
+- <token>
+  <attribute>FLT:PhoneNumber</attribute> 
+  <regex>ANYWORD</regex> 
+  </token>
+- <token>
+  <regex>[\=\/\:\.\-]</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+  </context>
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>\(</regex> 
+  </token>
+- <token>
+  <regex>[1-9]\d{2}</regex> 
+  </token>
+- <token>
+  <regex>\)</regex> 
+  </token>
+- <token>
+  <regex>\d{3}</regex> 
+  </token>
+- <token>
+  <regex>\d{4}</regex> 
+  </token>
+  </internal>
+  </rule>
+- <rule id='2a' name='FLT:FAXNO'>
+- <context>
+- <token>
+  <attribute>FLT:PhoneNumber</attribute> 
+  <regex>ANYWORD</regex> 
+  </token>
+- <token>
+  <regex>[\=\/\:\.\-]</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+  </context>
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>[1-9]\d{2}</regex> 
+  </token>
+- <token>
+  <regex>\d{3}</regex> 
+  </token>
+- <token>
+  <regex>\d{4}</regex> 
+  </token>
+  </internal>
+  </rule>
+- <rule id='3' name='FLT:FAXNO'>
+- <context>
+- <token>
+  <attribute>FLT:PhoneNumber</attribute> 
+  <regex>ANYWORD</regex> 
+  </token>
+- <token>
+  <regex>[\=\/\:\.\-]</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+  </context>
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>[1-9]\d{2}[\-\.]?\d{3}[\-\.]?\d{4}</regex> 
+  </token>
+  </internal>
+  </rule>
+- <rule id='4' name='FLT:FAXNO'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>\(</regex> 
+  </token>
+- <token>
+  <regex>[1-9]\d{2}</regex> 
+  </token>
+- <token>
+  <regex>\)</regex> 
+  </token>
+- <token>
+  <regex>[\-]?\d{3}[\-\.]?\d{4}</regex> 
+  </token>
+  </internal>
+- <context>
+- <token>
+  <regex>[\(\[]</regex> 
+  </token>
+- <token>
+  <attribute>FLT:PhoneNumber</attribute> 
+  <regex>ANYWORD</regex> 
+  </token>
+- <token>
+  <regex>[\]\)]</regex> 
+  </token>
+  </context>
+  </rule>
+- <rule id='5' name='FLT:FAXNO'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>\(</regex> 
+  </token>
+- <token>
+  <regex>[1-9]\d{2}</regex> 
+  </token>
+- <token>
+  <regex>\)</regex> 
+  </token>
+- <token>
+  <regex>\d{3}</regex> 
+  </token>
+- <token>
+  <regex>\d{4}</regex> 
+  </token>
+  </internal>
+- <context>
+- <token>
+  <regex>[\(\[]</regex> 
+  </token>
+- <token>
+  <attribute>FLT:PhoneNumber</attribute> 
+  <regex>ANYWORD</regex> 
+  </token>
+- <token>
+  <regex>[\]\)]</regex> 
+  </token>
+  </context>
+  </rule>
+- <rule id='5a' name='FLT:FAXNO'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>[1-9]\d{2}</regex> 
+  </token>
+- <token>
+  <regex>\d{3}</regex> 
+  </token>
+- <token>
+  <regex>\d{4}</regex> 
+  </token>
+  </internal>
+- <context>
+- <token>
+  <regex>[\(\[]</regex> 
+  </token>
+- <token>
+  <attribute>FLT:PhoneNumber</attribute> 
+  <regex>ANYWORD</regex> 
+  </token>
+- <token>
+  <regex>[\]\)]</regex> 
+  </token>
+  </context>
+  </rule>
+- <rule id='6' name='FLT:FAXNO'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>[1-9]\d{2}[\-\.]?\d{3}[\-\.]?\d{4}</regex> 
+  </token>
+  </internal>
+- <context>
+- <token>
+  <regex>[\(\[]</regex> 
+  </token>
+- <token>
+  <attribute>FLT:PhoneNumber</attribute> 
+  <regex>ANYWORD</regex> 
+  </token>
+- <token>
+  <regex>[\]\)]</regex> 
+  </token>
+  </context>
+  </rule>
+  </rules>
+ */
+
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Aggregation/Consolidation section <<<<<<<<<<<<<<<<
+-- ===========================================================================
+
+-- Merge all the different rules.
+create view PhoneNumAll as
+	(select P.num as num from PhoneNumber_R1a P)
+union all
+    (select P.num as num from PhoneNumber_R1b_2 P)
+union all
+    (select P.num as num from PhoneNumber_R2a P)
+union all
+    (select P.num as num from PhoneNumber_R3 P)
+union all
+    (select P.num as num from PhoneNumber_R3a P)
+union all
+    (select P.num as num from PhoneNumber_R4 P)
+union all
+    (select P.num as num from PhoneNumber_R5 P)
+union all
+    (select P.num as num from PhoneNumber_R7a_7b_7c P)
+union all
+    (select P.num as num from PhoneNumber_R8ILPhone P);
+	
+-- -------------------------------------------------------
+-- Consolidation:
+-- For now, we just remove annotations that are completely
+-- contained within other annotations.
+-- -------------------------------------------------------
+
+create view PhoneNumCons as
+select C.num as num
+--from Consolidate(PhoneNumAll.num) C,
+from PhoneNumAll C,
+     sentence S
+where Contains(S.sentence, C.num)
+consolidate on C.num;
+
+-- -------------------------------------------------------
+-- Identify fax/pager numbers
+-- -------------------------------------------------------
+create view NonPhoneNum as
+	(select P.num as num
+	--select CombineSpans(F.annot, P.num) as num
+	from   PhoneNumCons P,
+    	   PhoneFilter F
+	where  FollowsTok(F.annot, P.num, 0, 2)
+  	  and  MatchesRegex(/\s*[\=\/\:\.\-\(\)]?\s*\+?\s*/, SpanBetween(F.annot, P.num)))
+union all 
+	(select P.num as num
+	from   PhoneNumCons P,
+           PhoneFilter F
+	where  FollowsTok(P.num, F.annot, 0, 1)
+  	  and MatchesRegex(/\s*[\(\[]\s*/, SpanBetween(P.num, F.annot)));
+  	  
+  	  
+  	  
+--=====================================================================
+-- Remove fax/pager numbers
+--=====================================================================
+ create view PhoneNumOnly as
+     (select P.num as num from PhoneNumCons P)
+     minus
+     (select NP.num as num from NonPhoneNum NP);
+      
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Output section <<<<<<<<<<<<<<<<
+-- ===========================================================================		
+-- Output
+select P.num as num
+--select P.annot as num
+into PhoneNumber
+from PhoneNumOnly P;
+
+-- ===========================================================================
+--   Person, Organization, Places begin here 
+-- ===========================================================================
+
+create dictionary FilterPersonDict as
+(
+	'Travel', 'Fellow', 'Sir', 'IBMer', 'Researcher', 'All',
+	'Friends', 'Friend', 'Colleague', 'Colleagues', 'Managers',
+	'Customer', 'Users', 'User', 'Valued', 'Executive', 'Chairs',
+	'New', 'Owner', 'Conference', 'Please', 'Outlook', 'Lotus', 'Notes',
+	'This', 'That', 'There', 'Here', 'Subscribers', 'What', 'When', 'Where',
+	'With', 'While', 'Thanks', 'Thanksgiving','Senator', 'Platinum',
+        'Perspective',
+	'Manager', 'Ambassador', 'Professor', 'Dear'
+);
+ 
+
+--  Place rules begin here
+
+ create view CapsPlace as
+	select
+		R.match as match
+	from
+		Regex(/\b\p{Upper}[\p{Lower}\&]{1,20}\b/, Document.text) R;
+	 
+
+ create view CapsPlaceTwo as
+	select
+ 		CombineSpans(cp1.match, cp2.match) as match
+	from
+		CapsPlace cp1,
+		CapsPlace cp2
+ 	where
+		FollowsTok(cp1.match, cp2.match, 0, 0);	
+		
+  create view CapsPlaceOnetoTwo
+	as 
+	 (select R.match as match from CapsPlace R)
+	union all 
+	 (select R.match as match from CapsPlaceTwo R);
+ 
+ create view CityNoCase as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/sekar/GENERALCITY.dict', Document.text) D;
+	
+ create view City as 
+ 	select C.match as match 
+ 	from CityNoCase C
+	where 
+		MatchesRegex(/^\p{Upper}[\p{Lower}\&]{1,20}/, C.match);
+--		MatchesRegex(/^\p{Upper}[\p{Lower}\&]{1,20}( \p{Upper}[\p{Lower}\&]{1,20})*$/, C.match);	
+		
+ create view USCityNoCase as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/sekar/CITY.dict', Document.text) D;
+	
+ create view USCity as 
+ 	select C.match as match 
+ 	from USCityNoCase C
+	where 
+		MatchesRegex(/^\p{Upper}[\p{Lower}\&]{1,20}/, C.match);			
+  
+  
+  create view CountryNoCase as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/sekar/COUNTRY.dict', Document.text) D;
+	
+ create view Country as 
+ 	select C.match as match 
+ 	from CountryNoCase C
+	where 
+		MatchesRegex(/^\p{Upper}[\p{Lower}\&]{1,20}/, C.match);		
+		
+ create view State  as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/sekar/Statelist.dict',  Document.text) D;
+		
+ create view StateAbbrev  as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/sekar/Statelist.abbrev.dict',  Document.text) D;
+		
+  create view StateAll
+	as
+	(select S.match as match from State S)
+	union all 
+	 (select S.match as match from StateAbbrev S);		
+	
+  create view StreetSuffixNoCase  as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/sekar/streetSuffixes.dict',  Document.text) D;
+	
+  create view StreetSuffix as 
+ 	select S.match as match 
+ 	from StreetSuffixNoCase S
+	where 
+		MatchesRegex(/^\p{Upper}[\p{Lower}\&]{1,20}/, S.match);		
+	
+  create view StreetSuffixWeakNoCase  as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/sekar/streetSuffixesWeak.dict',   Document.text) D;
+		
+	create view StreetSuffixWeak as 
+ 	select S.match as match 
+ 	from StreetSuffixWeakNoCase S
+	where 
+		MatchesRegex(/^\p{Upper}[\p{Lower}\&]{1,20}/, S.match);		
+	
+   create view StreetSuffixAll
+	as
+	(select S.match as match from StreetSuffix S)
+	union all 
+	 (select S.match as match from StreetSuffixWeak S)	;
+	
+	
+  create view SecondaryUnitNoCase  as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/sekar/secondaryUnit.dict', Document.text) D;   
+		
+  create view SecondaryUnit as 
+ 	select S.match as match 
+ 	from SecondaryUnitNoCase S
+	where 
+		MatchesRegex(/^(\#)|(\p{Upper}[\p{Lower}\&]{1,20})/, S.match);		
+		
+  create view ClueOf  as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/sekar/PLACE_CLUES_OF.dict', 'Exact', Document.text) D; 
+	
+	
+	create view CluePNoCase  as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/sekar/PLACE_CLUES_P.dict', Document.text) D; 
+	
+	create view ClueP as 
+ 	select C.match as match 
+ 	from CluePNoCase C
+	where 
+		MatchesRegex(/^\p{Upper}[\p{Lower}\&]{1,20}/, C.match);		
+	
+	
+	create view CluePStrong  as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/sekar/PLACE_CLUES_P_STRONG.dict',
+                'Exact', Document.text) D; 
+	
+	create view Zipcode as
+	select
+		R.match as match
+	from
+		Regex(/\b[0-9]{5}(\-[0-9]{4})?\b/, Document.text) R;
+	 
+--	create view ClueSNoCase  as
+--	select
+--		D.match as match
+--	from
+--		Dictionary('dictionaries/sekar/PLACE_CLUES_S.dict', Document.text) D; 
+		
+--	create view ClueS as 
+-- 	select C.match as match 
+-- 	from ClueSNoCase C
+--	where 
+--		MatchesRegex(/^\p{Upper}[\p{Lower}\&]{1,20}/, C.match);		
+		
+-- Rule 1
+
+	create view CityState as
+	select
+ 		CombineSpans(C.match, S.match) as match
+	from
+		USCity C,
+		StateAll S
+ 	where
+		FollowsTok(C.match,S.match, 0, 1) and
+		ContainsRegex(/^\s*,\s*$/, SpanBetween(C.match,S.match));	
+		
+-- Rule 3
+
+	create view PlaceOf as
+	select
+ 		CombineSpans(Co.match, CP.match) as match
+	from
+		ClueOf Co,
+		CapsPlaceOnetoTwo CP
+ 	where
+		FollowsTok(Co.match,CP.match, 0, 1) and
+		ContainsRegex(/^\s*of\s*$/, SpanBetween(Co.match,CP.match));	
+		
+-- Rule 6
+
+	create view PStrongTwo as
+	select
+ 		CombineSpans(cp1.match, cp2.match) as match
+	from
+		CluePStrong cp1,
+		CluePStrong cp2
+ 	where
+		FollowsTok(cp1.match, cp2.match, 0, 0);	
+		
+  create view PStrongOnetoTwo
+	as 
+	 (select R.match as match from CluePStrong R)
+	union all 
+	 (select R.match as match from PStrongTwo R);
+
+    create view PStrongTwoCp as
+	select
+ 		CombineSpans(Ps.match, CP.match) as match
+	from
+		PStrongOnetoTwo Ps,
+		CapsPlace CP
+ 	where
+		FollowsTok(Ps.match,CP.match, 0, 0)  ;	
+		
+-- Rule 6a
+
+	create view PCity as
+	select
+ 		CombineSpans(Ps.match, C.match) as match
+	from
+		ClueP Ps,
+		City C
+ 	where
+		FollowsTok(Ps.match,C.match, 0, 0)  ;	
+	
+		
+-- Rule 4
+
+--streetaddress
+    create view NumCP as
+	select
+		R.match as match
+	from
+		Regex(/\b([\d\p{Alpha}\.\-\,]*\d[\d\p{Alpha}\.\-\,]*)\s*\p{Upper}[\p{Lower}\&]{1,20}\b/, Document.text) R;
+	
+	
+	create view StreetAddressStrong as
+	select
+ 		CombineSpans(nc.match, ss.match) as match
+	from
+		NumCP nc,
+		StreetSuffix ss
+ 	where
+		FollowsTok(nc.match,ss.match, 0, 2)  and
+		ContainsRegex(/^\s*(\p{Upper}[\p{Lower}\&]+\s*){1,2}$/, SpanBetween(nc.match,ss.match));
+		
+	create view StreetAddressAll as
+	select
+ 		CombineSpans(nc.match, ssw.match) as match
+	from
+		NumCP nc,
+		StreetSuffixAll ssw
+ 	where
+		FollowsTok(nc.match,ssw.match, 0, 2)  and
+		ContainsRegex(/^\s*(\p{Upper}[\p{Lower}\&]+\s*){1,2}$/, SpanBetween(nc.match,ssw.match));
+		
+-- unit
+     	
+     		
+	create view StreetAddressUnit  as
+	select
+ 		CombineSpans(S.match, Su.match) as match
+	from
+		StreetAddressAll S,
+		SecondaryUnit Su
+  	where
+		FollowsTok(S.match,Su.match, 0, 1) and
+		ContainsRegex(/^\s*,?\s*$/, SpanBetween(S.match,Su.match));
+			
+	create view StreetAddressOptionalUnit
+	as
+	(select S.match as match from StreetAddressAll S)
+	union all 
+	 (select S.match as match from StreetAddressUnit S)	;
+	
+	create view StreetAddressWithCity as
+	select
+ 		CombineSpans(S.match, cp.match) as match
+	from
+		StreetAddressOptionalUnit S,
+		CapsPlaceOnetoTwo cp
+ 	where
+		FollowsTok(S.match,cp.match, 0, 4) and
+		ContainsRegex(/^\s*[\d\p{Alpha}]{1,20}[\.\ \-\,\d\p{Alpha}]{0,10}\s*,?\s*$/, SpanBetween(S.match,cp.match));
+
+
+--  addresswithstate
+
+    create view StreetAddressWithCityState as
+	select
+ 		CombineSpans(Sawc.match, Sa.match) as match
+	from
+		StreetAddressWithCity Sawc,
+		StateAll Sa
+ 	where
+		FollowsTok(Sawc.match,Sa.match, 0, 1)  and
+		MatchesRegex(/\s*,?\s*/, SpanBetween(Sawc.match,Sa.match));
+		
+		
+	create view StreetAddressWithCityOptionalState
+	as
+	(select S.match as match from StreetAddressWithCity S)
+	union all 
+	 (select S.match as match from StreetAddressWithCityState S);
+	 
+	create view StreetAddressWithCityOptionalStateZipcode as
+	select
+ 		CombineSpans(Sawcos.match, z.match) as match
+	from
+		StreetAddressWithCityOptionalState Sawcos,
+		Zipcode z
+ 	where
+		FollowsTok(Sawcos.match,z.match, 0, 1)  and
+		ContainsRegex(/^\s*,?\s*$/, SpanBetween(Sawcos.match,z.match));
+	
+	
+	-- ===========================================================================
+-- >>>>>>>>>>>>>>> Aggregation/Consolidation section <<<<<<<<<<<<<<<<
+-- ===========================================================================
+
+-- Merge all the different rules.
+create view PlaceAll
+as
+	(select R.match as loc from StreetAddressWithCityOptionalStateZipcode R)
+union all 
+	 (select R.match as loc from StreetAddressWithCityOptionalState R)
+ union all 
+	 (select R.match as loc from StreetAddressStrong R)
+-- union all 
+-- this rule returns false matches like 09YPO World Terrorism Summit Features Broad Range
+--	 (select R.match as loc from  PStrongTwoCp R)
+-- union all 
+--	 (select R.match as loc from PCity R)
+-- union all 
+--	 (select R.match as loc from CityState R)
+-- union all 
+--	 (select R.match as loc from PlaceOf R)
+-- union all 
+--	 (select R.match as loc from StateAll R)
+-- union all 
+--	 (select R.match as loc from Country R)
+-- union all 
+--	 (select R.match as loc from City R)
+   ;
+ 
+ 
+create view PlaceSentence as
+	select PA.loc	as loc	 
+	from
+		sentence S, PlaceAll PA
+	where
+		Contains(S.sentence, PA.loc) and
+		Not(ContainsDict('FilterPersonDict', PA.loc));				 
+ 
+-- -----------------------------------------
+-- Organization rules begin here
+-- ----------------------------------------- 
+ 
+ create dictionary OrgConjDict as
+(
+	'&','and','und'
+);
+ 
+ create dictionary OrgPrepDict as
+(
+	 'of','for'
+);
+
+create dictionary TheDict as
+(
+	 'The'
+);
+ 
+ 
+ create view OrgConj as
+	select
+		D.match as match
+	from
+		Dictionary('OrgConjDict', Document.text) D;
+		
+ create view OrgPrep as
+	select
+		D.match as match
+	from
+		Dictionary('OrgPrepDict', Document.text) D;
+		
+ create view The as
+	select
+		D.match as match
+	from
+		Dictionary('TheDict', Document.text) D;
+ 
+ create view CapsOrg as
+	select
+		R.match as match
+	from
+		Regex(/\b\p{Upper}[\p{Lower}\&\.\-\,]+\b/, Document.text) R;
+	 
+ create view DotCom as
+	select
+		R.match as match
+	from
+		Regex(/[\w\&\-]+\.com\b/, Document.text) R;
+	 
+ create view OrgClueStInd as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/sekar/industry_types_retained.dict', Document.text) D;
+		
+ create view OrgClueStSuffix as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/sekar/organization_suffixes.dict', Document.text) D;
+		
+ create view OrgClueStIndCaps as 
+ 	select OCSI.match as match 
+ 	from OrgClueStInd OCSI
+	where 
+		MatchesRegex(/\p{Upper}[\p{Lower}\&\.\-\,]+/, OCSI.match);	
+		
+ create view OrgClueStSuffixCaps as 
+ 	select OCSS.match as match 
+ 	from OrgClueStSuffix OCSS
+	where 
+		MatchesRegex(/\p{Upper}[\p{Lower}\&\.\-\,]+/, OCSS.match);	
+		
+ create view OrgClueStCaps
+ as
+	(select OCSIC.match as match from OrgClueStIndCaps OCSIC)
+ union all
+    (select OCSSC.match as match from OrgClueStSuffixCaps OCSSC);
+    
+ create view OrgFullCase as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/sekar/organization_full_case.dict',
+                'Exact', Document.text) D;
+		
+ create view OrgFullNoCase as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/sekar/organization_full_nocase.dict', Document.text) D;
+		
+		
+ create view OrgFull
+	as 
+	 (select R.match as match from OrgFullNoCase R)
+	union all 
+	 (select R.match as match from OrgFullCase R);
+		
+  create view CoCo as
+	select
+ 		CombineSpans(co1.match, co2.match) as match
+	from
+		CapsOrg co1,
+		CapsOrg co2
+ 	where
+		FollowsTok(co1.match, co2.match, 0, 0);		
+		
+  create view CoCoCo as
+	select
+ 		CombineSpans(coco.match, co.match) as match
+	from
+		CoCo coco,
+		CapsOrg co
+ 	where
+		FollowsTok(coco.match, co.match, 0, 0);	
+		
+   create view Coonetotwo
+	as 
+	 (select R.match as match from CapsOrg R)
+	union all 
+	 (select R.match as match from CoCo R);
+	 
+   create view Coonetothree
+	as 
+	 (select R.match as match from Coonetotwo R)
+	union all 
+	 (select R.match as match from CoCoCo R);
+		
+-- rule 7
+		
+	create view CoOcscOpCo as
+	select
+ 		CombineSpans(coco1.match, coco2.match) as match
+	from
+		Coonetotwo coco1,
+		OrgClueStCaps ocsc,
+		OrgPrep op,
+		Coonetotwo coco2
+ 	where
+		FollowsTok(coco1.match, ocsc.match, 0, 0) and
+		FollowsTok(ocsc.match, op.match,0, 0) and
+		FollowsTok(op.match, coco2.match, 0, 0);	
+
+-- rule 10
+
+  create view CoOcsic as
+	select
+ 		CombineSpans(coco.match, ocsic.match) as match
+	from
+		Coonetothree coco,
+		OrgClueStIndCaps ocsic 
+ 	where
+		FollowsTok(coco.match, ocsic.match, 0, 0) ;	
+
+--rule 9
+
+  create view CoOcssc as
+	select
+ 		CombineSpans(coco.match, ocssc.match) as match
+	from
+		Coonetothree coco,
+		OrgClueStSuffixCaps ocssc 
+ 	where
+		FollowsTok(coco.match, ocssc.match, 0, 1) and
+		ContainsRegex(/^\s*,\s*$/, SpanBetween(coco.match,ocssc.match));	
+		
+-- rule 5
+  create view OcscOpCoOcCo as
+	select
+ 		CombineSpans(ocsc.match, coco2.match) as match
+	from
+		OrgClueStCaps ocsc,
+		OrgPrep op,
+		Coonetotwo coco1,
+		OrgConj oc,
+		Coonetotwo coco2
+	 	where
+			FollowsTok(ocsc.match, op.match, 0, 0) and
+			FollowsTok(op.match, coco1.match, 0, 0) and
+			FollowsTok(coco1.match, oc.match, 0, 0) and
+			FollowsTok(oc.match, coco2.match, 0, 0);
+   
+   create view CoOcscOpCoOcCo as 
+  	  select 
+  	  		CombineSpans(coco.match, R1.match) as match
+  	  from 
+  	  		Coonetotwo coco,
+  	  		OcscOpCoOcCo R1
+  	  where 
+  	  		FollowsTok(coco.match,R1.match,0,0);
+		
+ -- R5, R7, R9, R10
+ 
+ 	create view Org57910
+	as 
+	 (select R.match as match from  CoOcscOpCoOcCo R)
+	union all 
+	 (select R.match as match from OcscOpCoOcCo R)
+	union all 
+	 (select R.match as match from  CoOcsic R)
+	union all 
+	 (select R.match as match from CoOcssc R)
+	union all 
+	 (select R.match as match from  CoOcscOpCo R)
+	 ;
+ 		
+	 create view TheOrg57910 as 
+  	  select 
+  	  		CombineSpans(the.match, org57910.match) as match
+  	  from 
+  	  		The  the,
+  	  		Org57910 org57910
+  	  where 
+  	  		FollowsTok(the.match,org57910.match,0,0);
+  	  		
+-- R1
+
+	create view OfCo as
+		select 
+			CombineSpans(of.match,coco.match) as match
+		from
+			OrgFull of,
+			Coonetotwo coco
+		where
+			FollowsTok(of.match,coco.match,0,0);
+	  	  		
+	 create view OfCozerototwo as
+	 	(select R.match as match from OrgFull R)
+	 union all
+	    (select R.match as match from OfCo R);
+	    
+	 create view OfCoOcsc as
+	     select
+	     	CombineSpans(of.match,ocsc.match) as match
+	     from
+	     	OfCozerototwo of,
+	     	OrgClueStCaps ocsc
+	     where
+	     	FollowsTok(of.match,ocsc.match,0,0);
+	     	
+-- R2
+
+	create view CoOc as
+	     select
+	     	CombineSpans(co.match,oc.match) as match
+	     from
+	     	Coonetotwo co,
+	     	OrgConj oc
+	     where
+	     	FollowsTok(co.match,oc.match,0,0);
+	     	
+	create view CoOcCo as
+	     select
+	     	CombineSpans(cooc.match,co.match) as match
+	     from
+	     	CoOc cooc,
+	     	Coonetotwo co
+	     where
+	     	FollowsTok(cooc.match,co.match,0,0);
+
+	create view CoOcCozerototwo as
+		(select R.match as match from CoOc R)
+	union all 
+		(select R.match as match from CoOcCo R); 
+
+	create view CoOcCozerototwoOcscOpCo as
+		select
+	     	CombineSpans(coocco.match,co.match) as match
+	     from
+	     	CoOcCozerototwo coocco,
+	     	OrgClueStCaps ocsc,
+	     	OrgPrep op,
+	     	Coonetotwo co
+	     where
+	     	FollowsTok(coocco.match, ocsc.match,0,0) and
+	     	FollowsTok(ocsc.match,op.match,0,0) and
+	     	FollowsTok(op.match,co.match,0,0);
+		
+	-- ===========================================================================
+-- >>>>>>>>>>>>>>> Aggregation/Consolidation section <<<<<<<<<<<<<<<<
+-- ===========================================================================
+
+-- Merge all the different rules.
+create view OrgAll
+as 
+	 (select R.match as org from DotCom R)
+union all 
+	 (select R.match as org from OrgFull R)
+union all
+	 (select R.match as org from Org57910 R)
+union all
+	 (select R.match as org from TheOrg57910 R)
+union all
+     (select R.match as org from OfCoOcsc R)
+union all 
+	 (select R.match as org from CoOcCozerototwoOcscOpCo R);
+ 
+-- ------------------------------------------
+-- Consolidation:
+-- For now, we just remove annotations that are completely
+-- contained within other annotations.
+
+create view OrgSentence as
+	select OA.org as org	 
+	from
+		sentence S, OrgAll OA
+	where
+		Contains(S.sentence, OA.org) and
+		Not(ContainsDict('FilterPersonDict', OA.org));		
+		
+-- -----------------------------------------
+-- Person rules begin here
+-- ----------------------------------------- 
+ 
+ create dictionary TitlesDict as
+(
+	'rev.', 'col.', 'reverend', 'prof.', 'professor.', 
+	'lady', 'miss.', 'mrs.', 'mrs', 'mr.', 'pt.', 'ms.',
+	'messrs.', 'dr.', 'master.', 'marquis', 'monsieur',
+	'ds', 'junior', 'di', 'Dear', 'Name:'
+);
+ 
+  
+ create view CapsPerson as
+	select
+		R.match as name
+	from
+		Regex(/\b\p{Upper}\p{Lower}[\p{Alpha}]{1,20}\b/, Document.text) R;
+	 
+  create view TitleAll as
+	select
+		D.match as initial
+	from
+		Dictionary('TitlesDict', Document.text) D;
+	
+  create view Title as
+	select T.initial as initial
+	from TitleAll T
+	consolidate on T.initial;
+	--from Consolidate(TitleAll.initial) T;
+
+ create view StrictFirstName as
+	select
+		D.match as name
+	from
+		Dictionary('dictionaries/strictfirstsekar.dict', Document.text) D;
+	
+ create view StrictFirstNameCapsWord as 
+ 	select SFN.name as name 
+ 	from StrictFirstName SFN	
+	where 
+		MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{1,20}/, SFN.name);		
+ 
+ 
+ create view StrictLastName as
+	select
+		D.match as name
+	from
+		Dictionary('dictionaries/strictlastsekar.dict', Document.text) D;
+	
+ create view StrictLastNameCapsWord as 
+ 	select SLN.name as name 
+ 	from StrictLastName SLN	
+	where 
+		MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{1,20}/, SLN.name);		
+ 
+ create view AllName as
+	select
+		D.match as name
+	from
+		Dictionary('dictionaries/namessekar.dict', Document.text) D;
+	
+ create view AllNameCapsWord as 
+ 	select AN.name as name 
+ 	from AllName AN	
+	where 
+		MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{1,20}/, AN.name);		
+ 
+ create view Initials as
+	select
+		R.match as initials
+	from
+		Regex(/\b([\p{Upper}\s*]\.\s*){1,5}/, Document.text) R;
+ 
+ create view TitleCp as
+	select
+ 		cp.name as person
+	from
+		Title title,
+		CapsPerson cp
+ 	where
+		FollowsTok(title.initial, cp.name, 0, 0);
+	 
+  create view TCpICp as
+	select
+ 		CombineSpans(tCp.person, last.name) as person
+	from
+		TitleCp tCp,
+		Initials I,
+		CapsPerson last
+ 	where
+		FollowsTok(tCp.person, I.initials, 0, 0) and
+	 	FollowsTok(I.initials, last.name, 0, 0);
+ 
+  create view TCpCp as
+	select
+ 		CombineSpans(tCp.person, last.name) as person
+	from
+		TitleCp tCp,
+ 		CapsPerson last
+ 	where
+		FollowsTok(tCp.person,last.name, 0, 0);
+    
+   create view TCpCpCp as
+	select
+ 		CombineSpans(tCpCp.person, last.name) as person
+	from
+		TCpCp tCpCp,
+ 		CapsPerson last
+ 	where
+		FollowsTok(tCpCp.person,last.name, 0, 0);
+		
+	create view AncwIAncw as
+	select
+ 		CombineSpans(Ancw.name, Ancw1.name) as person
+	from
+		AllNameCapsWord Ancw,
+ 		Initials I,
+		AllNameCapsWord Ancw1
+ 	where
+		FollowsTok(Ancw.name,I.initials, 0, 0) and
+		FollowsTok(I.initials, Ancw1.name,0, 0);
+		
+	create view SfncwICp as
+	select
+ 		CombineSpans(Sfncw.name, cp.name) as person
+	from
+		StrictFirstNameCapsWord Sfncw,
+ 		Initials I,
+		CapsPerson cp
+ 	where
+		FollowsTok(Sfncw.name,I.initials, 0, 0) and
+		FollowsTok(I.initials, cp.name,0, 0);
+		
+	create view CpISlncw as
+	select
+ 		CombineSpans(cp.name, Slncw.name) as person
+	from
+		CapsPerson cp,
+ 		Initials I,
+		StrictLastNameCapsWord Slncw 
+ 	where
+		FollowsTok(cp.name,I.initials, 0, 0) and
+		FollowsTok(I.initials, Slncw.name,0, 0);
+		
+	create view IAncpCp as
+	select
+ 		CombineSpans(I.initials, cp.name) as person
+	from
+		Initials I,
+		AllNameCapsWord ancp,
+		CapsPerson cp
+ 	where
+		FollowsTok(I.initials, ancp.name,0, 0) and
+		FollowsTok(ancp.name,cp.name,0, 0);
+		
+	create view ICpAncp as
+	select
+ 		CombineSpans(I.initials, ancp.name) as person
+	from
+		Initials I,
+		CapsPerson cp,
+		AllNameCapsWord ancp
+ 	where
+		FollowsTok(I.initials, cp.name,0, 0) and
+		FollowsTok(cp.name,ancp.name,0, 0);
+		
+	create view SfncpCp as
+	select
+ 		CombineSpans(Sfncp.name, cp.name) as person
+	from
+ 		StrictFirstNameCapsWord Sfncp,
+ 		CapsPerson cp
+	where
+		FollowsTok(Sfncp.name, cp.name,0, 0) ;
+		
+	create view CpSlncp as
+	select
+ 		CombineSpans(cp.name, Slncp.name) as person
+	from
+		CapsPerson cp,
+ 		StrictLastNameCapsWord Slncp 
+	where
+		FollowsTok(cp.name,Slncp.name,0, 0) ;
+			
+	create view SlncpCSfncp as
+	select
+ 		CombineSpans(Slncp.name, Sfncp.name) as person
+	from
+ 		StrictLastNameCapsWord Slncp,
+ 		StrictFirstNameCapsWord Sfncp 
+	where
+		FollowsTok(Slncp.name,Sfncp.name,0, 1) and
+		ContainsRegex(/^\s*,\s*$/, SpanBetween(Slncp.name, Sfncp.name));
+ 
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Aggregation/Consolidation section <<<<<<<<<<<<<<<<
+-- ===========================================================================
+
+-- Merge all the different rules.
+create view PersonAll
+as
+	(select SFNCW.name as person from StrictFirstNameCapsWord SFNCW)
+union all 
+	 (select LNCW.name as person from StrictLastNameCapsWord LNCW)
+union all 
+	 (select R.person as person from TCpICp R)
+union all 
+	 (select tCp.person as person from TitleCp tCp)
+union all 
+	 (select tCpCp.person as person from TCpCp tCpCp)
+union all 
+	 (select tCpCpCp.person as person from TCpCpCp tCpCpCp)
+union all 
+	 (select R.person as person from AncwIAncw R)
+union all 
+	 (select R.person as person from SfncwICp R)
+union all 
+	 (select R.person as person from CpISlncw R)
+union all 
+	 (select R.person as person from IAncpCp R)
+union all 
+	 (select R.person as person from ICpAncp R)
+union all 
+	 (select R.person as person from SfncpCp R)
+union all 
+	 (select R.person as person from CpSlncp R)
+union all 
+	 (select R.person as person from SlncpCSfncp R);
+ 
+-- ------------------------------------------
+-- Consolidation:
+-- For now, we just remove annotations that are completely
+-- contained within other annotations.
+
+create view PersonSentence as
+	select PA.person	as person	 
+	from
+		sentence S, PersonAll PA
+	where
+		Contains(S.sentence, PA.person) and
+		Not(ContainsDict('FilterPersonDict', PA.person));
+		
+-- ------------------------------------------
+-- Consolidation:
+-- For now, we just remove annotations that are completely
+-- contained within other annotations.
+
+create view PlaceConsolidated as
+select C.loc as loc
+from PlaceSentence C
+consolidate on C.loc;
+--from Consolidate(PlaceSentence.loc) C;
+
+create view OrgWithinPlace as
+select O.org as org
+from OrgSentence O, PlaceConsolidated Pl
+where Contains (Pl.loc, O.org);
+
+create view ValidOrg as 
+	(select O.org as org from OrgSentence O)
+	minus
+	(select OP.org as org from OrgWithinPlace OP);
+
+create view OrgConsolidated as
+select C.org as org
+from ValidOrg C
+consolidate on C.org;
+--from Consolidate(ValidOrg.org) C;
+
+create view PersonWithinOrg as
+select PS.person as person
+from PersonSentence PS, OrgConsolidated O
+where Contains (O.org, PS.person);
+
+create view ValidPersonTemp as 
+	(select P.person as person from PersonSentence P)
+	minus
+	(select P1.person as person from PersonWithinOrg P1);
+
+create view PersonWithinPlace as
+select PT.person as person
+from ValidPersonTemp PT, PlaceConsolidated Pl
+where Contains (Pl.loc, PT.person);
+
+create view ValidPerson as 
+	(select P.person as person from ValidPersonTemp P)
+	minus
+	(select P1.person as person from PersonWithinPlace P1);
+
+create view PersonConsolidated as
+select C.person as person
+from ValidPerson C
+consolidate on C.person;
+--from Consolidate(ValidPerson.person) C;
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Output section <<<<<<<<<<<<<<<<
+-- ===========================================================================		
+-- Output
+select P.loc as loc
+into Place
+from PlaceConsolidated P;
+ 
+	
+select O.org as org
+into Organization
+from OrgConsolidated O;
+
+
+select P.person as person
+into Person
+from PersonConsolidated P;
+
+		

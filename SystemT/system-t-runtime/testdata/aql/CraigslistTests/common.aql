@@ -1,0 +1,37 @@
+-----------------------------------------------------------------------------
+-- common.aql
+--
+-- Low-level views that are used in several places.
+-- 
+-- Depends on:
+--	xml.aql
+-----------------------------------------------------------------------------
+
+-- Dictionary of common abbreviations.
+create dictionary AbbrevDict
+with case exact
+as
+(
+'A.', 'Adj.', 'Adm.', 'Adv.', 'Apr.', 'Asst.', 'Aug.', 'B.', 'Bart.', 'Bldg.',
+'Blvd.', 'Brig.', 'Bros.', 'Bros.', 'C.', 'Capt.', 'Cmdr.', 'Co.', 'Col.',
+'Comdr.', 'Con.', 'Corp.', 'Cos.', 'Cp.', 'Cpl.', 'D.', 'DR.', 'Dec.', 'Dr.',
+'E.', 'Ens.', 'F.', 'Feb.', 'G.', 'Gen.', 'Gov.', 'H.', 'Hon.', 'Hosp.', 'I.',
+'Inc.', 'Insp.', 'J.', 'Jan.', 'K.', 'L.', 'Lt.', 'M.', 'M.', 'MM.', 'MR.',
+'MRS.', 'MS.', 'Maj.', 'Messers.', 'Messrs.', 'Miss.', 'Mlle.', 'Mme.', 'Mr.',
+'Mrs.', 'Ms.', 'Msgr.', 'Mt.', 'N.', 'Nov.', 'O.', 'Oct.', 'Op.', 'Ord.', 'P.',
+'Pfc.', 'Ph.', 'Prof.', 'Pt.', 'Pvt.', 'Q.', 'R.', 'Rd.', 'Rep.', 'Reps.',
+'Res.', 'Rev.', 'Rev.', 'Rt.', 'S.', 'Sen.', 'Sens.', 'Sept.', 'Sfc.', 'Sgt.',
+'Sr.', 'St.', 'Ste.', 'Supt.', 'Surg.', 'T.', 'U.', 'V.', 'W.', 'X.', 'Y.',
+'Yahoo!', 'Z.', 'al.', 'etc.', 'inc.', 'v.', 'vs.'
+);
+
+-- Sentence boundaries that can be identified from the actual text.
+create view SentenceBound as
+extract 
+        regex /(([\.\?!]+\s)|(\n\s*\n))/ on D.text as boundary
+        from DetaggedDoc D
+		-- Filter the candidate boundaries.
+		having Not(ContainsDict('AbbrevDict', 
+            CombineSpans(LeftContextTok(boundary, 1), boundary)));
+
+

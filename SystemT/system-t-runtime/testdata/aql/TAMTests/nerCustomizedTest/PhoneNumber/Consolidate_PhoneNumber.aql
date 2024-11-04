@@ -1,0 +1,111 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module PhoneNumber;
+
+-- This file shall contain all the filtered/consolidated views, for eventual export
+
+
+-- Merge all the different rules.
+-- First merge all the full phone numbers
+
+create view PhoneNumFullCandidates as
+	(select P.num as num from PhoneNumber_R1a P)
+union all
+    (select P.num as num from PhoneNumber_R1b_2 P)
+union all
+	(select P.num as num from PhoneNumber_R1c P)
+union all
+    (select P.num as num from PhoneNumber_R2a P)
+union all
+    (select P.num as num from PhoneNumber_R3 P)
+union all
+    (select P.num as num from PhoneNumber_R3a P)
+union all
+    (select P.num as num from PhoneNumber_R7a_7b_7c P)
+union all
+    (select P.num as num from PhoneNumber_R8ILPhone P)
+union all
+	(select P.num as num from StrongPhoneNumber P);
+
+create view PhoneNumFull as
+select P.num as num 
+from PhoneNumFullCandidates P 
+where Not(ContainsRegex(/[\n\r]+/, P.num));
+
+-- Then merge all the extension numbers
+
+create view ExtensionNums as
+    (select P.num as num from PhoneNumber_R4 P)
+union all
+    (select P.num as num from PhoneNumber_R5 P);
+    
+
+-- Merge full phone number with its extension number whenever possible
+
+create view PhoneNumWithExtension as
+select CombineSpans(P.num, E.num) as num
+from PhoneNumFull P,
+	 ExtensionNums E
+where FollowsTok(P.num, E.num, 0, 0)
+  	  and Not(ContainsRegex(/[\n\r]/, SpanBetween(P.num, E.num)));
+
+
+-- Merge all phone numbers
+
+create view PhoneNumAll as
+	(select P.num as num from PhoneNumFull P)
+union all
+	(select P.num as num from ExtensionNums P)
+union all
+	(select P.num as num from PhoneNumWithExtension P);
+
+  	  	
+-- -------------------------------------------------------
+-- Consolidation:
+-- For now, we just remove annotations that are completely
+-- contained within other annotations.
+-- -------------------------------------------------------
+
+create view PhoneNumCons as
+select C.num as num
+from PhoneNumAll C
+consolidate on C.num;
+
+-- -------------------------------------------------------
+-- Identify fax/pager numbers
+-- -------------------------------------------------------
+create view NonPhoneNum as
+	(select P.num as num
+	from   PhoneNumCons P,
+    	   PhoneFilter F
+  	where  FollowsTok(F.annot, P.num, 0, 4)
+  	      and  MatchesRegex(/\s*\:*\s*.{0,10}\s*\+*\s*/, SpanBetween(F.annot, P.num)))
+	union all 
+	(select P.num as num
+	from   PhoneNumCons P,
+           PhoneFilter F
+	where  FollowsTok(P.num, F.annot, 0, 2)
+  	  and MatchesRegex(/\s*\:?[\(\[]\s*/, SpanBetween(P.num, F.annot)));
+
+--=====================================================================
+-- Remove fax/pager numbers
+--=====================================================================
+ create view PhoneNumOnly as
+     (select P.num as num from PhoneNumCons P)
+     minus
+     (select NP.num as num from NonPhoneNum NP);
+      

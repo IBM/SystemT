@@ -1,0 +1,290 @@
+
+create function NormalizedTime(hour Span, min Span, sec Span, ms Span, tz Span)
+	return String
+	external_name '../lib/logAAqlUDFs.jar:com.ibm.logparse.aql.TimeNormalized!normalizedTime'
+	language java
+	deterministic
+	called on null input;
+	
+/*create function NormalizedTimeWithTz(hour Span, min Span, sec Span, ms Span, tz Span)
+	return String
+	external_name '../lib/logAAqlUDFs.jar:com.ibm.logparse.aql.TimeNormalized!normalizedTimeWithTz'
+	language java
+	deterministic
+	called on null input;
+	
+create function NormalizedTimeWithoutTz(hour Span, min Span, sec Span, ms Span)
+	return String
+	external_name '../lib/logAAqlUDFs.jar:com.ibm.logparse.aql.TimeNormalized!normalizedTimeWithoutTz'
+	language java
+	deterministic
+	called on null input;
+*/	
+create function GetTimeCategoryWithTz(normalizedTime String)
+	return String
+	external_name '../lib/logAAqlUDFs.jar:com.ibm.logparse.aql.TimeNormalized!getTimeCategoryWithTz'
+	language java
+	deterministic
+	return null on null input;
+
+create function GetTimeCategoryIgnoringTz(normalizedTime String)
+	return String
+	external_name '../lib/logAAqlUDFs.jar:com.ibm.logparse.aql.TimeNormalized!getTimeCategoryIgnoringTz'
+	language java
+	deterministic
+	return null on null input;
+	
+create function GetTimeCategoryWithoutTz(normalizedTime String)
+	return String
+	external_name '../lib/logAAqlUDFs.jar:com.ibm.logparse.aql.TimeNormalized!getTimeCategoryWithoutTz'
+	language java
+	deterministic
+	return null on null input;
+
+create view Time4_parts as 
+select TP.hour as hour, TP.min as min, TP.sec as sec, TP.ms as ms, TP.time as nonnormative_time
+from
+	(
+	extract 
+		regex /((2[0-3]|[0-1][0-9]|[0-9]):([0-5][0-9])(:(\d{2})((\.|,|:)(\d{3}))*)?)/
+		on T.match
+		return group 1 as time
+			and group 2 as hour
+			and group 3 as min
+			and group 5 as sec
+			and group 8 as ms
+	from 
+		Time4 T 
+	) TP;
+
+create view Time4NormalizedWithoutCategoryInterim as
+select 
+	T.nonnormative_time as nonnormative_time, 
+	GetText(T.nonnormative_time) as nonnormative_time_text, 
+	T.hour as hour, 
+	T.min as min, 
+	T.sec as sec, 
+	T.ms as milli_sec, 
+	getNullSpan(T.nonnormative_time) as time_zone
+from Time4_parts T;
+
+create view Time4NormalizedWithoutCategory as
+select 
+	T.nonnormative_time as nonnormative_time, 
+	T.nonnormative_time_text as nonnormative_time_text, 
+	T.hour as hour, 
+	T.min as min, 
+	T.sec as sec, 
+	T.milli_sec as milli_sec, 
+	T.time_zone as time_zone,
+	NormalizedTime(T.hour, T.min, T.sec, T.milli_sec, T.time_zone) as normalized_time
+from Time4NormalizedWithoutCategoryInterim T;
+
+create view Time4Normalized as
+select
+	T.nonnormative_time as nonnormative_time,
+	T.nonnormative_time_text as nonnormative_time_text,
+	T.hour as hour,
+	T.min as min,
+	T.sec as sec,
+	T.milli_sec as ms,
+	T.time_zone as time_zone,
+	T.normalized_time as normalized_time,
+	GetTimeCategoryIgnoringTz(GetString(T.normalized_time)) as category
+from Time4NormalizedWithoutCategory T;
+
+create view Time4Follows3_parts as 
+select TP.hour as hour, TP.min as min, TP.sec as sec, TP.ms as ms, TP.tz as tz, TP.time as nonnormative_time
+from
+	(
+	extract
+		T.match as time,
+		regex /((2[0-3]|[0-1][0-9]|[0-9]):([0-5][0-9])(:(\d{2})((\.|,|:)(\d{3}))*)?[ ]([A-Z]+))/
+		on T.match
+		return group 2 as hour
+			and group 3 as min
+			and group 5 as sec
+			and group 8 as ms
+			and group 9 as tz
+	from 
+		Time4Follows3 T
+	) TP;
+
+
+create view Time4Follows3WithoutCategory as
+select 
+	T.nonnormative_time as nonnormative_time, 
+	GetText(T.nonnormative_time) as nonnormative_time_text, 
+	T.hour as hour, 
+	T.min as min, 
+	T.sec as sec, 
+	T.ms as milli_sec, 
+	T.tz as time_zone,
+	NormalizedTime(T.hour, T.min, T.sec, T.ms, T.tz) as normalized_time
+from Time4Follows3_parts T;
+
+create view Time4Follows3Normalized as
+select
+	T.nonnormative_time as nonnormative_time,
+	T.nonnormative_time_text as nonnormative_time_text,
+	T.hour as hour,
+	T.min as min,
+	T.sec as sec,
+	T.milli_sec as ms,
+	T.time_zone as time_zone,
+	T.normalized_time as normalized_time,
+	GetTimeCategoryIgnoringTz(GetString(T.normalized_time)) as category
+from Time4Follows3WithoutCategory T;
+
+create view TimeOptMsTz_parts as
+select TP.hour as hour, TP.min as min, TP.sec as sec, TP.ms as ms, TP.tz as timezone, TP.time as nonnormative_time
+from
+	(
+	extract
+		regex /((2[0-3]|[0-1][0-9]|[0-9]):([0-5][0-9]):([0-5][0-9])([\.\:]([0-9]+))?(Z|[+-](?:2[0-3]|[0-1][0-9]):[0-5][0-9]))/
+		on T.match
+		return group 1 as time
+		and group 2 as hour
+		and group 3 as min
+		and group 4 as sec
+		and group 6 as ms
+		and group 7 as tz
+	from
+		TimeOptMsTz T
+	)TP; 
+	
+create view TimeOptMsTzNormalizedWithoutCategory as
+select 
+	T.nonnormative_time as nonnormative_time, 
+	GetText(T.nonnormative_time) as nonnormative_time_text, 
+	T.hour as hour, 
+	T.min as min, 
+	T.sec as sec, 
+	T.ms as milli_sec,
+	T.timezone as time_zone, 
+	NormalizedTime(T.hour, T.min, T.sec, T.ms, T.timezone) as normalized_time
+from TimeOptMsTz_parts T;
+
+create view TimeOptMsTzNormalized as
+select 
+	T.nonnormative_time as nonnormative_time,
+	T.nonnormative_time_text as nonnormative_time_text,
+	T.hour as hour,
+	T.min as min,
+	T.sec as sec,
+	T.milli_sec as ms,
+	T.time_zone as time_zone,
+	T.normalized_time as normalized_time,
+	GetTimeCategoryIgnoringTz(GetString(T.normalized_time)) as category 
+from TimeOptMsTzNormalizedWithoutCategory T;
+
+create view TimeOptMsTz_a_parts as
+select TP.hour as hour, TP.min as min, TP.sec as sec, TP.ms as ms, TP.tz as timezone, TP.time as nonnormative_time
+from
+	(
+	extract
+		regex /(:(2[0-3]|[0-1][0-9]|[0-9]):([0-5][0-9]):([0-5][0-9])([\.\:]([0-9]+))?(Z|[+-](?:2[0-3]|[0-1][0-9]):[0-5][0-9])?)/
+		on T.match
+		return group 1 as time
+		and group 2 as hour
+		and group 3 as min
+		and group 4 as sec
+		and group 6 as ms
+		and group 7 as tz
+	from
+		TimeOptMsTz_a T
+	)TP; 
+	
+create view TimeOptMsTz_aNormalizedWithoutCategory as
+select 
+	T.nonnormative_time as nonnormative_time, 
+	GetText(T.nonnormative_time) as nonnormative_time_text, 
+	T.hour as hour, 
+	T.min as min, 
+	T.sec as sec, 
+	T.ms as milli_sec,
+	T.timezone as time_zone, 
+	NormalizedTime(T.hour, T.min, T.sec, T.ms, T.timezone) as normalized_time
+from TimeOptMsTz_a_parts T;
+
+
+create view TimeOptMsTz_aNormalized as
+select
+	T.nonnormative_time as nonnormative_time,
+	T.nonnormative_time_text as nonnormative_time_text,
+	T.hour as hour,
+	T.min as min,
+	T.sec as sec,
+	T.milli_sec as ms,
+	T.time_zone as time_zone,
+	T.normalized_time as normalized_time,
+	GetTimeCategoryIgnoringTz(GetString(T.normalized_time)) as category 
+from TimeOptMsTz_aNormalizedWithoutCategory T;
+
+
+create view TimeOptMsTz_b_parts as
+select TP.hour as hour, TP.min as min, TP.sec as sec, TP.ms as ms, TP.tz as timezone, TP.time as nonnormative_time
+from
+	(
+	extract
+		regex /((:)((2[0-3]|[0-1][0-9]|[0-9]):([0-5][0-9]):([0-5][0-9])([\.\:]([0-9]+))?([ ]Z|[ ][+-](?:2[0-3]|[0-1][0-9])[0-5][0-9])?))/
+		on T.match
+		return group 3 as time
+		and group 4 as hour
+		and group 5 as min
+		and group 6 as sec
+		and group 8 as ms
+		and group 9 as tz
+	from
+		TimeOptMsTz_b T
+	)TP;
+
+create view TimeOptMsTz_bNormalizedWithoutCategory as
+select 
+	T.nonnormative_time as nonnormative_time, 
+	GetText(T.nonnormative_time) as nonnormative_time_text, 
+	T.hour as hour, 
+	T.min as min, 
+	T.sec as sec, 
+	T.ms as milli_sec,
+	T.timezone as time_zone, 
+	NormalizedTime(T.hour, T.min, T.sec, T.ms, T.timezone) as normalized_time
+from TimeOptMsTz_b_parts T;
+
+create view TimeOptMsTz_bNormalized as
+select 
+	T.nonnormative_time as nonnormative_time,
+	T.nonnormative_time_text as nonnormative_time_text,
+	T.hour as hour,
+	T.min as min,
+	T.sec as sec,
+	T.milli_sec as ms,
+	T.time_zone as time_zone,
+	T.normalized_time as normalized_time,
+	GetTimeCategoryIgnoringTz(GetString(T.normalized_time)) as category 
+from TimeOptMsTz_bNormalizedWithoutCategory T;
+
+create view TimesNormalized as
+	(select * from Time4Normalized)
+	union all
+	(select * from TimeOptMsTzNormalized)
+	union all
+	(select * from TimeOptMsTz_aNormalized)
+	union all 
+	(select * from Time4Follows3Normalized);
+	
+create view TimesNormalizedDetail as
+select 
+	T.nonnormative_time as nonnormative_time,
+	T.nonnormative_time_text as nonnormative_time_text,
+	T.hour as hour,
+	T.min as min,
+	T.sec as sec,
+	T.ms as ms,
+	T.time_zone as time_zone,
+	T.normalized_time as normalized_time,
+	T.category as category
+from TimesNormalized T
+consolidate on T.nonnormative_time;
+
+

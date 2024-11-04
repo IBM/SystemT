@@ -1,0 +1,34 @@
+------------------------------------------------------------------
+-- Test case for bug# 16500 : HashJoin does not accept UDF calls as
+-- arguments
+------------------------------------------------------------------
+require document with columns text Text;
+
+
+create function toUpperCase(s String)
+return String
+external_name 'udfjars/udfs.jar:com.ibm.test.udfs.udf1!toUpperCase'
+language java
+deterministic
+return null on null input; 
+
+-- Caps tokens
+create view CapsToken as
+extract regex /[A-Z].*/ on 1 token in D.text as match
+from Document D;
+
+-- Low case tokens
+create view LowToken as
+extract regex /[a-z].*/ on 1 token in D.text as match
+from Document D;
+
+-- Find caps tokens and low tokens that are equal case insensitive
+create view EqualIgnoreCaseToken as
+select C.match as caps, L.match as low
+from CapsToken C, LowToken L
+where Equals(toUpperCase(GetText(L.match)), toUpperCase(GetText(C.match)));
+--where Equals(ToLowerCase(L.match), ToLowerCase(C.match));
+
+output view CapsToken;
+output view LowToken;
+output view EqualIgnoreCaseToken;

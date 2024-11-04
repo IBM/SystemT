@@ -1,0 +1,25 @@
+-- Test to throw an error when attempting to extract parts of speech using an imported or external mapping table
+module module2;
+
+import table POSMapping_EN from module module1 as POSMapping_EN;
+
+create external table POSExternMapping_EN (tag Text, basetag Text, flagstr Text)
+allow_empty false;
+    
+-- throw exception because mapping table is imported
+create view EnglishNoun as
+extract part_of_speech 'Noun'
+    with language 'en' and mapping from POSMapping_EN
+    on D.text as noun
+from Document D;
+
+output view EnglishNoun;
+
+-- throw exception because mapping table is external
+create view EnglishNoun2 as
+extract part_of_speech 'Noun'
+    with language 'en' and mapping from POSExternMapping_EN
+    on D.text as noun
+from Document D;
+
+output view EnglishNoun2;

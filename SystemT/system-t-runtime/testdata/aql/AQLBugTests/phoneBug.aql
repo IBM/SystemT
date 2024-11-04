@@ -1,0 +1,191 @@
+require document with columns text Text;
+
+-----------------------------------------------------------------------------
+-- phonebug.aql
+--
+-- Incorrect results test case.
+-----------------------------------------------------------------------------
+
+--===========================================================================
+-- Dictionaries
+--===========================================================================
+-- Strong patterns indicating the existence of a phone number
+create dictionary PhoneVariants as (
+	'+',
+	'phone:',
+	'phone :',
+	'cell:',
+	'cell :',
+	'contact:',
+	'contact :',
+	'direct:',
+	'direct :',
+	'office:',
+	'office :'
+);
+
+
+-- Strong patterns indicating the existence of a fax number
+create dictionary FilterPhoneNum as (
+	'fax',
+	'efax',
+	'pager'
+);
+
+--===========================================================================
+-- Dictionary Matches
+--===========================================================================
+create view PhoneVariant as 
+select D.match as annot
+from   Dictionary('PhoneVariants', Document.text) D;
+
+create view PhoneFilter as
+select D.match as annot
+from Dictionary('FilterPhoneNum', Document.text) D;
+
+--===========================================================================
+-- Sentence annotator
+--===========================================================================
+create view sentence as
+extract 
+    split using B.boundary 
+        retain right split point
+        on B.text
+        as sentence
+from (
+    extract 
+        D.text as text,
+        regex /(?:(?:[\;\.\?!]+\s)|(\n\s*\n))/ on D.text as boundary 
+        from Document D
+    having Not(ContainsDict('dictionaries/abbreviations.dict', 
+    CombineSpans(LeftContextTok(boundary, 1), boundary)))
+) B;
+
+
+--===========================================================================
+-- Translation for individual rules in telnumber.xml
+--===========================================================================
+--------------
+-- Rule 1b and 2
+--
+-- Purpose: 
+--       Match US phone number
+--
+-- Example:
+--       +(734) 1231245
+--       (890)124.4568
+--------------
+/*--------------------------------
+- <rule id='1b' name='PhoneNumber'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>\(</regex> 
+  </token>
+- <token>
+  <regex>[1-9]\d{2}</regex> 
+  </token>
+- <token>
+  <regex>\)</regex> 
+  </token>
+- <token>
+  <regex>[\-]?\d{3}[\-\.]?\d{4}</regex> 
+  </token>
+  </internal>
+  </rule>
+  
+  - <rule id='2' name='PhoneNumber'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>\(</regex> 
+  </token>
+- <token>
+  <regex>[1-9]\d{2}</regex> 
+  </token>
+- <token>
+  <regex>\)</regex> 
+  </token>
+- <token>
+  <regex>\d{3}</regex> 
+  </token>
+- <token>
+  <regex>\d{4}</regex> 
+  </token>
+  </internal>
+  </rule>
+------------------------------------*/
+
+create view PhoneNumber_R1b_2 as
+select R.match as num
+from Regex(/\+?\s*\(\s*[1-9]\d{2}\s*\)\s*[\-\.]?\d{3}[\-\.\s*]?\d{4}/, Document.text) R;
+
+
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Aggregation/Consolidation section <<<<<<<<<<<<<<<<
+-- ===========================================================================
+
+-- Merge all the different rules.
+create view PhoneNumAll as
+    select P.num as num from PhoneNumber_R1b_2 P;
+	
+-- -------------------------------------------------------
+-- Consolidation:
+-- For now, we just remove annotations that are completely
+-- contained within other annotations.
+-- -------------------------------------------------------
+
+create view PhoneNumCons as
+select C.num as num
+from 
+(
+    select * from PhoneNumAll A consolidate on A.num
+) C,
+     sentence S
+where Contains(S.sentence, C.num);
+
+-- -------------------------------------------------------
+-- Identify fax/pager numbers
+-- -------------------------------------------------------
+create view NonPhoneNum as
+	select P.num as num
+	--select CombineSpans(F.annot, P.num) as num
+	from   PhoneNumCons P,
+    	   PhoneFilter F
+	where  FollowsTok(F.annot, P.num, 0, 2)
+  	  and  MatchesRegex(/\s*[\=\/\:\.\-\(\)]?\s*\+?\s*/, SpanBetween(F.annot, P.num));
+  	  
+  	  
+--=====================================================================
+-- Remove fax/pager numbers
+--=====================================================================
+ create view PhoneNumOnly as
+     (select P.num as num from PhoneNumCons P)
+     minus
+     (select NP.num as num from NonPhoneNum NP);
+      
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Output section <<<<<<<<<<<<<<<<
+-- ===========================================================================		
+-- Output
+select P.num as num
+into PhoneNumber
+from PhoneNumCons P;
+
+select F.num as num
+into NonPhoneNumber
+from NonPhoneNum F;
+
+select F.annot as annot
+into PhoneFilters
+from PhoneFilter F;
+

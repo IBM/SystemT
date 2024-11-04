@@ -1,0 +1,33 @@
+-------------------------------------------------------------------------------
+-- missingDictionaryFileNotInSearchPath.aql
+
+-- Test for a defect# 18697
+-- Compiler throwing NPE for missing dictionary file
+-- In this testcase strictFirst1.dict is the missing dictionary
+-------------------------------------------------------------------------------
+create view FirstName as
+select T.original,T.first 
+from 
+(
+extract D.text as original,dictionary 'strictFirst1.dict'
+on D.text as first
+from Document D
+having MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, first)
+) T;
+
+
+-- Find dictionary matches for all last names
+
+create view Phone as
+extract regexes /\d{3}-\d{4}/ and /\+?[Xx]\.?\d{4,5}/
+	on D.text as num
+from Document D;
+
+create view PersonPhone as
+select GetText(CombineSpans(F.first, P.num)) as personphone,
+     GetText(F.first) as name,
+     GetText(P.num) as num   
+from FirstName F, Phone P
+where Follows(F.first, P.num, 0,10);
+
+output view PersonPhone; 

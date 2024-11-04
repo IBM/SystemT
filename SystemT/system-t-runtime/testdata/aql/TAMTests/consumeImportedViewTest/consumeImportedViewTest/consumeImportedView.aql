@@ -1,0 +1,39 @@
+/*
+This test consumes imported views in context of built-in functions.
+*/
+module consumeImportedViewTest;
+
+-- import view PhoneNumber from module 'phone'
+import view PhoneNumber from module phone;
+
+-- import all views from 'person' module
+import module person;
+
+-- import view NewPhone and create an alias
+import view NewPhone from module personPhone as importedPersonPhone;
+
+
+-- referred fields from imported views thru there fully qualifed name in, 
+-- select list and function calls 
+create view PersonPhone1 as
+select person.FirstLast.name as name, phone.PhoneNumber.number as number, 
+CombineSpans(person.FirstLast.name, phone.PhoneNumber.number) as match
+from person.FirstLast, phone.PhoneNumber
+where FollowsTok(person.FirstLast.name, phone.PhoneNumber.number,0,1);
+
+output view PersonPhone1;
+
+-- access imported views in the from list thru there aliases
+create view PersonPhone2 as
+select CombineSpans(P.name, PH.number) as match
+from person.FirstLast P, phone.PhoneNumber PH
+where FollowsTok(P.name, PH.number,0,1);
+
+output view PersonPhone2;
+
+-- refering the fields from imported view thru aliases in function calls 
+create view testAliasRefInFunc as
+select GetText(importedPersonPhone.name) as name, GetText(importedPersonPhone.number) as number 
+from importedPersonPhone;
+
+output view testAliasRefInFunc;

@@ -1,0 +1,371 @@
+module Linguistics;
+
+
+import dictionary PrepositionsInEnglish from module Dictionaries as PrepositionsInEnglish
+;
+
+
+import dictionary DeterminersInEnglish from module Dictionaries as DeterminersInEnglish
+;
+
+
+import dictionary WorldTimeZones from module Dictionaries as WorldTimeZones
+;
+
+
+create view LongCapsPlace as
+  select  CombineSpans(CP1.match, CP2.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CP1.__auto__id as CapsPlace_____sep_____CP1____id,
+          CP2.__auto__id as CapsPlace_____sep_____CP2____id
+  from  CapsPlace CP1,
+        CapsPlace CP2
+  where FollowsTok(CP1.match, CP2.match, 0, 1)
+     and MatchesRegex(/\s*(-|de)?\s*/, SpanBetween(CP1.match, CP2.match))
+     and Not(MatchesRegex(/([tT]he|an?)/, CP1.match));
+
+output view LongCapsPlace;
+
+create view HyphenatedLongCapsPlace1 as
+  select  CombineSpans(CP1.match, CP2.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CP1.__auto__id as CapsPlace_____sep_____CP1____id,
+          CP2.__auto__id as CapsPlace_____sep_____CP2____id
+  from  CapsPlace CP1,
+        CapsPlace CP2
+  where FollowsTok(CP1.match, CP2.match, 3, 3)
+     and MatchesRegex(/-(\p{L}\p{M}*)+-/, SpanBetween(CP1.match, CP2.match));
+
+output view HyphenatedLongCapsPlace1;
+
+create view HyphenatedLongCapsPlace2 as
+  select  CombineSpans(LeftContextTok(CP.match, 2), CP.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CP.__auto__id as CapsPlace_____sep_____CP____id
+  from  CapsPlace CP
+  where MatchesRegex(/al-/, LeftContextTok(CP.match, 2));
+
+output view HyphenatedLongCapsPlace2;
+
+create view CapsInitial as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    regex /(\p{Lu}\p{M}*\.?){1,2}/
+    with flags 'DOTALL'
+    on between 1 and 4 tokens in D.text
+    return group 0 as match
+  from DocumentText D;
+
+output view CapsInitial;
+
+create view CapsPlaceWithInitial1 as
+  select  CombineSpans(I.match, CP.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          I.__auto__id as CapsInitial_____sep_____I____id,
+          CP.__auto__id as CapsPlace_____sep_____CP____id
+  from  CapsInitial I,
+        CapsPlace CP
+  where FollowsTok(I.match, CP.match, 0, 0)
+     and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(I.match, CP.match)));
+
+output view CapsPlaceWithInitial1;
+
+create view CapsPlaceWithInitial2 as
+  select  CombineSpans(CP.match, I.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          I.__auto__id as CapsInitial_____sep_____I____id,
+          CP.__auto__id as CapsPlace_____sep_____CP____id
+  from  CapsInitial I,
+        CapsPlace CP
+  where FollowsTok(CP.match, I.match, 0, 0)
+     and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(I.match, CP.match)));
+
+output view CapsPlaceWithInitial2;
+
+create view AllCapsPlace as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    regex /(\p{Lu}\p{M}*){2,}/
+    with flags 'DOTALL'
+    on between 1 and 1 tokens in D.text
+    return group 0 as match
+  from DocumentText D
+  having MatchesRegex(/\s*,/, RightContextTok(match, 1))
+     and MatchesRegex(/[\r\n]/, LeftContext(match, 1));
+
+output view AllCapsPlace;
+
+create view RelaxedCapsPlaceAll as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__6__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__6__TempOp__1 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__6__TempOp__2 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__6__TempOp__3 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__6__TempOp__4 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__6__TempOp__5 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__6__TempOp__6 Op);
+
+output view RelaxedCapsPlaceAll;
+
+create view RelaxedCapsPlace as
+  select  CP.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CP.__auto__id as RelaxedCapsPlaceAll_____sep_____CP____id
+  from  RelaxedCapsPlaceAll CP
+  where Not(ContainsDict('PrepositionsInEnglish', SubSpanTok(CP.match, 1, 1)))
+     and Not(MatchesDict('DeterminersInEnglish', CP.match));
+
+output view RelaxedCapsPlace;
+
+create view ExtraLongCapsPlace as
+  select  CombineSpans(CP1.match, CP2.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CP1.__auto__id as RelaxedCapsPlace_____sep_____CP1____id,
+          CP2.__auto__id as RelaxedCapsPlace_____sep_____CP2____id
+  from  RelaxedCapsPlace CP1,
+        RelaxedCapsPlace CP2
+  where FollowsTok(CP1.match, CP2.match, 1, 1)
+     and MatchesRegex(/\s*de\s*/, SpanBetween(CP1.match, CP2.match));
+
+output view ExtraLongCapsPlace;
+
+create view AllRelaxedCapsPlace as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__7__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__7__TempOp__1 Op);
+
+output view AllRelaxedCapsPlace;
+
+create view OneToTwoAllCapsWord as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    regex /(\p{Lu}\p{M}*){2,}([ ](\p{Lu}\p{M}*){2,})?/
+    with flags 'DOTALL'
+    on between 1 and 2 tokens in D.text
+    return group 0 as match
+  from DocumentText D;
+
+output view OneToTwoAllCapsWord;
+
+create view RelaxedCapsPlaceOnetoTwo as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__8__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__8__TempOp__1 Op);
+
+output view RelaxedCapsPlaceOnetoTwo;
+
+create view InitialWord as
+  (select  Op.word as word,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__9__TempOp__0 Op)
+  union all
+  (select  Op.word as word,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__9__TempOp__1 Op);
+
+output view InitialWord;
+
+create view WeakInitialWord as
+  select  R.match as word,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__10__Temp_____sep_____R____id
+  from  __Subquery__10__Temp R
+  where Not(ContainsRegex(/\p{Lu}\p{M}*{3}/, R.match))
+     and Not(ContainsDict('WorldTimeZones', R.match))
+     and Not(MatchesRegex(/(VS\.|V\.)/, R.match));
+
+output view WeakInitialWord;
+
+create view __Subquery__10__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    regex /(\p{Lu}\p{M}*\.?\s*){1,5}/
+    with flags 'DOTALL'
+    on between 1 and 10 tokens in D.text
+    return group 0 as match
+  from DocumentText D;
+
+output view __Subquery__10__Temp;
+
+create view __Union__6__TempOp__0 as
+  select  CP.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CP.__auto__id as CapsPlace_____sep_____CP____id
+  from  CapsPlace CP;
+
+output view __Union__6__TempOp__0;
+
+create view __Union__6__TempOp__1 as
+  select  CP.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CP.__auto__id as LongCapsPlace_____sep_____CP____id
+  from  LongCapsPlace CP;
+
+output view __Union__6__TempOp__1;
+
+create view __Union__6__TempOp__2 as
+  select  CP.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CP.__auto__id as HyphenatedLongCapsPlace1_____sep_____CP____id
+  from  HyphenatedLongCapsPlace1 CP;
+
+output view __Union__6__TempOp__2;
+
+create view __Union__6__TempOp__3 as
+  select  CP.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CP.__auto__id as HyphenatedLongCapsPlace2_____sep_____CP____id
+  from  HyphenatedLongCapsPlace2 CP;
+
+output view __Union__6__TempOp__3;
+
+create view __Union__6__TempOp__4 as
+  select  CP.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CP.__auto__id as CapsPlaceWithInitial1_____sep_____CP____id
+  from  CapsPlaceWithInitial1 CP;
+
+output view __Union__6__TempOp__4;
+
+create view __Union__6__TempOp__5 as
+  select  CP.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CP.__auto__id as CapsPlaceWithInitial2_____sep_____CP____id
+  from  CapsPlaceWithInitial2 CP;
+
+output view __Union__6__TempOp__5;
+
+create view __Union__6__TempOp__6 as
+  select  O.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          O.__auto__id as AllCapsPlace_____sep_____O____id
+  from  AllCapsPlace O;
+
+output view __Union__6__TempOp__6;
+
+create view __Union__7__TempOp__0 as
+  select  CP.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CP.__auto__id as RelaxedCapsPlace_____sep_____CP____id
+  from  RelaxedCapsPlace CP;
+
+output view __Union__7__TempOp__0;
+
+create view __Union__7__TempOp__1 as
+  select  CP.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CP.__auto__id as ExtraLongCapsPlace_____sep_____CP____id
+  from  ExtraLongCapsPlace CP;
+
+output view __Union__7__TempOp__1;
+
+create view __Union__8__TempOp__0 as
+  select  W.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          W.__auto__id as OneToTwoAllCapsWord_____sep_____W____id
+  from  OneToTwoAllCapsWord W;
+
+output view __Union__8__TempOp__0;
+
+create view __Union__8__TempOp__1 as
+  select  W.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          W.__auto__id as CapsPlaceOnetoTwo_____sep_____W____id
+  from  CapsPlaceOnetoTwo W;
+
+output view __Union__8__TempOp__1;
+
+create view __Union__9__TempOp__0 as
+  select  I.word as word,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          I.__auto__id as InitialWord1_____sep_____I____id
+  from  InitialWord1 I;
+
+output view __Union__9__TempOp__0;
+
+create view __Union__9__TempOp__1 as
+  select  I.word as word,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          I.__auto__id as InitialWord2_____sep_____I____id
+  from  InitialWord2 I;
+
+output view __Union__9__TempOp__1;
+

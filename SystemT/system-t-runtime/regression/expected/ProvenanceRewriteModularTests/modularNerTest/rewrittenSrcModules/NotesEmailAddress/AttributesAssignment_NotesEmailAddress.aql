@@ -1,0 +1,116 @@
+module NotesEmailAddress;
+
+
+create view NotesEmailAddressWithAttr as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    E.__auto__id as NotesEmailConsolidated_____sep_____E____id,
+    regex /^([^\/]+)\/(.+)$/
+    with flags 'DOTALL'
+    on E.annot
+    return group 0 as reference
+       and group 1 as name
+       and group 2 as domain
+  from NotesEmailConsolidated E;
+
+output view NotesEmailAddressWithAttr;
+
+create view NotesEmailAddressWithoutAttr as
+  select  Op.email as email,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__116__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__116__TempOp__1 Op,
+        __Minus__116__Temp __t
+  where Equals(Op.email, __t.email);
+
+output view NotesEmailAddressWithoutAttr;
+
+create view NotesEmailAddressWithAttrAll as
+  (select  Op.email as email,
+            Op.name as name,
+            Op.domain as domain,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__117__TempOp__0 Op)
+  union all
+  (select  Op.email as email,
+            Op.name as name,
+            Op.domain as domain,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__117__TempOp__1 Op);
+
+output view NotesEmailAddressWithAttrAll;
+
+create view NotesEmailAddress_ as
+  select  E.email as email,
+          E.name as name,
+          E.domain as domain,
+          E.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          E.__auto__id as NotesEmailAddressWithAttrAll_____sep_____E____id
+  from  NotesEmailAddressWithAttrAll E;
+
+output view NotesEmailAddress_;
+
+create view __Minus__116__Temp as
+  select  __t.email as email
+  from  
+    ((select  Op.email as email
+      from  __Minus__116__TempOp__1 Op)
+    minus
+    (select  Op.email as email
+      from  __Minus__116__TempOp__2 Op)
+    ) __t
+  group by __t.email;
+
+output view __Minus__116__Temp;
+
+create view __Minus__116__TempOp__1 as
+  select  E.annot as email,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          E.__auto__id as NotesEmailConsolidated_____sep_____E____id
+  from  NotesEmailConsolidated E;
+
+output view __Minus__116__TempOp__1;
+
+create view __Minus__116__TempOp__2 as
+  select  E.reference as email,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          E.__auto__id as NotesEmailAddressWithAttr_____sep_____E____id
+  from  NotesEmailAddressWithAttr E;
+
+output view __Minus__116__TempOp__2;
+
+create view __Union__117__TempOp__0 as
+  select  E.reference as email,
+          E.name as name,
+          E.domain as domain,
+          E.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          E.__auto__id as NotesEmailAddressWithAttr_____sep_____E____id
+  from  NotesEmailAddressWithAttr E;
+
+output view __Union__117__TempOp__0;
+
+create view __Union__117__TempOp__1 as
+  select  E.email as email,
+          '' as name,
+          '' as domain,
+          E.email as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          E.__auto__id as NotesEmailAddressWithoutAttr_____sep_____E____id
+  from  NotesEmailAddressWithoutAttr E;
+
+output view __Union__117__TempOp__1;
+

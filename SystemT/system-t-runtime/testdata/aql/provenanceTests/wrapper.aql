@@ -1,0 +1,121 @@
+-------------------------------------------------------------------------------
+--
+-- Test cases to verify that autoIDs are passed upstream from under wrapped statements
+--
+-------------------------------------------------------------------------------
+
+-- Start writing your AQL here
+create view Noun as
+extract part_of_speech 'NN,NNP,NNPS,NNS' 
+with language 'en' on D.text as noun
+from Document D;
+
+create dictionary MissingNounDict as ( '$');
+
+create view CompondNoun as 
+(
+	extract dictionaries 'MissingNounDict'
+	on D.text as noun
+	from Document D 
+)
+union all
+(
+	extract blocks
+    with count between 1 and 3
+    and separation 0 tokens
+    on N.noun as noun
+	from Noun N
+);
+
+
+
+create view MissingNounSq as 
+select C.*
+from
+(
+	extract dictionaries 'MissingNounDict'
+	on D.text as noun
+	from Document D 
+) C;
+
+
+create view MissingNounDirect as
+extract dictionaries 'MissingNounDict'
+on D.text as noun
+from Document D ;
+	
+create view MissingNounSelect as 
+select M.*
+from MissingNounDirect M;
+
+create view CompondNounUnionSup as 
+(
+	extract dictionaries 'MissingNounDict'
+	on D.text as noun
+	from Document D 
+)
+union all
+(
+	extract regex /MARKET/ on 1 token in D.text as noun
+	from Document D
+);
+
+create view CompondNounUnionDirect as 
+( select * from MissingNounDirect )
+union all
+( select * from Noun );
+
+create view CompondNounUnionSupSq as 
+(
+	select * from 
+	(
+		extract dictionaries 'MissingNounDict'
+		on D.text as noun
+		from Document D 
+	) S
+)
+union all
+(
+	select *
+	from
+	(
+		extract regex /MARKET/ on 1 token in D.text as noun
+		from Document D
+	) S
+);
+
+
+
+create view PhoneNumber as
+select P.num as num
+from 
+(
+	extract 
+	    regexes /\+?\([1-9]\d{2}\)\d{3}-\d{4}/ and /\+?[Xx]\.?\d{4,5}/
+	    on D.text as num
+	from Document D
+) P;
+
+
+
+create view NounPhone as
+select CombineSpans(N.noun, P.num)
+from CompondNounUnionDirect N, PhoneNumber P
+where FollowsTok(N.noun, P.num, 0, 3);
+
+
+output view CompondNoun;
+output view CompondNounUnionSupSq;
+output view MissingNounSq;
+output view MissingNounDirect; 
+output view MissingNounSelect; 
+output view CompondNounUnionSup;
+output view CompondNounUnionDirect;
+output view PhoneNumber;
+output view NounPhone;
+
+
+
+
+
+   

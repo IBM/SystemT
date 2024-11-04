@@ -1,0 +1,85 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+/**
+ * Define external dictionaries for the customization of Person extractor
+ *
+ * Author: Yunyao Li [yunyaoli@us.ibm.com]
+ * Since:  11/01/2013
+ */
+
+module PersonCandidates;
+
+--- Step 1: Define all the external dictionaries used as customization points.
+
+-- A dictionary used to specify customized full names
+create external dictionary FullNameCustomDict allow_empty true with case insensitive;
+
+-- A dictionary used to specify customized first names
+create external dictionary FirstNameCustomDict allow_empty true with case insensitive;
+
+-- A dictionary used to specify customized last names
+create external dictionary LastNameCustomDict allow_empty true with case insensitive;
+
+-- A dictionary used to specify customized name components that may be first name or last name
+create external dictionary NameCustomDict allow_empty true with case insensitive;
+
+--  A dictionary used to specify customized titles prefixing a person's name 
+create external dictionary PrefixTitleCustomDict allow_empty true with case insensitive;
+
+--  A dictionary used to specify customized person name suffixes
+create external dictionary NameSuffixCustomDict allow_empty true with case insensitive;
+
+-- A dictionary used to specify customized invalid person names
+-- Any string contained by matches of an entry from the dictionary will not be identified as person
+-- This is useful to remove any systematic wrong matches
+create external dictionary InvalidPersonCustomDict allow_empty true with case insensitive;
+
+-- Step 2: Identify their matches
+create view FullNameCustom as
+extract dictionary 'FullNameCustomDict' 
+	on D.text as match
+from DocumentText D;
+
+create view FirstNameCustom as
+extract dictionary 'FirstNameCustomDict' 
+	on D.text as match
+from DocumentText D;
+
+create view LastNameCustom as
+extract dictionary 'LastNameCustomDict' 
+	on D.text as match
+from DocumentText D;
+
+create view NameCustom as
+extract dictionary 'NameCustomDict' 
+	on D.text as match
+from DocumentText D;
+
+create view PrefixTitleCustom as
+extract dictionary 'PrefixTitleCustomDict' 
+	on D.text as match
+from DocumentText D;
+
+create view NameSuffixCustom as
+extract dictionary 'NameSuffixCustomDict' 
+	on D.text as match
+from DocumentText D;
+
+create view InvalidPersonCustom as
+extract dictionary 'InvalidPersonCustomDict'
+	on D.text as match
+from DocumentText D;

@@ -1,0 +1,113 @@
+
+---------------------- singular / mass, plural, proper singular, proper plural nouns with a polarity.
+create view SentimentNN as
+  select NN.nn, 'NN' as detailedPos
+   from POSTagNN NN, AllTaggerDependentSentTermsInDoc AST
+   where Equals(NN.nn, AST.match);
+--output view SentimentNN;
+create view SentimentNNS as
+   select NNS.nn, 'NNS' as detailedPos
+   from POSTagNNS NNS, AllTaggerDependentSentTermsInDoc AST
+   where Equals(NNS.nn, AST.match);
+create view SentimentNNP as
+   select NNP.nn, 'NNP' as detailedPos
+    from POSTagNNP NNP, AllTaggerDependentSentTermsInDoc AST
+    where Equals(NNP.nn, AST.match);
+create view SentimentNNPS as
+   select NNPS.nn, 'NNPS' as detailedPos
+    from POSTagNNPS NNPS, AllTaggerDependentSentTermsInDoc AST
+    where Equals(NNPS.nn, AST.match);
+-- unite them
+create view AllSentimentNouns as
+  (select N.nn, N.detailedPos from SentimentNN N)
+  union all
+  (select N.nn, N.detailedPos from SentimentNNS N)
+  union all
+  (select N.nn, N.detailedPos from SentimentNNP N)
+  union all
+  (select N.nn, N.detailedPos from SentimentNNPS N);
+--output view AllSentimentNouns;
+ 
+
+
+
+---------------------- adjective positive, comparative, superlative with a polarity
+create view SentimentJJ as
+  select JJ.jj, 'JJ' as detailedPos
+  from POSTagJJ JJ, AllTaggerDependentSentTermsInDoc AST
+  where Equals(JJ.jj, AST.match);
+create view SentimentJJR as
+   select JJR.jj, 'JJR' as detailedPos
+   from POSTagJJR JJR, AllTaggerDependentSentTermsInDoc AST
+   where Equals(JJR.jj, AST.match);
+create view SentimentJJS as
+   select JJS.jj, 'JJS' as detailedPos
+   from POSTagJJS JJS, AllTaggerDependentSentTermsInDoc AST
+   where Equals(JJS.jj, AST.match);
+-- unite them
+create view AllSentimentAdjectives as
+   (select A.jj, A.detailedPos from SentimentJJ A)
+   union all
+   (select A.jj, A.detailedPos from SentimentJJR A)
+   union all
+   (select A.jj, A.detailedPos from SentimentJJS A);
+
+
+----------------------- derived verbs forms in document with a given polarity
+
+create view SentimentVB as
+   select VB.vb, 'VB' as detailedPos
+   from POSTagVB VB, AllTaggerDependentSentTermsInDoc AST
+   where Equals(VB.vb, AST.match);
+create view SentimentVBD as
+    select VBD.vb, 'VBD' as detailedPos
+    from POSTagVBD VBD, AllTaggerDependentSentTermsInDoc AST
+    where Equals(VBD.vb, AST.match);
+create view SentimentVBG as
+     select VBG.vb, 'VBG' as detailedPos
+     from POSTagVBG VBG, AllTaggerDependentSentTermsInDoc AST
+     where Equals(VBG.vb, AST.match);
+create view SentimentVBP as
+     select VBP.vb, 'VBP' as detailedPos
+    from POSTagVBP VBP, AllTaggerDependentSentTermsInDoc AST
+    where Equals(VBP.vb, AST.match);
+create view SentimentVBZ as
+      select VBZ.vb, 'VBZ' as detailedPos
+      from POSTagVBZ VBZ, AllTaggerDependentSentTermsInDoc AST
+      where Equals(VBZ.vb, AST.match);
+--unite them
+create view AllSentimentVerbs as
+  (select V.vb, V.detailedPos from SentimentVB V)
+  union all
+  (select V.vb, V.detailedPos from SentimentVBD V)
+  union all
+  (select V.vb, V.detailedPos from SentimentVBG V)
+  union all
+  (select V.vb, V.detailedPos from SentimentVBP V)
+  union all
+  (select V.vb, V.detailedPos from SentimentVBZ V);
+--output view AllSentimentVerbs;
+
+
+------------------------- adverbs in document with polarity
+create view SentimentRB as
+   select RB.rb, 'RB' as detailedPos
+   from POSTagRB RB, AllTaggerDependentSentTermsInDoc AST
+   where Equals(RB.rb, AST.match);
+ create view SentimentRBR as
+    select RBR.rb, 'RBR' as detailedPos
+    from POSTagRBR RBR, AllTaggerDependentSentTermsInDoc AST
+    where Equals(RBR.rb, AST.match);
+ create view SentimentRBS as
+    select RBS.rb, 'RBS' as detailedPos
+    from POSTagRBS RBS, AllTaggerDependentSentTermsInDoc AST
+    where Equals(RBS.rb, AST.match);
+  -- all the adverbs in the text that are interesting at all
+  -- meaning that they are contained within one of our dictionaries.
+ create view AllSentimentAdverbs as
+    (select A.rb, A.detailedPos from SentimentRB A)
+    union all
+    (select A.rb, A.detailedPos from SentimentRBR A)
+    union all
+    (select A.rb, A.detailedPos from SentimentRBS A);
+ output view AllSentimentAdverbs;

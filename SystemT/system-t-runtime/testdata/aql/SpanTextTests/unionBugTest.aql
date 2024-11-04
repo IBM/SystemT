@@ -1,0 +1,54 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test case for a union bug that manifest in NEEvalTests.runAnnotTest
+-- With LocationCounty -> ProjectFirst, LocationStateOrProvincce -> ProjectSecond
+-- MapLocation -> JoinType
+--
+-------------------------------------------------------------------------------
+require document with columns text Text;
+
+-- create a view with a Span column
+create view CapitalizedWord as
+extract regex /[A-Z][a-z]*/ with flags 'CANON_EQ'
+        on 1 token in D.text
+        as match
+from Document D;
+
+-- create a view with a Span column
+create view NoMatch as
+extract regex /invalid/ with flags 'CANON_EQ'
+        on 1 token in D.text
+        as match
+from Document D;
+
+-------------------------------------
+
+create view JoinType as
+	select '' as first, C.match as second
+	 from CapitalizedWord C
+	;
+
+create view ProjectFirst as
+select C.first as text from JoinType C;
+	
+create view ProjectSecond as
+select C.second as text from JoinType C;
+
+create view UnionSecondFirst as
+	(select C.text as text from ProjectSecond C)
+	union all
+	(select C.first as text from JoinType C)
+;
+
+create view UnionFirstSecond as
+	(select C.first as text from JoinType C)
+	union all
+	(select C.text as text from ProjectSecond C)
+;
+
+output view ProjectFirst;
+output view ProjectSecond;
+output view UnionFirstSecond;
+output view UnionSecondFirst;
+
+

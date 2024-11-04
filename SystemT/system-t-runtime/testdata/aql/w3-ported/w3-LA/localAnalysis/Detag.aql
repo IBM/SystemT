@@ -1,0 +1,375 @@
+-------------------------------------------------------------------------------
+-- Detag.aql
+--
+-- HTML detagging and skipping of unwanted content for W3 local analysis.
+--
+-- Depends on SkipDocumentBeforeDetag.aql
+--
+-- Calculates DetaggedContent used for LanguageID 
+--
+-------------------------------------------------------------------------------
+
+-- ***********************************************************************
+-- ***                        UDF declarations                        ****
+-- ***********************************************************************
+--UDF to skip the tags. It also tracks the change in the body tag's
+--position in the document after skipping.
+create function SkipTags(text String, skiplist ScalarList, bodyBegin Integer, bodyEnd Integer, skippedBodySpan ScalarList)
+return String 
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.SkipUDF!SkipTags'
+language java
+deterministic
+called on null input;
+
+--UDF for extracting a substring from the input string.
+--UDF to truncate the text to the first N characters within the span specified
+create function Substring(text String, begin Integer, end Integer)
+return String 
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UDF!Substring'
+language java
+deterministic
+return null on null input;
+
+-- ***********************************************************************
+
+
+-- ***********************************************************************
+-- ***        Should the document be skipped by the detagger ?        ****
+-- ***********************************************************************
+
+-- Set Document.text to '' for documents that should be skipped by the detagger (SkipDocument annotation is not null)
+create view DocumentAfterSkip as
+(select D.text as text, D.label as label from Document D, SkipDocumentAll S where Not(NotNull(S.skipResult)))
+union all
+(select '' as text, D.label as label from Document D, SkipDocumentAll S where NotNull(S.skipResult));
+
+
+-- ***********************************************************************
+--List created for considering a return type in the UDF.
+-- ***********************************************************************
+create view TempViewForList as
+select List('') as list
+from Document D;
+
+-- ***********************************************************************
+
+
+-- Extract important HTML tags, as well as relevant field values.
+--TODO: For META tags, also extract the contents of attribute "value", 
+--      in addition to attribute named "content".
+--      See es2resources/configs/local/change_types.txt.
+detag DocumentAfterSkip.text as DetaggedDoc
+detect content_type never
+annotate 
+    element 'a' as ATag
+		with attribute 'href' as target
+		 and attribute 'id' as id
+		 and attribute 'class' as class,
+	element 'h1' as H1Tag
+		with attribute 'id' as id
+		 and attribute 'class' as class,
+	element 'h2' as H2Tag
+		with attribute 'id' as id
+		 and attribute 'class' as class,
+	element 'h3' as H3Tag,
+	element 'title' as AllTitleTag,
+	element 'font' as FontTag,
+	element 'meta' as MetaTagAll
+		with attribute 'name' as name
+		and attribute 'content' as content
+		and attribute 'value' as value,
+	element 'input' as InputTag
+		with attribute 'name' as name,
+	element 'script' as ScriptTag,
+	element 'style' as StyleTag,	
+	element 'noscript' as NoscriptTag,
+	element 'p' as PTag
+		with attribute 'id' as id
+		 and attribute 'class' as class,
+	element 'div' as DivTag
+		with attribute 'id' as id
+		 and attribute 'class' as class,
+	element 'span' as SpanTag
+		with attribute 'id' as id
+		 and attribute 'class' as class,
+	element 'td' as TdTag
+		with attribute 'id' as id
+		 and attribute 'class' as class
+     and attribute 'onmouseover' as onmouseover,
+	element 'tr' as TrTag
+		with attribute 'id' as id
+		 and attribute 'class' as class,
+	element 'body' as BodyTag;
+		
+-- ***********************************************************************
+-- ***      Calculate content that should be skipped                  ****
+-- ***********************************************************************
+
+-- Combining all the tags to skip, except for the title - we do that separately
+-- Laura 7/7: added some additional info (type and id) for debugging
+-- TODO: Laura to remove additional info once LA testing completes
+-- Laura 7/7: added the class attribute to be considered when skipping. We now consider a match on id or class (independently)
+-- TODO: implement the exact Java logic if needed (first check id, and only if there's no match check class)
+create view TagsToSkipNoTitle as
+select T.type as type, T.id as id, T.match as match
+from
+(
+(select 'Script' as type, '' as id, T.match as match from ScriptTag T)
+union all
+(select 'Style' as type, '' as id, T.match as match from StyleTag T)
+--union all
+--(select T.match as match from AllTitleTag T)
+--union all
+--(select 'Input' as type, '' as id, T.match as match from InputTag T)
+--union all
+--(select 'Noscript' as type, '' as id, T.match as match from NoscriptTag T)
+union all
+(select 'P' as type, T.id as id, T.match as match from PTag T where MatchesRegex(/access/,  T.id))
+union all
+(select 'P' as type, T.class as id, T.match as match from PTag T where MatchesRegex(/access/,  T.class)) 
+union all
+(select 'P' as type, T.id as id, T.match as match from PTag T where MatchesRegex(/date-stamp/,  T.id))
+union all
+(select 'P' as type, T.class as id, T.match as match from PTag T where MatchesRegex(/date-stamp/,  T.class))
+union all
+(select 'Div' as type, D.id as id, D.match as match from DivTag D where MatchesRegex(/skip/, D.id))
+union all
+(select 'Div' as type, D.class as id, D.match as match from DivTag D where MatchesRegex(/skip/, D.class))
+union all
+(select 'Div' as type, D.id as id, D.match as match from DivTag D where MatchesRegex(/access/, D.id))
+union all
+(select 'Div' as type, D.class as id, D.match as match from DivTag D where MatchesRegex(/access/, D.class))
+union all
+(select 'Div' as type, D.id as id, D.match as match from DivTag D where MatchesRegex(/access-info/, D.id))
+union all
+(select 'Div' as type, D.class as id, D.match as match from DivTag D where MatchesRegex(/access-info/, D.class))
+union all
+(select 'Div' as type, D.id as id, D.match as match from DivTag D where MatchesRegex(/header-search/, D.id))
+union all
+(select 'Div' as type, D.class as id, D.match as match from DivTag D where MatchesRegex(/header-search/, D.class))
+union all
+(select 'Div' as type, D.id as id, D.match as match from DivTag D where MatchesRegex(/browser-warning/, D.id))
+union all
+(select 'Div' as type, D.class as id, D.match as match from DivTag D where MatchesRegex(/browser-warning/, D.class))
+union all
+(select 'Div' as type, D.id as id, D.match as match from DivTag D where MatchesRegex(/menus/, D.id))
+union all
+(select 'Div' as type, D.class as id, D.match as match from DivTag D where MatchesRegex(/menus/, D.class))
+union all
+(select 'Div' as type, D.id as id, D.match as match from DivTag D where  MatchesRegex(/menu/, D.id))
+union all
+(select 'Div' as type, D.class as id, D.match as match from DivTag D where  MatchesRegex(/menu/, D.class))
+union all
+(select 'Div' as type, D.id as id, D.match as match from DivTag D where  MatchesRegex(/mainmenu/, D.id))
+union all
+(select 'Div' as type, D.class as id, D.match as match from DivTag D where  MatchesRegex(/mainmenu/, D.class))
+union all
+(select 'Div' as type, D.id as id, D.match as match from DivTag D where  MatchesRegex(/navigation/, D.id))
+union all
+(select 'Div' as type, D.class as id, D.match as match from DivTag D where  MatchesRegex(/navigation/, D.class))
+union all
+(select 'Div' as type, D.id as id, D.match as match from DivTag D where  MatchesRegex(/persistent-nav/, D.id))
+union all
+(select 'Div' as type, D.class as id, D.match as match from DivTag D where  MatchesRegex(/persistent-nav/, D.class))
+union all
+(select 'Div' as type, D.id as id, D.match as match from DivTag D where  MatchesRegex(/jump-to-nav/, D.id))
+union all
+(select 'Div' as type, D.class as id, D.match as match from DivTag D where  MatchesRegex(/jump-to-nav/, D.class))
+union all
+(select 'Div' as type, D.id as id, D.match as match from DivTag D where  MatchesRegex(/personalization-links/, D.id))
+union all
+(select 'Div' as type, D.class as id, D.match as match from DivTag D where  MatchesRegex(/personalization-links/, D.class))
+union all
+(select 'Div' as type, D.id as id, D.match as match from DivTag D where  MatchesRegex(/ibm-top/, D.id))
+union all
+(select 'Div' as type, D.class as id, D.match as match from DivTag D where  MatchesRegex(/ibm-top/, D.class))
+union all
+(select 'Div' as type, D.id as id, D.match as match from DivTag D where  MatchesRegex(/lotusBanner/, D.id))
+union all
+(select 'Div' as type, D.class as id, D.match as match from DivTag D where  MatchesRegex(/lotusBanner/, D.class))
+union all
+(select 'Div' as type, D.id as id, D.match as match from DivTag D where  MatchesRegex(/lotusAccess/, D.id))
+union all
+(select 'Div' as type, D.class as id, D.match as match from DivTag D where  MatchesRegex(/lotusAccess/, D.class))
+union all
+(select 'Div' as type, D.id as id, D.match as match from DivTag D where  MatchesRegex(/masthead/, D.id))
+union all
+(select 'Div' as type, D.class as id, D.match as match from DivTag D where  MatchesRegex(/masthead/, D.class))
+union all
+(select 'Div' as type, D.id as id, D.match as match from DivTag D where  MatchesRegex(/ibm-masthead/, D.id))
+union all
+(select 'Div' as type, D.class as id, D.match as match from DivTag D where  MatchesRegex(/ibm-masthead/, D.class))
+union all
+(select 'Div' as type, D.id as id, D.match as match from DivTag D where  MatchesRegex(/ibm-tab-navigation/, D.id))
+union all
+(select 'Div' as type, D.class as id, D.match as match from DivTag D where  MatchesRegex(/ibm-tab-navigation/, D.class))
+union all
+(select 'H1' as type, H1.id as id, H1.match as match from H1Tag H1 where  MatchesRegex(/access/, H1.id))
+union all
+(select 'H1' as type, H1.class as id, H1.match as match from H1Tag H1 where  MatchesRegex(/access/, H1.class))
+union all
+(select 'H2' as type, H2.id as id, H2.match as match from H2Tag H2 where MatchesRegex(/access/, H2.id))
+union all
+(select 'H2' as type, H2.class as id, H2.match as match from H2Tag H2 where MatchesRegex(/access/, H2.class))
+union all
+(select 'H2' as type, H2.id as id, H2.match as match from H2Tag H2 where MatchesRegex(/alert-stop/, H2.id))
+union all
+(select 'H2' as type, H2.class as id, H2.match as match from H2Tag H2 where MatchesRegex(/alert-stop/, H2.class))
+union all
+(select 'Span' as type, S.id as id, S.match as match from SpanTag S where MatchesRegex(/anz-date-stamp/, S.id))
+union all
+(select 'Span' as type, S.class as id, S.match as match from SpanTag S where MatchesRegex(/anz-date-stamp/, S.class))
+union all
+(select 'Span' as type, S.id as id, S.match as match from SpanTag S where MatchesRegex(/nav/, S.id))
+union all
+(select 'Span' as type, S.class as id, S.match as match from SpanTag S where MatchesRegex(/nav/, S.class))
+union all
+-- <span class="rnav"> can be used to identify navigation bar.
+(select 'Span' as type, S.id as id, S.match as match from SpanTag S where MatchesRegex(/rnav/, S.id))
+union all
+(select 'Span' as type, S.class as id, S.match as match from SpanTag S where MatchesRegex(/rnav/, S.class))
+union all
+(select 'A' as type, A.id as id, A.match as match from ATag A where  MatchesRegex(/mainlink/, A.id))
+union all
+(select 'A' as type, A.class as id, A.match as match from ATag A where  MatchesRegex(/mainlink/, A.class))
+union all
+(select 'A' as type, A.id as id, A.match as match from ATag A where  MatchesRegex(/skiplink/, A.id))
+union all
+(select 'A' as type, A.class as id, A.match as match from ATag A where  MatchesRegex(/skiplink/, A.class))
+union all
+(select 'A' as type, A.id as id, A.match as match from ATag A where  MatchesRegex(/masthead-mainlink/, A.id))
+union all
+(select 'A' as type, A.class as id, A.match as match from ATag A where  MatchesRegex(/masthead-mainlink/, A.class))
+union all
+(select 'A' as type, A.id as id, A.match as match from ATag A where  MatchesRegex(/rlinks/, A.id))
+union all
+(select 'A' as type, A.class as id, A.match as match from ATag A where  MatchesRegex(/rlinks/, A.class))
+union all
+(select 'A' as type, A.id as id, A.match as match from ATag A where  MatchesRegex(/nav/, A.id))
+union all
+(select 'A' as type, A.class as id, A.match as match from ATag A where  MatchesRegex(/nav/, A.class))
+union all
+(select 'TD' as type, T.id as id, T.match as match from TdTag T where MatchesRegex(/NAVIGATION/,  T.id))
+union all
+(select 'TD' as type, T.class as id, T.match as match from TdTag T where MatchesRegex(/NAVIGATION/,  T.class))
+union all
+-- <td height="22" bgcolor="#98cbff" onmouseover="this.className='index-selected';" onmouseout="this.className='index-unselected';" style="cursor:hand">, especially onmouseover can be used to identify menu. 
+(select 'TD' as type, T.id as id, T.match as match from TdTag T where MatchesRegex(/this\.className='index\-selected';/,  T.onmouseover))
+union all
+(select 'TR' as type, T.id as id, T.match as match from TrTag T where MatchesRegex(/cty-tou/,  T.id))
+union all
+(select 'TR' as type, T.class as id, T.match as match from TrTag T where MatchesRegex(/cty-tou/,  T.class))
+) T
+order by T.match;
+
+
+-- ***********************************************************************
+-- ***         Consolidate all content to be skipped                  **** 
+-- ***********************************************************************
+
+create view TagsToSkipNoTitleConsolidated as
+select T.match as match
+from TagsToSkipNoTitle T
+where NotNull(T.match)
+consolidate on T.match;
+
+-- Extract the phrases to be skipped from the NOSCRIPT tag
+create view NoscriptContentToSkip as
+select NS.match as match
+from Dictionary('detag/noscript.dict', NoscriptTag.match) NS;
+
+-- Combining all the tags/spans within tags to skip
+create view TagsToSkip as
+(select T.match as match from AllTitleTag T)
+union all
+(select T.match as match from TagsToSkipNoTitleConsolidated T)
+union all
+(select NS.match as match from NoscriptContentToSkip NS);
+
+
+-- Consolidate all tags to be skipped when computing snippets
+create view TagsToSkipConsolidated as
+select T.match as match, 0 as group_by
+from TagsToSkip T
+where NotNull(T.match)
+consolidate on T.match;
+
+
+--Sort and group consolidated tags to be skipped
+create view TagsToSkipGroup as
+(
+	select T.group_by as group_by, List(T.match) as skiplist
+	from (select T.match as match, T.group_by as group_by from TagsToSkipConsolidated T order by T.match) T
+	group by T.group_by
+)
+union all
+-- Handle the case when there is nothing to skip
+(
+	select 0 as group_by, cast(null as ScalarList) as skiplist
+	from DetaggedDoc D, (select Count(*) as cnt from TagsToSkipConsolidated) T
+	where Equals(T.cnt,0)
+);
+
+
+-- ***********************************************************************
+-- *** Calculate detagged document and body content after skipping    **** 
+-- ***********************************************************************
+
+-- For those documents that do not have a body tag.
+create view BodyTagMissing as 
+select 0 as bodyBegin, 0 as bodyEnd
+from Document D, (select Count(*) as bodyTagCount from BodyTag B) BC
+where Equals(BC.bodyTagCount, 0);
+
+
+create view BodyTagSpansAll as
+(select GetBegin(B.match) as bodyBegin, GetEnd(B.match) as bodyEnd from BodyTag B limit 1)
+union all
+(select * from BodyTagMissing);
+
+
+-- Create an outlist for the SkipTags UDF to return the new
+-- offsets for the body tag after skipping unwanted tags.
+create view SkippedBodySpanOutList as
+select List(0) as skippedBodySpan
+from Document D;
+
+
+-- Generate detagged text with all skip tags removed
+-- for Snippet and Description annotators.
+create view DetaggedDocumentUnnormalizedWhitespace as
+select SkipTags(GetText(D.text), T.skiplist, B.bodyBegin, B.bodyEnd, SBS.skippedBodySpan) as content
+from DetaggedDoc D, TagsToSkipGroup T, BodyTagSpansAll B, SkippedBodySpanOutList SBS ;
+
+
+-- Detagged content of entire document,
+-- after skipping and white-space normalization
+create view DetaggedDocument as
+select NormalizeWhitespace(GetText(D.content)) as content
+from DetaggedDocumentUnnormalizedWhitespace D
+where NotNull(D.content);
+
+-- Detagged content of <BODY> tag 
+-- after skipping and white-space normalization
+create view DetaggedBody as
+select NormalizeWhitespace(GetString(D.content)) as content
+from
+(
+	select Substring(GetString(D.content), getElementFromIntList(SBS.skippedBodySpan, 0), getElementFromIntList(SBS.skippedBodySpan, 1)) as content
+	from DetaggedDocumentUnnormalizedWhitespace D, 
+		 SkippedBodySpanOutList SBS,
+		 -- include BodyTag, since we only compute this when BODY exists 
+		 BodyTag B
+	where NotNull(D.content)
+) D
+-- Substring may return null for invalid begin/end offsets
+where NotNull(D.content);
+
+-- Detagged content for calculating Snippet, Description, and for use in LanguageID detection
+-- Computed as the DetaggedBody content, if present, otherwise the DetaggedDocument content
+create view DetaggedContent as
+( select D.content from DetaggedBody D) -- <body> tag is present
+union all
+( select D.content from DetaggedDocument D, (select Count(*) as cnt from DetaggedBody) B where Equals(B.cnt, 0) ); -- <body> tag is absent
+
+

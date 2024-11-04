@@ -1,0 +1,113 @@
+create view Initial as
+	extract
+	   --dictionaries 'initial.dict'
+	   dictionaries 'per_salut_mixed.dict'
+	          --and   'misc/strong_position.dict'
+	          and 'misc/role_imp_org_en.dict'
+	          --and   'misc/sports_related_positions.dict'
+	          and 'misc/role_imp_sport_en.dict'
+	          --and   'misc/relatives.dict'
+	          and 'misc/role_imp_family_en.dict'
+	  on D.text   
+      as initial
+	  from Doc D
+	  -- Sudarshan regex : 10/13/2011 - backreference on line 13
+	  -- Sudarshan regex : 10/13/2011 - changed regex on line 12 to 13 - unicode equivalents + detect combination marks
+	  --having MatchesRegex(/((\p{Lu}\p{M}*){2}|((\p{Lu}\p{M}*)?\p{Lower}{1,10}\s*){1,2}.*)/, initial);
+	  having MatchesRegex(/((\p{Lu}\p{M}*){2}|((\p{Lu}\p{M}*)?(\p{Ll}\p{M}*){1,10}\s*){1,2}.*)/, initial);
+	  
+-- Yunyao: added 05/09/2008 to capture person name suffix
+create view PersonSuffix as
+select D.match as suffix
+-- from   Dictionary('personSuffix.dict', Doc.text) D
+from (extract dictionary 'per_name_suffix_posClue_ctxtRight_en.dict' on D.text as match from Doc D) D
+--Yunyao: allow no white space in between
+where Not(ContainsRegex(/\s/, D.match));
+	
+-- Find capitalized words that look like person  names and not in the non-name dictionary
+create view CapsPersonCandidate as
+select R.match as name
+--from   Regex(/\b\p{Upper}\p{Lower}[\p{Alpha}]{1,20}\b/, Doc.text) R
+--from   Regex(/\b\p{Upper}\p{Lower}[\p{Alpha}]{0,10}(['-][\p{Upper}])?[\p{Alpha}]{1,10}\b/, Doc.text) R 
+-- change to enable unicode match
+--from   Regex(/\b\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*[\p{L}\p{M}*]{0,10}(['-][\p{Lu}\p{M}*])?[\p{L}\p{M}*]{1,10}\b/, Doc.text) R 
+--from   Regex(/\b\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*[\p{L}\p{M}*]{0,10}(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}\b/, Doc.text) R 
+-- Allow fully capitalized words
+--from   Regex(/\b\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}\b/, Doc.text) R 
+--from   RegexTok(/\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}/, 4, Doc.text) R --'
+-- Possible Customization for CoNLL2003, allow the name after - be lower case
+-- from   RegexTok(/(al-|\p{Lu}\p{M}*(\p{L}\p{M}*){0,10})(['-][\p{L}\p{M}*])?(\p{L}\p{M}*){1,10}/, 4, Doc.text) R --'
+-- Sudarshan regex : 10/13/2011 - backreference on line 36
+ --from   RegexTok(/(al-|\p{Lu}\p{M}*(\p{L}\p{M}*){0,10})(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}/, 4, Doc.text) R --'
+ from (extract regex /(al-|\p{Lu}\p{M}*(\p{L}\p{M}*){0,10})(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}/ 
+ 		on between 1 and 4 tokens in D.text 
+ 			as match 
+ 	  from Doc D) R
+where  Not(ContainsDicts(
+		--'FilterPersonDict',
+		'filter_per_en.dict', 
+		--'filterPerson_position.dict',
+		'filter_per_role_en.dict',
+		--'filterPerson_weak_position.dict',
+		'filter_per_role_weak_en.dict',
+		--'filterPerson_german.dict',
+		'filter_per_german_de.dict',
+		--'initial.dict',
+		'per_salut_mixed.dict',
+		--'StrongPhoneVariantDictionary',
+		'misc/misc_phone_type_mixed.dict',
+		--'stateList.dict',
+		--'organization_suffix.dict',
+		'org_global_group_suffix_case_mixed.dict',
+   		--'orgs/industryType/industryTypeCompany_suffix.dict',
+   		'orgs/industryType/org_company_group_suffix_case_en.dict',
+   		--'orgs/industryType/industryTypeEducation_suffix.dict',
+   		'orgs/industryType/org_edu_group_suffix_case_en.dict',
+   		--'orgs/industryType/industryTypeGovernment_suffix.dict',
+   		'orgs/industryType/org_govt_group_suffix_case_en.dict',
+   		--'orgs/industryType/industryTypeMedical_suffix.dict',
+   		'orgs/industryType/org_med_group_suffix_case_en.dict',
+   		--'orgs/industryType/industryTypeMedia_suffix.dict',
+   		'orgs/industryType/org_media_group_suffix_case_en.dict',
+   		--'orgs/industryType/industryTypeNewspaper_suffix.dict',
+   		'orgs/industryType/org_news_group_suffix_case_en.dict',
+   		--'orgs/industryType/industryTypeOthers_suffix.dict',
+   		'orgs/industryType/org_others_group_suffix_case_en.dict',
+   		--'streetSuffix_forPerson.dict',
+   		'filter_addr_street_suffix_en.dict', 
+   		--'wkday.dict',
+   		'time_weekdays_en.dict',
+   		-- added for conll2003
+   		--'month.dict',
+   		'time_months_en.dict',
+   		--'nationality.dict',
+   		'per_nationalities_en.dict',
+   		--'location/stateAbbrevs/stateListStrongAbbrev.dict',
+   		'location/stateAbbrevs/loc_usa_states_abbrev_case_en.dict',
+   		--'stateAbbrv.ChicagoAPStyle.dict',
+   		'loc_usa_states_abbrev_chicagoAP_case_en.dict',
+   		--'country.dict',
+   		'loc_world_countries_en.dict',
+   		--'continent.dict',
+   		'loc_continents_en.dict',
+   		--'misc/sports_related_positions.dict',
+   		'misc/role_imp_sport_en.dict',
+   		 -- Yunyao: added on 04/29/2010
+   		--'pos/preps-list',
+   		'pos/lang_preps_en.dict',   		
+   		--'pos/conjs-list',
+   		'pos/lang_conjs_en.dict', 
+   		--'pos/verbs-list',
+   		--'misc/ethnicGroup.dict',
+   		'misc/per_ethnicities_global_en.dict', 
+   		--'misc/ordinal.dict',
+   		'misc/misc_ordinal_en.dict',
+   		--'misc/relatives.dict',
+   		'misc/role_imp_family_en.dict', 
+   		--'misc/strong_position.dict',
+   		'misc/role_imp_org_en.dict',
+   		 R.match));
+
+
+	
+	  

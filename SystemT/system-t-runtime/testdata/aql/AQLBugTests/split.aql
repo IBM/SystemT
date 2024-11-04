@@ -1,0 +1,31 @@
+-------------------------------------------------------------------------------
+-- split.aql
+--
+-- Test of a bug in split when there are no split points.
+-------------------------------------------------------------------------------
+
+require document with columns text Text;
+
+create view CommaSplit as
+extract 
+	B.comma as comma,
+    split using B.comma 
+        retain right split point
+        on B.text
+        as elem
+from (
+	(
+    	extract 
+       		D.text as text,
+        	regex /,/ on D.text as comma
+        	from Document D
+    )
+    union all
+    (
+    	select D.text as text, null as comma
+    	from Document D
+    	where Not(ContainsRegex(/,/, D.text))
+    )
+) B;
+
+output view CommaSplit;

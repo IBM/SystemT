@@ -1,0 +1,44 @@
+-------------------------------------------------------------------------------
+-- Test case for bug #18638 - Runtime Exception in sort-merge join
+-- Looks like SlowComparator.compare() passes a null memoization table 
+-------------------------------------------------------------------------------
+require document with columns text Text;
+
+-- Find capitalized words that look like person names 
+create view CapsPerson_r as 
+extract regex /\b\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}\b/ --' 
+          on between 1 and 10 tokens in D.text as match --word 
+from Document D; 
+
+-- Find CapsPerson with another CapsPerson in the left context
+-- Throws RuntimeException in sort-merge
+create view Person1 as
+select CP1.match as match 
+from CapsPerson_r CP1, CapsPerson_r CP2
+where Contains(LeftContextTok(CP1.match, 2), CP2.match);
+
+-- Same problem when using Follows() instead of Contains()
+-- Throws RuntimeException in sort-merge
+create view Person2 as
+select CP1.match as match 
+from CapsPerson_r CP1, CapsPerson_r CP2
+where Follows(LeftContextTok(CP1.match, 2), CP2.match, 0,2);
+
+-- Workaround: compute left context in a subquery
+create view Person1_alternative as
+select CP1.match as match  
+from 
+	(
+		select CP.match as match, LeftContextTok(CP.match, 2) as leftCtx
+		from CapsPerson_r CP
+	) CP1, 
+	CapsPerson_r CP2
+where Contains(CP1.match, CP2.match);
+
+
+
+output view Person1;
+output view Person2;
+--output view Person1_alternative;
+
+

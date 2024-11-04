@@ -1,0 +1,269 @@
+---------------------------------------
+-- Document Preprocessing
+---------------------------------------
+create view Doc as
+select D.text as text
+from DocScan D;
+
+--------------------------------------------------------
+-- The main NE annotators that can be used to filter 
+-- by when refining Person are:
+--       Organization, Location, Address, EmailAddress, 
+--       PhoneNumber, DateTime, URL
+
+-- *** You are allowed to use only the <reference> attribute of these views in your refinements ***
+---------------------------------------------------------
+include 'ne-library-annotators-for-UMD.aql';
+
+output view Location;
+output view Organization;  
+output view Address;
+output view EmailAddress;
+output view DateTime;
+output view URL; 
+
+---------------------------------------
+-- Other annotators that can be used to filter by
+-- when refining Person
+---------------------------------------
+create view DblNewLine as
+extract regex /[\r\n]{2}/ on D.text as reference
+from Doc D;
+
+create view SingleNewLine as
+extract regex /[\r\n]/ on D.text as reference
+from Doc D;
+
+output view DblNewLine;
+output view SingleNewLine;
+
+
+
+---------------------------------------
+-- Person Annotator - to be refined
+---------------------------------------
+create dictionary SalutationDict as
+(
+	'rev.', 'col.', 'reverend', 'prof.', 'professor', 
+	'lady', 'miss.', 'mrs.', 'mrs', 'mr.', 'pt.', 'ms.',
+	'messrs.', 'dr.', 'master.', 'marquis', 'monsieur',
+	'ds', 'di','herr', 'Fraeulein', 'Doktor', 'Herr Doktor', 
+	'Frau Doktor','Herr Professor', 'Frau professor', 'Baron', 'graf'
+);
+
+create dictionary CapsPersonDict as
+(''
+);
+
+
+-- Find dictionary matches for all title initials
+create view Salutation as
+---select D.match as salutation
+extract dictionary 'SalutationDict' 
+on D.text as salutation 
+from Doc D;
+
+-- Find capitalized words that look like person  names 
+create view CapsPersCand as
+extract regex /\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}/
+	on between 1 and 10 tokens in D.text as word
+from Doc D; 
+
+create view CapsPers as
+select C.word as word from CapsPersCand C
+where  Not(ContainsDict('CapsPersonDict', C.word));
+ 
+ 
+ -- Find initial words 
+create view InitialWrd as
+extract regex /([\p{Upper}]\.\s*){1,5}/
+	on between 1 and 10 tokens in D.text as word
+from Doc D;
+ 
+-- Find dictionary matches for all last names
+create view LastDict as
+extract dictionary 'strictLast.dict'
+on D.text as last
+from Doc D;
+
+create view Last as
+select D.last as last
+from   LastDict D
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.last);	
+
+-- Find dictionary matches for all first names
+-- Mostly US first names
+create view FirstDict as
+extract dictionary 'strictFirst.dict'
+on D.text as first
+from Doc D;
+
+create view First as
+select D.first as first
+from   FirstDict D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.first);
+ 
+-- Rule R1 <First><Last>
+create view FirstLast as
+select CombineSpans(FN.first, LN.last) as name
+from First FN, Last LN
+where FollowsTok(FN.first, LN.last,0,0);
+
+-- Rule R2 <CapsPers><Last>
+create view CapsLast as
+select CombineSpans(CP.word, LN.last) as name
+from CapsPers CP, Last LN
+where FollowsTok(CP.word, LN.last,0,0);
+
+-- Rule R3 <First><CapsPers>
+create view FirstCaps as
+select CombineSpans(FN.first, CP.word) as name
+from First FN, CapsPers CP
+where FollowsTok(FN.first, CP.word,0,0);
+
+-- Rule R4 <Last>,<First>
+create view LastCommaFirst as
+select CombineSpans(LN.last,FN.first) as name
+from First FN, Last LN
+where FollowsTok(LN.last,FN.first,0,1) and ContainsRegex(/,/,SpanBetween(LN.last, FN.first));
+
+-- Rule R5 <CapsPers>,<First>
+create view CapsCommaFirst as
+select CombineSpans(CP.word,FN.first) as name
+from CapsPers CP, First FN
+where FollowsTok(CP.word,FN.first,0,1) and ContainsRegex(/,/,SpanBetween(CP.word, FN.first));
+
+-- Rule R6 <Last>,<CapsPers>
+create view LastCommaCaps as
+select CombineSpans(LN.last,CP.word) as name
+from Last LN, CapsPers CP
+where FollowsTok(LN.last,CP.word,0,1) and ContainsRegex(/,/,SpanBetween(LN.last, CP.word));
+
+
+-- Rule R7 <Salutation><CapsPers>
+create view SalCaps as
+select CP.word as name
+from Salutation S, CapsPers CP
+where FollowsTok(S.salutation,CP.word,0,0);
+  
+  
+-- Rule R8 <Salutation><CapsPers><CapsPers>
+create view SalCapsCaps as
+select CombineSpans(CP1.word,CP2.word) as name
+from Salutation S, CapsPers CP1,CapsPers CP2
+where FollowsTok(S.salutation,CP1.word,0,0) and
+      FollowsTok(CP1.word,CP2.word,0,0);
+ 
+-- Rule R9 <InitialWord><Last>
+create view InitialLast as
+select CombineSpans(IW.word, LN.last) as name
+from InitialWord IW, Last LN
+where FollowsTok(IW.word, LN.last,0,0);
+
+-- Rule R10 <InitialWord><First>
+create view InitialFirst as
+select CombineSpans(IW.word, FN.first) as name
+from InitialWord IW, First FN
+where FollowsTok(IW.word, FN.first,0,0);
+
+-- Rule R11 <First><InitialWord><Last>
+create view FirstInitialLast as
+select CombineSpans(FN.first,LN.last) as name
+from First FN, InitialWord IW, Last LN
+where FollowsTok(FN.first,IW.word,0,0) and FollowsTok(IW.word, LN.last,0,0);
+
+-- Rule R12 <CapsPers><InitialWord><CapsPers>
+create view CapsInitialCaps as
+select CombineSpans(CP1.word,CP2.word) as name
+from CapsPers CP1, InitialWord IW, CapsPers CP2
+where FollowsTok(CP1.word,IW.word,0,0) and FollowsTok(IW.word, CP2.word,0,0);
+
+
+-- Union matches of the form <Last><Comma><First>
+create view PersonLastFirstAll as
+(select P.name as person from LastCommaFirst P)
+union all 
+(select P.name as person from CapsCommaFirst P)
+union all 
+(select P.name as person from LastCommaCaps P); 
+
+
+-- To be refined using filter view DblNewLine (Y3)
+create view PersonLastFirstCand as
+select P.person as person 
+from PersonLastFirstAll P;   
+
+
+-- Union matches of the form <First><Last>
+create view PersonFirstLastAll as
+(select P.name as person from FirstLast P)
+union all 
+(select P.name as person from CapsLast P)
+union all 
+(select P.name as person from FirstCaps P)
+union all 
+(select P.name as person from SalCapsCaps P)
+union all 
+(select P.name as person from InitialLast P)
+union all 
+(select P.name as person from InitialFirst P)
+union all 
+(select P.name as person from FirstInitialLast  P)
+union all 
+(select P.name as person from CapsInitialCaps  P);
+
+
+-- To be refined using filter view DblNewLine (Y3)
+create view PersonFirstLastCand as
+select P.person as person 
+from PersonFirstLastAll P;
+
+-- Union matches having a single token
+create view PersonSingleToken as
+(select P.first as person from First P) 
+union all
+(select P.last as person from Last P)
+union all 
+(select P.name as person from SalCaps P);
+
+
+-- Union all Person matches
+create view PersonCand as
+(select P.person as person from PersonLastFirstCand P) 
+union all
+(select P.person as person from PersonFirstLastCand P)
+union all
+(select P.person as person from PersonSingleToken P);
+
+create dictionary PersonDict as
+(''
+);
+
+-- To be refined using simulate consolidate (Y1), 
+-- and filter views Organization, Address, EmailAddress, DateTime (Y4)
+create view PersonBeforeConsolidate as
+select P.person as person 
+from PersonCand P
+where Not(ContainsDict('PersonDict', P.person));
+
+
+-- Final consolidation
+create view Person as
+select P.person as person 
+from PersonBeforeConsolidate P
+consolidate on P.person using 'ContainedWithin'
+order by GetBegin(P.person); 
+
+
+
+--------------------------------------------------------
+--    OUTPUT SECTION
+--------------------------------------------------------
+
+output view Person;
+
+--------------------------------------------------------
+--    PHONE SECTION
+--------------------------------------------------------
+
+include 'phone.aql';

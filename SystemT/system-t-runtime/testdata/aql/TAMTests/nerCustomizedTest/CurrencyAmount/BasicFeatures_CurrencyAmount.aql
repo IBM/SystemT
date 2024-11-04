@@ -1,0 +1,32 @@
+module CurrencyAmount; 
+
+-------------------------------------------------------------------------------
+-- Import all dictionaries used in Currency Module, which is from FinancialDictionaries module
+-- Extract regex for simple Currency Symbol
+-------------------------------------------------------------------------------
+
+import module InputDocumentProcessor;
+import module FinancialDictionaries;
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText;
+import dictionary CurrencySuffixes from module FinancialDictionaries as CurrencySuffixes;
+import dictionary CurrencyDenominations from module FinancialDictionaries as CurrencyDenominations;
+
+require document with columns
+text Text;
+
+create view CurrencySymbol as
+extract
+  regex /[$\p{Sc}]/
+        on D.text as match
+from DocumentText D;
+
+create view CurrencySymbolSuffix as
+  extract dictionary 'CurrencySuffixes'
+  on D.text as match
+  from DocumentText D;
+  
+create view Denomination as
+  extract dictionary 'CurrencyDenominations'
+  on D.text as match
+  from DocumentText D;

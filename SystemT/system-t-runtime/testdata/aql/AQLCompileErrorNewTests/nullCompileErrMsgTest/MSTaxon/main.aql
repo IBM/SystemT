@@ -1,0 +1,66 @@
+module MSTaxon;
+ 
+-------------------------------------------------------------------------------
+-- Find pairs of (Noun phrase in Subject, Noun phrase in Sentiment object) 
+-- where the two noun phrases have matching heads. Also output Noun phrase pais 
+-- from documents for which we cound not find any pair with matching heads, 
+-- so that we can inspect them further. 
+-------------------------------------------------------------------------------
+
+-- Pairs of (Noun phrase in Subject, Noun phrase in Sentiment object)
+-- Cartesian product
+create view Combined as
+select NO.category, NO.subcategory, NO.subject, 
+	   NS.npTextLong as subjectNPLongest,
+	   NS.npText as subjectNP,
+       NS.npHeadNormalForm as subjectNPHead,
+       NO.npTextLong as objectNPLongest,
+       NO.npText as objectNP,
+       NO.npHeadNormalForm as objectNPHead,
+       NO.Object, NO.sentence
+from NounPhraseInSubject_Consolidated NS, NounPhraseInSentimentObject_Consolidated NO
+group by NO.category, NO.subcategory, NO.subject, 
+	   NS.npTextLong,
+	   NS.npText,
+       NS.npHeadNormalForm,
+       NO.npTextLong,
+       NO.npText,
+       NO.npHeadNormalForm,
+       NO.Object, NO.sentence;
+
+-- Pais for which the NP head in subject is equal to the NP head in sentiment object
+create view Combined_EqualNPHead as
+select C.*
+from Combined C
+where Equals(GetString(ToLowerCase(C.subjectNPHead)), GetString(ToLowerCase(C.objectNPHead)))
+consolidate on C.objectNP;
+
+-- Subtract NP pais with matching heads from the set of all NP pairs
+create view Combined_NotEqualNPHead as
+(select * from Combined)
+minus
+(select * from Combined_EqualNPHead);
+
+-- Determine whether we found at least one NP pair with matching heads
+create view HeadEquality_Exists as
+select case when Equals(C.cnt, 0) then 'FALSE' else 'TRUE' as exists
+from 
+	(
+		select Count(*) as cnt 
+		from Combined_EqualNPHead
+	) C;
+
+-- Records for which we did not find any NP pair with matching heads
+create view Combined_NotEqualNPHead_Project as
+select C.category, C.subcategory, C.subject, C.subjectNPLongest, C.objectNPLongest, C.objectNPHead
+from Combined_NotEqualNPHead C, HeadEquality_Exists E
+where Equals(GetText(E.exists), 'FALSE')
+group by C.category, C.subcategory, C.subject, C.subjectNPLongest, C.objectNPLongest, C.objectNPHead;
+
+
+
+
+
+  
+
+  

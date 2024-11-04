@@ -1,0 +1,38 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- contextTest.aql
+--
+-- Test of scalar functions for left and right context.
+-------------------------------------------------------------------------------
+
+-- Find first names, using an exhaustive dictionary.
+select D.match as name
+into FirstName
+from Dictionary('dictionaries/first.dict', Document.text) D
+where MatchesRegex(/\A[A-Z][a-z]*\Z/, D.match);
+
+-- Find the 20 characters to the left of the name.
+create view FirstNameLC as
+select F.name as name, LeftContext(F.name, 20) as context
+from FirstName F;
+
+-- Find the 10 characters to the right of the name.
+create view FirstNameRC as
+select F.name as name, RightContext(F.name, 10) as context
+from FirstName F;
+
+-- Repeat the previous two tests using token distances.
+create view FirstNameLCTok as
+select F.name as name, LeftContextTok(F.name, 6) as context
+from FirstName F;
+
+-- Find the 10 characters to the right of the name.
+create view FirstNameRCTok as
+select F.name as name, RightContextTok(F.name, 3) as context
+from FirstName F;
+
+output view FirstNameLC;
+output view FirstNameRC;
+output view FirstNameLCTok;
+output view FirstNameRCTok;

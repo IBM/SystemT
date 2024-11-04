@@ -1,0 +1,1061 @@
+--include 'CompanyEvents/preprocess.aql';
+--include 'CompanyEvents/preprocesswithdetag.aql';
+--include 'CompanyEvents/companyinfo.aql';
+
+
+-- ==================== Requirements ===================
+
+-- status: ANNOUNCED - references to a completed merger (e.g. “announced”, “confirm”)
+-- X merged with Y
+-- X and Y merge 
+-- X and Y completed merger
+
+
+--status: CANCELLED - references an indication of cancellation of a merger (e.g. “failure”, “terminated”)
+-- X terminated Merger Agreement with Y
+-- X terminated merger with Y 
+-- X terminated its merger of Y 
+
+
+-- status: PLANNED - references to a future merger (e.g, “will”, “plan”)
+-- X to Merge with Y
+-- X announced a merger agreement with Y
+-- X shareholders approve Y merger        
+-- X Stockholders Approve Merger Agreementdasd
+-- X Will Consider Merger With Y
+-- X merger with Y is scheduled to close later today
+-- X noted that the completion of the Dow/Kuwait partnership is not a closing condition for the proposed merger with Y ??
+-- X Higher on Expected Merger Closing  (don't identify, unless we have Y)
+
+        
+-- status: POSTPONED - references an indication of the delay of a merger (e.g. “postponed”, “detailed”)
+-- X and Y have agreed to extend the closing date for their pending merger
+-- X and Y Extend Merger Closing
+-- X Announces Outside Date for Merger Agreement Has Passed
+-- A announced that the merger among X and Y and Z was not consummated.
+
+
+-- status: UPDATED - references a update of a merger transaction (e.g. “updates”)
+-- X Updates Y Merger Transaction
+       
+               
+-- status: KNOWN - references to a past merger (e.g. “previous merger”)
+-- status: RUMORED - references a possible merger that has not yet confirmed (e.g., “would”, “could”, “shouldn’t”)
+
+
+
+
+
+  
+
+-- ================MERGE rules for SHORT TEXT========================
+  
+create view MergerClueShort as
+  extract dictionary 'merger/mergerclueshort.dict'
+  on A.match as clue
+  from ShortText A;
+  
+
+-- Match statements of the form "X merger with Y"
+create view MergerClueBetweenCompNames as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 SpanBetween(C1.match, C2.match) as betweencontext,
+  		 RightContext(C2.match, 20) as aftercontext,
+  		 CombineSpans(C1.match, C2.match) as match
+  from CompanyInfoShort C1, CompanyInfoShort C2, MergerClueShort M
+  where FollowsTok(C1.match, M.clue, 0, 5) and
+  	    FollowsTok(M.clue, C2.match, 0, 4);
+  	    
+-- make sure the match is within the same announcement
+create view MergerClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, A.match) as aftercontext,
+  	   M.match as match
+from MergerClueBetweenCompNames M, ShortText A
+where Contains(A.match, M.match);
+  	    
+-- Match statements of the form "X and Y merger"
+create view MergerClueAfterCompNames as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 SpanBetween(C2.match, M.clue) as betweencontext,
+  		 RightContext(M.clue, 20) as aftercontext,
+  		 CombineSpans(C1.match, M.clue) as match
+  from CompanyInfoShort C1, CompanyInfoShort C2, MergerClueShort M
+  where FollowsTok(C1.match, C2.match, 0, 5) and
+  	    FollowsTok(C2.match, M.clue, 0, 6);
+  	    
+-- make sure the match is within the same announcement
+create view MergerClueAfterCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, A.match) as aftercontext,
+  	   M.match as match
+from MergerClueAfterCompNames M, ShortText A
+where Contains(A.match, M.match);
+
+
+--
+  	    
+-- CANCELLED clues
+create view MergerCancelledClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'cancelled' as status,
+  	   M.match as match
+from MergerClueBetweenCompNamesShort M
+where Or(ContainsDict('merger/cancelledclueshort.dict', M.betweencontext),
+	  ContainsDict('merger/cancelledclueshort.dict', M.aftercontext));
+
+	  
+create view MergerCancelledClueAfterCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'cancelled' as status,
+  	   M.match as match
+from MergerClueAfterCompNamesShort M
+where Or(ContainsDict('merger/cancelledclueshort.dict', M.betweencontext),
+	  ContainsDict('merger/cancelledclueshort.dict', M.aftercontext));
+	  
+create view MergerCancelledShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.status as status, M.match as match
+	from MergerCancelledClueBetweenCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.status as status, M.match as match
+	from MergerCancelledClueAfterCompNamesShort M
+);
+
+	  
+-- ANNOUNCED clues  
+create view MergerAnnouncedClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'announced' as status,
+  	   M.match as match
+from MergerClueBetweenCompNamesShort M
+where Or(ContainsDict('merger/announcedclueshort.dict', M.betweencontext),
+	  ContainsDict('merger/announcedclueshort.dict', M.aftercontext));
+
+	  
+create view MergerAnnouncedClueAfterCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'announced' as status,
+  	   M.match as match
+from MergerClueAfterCompNamesShort M
+where Or(ContainsDict('merger/announcedclueshort.dict', M.match),
+	  ContainsDict('merger/announcedclueshort.dict', M.aftercontext));
+
+	  
+create view MergerAnnouncedShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.status as status, M.match as match
+	from MergerAnnouncedClueBetweenCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.status as status, M.match as match
+	from MergerAnnouncedClueAfterCompNamesShort M
+);	  
+	  
+-- PLANNED clues  
+create view MergerPlannedClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'planned' as status,
+  	   M.match as match
+from MergerClueBetweenCompNamesShort M
+where Or(ContainsDict('merger/plannedclueshort.dict', M.betweencontext),
+	  ContainsDict('merger/plannedclueshort.dict', M.aftercontext));
+
+	  
+create view MergerPlannedClueAfterCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'planned' as status,
+  	   M.match as match
+from MergerClueAfterCompNamesShort M
+where Or(ContainsDict('merger/plannedclueshort.dict', M.match),
+	  ContainsDict('merger/plannedclueshort.dict', M.aftercontext));	
+	  
+
+create view MergerPlannedShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.status as status, M.match as match
+	from MergerPlannedClueBetweenCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.status as status, M.match as match
+	from MergerPlannedClueAfterCompNamesShort M
+);	  
+	  
+	  
+-- POSTPONED clues  
+create view MergerPostponedClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'postponed' as status,
+  	   M.match as match
+from MergerClueBetweenCompNamesShort M
+where Or(ContainsDict('merger/postponedclueshort.dict', M.betweencontext),
+	  ContainsDict('merger/postponedclueshort.dict', M.aftercontext));
+
+	  
+create view MergerPostponedClueAfterCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'postponed' as status,
+  	   M.match as match
+from MergerClueAfterCompNamesShort M
+where Or(ContainsDict('merger/postponedclueshort.dict', M.betweencontext),
+	  ContainsDict('merger/postponedclueshort.dict', M.aftercontext));
+	  
+
+create view MergerPostponedShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.status as status, M.match as match
+	from MergerPostponedClueBetweenCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.status as status, M.match as match
+	from MergerPostponedClueAfterCompNamesShort M
+);	  
+	  
+	  
+-- UPDATED clues  
+create view MergerUpdatedClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'updated' as status,
+  	   M.match as match
+from MergerClueBetweenCompNamesShort M
+where Or(ContainsDict('merger/updatedclueshort.dict', M.betweencontext),
+	  ContainsDict('merger/updatedclueshort.dict', M.aftercontext));
+
+	  
+create view MergerUpdatedClueAfterCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'updated' as status,
+  	   M.match as match
+from MergerClueAfterCompNamesShort M
+where Or(ContainsDict('merger/updatedclueshort.dict', M.match),
+	  ContainsDict('merger/updatedclueshort.dict', M.aftercontext)); 
+	  
+
+create view MergerUpdatedShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.status as status, M.match as match
+	from MergerUpdatedClueBetweenCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.status as status, M.match as match
+	from MergerUpdatedClueAfterCompNamesShort M
+);		  
+
+
+
+--Mergers with known status
+
+create view MergerKnownStatusShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.status as status, M.match as match
+	from MergerCancelledShort M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.status as status, M.match as match
+	from MergerAnnouncedShort M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.status as status, M.match as match
+	from MergerPlannedShort M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.status as status, M.match as match
+	from MergerPostponedShort M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.status as status, M.match as match
+	from MergerUpdatedShort M
+);
+
+
+--all mergers with no status info
+create view MergerAllShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.match as match
+	from MergerClueBetweenCompNamesShort M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.match as match
+	from MergerClueAfterCompNamesShort M
+);
+
+
+-- Mergers with unknown status
+create view MergerUnknownStatusShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	   	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		   M.match as match
+	from MergerAllShort M
+)
+minus
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		   M.match as match
+	from MergerKnownStatusShort M
+);  
+
+
+
+--all mergers with status info
+create view MergerWithStatusShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	   M.status as status, M.match as match
+from
+(
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.status as status, M.match as match
+		from MergerKnownStatusShort M
+	)
+	union all
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   '' as status, M.match as match
+		from MergerUnknownStatusShort M
+	)
+) M
+order by GetBegin(M.match);
+
+
+
+
+
+-- ================General MERGE rules for the body of text =========================
+
+
+-- Match statements of the form "X merger with Y"
+
+create view MergerClueBetweenLong as
+select S.clue as clue from
+(
+  extract dictionary 'merger/mergercluebetweenlong.dict'
+  on P.match as clue
+  from LongText P
+) S
+consolidate on S.clue;
+  
+  
+create view MergerClueBetweenCompNamesTmp as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 SpanBetween(C1.match, C2.match) as betweencontext,
+  		 RightContext(C2.match, 50) as aftercontext,
+  		 CombineSpans(C1.match, C2.match) as match
+  from CompanyInfoLong C1, CompanyInfoLong C2, MergerClueBetweenLong M
+  where FollowsTok(C1.match, M.clue, 0, 20) and
+  	    FollowsTok(M.clue, C2.match, 0, 4) and
+  	    Not(Equals(GetText(C1.companyname),GetText(C2.companyname))) and
+  	    Not(Contains(C1.match, M.clue)) and Not(Contains(C2.match, M.clue));
+  	    
+-- make sure the match is within the same sentence
+create view MergerClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   '' as exchange3, '' as ticker3, '' as company3,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, S.match) as aftercontext,
+  	   M.match as match
+from MergerClueBetweenCompNamesTmp M, LongText S
+where Contains(S.match, M.match);
+
+
+    
+-- Match statements of the form "X and Y merger"
+
+create view MergerClueAfterLong as
+select S.clue as clue from
+(
+  extract dictionary 'merger/mergerclueafterlong.dict'
+  on P.match as clue
+  from LongText P
+) S
+consolidate on S.clue;
+
+  
+create view MergerClueAfterCompNamesTmp as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 SpanBetween(C2.match, M.clue) as betweencontext,
+  		 RightContext(M.clue, 50) as aftercontext,
+  		 CombineSpans(C1.match, M.clue) as match
+  from CompanyInfoLong C1, CompanyInfoLong C2, MergerClueAfterLong M
+  where FollowsTok(C1.match, C2.match, 0, 20) and
+  	    FollowsTok(C2.match, M.clue, 0, 20) and
+  	    Not(Contains(C1.match, M.clue)) and Not(Contains(C2.match, M.clue));
+  	    
+-- make sure the match is within the same sentence
+create view MergerClueAfterCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   '' as exchange3, '' as ticker3, '' as company3,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, S.match) as aftercontext,
+  	   M.match as match
+from MergerClueAfterCompNamesTmp M, LongText S
+where Contains(S.match, M.match);
+
+
+-- Match statements of the form "merger of X and Y"
+
+create view MergerClueBeforeLong as
+select S.clue as clue from
+(
+  extract dictionary 'merger/mergercluebeforelong.dict'
+  on P.match as clue
+  from LongText P
+) S
+consolidate on S.clue;
+
+
+-- collect all clues, for debugging purposes
+create view MergerClueAllLong as
+(select 'before' as type, M.clue as clue from MergerClueBeforeLong M)
+union all
+(select 'between' as type, M.clue as clue from MergerClueAfterLong M)
+union all
+(select 'after' as type, M.clue as clue from MergerClueAfterLong M);
+
+
+-- rule for merger between 2 companies
+create view MergerClueBefore2CompNamesTmp as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 LeftContext(M.clue, 50) as beforecontext,
+  		 SpanBetween(M.clue, C2.match) as betweencontext,
+  		 RightContext(C2.match, 70) as aftercontext,
+  		 CombineSpans(M.clue, C2.match) as match
+  from CompanyInfoLong C1, CompanyInfoLong C2, MergerClueBeforeLong M
+  where FollowsTok(M.clue, C1.match, 0, 10) and
+  	    FollowsTok(C1.match, C2.match, 0, 15) and
+  	    Not(Contains(C1.match, M.clue)) and Not(Contains(C2.match, M.clue));
+  	    
+-- make sure the match is within the same sentence
+create view MergerClueBefore2CompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   '' as exchange3, '' as ticker3, '' as company3,
+  	   SpanIntersection(M.beforecontext, S.match) as beforecontext,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, S.match) as aftercontext,
+  	   M.match as match
+from MergerClueBefore2CompNamesTmp M, LongText S
+where Contains(S.match, M.match);
+
+-- rule for merger between 3 companies
+create view MergerClueBefore3CompNamesTmp as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 C3.exchange as exchange3, C3.ticker as ticker3, C3.companyname as company3,
+  		 LeftContext(M.clue, 50) as beforecontext,
+  		 SpanBetween(M.clue, C3.match) as betweencontext,
+  		 RightContext(C3.match, 70) as aftercontext,
+  		 CombineSpans(M.clue, C3.match) as match
+  from CompanyInfoLong C1, CompanyInfoLong C2, CompanyInfoLong C3, MergerClueBeforeLong M
+  where FollowsTok(M.clue, C1.match, 0, 10) and
+  	    FollowsTok(C1.match, C2.match, 0, 15) and
+  	    FollowsTok(C2.match, C3.match, 0, 15) and
+  	    Not(Contains(C1.match, M.clue)) and Not(Contains(C2.match, M.clue)) and Not(Contains(C3.match, M.clue));
+  	    
+-- make sure the match is within the same sentence
+create view MergerClueBefore3CompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   SpanIntersection(M.beforecontext, S.match) as beforecontext,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, S.match) as aftercontext,
+  	   M.match as match
+from MergerClueBefore3CompNamesTmp M, LongText S
+where Contains(S.match, M.match);
+
+--consolidate the matches for 2 and 3 companies
+create view MergerClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	   M.beforecontext as beforecontext,
+	   M.betweencontext as betweencontext, 
+	   M.aftercontext as aftercontext,
+	   M.match as match
+from
+(
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.beforecontext as beforecontext,
+		  	   M.betweencontext as betweencontext, 
+		  	   M.aftercontext as aftercontext,
+		  	   M.match as match
+		from MergerClueBefore3CompNamesLong M
+	)
+	union all
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.beforecontext as beforecontext,
+		  	   M.betweencontext as betweencontext, 
+		  	   M.aftercontext as aftercontext,
+		  	   M.match as match
+		from MergerClueBefore2CompNamesLong M
+	)
+) M
+consolidate on M.match;
+
+
+-- CANCELLED clues
+create view MergerCancelledClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'cancelled' as status,
+  	   M.match as match
+from MergerClueBetweenCompNamesLong M
+where Or(ContainsDict('merger/cancelledclueshort.dict', M.betweencontext),
+	  ContainsDict('merger/cancelledclueshort.dict', M.aftercontext));
+
+	  
+create view MergerCancelledClueAfterCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'cancelled' as status,
+  	   M.match as match
+from MergerClueAfterCompNamesLong M
+where Or(ContainsDict('merger/cancelledclueshort.dict', M.betweencontext),
+	  ContainsDict('merger/cancelledclueshort.dict', M.aftercontext));
+	  
+	  
+create view MergerCancelledClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'cancelled' as status,
+  	   M.match as match
+from MergerClueBeforeCompNamesLong M
+where Or(ContainsDict('merger/cancelledclueshort.dict', M.betweencontext),
+	     ContainsDict('merger/cancelledclueshort.dict', M.aftercontext),
+	     ContainsDict('merger/cancelledclueshort.dict', M.beforecontext));
+	  
+create view MergerCancelledLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from MergerCancelledClueBetweenCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from MergerCancelledClueAfterCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from MergerCancelledClueBeforeCompNamesLong M
+);
+
+	  
+-- ANNOUNCED clues  
+create view MergerAnnouncedClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'announced' as status,
+  	   M.match as match
+from MergerClueBetweenCompNamesLong M
+where Or(ContainsDict('merger/announcedclueshort.dict', M.betweencontext),
+	  ContainsDict('merger/announcedclueshort.dict', M.aftercontext));
+
+	  
+create view MergerAnnouncedClueAfterCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'announced' as status,
+  	   M.match as match
+from MergerClueAfterCompNamesLong M
+where Or(ContainsDict('merger/announcedclueshort.dict', M.match),
+	  ContainsDict('merger/announcedclueshort.dict', M.aftercontext));
+	  
+
+create view MergerAnnouncedClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'announced' as status,
+  	   M.match as match
+from MergerClueBeforeCompNamesLong M
+where Or(ContainsDict('merger/announcedclueshort.dict', M.betweencontext),
+	     ContainsDict('merger/announcedclueshort.dict', M.aftercontext),
+	     ContainsDict('merger/announcedclueshort.dict', M.beforecontext));	  
+
+	  
+create view MergerAnnouncedLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	       M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from MergerAnnouncedClueBetweenCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	       M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from MergerAnnouncedClueAfterCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from MergerAnnouncedClueBeforeCompNamesLong M
+);	  
+	  
+-- PLANNED clues  
+create view MergerPlannedClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'planned' as status,
+  	   M.match as match
+from MergerClueBetweenCompNamesLong M
+where Or(ContainsDict('merger/plannedclueshort.dict', M.betweencontext),
+	  ContainsDict('merger/plannedclueshort.dict', M.aftercontext));
+
+	  
+create view MergerPlannedClueAfterCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'planned' as status,
+  	   M.match as match
+from MergerClueAfterCompNamesLong M
+where Or(ContainsDict('merger/plannedclueshort.dict', M.match),
+	  ContainsDict('merger/plannedclueshort.dict', M.aftercontext));	
+
+	  
+create view MergerPlannedClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'planned' as status,
+  	   M.match as match
+from MergerClueBeforeCompNamesLong M
+where Or(ContainsDict('merger/plannedclueshort.dict', M.betweencontext),
+	     ContainsDict('merger/plannedclueshort.dict', M.aftercontext),
+	     ContainsDict('merger/plannedclueshort.dict', M.beforecontext));	 
+	     
+
+create view MergerPlannedLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from MergerPlannedClueBetweenCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from MergerPlannedClueAfterCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from MergerPlannedClueBeforeCompNamesLong M
+);	  
+	  
+	  
+-- POSTPONED clues  
+create view MergerPostponedClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'postponed' as status,
+  	   M.match as match
+from MergerClueBetweenCompNamesLong M
+where Or(ContainsDict('merger/postponedclueshort.dict', M.betweencontext),
+	  ContainsDict('merger/postponedclueshort.dict', M.aftercontext));
+
+	  
+create view MergerPostponedClueAfterCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'postponed' as status,
+  	   M.match as match
+from MergerClueAfterCompNamesLong M
+where Or(ContainsDict('merger/postponedclueshort.dict', M.betweencontext),
+	  ContainsDict('merger/postponedclueshort.dict', M.aftercontext));
+	  
+	  
+create view MergerPostponedClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'postponed' as status,
+  	   M.match as match
+from MergerClueBeforeCompNamesLong M
+where Or(ContainsDict('merger/postponedclueshort.dict', M.betweencontext),
+	     ContainsDict('merger/postponedclueshort.dict', M.aftercontext),
+	     ContainsDict('merger/postponedclueshort.dict', M.beforecontext));	
+	  
+
+create view MergerPostponedLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from MergerPostponedClueBetweenCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from MergerPostponedClueAfterCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from MergerPostponedClueBeforeCompNamesLong M
+);	  
+	  
+	  
+-- UPDATED clues  
+create view MergerUpdatedClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'updated' as status,
+  	   M.match as match
+from MergerClueBetweenCompNamesLong M
+where Or(ContainsDict('merger/updatedclueshort.dict', M.betweencontext),
+	  ContainsDict('merger/updatedclueshort.dict', M.aftercontext));
+
+	  
+create view MergerUpdatedClueAfterCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'updated' as status,
+  	   M.match as match
+from MergerClueAfterCompNamesLong M
+where Or(ContainsDict('merger/updatedclueshort.dict', M.match),
+	  ContainsDict('merger/updatedclueshort.dict', M.aftercontext)); 
+	  
+
+create view MergerUpdatedClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'updated' as status,
+  	   M.match as match
+from MergerClueBeforeCompNamesLong M
+where Or(ContainsDict('merger/updatedclueshort.dict', M.betweencontext),
+	     ContainsDict('merger/updatedclueshort.dict', M.aftercontext),
+	     ContainsDict('merger/updatedclueshort.dict', M.beforecontext));		  
+	  
+	  
+create view MergerUpdatedLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from MergerUpdatedClueBetweenCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from MergerUpdatedClueAfterCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from MergerUpdatedClueBeforeCompNamesLong M
+);		  
+
+
+
+--Mergers with known status
+
+create view MergerKnownStatusLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from MergerCancelledLong M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from MergerAnnouncedLong M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from MergerPlannedLong M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from MergerPostponedLong M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from MergerUpdatedLong M
+);
+
+
+--all mergers with no status info
+create view MergerAllLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.match as match
+from
+(
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.match as match
+		from MergerClueBetweenCompNamesLong M
+	)
+	union all
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.match as match
+		from MergerClueAfterCompNamesLong M
+	)
+	union all
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.match as match
+		from MergerClueBeforeCompNamesLong M
+	)
+) M
+consolidate on M.match;
+
+
+-- Mergers with unknown status
+create view MergerUnknownStatusLong as
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		   	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+			   M.match as match
+		from MergerAllLong M
+	)
+	minus
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+			   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+			   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+			   M.match as match
+		from MergerKnownStatusLong M
+	);  
+
+
+
+--all mergers with status info
+create view MergerWithStatusLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+from
+(
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.status as status, M.match as match
+		from MergerKnownStatusLong M
+	)
+	union all
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   '' as status, M.match as match
+		from MergerUnknownStatusLong M
+	)
+) M
+consolidate on M.match
+order by GetBegin(M.match);
+
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Output section <<<<<<<<<<<<<<<<
+-- ===========================================================================		
+
+
+/*
+output view MergerClueShort;
+output view MergerClueBetweenCompNamesShort;
+output view MergerClueAfterCompNamesShort;
+output view MergerCancelledClueBetweenCompNamesShort;
+output view MergerCancelledClueAfterCompNamesShort;
+output view MergerAnnouncedClueBetweenCompNamesShort;
+output view MergerAnnouncedClueAfterCompNamesShort;
+output view MergerPlannedClueBetweenCompNamesShort;
+output view MergerPlannedClueAfterCompNamesShort;
+output view MergerPostponedClueBetweenCompNamesShort;
+output view MergerPostponedClueAfterCompNamesShort;
+output view MergerUpdatedClueBetweenCompNamesShort;
+output view MergerUpdatedClueAfterCompNamesShort;
+
+output view MergerWithStatusShort;
+*/
+
+/*
+output view MergerClueAllLong;
+output view MergerClueBetweenLong;
+output view MergerClueBetweenCompNamesTmp;
+output view MergerClueBetweenCompNamesLong;
+output view MergerClueAfterLong;
+output view MergerClueAfterCompNamesTmp;
+output view MergerClueAfterCompNamesLong;
+output view MergerClueBeforeLong;
+output view MergerClueBefore2CompNamesTmp;
+output view MergerClueBefore2CompNamesLong;
+output view MergerClueBefore3CompNamesTmp;
+output view MergerClueBefore3CompNamesLong;
+output view MergerClueBeforeCompNamesLong;
+output view MergerCancelledClueBetweenCompNamesLong;
+output view MergerCancelledClueAfterCompNamesLong;
+output view MergerCancelledClueBeforeCompNamesLong;
+output view MergerAnnouncedClueBetweenCompNamesLong;
+output view MergerAnnouncedClueAfterCompNamesLong;
+output view MergerAnnouncedClueBeforeCompNamesLong;
+output view MergerPlannedClueBetweenCompNamesLong;
+output view MergerPlannedClueAfterCompNamesLong;
+output view MergerPlannedClueBeforeCompNamesLong;
+output view MergerPostponedClueBetweenCompNamesLong;
+output view MergerPostponedClueAfterCompNamesLong;
+output view MergerPostponedClueBeforeCompNamesLong;
+output view MergerUpdatedClueBetweenCompNamesLong;
+output view MergerUpdatedClueAfterCompNamesLong;
+output view MergerUpdatedClueBeforeCompNamesLong;
+output view MergerAllLong;
+output view MergerKnownStatusLong;
+output view MergerUnknownStatusLong;
+
+output view MergerWithStatusLong;
+*/

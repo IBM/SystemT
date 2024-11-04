@@ -1,0 +1,158 @@
+module genericModule;
+
+
+create view FirstName as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'firstnames.dict'
+    on D.text as name
+  from Document D
+  having MatchesRegex(/\A[A-Z][a-z]*\Z/, name);
+
+output view FirstName;
+
+
+
+create view PhoneNumber as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regexes /\+?\([1-9]\d{2}\)\d{3}-\d{4}/
+    and /\+?[Xx]\.?\d{4,5}/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as num
+  from Document D;
+
+output view PhoneNumber;
+
+
+
+create view PersonPhoneAll as
+  select  name.name as person,
+          phone.num as phone,
+          CombineSpans(name.name, phone.num) as personphone,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          name.__auto__id as FirstName_____sep_____name____id,
+          phone.__auto__id as PhoneNumber_____sep_____phone____id
+  from  FirstName name,
+        PhoneNumber phone
+  where Follows(name.name, phone.num, 0, 40);
+
+output view PersonPhoneAll;
+
+
+
+create view Union1 as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__1__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__1__TempOp__1 Op);
+
+output view Union1;
+
+
+
+create view Union2 as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__2__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__2__TempOp__1 Op);
+
+output view Union2;
+
+
+
+create view Union3 as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__3__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__3__TempOp__1 Op);
+
+output view Union3;
+
+
+
+create view __Union__1__TempOp__0 as
+  select  F.name as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          F.__auto__id as FirstName_____sep_____F____id
+  from  FirstName F;
+
+output view __Union__1__TempOp__0;
+
+create view __Union__1__TempOp__1 as
+  select  P.num as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PhoneNumber_____sep_____P____id
+  from  PhoneNumber P;
+
+output view __Union__1__TempOp__1;
+
+create view __Union__2__TempOp__0 as
+  select  F.name as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          F.__auto__id as FirstName_____sep_____F____id
+  from  FirstName F;
+
+output view __Union__2__TempOp__0;
+
+create view __Union__2__TempOp__1 as
+  select  P.person as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonPhoneAll_____sep_____P____id
+  from  PersonPhoneAll P;
+
+output view __Union__2__TempOp__1;
+
+create view __Union__3__TempOp__0 as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'firstnames.dict'
+    on D.text as match
+  from Document D
+  having MatchesRegex(/\A[A-Z][a-z]*\Z/, match);
+
+output view __Union__3__TempOp__0;
+
+create view __Union__3__TempOp__1 as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regexes /\+?\([1-9]\d{2}\)\d{3}-\d{4}/
+    and /\+?[Xx]\.?\d{4,5}/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as match
+  from Document D;
+
+output view __Union__3__TempOp__1;
+

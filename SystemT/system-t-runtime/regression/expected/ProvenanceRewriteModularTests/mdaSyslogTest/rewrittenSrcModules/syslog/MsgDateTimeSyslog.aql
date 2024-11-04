@@ -1,0 +1,65 @@
+module syslog;
+
+
+import view DateTimeOutput from module common;
+
+
+import view LogDatetimeOutput from module common;
+
+
+create view MsgDateTimeOutput as
+  select  Op.span as span,
+          Op.text as text,
+          Op.field_type as field_type,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__44__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__44__TempOp__1 Op,
+        __Minus__44__Temp __t
+  where Equals(Op.span, __t.span)
+     and Equals(Op.text, __t.text)
+     and Equals(Op.field_type, __t.field_type);
+
+output view MsgDateTimeOutput;
+
+create view __Minus__44__Temp as
+  select  __t.span as span,
+          __t.text as text,
+          __t.field_type as field_type
+  from  
+    ((select  Op.span as span,
+              Op.text as text,
+              Op.field_type as field_type
+      from  __Minus__44__TempOp__1 Op)
+    minus
+    (select  Op.span as span,
+              Op.text as text,
+              Op.field_type as field_type
+      from  __Minus__44__TempOp__2 Op)
+    ) __t
+  group by __t.span, __t.text, __t.field_type;
+
+output view __Minus__44__Temp;
+
+create view __Minus__44__TempOp__1 as
+  select  dto.span as span,
+          GetString(dto.span) as text,
+          GetString('MsgDateTime') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          dto.__auto__id as "common.DateTimeOutput_____sep_____dto____id"
+  from  "common.DateTimeOutput" dto;
+
+output view __Minus__44__TempOp__1;
+
+create view __Minus__44__TempOp__2 as
+  select  ldto.span as span,
+          GetString(ldto.span) as text,
+          GetString('MsgDateTime') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          ldto.__auto__id as "common.LogDatetimeOutput_____sep_____ldto____id"
+  from  "common.LogDatetimeOutput" ldto;
+
+output view __Minus__44__TempOp__2;
+

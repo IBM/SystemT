@@ -1,0 +1,168 @@
+module datapower;
+
+import view IPAddressOutput from module common;
+import view DateTimeOutput from module common;
+
+-------------------------------------------------------------------------------
+-- ConnReceived.aql
+--
+-- Rules for identifying points in DataPower logs where a DP transaction
+-- was started because DataPower was the target of a web services call.
+--
+-- Author: Fred Reiss
+------------------------------------------------------------------------------
+-- create facet
+create function getConnReceivedCategory(val1 String, val2 String, val3 String, val4 String)
+	return String
+	external_name 'logAAqlUDFs.jar:com.ibm.logparse.aql.Util!getCategory'
+	language java
+	deterministic
+	return null on null input;
+	
+create function getConnRepliedCategory(val1 String, val2 String,  val3 String,  val4 String)
+	return String
+	external_name 'logAAqlUDFs.jar:com.ibm.logparse.aql.Util!getCategory'
+	language java
+	deterministic
+	return null on null input;
+	
+-- Dictionary of values allowed for the method field of an HTTP request
+create dictionary httpMethodDict as 
+('OPTIONS', 'GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'TRACE', 'CONNECT');
+
+-- Identify strings that look like file/directory paths
+create view pathStr as 
+extract regex /\/|(\/[\p{Alnum}_%\.\-]+)+/ on D.text as path
+from Document D;
+
+--output view pathStr;
+
+-- Identify strings that look like URLs for the purpose of the views in
+-- this file.  In particular, we also allow the (invalid) URL 
+-- "http:///" for this file
+create view urlStr as
+(select U.URL_Span as url from common.URLAllInterim U)
+	union all 
+(extract regex /http:\/\/\// on D.text as url from Document D);
+
+--output view urlStr;
+
+
+-- Identify strings that look like HTTP access methods
+create view methodStr as
+extract dictionary httpMethodDict on D.text as method from Document D;
+
+
+-- Look for the pattern "Received HTTP/1.1 <method> for <path> from <host>
+create view receivedHTTP as
+extract pattern 
+	'Received HTTP/1.1' (<M.method>) 'for' (<P.path>) 'from' (<IP.span>)
+return 	
+	group 0 as span
+	and group 1 as method
+	and group 2 as path
+	and group 3 as host
+from 
+	methodStr M,
+	pathStr P,
+	common.IPAddressOutput IP;
+
+-- Look for an NCSA HTTP log record, indicating that the DataPower server
+-- has finished processing an incoming connection
+-- Format of an NCSA HTTP record spans 2 lines; for example:
+-- 	 ... 172.21.162.5 -  -
+--        [28/Mar/2012:11:51:56-07:00] "GET  / HTTP$http_version" 200 0 "http:///" "" GET  /
+-- NOTES: 
+--   * The last two parts ("GET /") are redundant, so we don't look for them.
+--   * In our current set of DataPower logs, the string "$http_version" is
+--     actually there verbatim.
+--   * Sometimes the remote host's IP address is omitted
+--   * Sometimes the invalid URL "http:///" appears in these records
+create view ncsaHTTP as
+extract pattern
+	'"' (<M.method>) (<P.path>) 'HTTP$http_version"' /\d{3}/ /\d{1,6}/ '"' <U.url> --'"'
+return 
+	group 0 as span
+	and group 1 as method
+	and group 2 as path
+from 
+	methodStr M,
+	pathStr P,
+	urlStr U;
+	
+--output view ncsaHTTP;
+
+
+-- The IP address associated with an HTTP record is found to the left; the entire 
+-- sequence of text spans 2 lines and goes like this:
+-- 	 ... 172.21.162.5 -  -
+--        [28/Mar/2012:11:51:56-07:00] "GET  / HTTP$http_version" 200 0 "http:///" "" GET  /
+-- Look for the stuff to the left.
+create view ncsaHTTPContext as
+extract pattern
+	(<IP.span>)? '- - [' -- Carriage return in here is just another kind of whitespace
+		<D.span>  ']'
+return
+	group 0 as span
+	and group 1 as host
+from 
+	common.IPAddressOutput IP,
+	common.DateTimeOutput D
+consolidate on span;
+
+--output view ncsaHTTPContext;
+
+-- Combine the HTTP logs with their context so that we have both the path and 
+-- the remote host (if available)
+create view repliedHTTP as 
+select 
+	CombineSpans(C.span, N.span) as span,
+	C.host as host,
+	N.method as method,
+	N.path as path
+from ncsaHTTPContext C, ncsaHTTP N
+where FollowsTok(C.span, N.span, 0, 0);
+
+--output view repliedHTTP;
+	
+-- Generate output in a manner consistent with other views in the 
+-- DataPower AQL stack
+create view ConnReceivedOutput as 
+    select R.span as span, 
+    	GetText(R.span) as text,
+    	GetText(R.method) as method, 
+    	GetText(R.path) as path,
+		GetText(R.host) as host,
+    	'ConnReceived' as field_type,
+    	getConnReceivedCategory(GetText(R.span), GetText(R.path), GetText(R.host), GetText(R.method) ) as category
+    	
+    from receivedHTTP R;
+   
+output view ConnReceivedOutput;
+
+export view ConnReceivedOutput;
+    
+create view ConnRepliedInterim as 
+    select R.span as span, 
+    	GetText(R.span) as text,
+    	GetText(R.method) as method, 
+    	GetText(R.path) as path,
+    	-- Host can be null
+    	case 
+    		when NotNull(R.host) then GetText(R.host) 
+    		else '' -- Currently no way to return null Text in a select list
+    			as host,
+    	'ConnReplied' as field_type
+    from repliedHTTP R;
+
+create view ConnRepliedOutput as 
+	select R.span, 
+    	R.text,
+    	R.method, 
+    	R.path,
+    	R.host,
+    	'ConnReplied' as field_type,
+    	getConnRepliedCategory(GetText(R.span), GetText(R.path), GetText(R.host), GetText(R.method)) as category
+    from ConnRepliedInterim R;
+
+export view ConnRepliedOutput;

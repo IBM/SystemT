@@ -1,0 +1,29 @@
+module Town;
+
+import view CapsPlace from module Linguistics as CapsPlace;
+
+create view TownCandidates1 as
+select C.match as match
+from TownLeftClue CC,
+     CapsPlace C	 
+where FollowsTok(CC.match, C.match, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(CC.match, C.match)))
+  and Not(MatchesRegex(/\s*\p{L}\p{M}*.*/, RightContext(C.match, 5)));
+  
+create view TownCandidates2 as
+select CombineSpans(C.match, RC.match) as match
+from CapsPlace C,
+     TownRightClue RC
+where FollowsTok(C.match, RC.match, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(C.match, RC.match)));
+
+create view TownCandidates as
+	(select C.* from TownCandidates1 C)
+	union all
+	(select C.* from TownCandidates2 C);
+	
+create view TownConsolidated as
+select C.match as match
+from TownCandidates C
+consolidate on C.match;
+	

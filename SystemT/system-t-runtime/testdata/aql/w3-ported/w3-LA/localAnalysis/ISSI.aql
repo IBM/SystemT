@@ -1,0 +1,28 @@
+-------------------------------------------------------------------------------
+-- ISSI.aql
+--
+-- Analytics specific to ISSI pages.
+--
+-- This file produces the contents of the following local analysis result
+-- tables:
+--      a. ISSI
+--
+-- Author: Laura Chiticariu <chiti@us.ibm.com>
+-------------------------------------------------------------------------------
+
+-- Extract platform clues from Input tags
+create view ISSIPlatformClue as 
+select toUpperCase(I.name) as name
+from InputTag I
+where MatchesDict('ISSIPlatformDict', I.name);
+
+-- Obtain the normalized platform name
+create view ISSIPlatform as
+select M.label as platform
+from ISSIPlatformClue I, ISSIPlatformMappingTable M
+where Equals(GetText(I.name), GetText(M.str));
+
+-- Final ISSI output
+create view ISSI as
+select I.platform as platform
+from ISSIPlatform I;

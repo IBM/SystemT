@@ -1,0 +1,197 @@
+
+-- assign part of speech tags to every single token separately.
+create view POSTagCC as
+extract parts_of_speech 'CC' with language 'en'   
+   on D.text as cc
+   from Doc D;
+
+-- prepositions or subordinating conjunctions
+create view POSTagIN as
+extract parts_of_speech 'IN' with language 'en'   
+   on D.text as prep -- !
+   from Doc D;
+output view POSTagIN;
+-- particles
+create view POSTagRP as
+extract parts_of_speech 'RP' with language 'en'   
+   on D.text as rp
+   from Doc D;
+output view POSTagRP;
+
+create view POSTagTO as
+extract parts_of_speech 'TO' with language 'en'   
+   on D.text as to
+   from Doc D;
+
+-- personal pronoun
+create view POSTagPP as
+extract parts_of_speech 'PP' with language 'en'   
+   on D.text as pp
+   from Doc D;
+
+-- possessive pronoun
+create view POSTagPRP as
+extract parts_of_speech 'PRP$' with language 'en'   
+   on D.text as prp
+   from Doc D;
+--output view POSTagPRP;
+
+-- determiners
+create view POSTagDT as
+ extract parts_of_speech 'DT' with language 'en'   
+    on D.text as dt
+    from Doc D;
+--output view POSTagDT;
+
+--aggregate determiner-like tags
+create view POSTagDTlike as
+   (select N.prp as span, 'PossPron' as pos, 'PRP$' as detailedPos from POSTagPRP N)
+   union all
+   (select N.dt as span, 'Determiner' as pos, 'DT' as detailedPos from POSTagDT N);
+--output view POSTagDTlike;
+
+-- nouns
+create view POSTagNN as -- singluar or mass
+extract parts_of_speech 'NN' with language 'en'   
+   on D.text as nn
+   from Doc D;
+create view POSTagNNS as -- noun plural
+extract parts_of_speech 'NNS' with language 'en'   
+   on D.text as nn
+   from Doc D;
+--output view POSTagNNS;
+create view POSTagNNP as -- proper noun, singular
+extract parts_of_speech 'NNP' with language 'en'   
+   on D.text as nn
+   from Doc D;
+create view POSTagNNPS as -- proper noun, plural
+extract parts_of_speech 'NNPS' with language 'en'   
+   on D.text as nn
+   from Doc D;
+-- all nouns
+create view AllNouns as
+  (select N.nn as span, 'Noun' as pos, 'NN' as detailedPos from POSTagNN N)
+  union all
+  (select N.nn as span, 'Noun' as pos, 'NNS' as detailedPos from POSTagNNS N)
+  union all
+  (select N.nn as span, 'Noun' as pos, 'NNP' as detailedPos from POSTagNNP N)
+   union all
+  (select N.nn as span, 'Noun' as pos, 'NNPS' as detailedPos from POSTagNNPS N);
+
+
+
+
+
+-- adjectives
+create view POSTagJJ as -- adj
+ extract parts_of_speech 'JJ' with language 'en'   
+    on D.text as jj
+    from Doc D;
+create view POSTagJJR as -- comparative
+ extract parts_of_speech 'JJR' with language 'en'   
+    on D.text as jj
+    from Doc D;
+create view POSTagJJS as -- superlative
+ extract parts_of_speech 'JJS' with language 'en'   
+    on D.text as jj
+    from Doc D;
+create view AllAdjectives as
+  (select A.jj as span, 'Adjective' as pos, 'JJ' as detailedPos from POSTagJJ A)
+  union all
+  (select A.jj as span, 'Adjective' as pos, 'JJR' as detailedPos from POSTagJJR A)
+  union all
+  (select A.jj as span, 'Adjective' as pos, 'JJS' as detailedPos from POSTagJJS A);
+
+
+-- verbs
+create view POSTagVB as -- verb, base form
+  extract parts_of_speech 'VB' with language 'en'   
+     on D.text as vb
+     from Doc D;
+create view POSTagVBD as -- verb, past tense
+  extract parts_of_speech 'VBD' with language 'en'   
+     on D.text as vb
+     from Doc D;
+create view POSTagVBG as -- verb, gerund or present participle
+  extract parts_of_speech 'VBG' with language 'en'   
+     on D.text as vb
+     from Doc D;
+create view POSTagVBN as -- verb, past participle
+  extract parts_of_speech 'VBN' with language 'en'   
+     on D.text as vb
+     from Doc D;
+create view POSTagVBP as -- verb, non-3rd person singular present
+  extract parts_of_speech 'VBP' with language 'en'   
+     on D.text as vb
+     from Doc D;
+create view POSTagVBZ as -- verb, 3rd person singular present
+  extract parts_of_speech 'VBZ' with language 'en'   
+     on D.text as vb
+     from Doc D;
+create view AllVerbs as
+  (select A.vb as span, 'Verb' as pos, 'VB' as detailedPos from POSTagVB A)
+  union all
+  (select A.vb as span, 'Verb' as pos, 'VBD' as detailedPos from POSTagVBD A)
+  union all
+  (select A.vb as span, 'Verb' as pos, 'VBG' as detailedPos from POSTagVBG A)
+  union all
+  (select A.vb as span, 'Verb' as pos, 'VBN' as detailedPos from POSTagVBN A)
+  union all
+  (select A.vb as span, 'Verb' as pos, 'VBP' as detailedPos from POSTagVBP A)
+  union all
+  (select A.vb as span, 'Verb' as pos, 'VBZ' as detailedPos from POSTagVBZ A);
+
+-- modals
+create view POSTagMD as
+  extract parts_of_speech 'MD' with language 'en'
+  on D.text as md
+  from Doc D;
+--output view POSTagMD;
+
+
+
+--create view POSTagRB as
+--  select * from (
+--  extract parts_of_speech 'RB' with language 'en'   
+--     on D.text as rb
+--     from Doc D) as P, 'RB' as detailedPos;
+
+-- adverb
+create view POSTagRB as -- comparative
+   extract parts_of_speech 'RB' with language 'en'   
+      on D.text as rb
+      from Doc D;
+create view POSTagRBR as -- comparative
+   extract parts_of_speech 'RBR' with language 'en'   
+      on D.text as rb
+      from Doc D;
+create view POSTagRBS as -- superlative
+   extract parts_of_speech 'RBS' with language 'en'   
+      on D.text as rb
+      from Doc D;
+-- union adverbs
+create view AllAdverbs as
+  (select A.rb as span, 'Adverb' as pos, 'RB' as detailedPos from POSTagRB A)
+  union all
+  (select A.rb as span, 'Adverb' as pos, 'RBR' as detailedPos from POSTagRBR A)
+  union all
+  (select A.rb as span, 'Adverb' as pos, 'RBS' as detailedPos from POSTagRBS A);
+  
+  
+
+
+-- All POS terms without polarity
+create view AllPosTerms as
+ (select * from AllNouns N)
+  union all
+ (select * from AllVerbs V)
+  union all
+ (select * from AllAdjectives A)
+  union all
+ (select * from AllAdverbs A);
+--union all
+--(select * from POSTagIN I)
+--union all
+--(select * from POSTagRP R);
+output view AllPosTerms;
+

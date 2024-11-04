@@ -1,0 +1,22 @@
+-- Yunyao: added 05/05/2008 to capture organization names mentioned in NotesEmail
+-- Sudarshan regex : added 10/11/2011 : lines 8 and 18 - changed [a-zA-Z] to \p{L}\p{M}*
+	create view OrgWithinNotesEmail1 as
+	select
+		R.match as match
+	from
+		-- RegexTok(/[a-zA-Z]+/, 1, NotesEmailConsolidated.annot) R
+		--RegexTok(/\p{L}\p{M}*+/, 1, NotesEmailConsolidated.annot) R
+		(extract regex /\p{L}\p{M}*+/ on 1 token in N.annot as match from NotesEmailConsolidated N) R 
+	where
+		MatchesRegex(/[\/]/, LeftContext(R.match, 1)) and
+		MatchesRegex(/[\s@]/, RightContext(R.match, 1));  	 
+
+	create view OrgWithinNotesEmail2 as
+	select
+		R.match as match
+	from
+		-- RegexTok(/[a-zA-Z]+/, 1, NotesEmailConsolidated.annot) R
+		--RegexTok(/\p{L}\p{M}*+/, 1, NotesEmailConsolidated.annot) R
+		(extract regex /\p{L}\p{M}*+/ on 1 token in N.annot as match from NotesEmailConsolidated N) R
+	where
+		MatchesRegex(/[@]/, LeftContext(R.match, 1));  

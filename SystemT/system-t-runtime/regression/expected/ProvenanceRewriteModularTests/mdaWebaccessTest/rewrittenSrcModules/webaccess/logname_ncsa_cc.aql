@@ -1,0 +1,74 @@
+module webaccess;
+
+
+import view IPAddressBuildingBlock from module common;
+
+
+create view Logname_base as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__45__Temp_____sep_____R____id
+  from  __Subquery__45__Temp R;
+
+output view Logname_base;
+
+create view Logname_interim as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as Logname_base_____sep_____C____id
+  from  Logname_base C
+  where Not(MatchesRegex(/\./, LeftContext(C.match, 1)))
+     and Not(MatchesRegex(/\./, RightContext(C.match, 1)));
+
+output view Logname_interim;
+
+create view Logname as
+  select  lognameI.match as logname,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          ipAddressF.__auto__id as "common.IPAddressBuildingBlock_____sep_____ipAddressF____id",
+          lognameI.__auto__id as Logname_interim_____sep_____lognameI____id
+  from  "common.IPAddressBuildingBlock" ipAddressF,
+        Logname_interim lognameI
+  where FollowsTok(ipAddressF.match, lognameI.match, 0, 0);
+
+output view Logname;
+
+create view LognameOutputInterim as
+  select  D.logname as logname_Span,
+          GetText(D.logname) as logname_Text,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as Logname_____sep_____D____id
+  from  Logname D;
+
+output view LognameOutputInterim;
+
+create view LognameOutput as
+  select  L.logname_Span as span,
+          L.logname_Text as text,
+          GetString('Logname') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as LognameOutputInterim_____sep_____L____id
+  from  LognameOutputInterim L;
+
+output view LognameOutput;
+
+export view webaccess.LognameOutput;
+
+
+create view __Subquery__45__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____Document____id,
+    regex /[\w\.]+/
+    with flags 'DOTALL'
+    on Document.text
+    return group 0 as match
+  from Document Document;
+
+output view __Subquery__45__Temp;
+

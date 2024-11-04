@@ -1,0 +1,535 @@
+$Document = DocScan(
+  (
+    "text" => "Text",
+    "label" => "Text"
+  )
+);
+CreateDict(
+    "name" => "firstnames.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false",
+    "lemma_match" => "false"
+);
+
+$FirstName =
+Select(
+  MatchesRegex(
+    RegexConst(
+      /\A[A-Z][a-z]*\Z/,
+      "JavaRegex"
+    ),
+    GetCol(
+      "name"
+    )
+  ),
+  Project(
+    (
+      "@@genericModule@@FirstName@@__auto__id" => "__auto__id",
+      "@@genericModule@@FirstName@@__stmt__type" => "__stmt__type",
+      "@@genericModule@@FirstName@@Document_____sep_____D____id" => "Document_____sep_____D____id",
+      "name" => "name"
+    ),
+    ApplyFunc(
+      IntConst(
+        -1
+      ) => "@@genericModule@@FirstName@@Document_____sep_____D____id",
+      ApplyFunc(
+        StringConst(
+          "STMT_TYPE_EXTRACT_DICT"
+        ) => "@@genericModule@@FirstName@@__stmt__type",
+        ApplyFunc(
+          AutoID()
+ => "@@genericModule@@FirstName@@__auto__id",
+          Dictionary("firstnames.dict" => "Default" , "D.text", "name",
+            Project(
+              (
+                "text" => "D.text"
+              ),
+              $Document
+            )
+          )
+        )
+      )
+    )
+  )
+);
+
+$PhoneNumber =
+Project(
+  (
+    "@@genericModule@@PhoneNumber@@__auto__id" => "__auto__id",
+    "@@genericModule@@PhoneNumber@@__stmt__type" => "__stmt__type",
+    "@@genericModule@@PhoneNumber@@Document_____sep_____D____id" => "Document_____sep_____D____id",
+    "num" => "num"
+  ),
+  Union(
+    ApplyFunc(
+      IntConst(
+        -1
+      ) => "@@genericModule@@PhoneNumber@@Document_____sep_____D____id",
+      ApplyFunc(
+        StringConst(
+          "STMT_TYPE_EXTRACT_REGEX"
+        ) => "@@genericModule@@PhoneNumber@@__stmt__type",
+        ApplyFunc(
+          AutoID()
+ => "@@genericModule@@PhoneNumber@@__auto__id",
+          FastRegex(/\+?\([1-9]\d{2}\)\d{3}-\d{4}/, (0 => "num"), "DOTALL", "D.text",
+            Project(
+              (
+                "text" => "D.text"
+              ),
+              $Document
+            )
+          )
+        )
+      )
+    ),
+    ApplyFunc(
+      IntConst(
+        -1
+      ) => "@@genericModule@@PhoneNumber@@Document_____sep_____D____id",
+      ApplyFunc(
+        StringConst(
+          "STMT_TYPE_EXTRACT_REGEX"
+        ) => "@@genericModule@@PhoneNumber@@__stmt__type",
+        ApplyFunc(
+          AutoID()
+ => "@@genericModule@@PhoneNumber@@__auto__id",
+          FastRegex(/\+?[Xx]\.?\d{4,5}/, (0 => "num"), "DOTALL", "D.text",
+            Project(
+              (
+                "text" => "D.text"
+              ),
+              $Document
+            )
+          )
+        )
+      )
+    )
+  )
+);
+
+$__Union__1__TempOp__0 =
+Project(
+  (
+    "F.name" => "match",
+    "@@genericModule@@__Union__1__TempOp__0@@__auto__id" => "__auto__id",
+    "@@genericModule@@__Union__1__TempOp__0@@__stmt__type" => "__stmt__type",
+    "F.__auto__id" => "FirstName_____sep_____F____id"
+  ),
+  ApplyFunc(
+    StringConst(
+      "STMT_TYPE_SELECT"
+    ) => "@@genericModule@@__Union__1__TempOp__0@@__stmt__type",
+    ApplyFunc(
+      AutoID()
+ => "@@genericModule@@__Union__1__TempOp__0@@__auto__id",
+      Project(
+        (
+          "__auto__id" => "F.__auto__id",
+          "name" => "F.name"
+        ),
+        $FirstName
+      )
+    )
+  )
+);
+
+$__Union__1__TempOp__1 =
+Project(
+  (
+    "P.num" => "match",
+    "@@genericModule@@__Union__1__TempOp__1@@__auto__id" => "__auto__id",
+    "@@genericModule@@__Union__1__TempOp__1@@__stmt__type" => "__stmt__type",
+    "P.__auto__id" => "PhoneNumber_____sep_____P____id"
+  ),
+  ApplyFunc(
+    StringConst(
+      "STMT_TYPE_SELECT"
+    ) => "@@genericModule@@__Union__1__TempOp__1@@__stmt__type",
+    ApplyFunc(
+      AutoID()
+ => "@@genericModule@@__Union__1__TempOp__1@@__auto__id",
+      Project(
+        (
+          "__auto__id" => "P.__auto__id",
+          "num" => "P.num"
+        ),
+        $PhoneNumber
+      )
+    )
+  )
+);
+
+$__Union__2__TempOp__0 =
+Project(
+  (
+    "F.name" => "match",
+    "@@genericModule@@__Union__2__TempOp__0@@__auto__id" => "__auto__id",
+    "@@genericModule@@__Union__2__TempOp__0@@__stmt__type" => "__stmt__type",
+    "F.__auto__id" => "FirstName_____sep_____F____id"
+  ),
+  ApplyFunc(
+    StringConst(
+      "STMT_TYPE_SELECT"
+    ) => "@@genericModule@@__Union__2__TempOp__0@@__stmt__type",
+    ApplyFunc(
+      AutoID()
+ => "@@genericModule@@__Union__2__TempOp__0@@__auto__id",
+      Project(
+        (
+          "__auto__id" => "F.__auto__id",
+          "name" => "F.name"
+        ),
+        $FirstName
+      )
+    )
+  )
+);
+
+$__Union__3__TempOp__0 =
+Select(
+  MatchesRegex(
+    RegexConst(
+      /\A[A-Z][a-z]*\Z/,
+      "JavaRegex"
+    ),
+    GetCol(
+      "match"
+    )
+  ),
+  Project(
+    (
+      "@@genericModule@@__Union__3__TempOp__0@@__auto__id" => "__auto__id",
+      "@@genericModule@@__Union__3__TempOp__0@@__stmt__type" => "__stmt__type",
+      "@@genericModule@@__Union__3__TempOp__0@@Document_____sep_____D____id" => "Document_____sep_____D____id",
+      "match" => "match"
+    ),
+    ApplyFunc(
+      IntConst(
+        -1
+      ) => "@@genericModule@@__Union__3__TempOp__0@@Document_____sep_____D____id",
+      ApplyFunc(
+        StringConst(
+          "STMT_TYPE_EXTRACT_DICT"
+        ) => "@@genericModule@@__Union__3__TempOp__0@@__stmt__type",
+        ApplyFunc(
+          AutoID()
+ => "@@genericModule@@__Union__3__TempOp__0@@__auto__id",
+          Dictionary("firstnames.dict" => "Default" , "D.text", "match",
+            Project(
+              (
+                "text" => "D.text"
+              ),
+              $Document
+            )
+          )
+        )
+      )
+    )
+  )
+);
+
+$__Union__3__TempOp__1 =
+Project(
+  (
+    "@@genericModule@@__Union__3__TempOp__1@@__auto__id" => "__auto__id",
+    "@@genericModule@@__Union__3__TempOp__1@@__stmt__type" => "__stmt__type",
+    "@@genericModule@@__Union__3__TempOp__1@@Document_____sep_____D____id" => "Document_____sep_____D____id",
+    "match" => "match"
+  ),
+  Union(
+    ApplyFunc(
+      IntConst(
+        -1
+      ) => "@@genericModule@@__Union__3__TempOp__1@@Document_____sep_____D____id",
+      ApplyFunc(
+        StringConst(
+          "STMT_TYPE_EXTRACT_REGEX"
+        ) => "@@genericModule@@__Union__3__TempOp__1@@__stmt__type",
+        ApplyFunc(
+          AutoID()
+ => "@@genericModule@@__Union__3__TempOp__1@@__auto__id",
+          FastRegex(/\+?\([1-9]\d{2}\)\d{3}-\d{4}/, (0 => "match"), "DOTALL", "D.text",
+            Project(
+              (
+                "text" => "D.text"
+              ),
+              $Document
+            )
+          )
+        )
+      )
+    ),
+    ApplyFunc(
+      IntConst(
+        -1
+      ) => "@@genericModule@@__Union__3__TempOp__1@@Document_____sep_____D____id",
+      ApplyFunc(
+        StringConst(
+          "STMT_TYPE_EXTRACT_REGEX"
+        ) => "@@genericModule@@__Union__3__TempOp__1@@__stmt__type",
+        ApplyFunc(
+          AutoID()
+ => "@@genericModule@@__Union__3__TempOp__1@@__auto__id",
+          FastRegex(/\+?[Xx]\.?\d{4,5}/, (0 => "match"), "DOTALL", "D.text",
+            Project(
+              (
+                "text" => "D.text"
+              ),
+              $Document
+            )
+          )
+        )
+      )
+    )
+  )
+);
+
+$PersonPhoneAll =
+Project(
+  (
+    "name.name" => "person",
+    "phone.num" => "phone",
+    "@@genericModule@@PersonPhoneAll@@personphone" => "personphone",
+    "@@genericModule@@PersonPhoneAll@@__auto__id" => "__auto__id",
+    "@@genericModule@@PersonPhoneAll@@__stmt__type" => "__stmt__type",
+    "name.__auto__id" => "FirstName_____sep_____name____id",
+    "phone.__auto__id" => "PhoneNumber_____sep_____phone____id"
+  ),
+  ApplyFunc(
+    StringConst(
+      "STMT_TYPE_SELECT"
+    ) => "@@genericModule@@PersonPhoneAll@@__stmt__type",
+    ApplyFunc(
+      AutoID()
+ => "@@genericModule@@PersonPhoneAll@@__auto__id",
+      ApplyFunc(
+        CombineSpans(
+          GetCol(
+            "name.name"
+          ),
+          GetCol(
+            "phone.num"
+          )
+        ) => "@@genericModule@@PersonPhoneAll@@personphone",
+        SortMergeJoin(
+          Follows(
+            GetCol(
+              "name.name"
+            ),
+            GetCol(
+              "phone.num"
+            ),
+            IntConst(
+              0
+            ),
+            IntConst(
+              40
+            )
+          ),
+          Project(
+            (
+              "__auto__id" => "name.__auto__id",
+              "name" => "name.name"
+            ),
+            $FirstName
+          ),
+          Project(
+            (
+              "__auto__id" => "phone.__auto__id",
+              "num" => "phone.num"
+            ),
+            $PhoneNumber
+          )
+        )
+      )
+    )
+  )
+);
+
+$Union1 =
+Union(
+  Project(
+    (
+      "Op.match" => "match",
+      "@@genericModule@@Union1_1@@__auto__id" => "__auto__id",
+      "@@genericModule@@Union1_1@@__stmt__type" => "__stmt__type",
+      "Op.__auto__id" => "__union_op__id"
+    ),
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_UNION"
+      ) => "@@genericModule@@Union1_1@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@Union1_1@@__auto__id",
+        Project(
+          (
+            "__auto__id" => "Op.__auto__id",
+            "match" => "Op.match"
+          ),
+          $__Union__1__TempOp__0
+        )
+      )
+    )
+  ),
+  Project(
+    (
+      "Op.match" => "match",
+      "@@genericModule@@Union1_2@@__auto__id" => "__auto__id",
+      "@@genericModule@@Union1_2@@__stmt__type" => "__stmt__type",
+      "Op.__auto__id" => "__union_op__id"
+    ),
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_UNION"
+      ) => "@@genericModule@@Union1_2@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@Union1_2@@__auto__id",
+        Project(
+          (
+            "__auto__id" => "Op.__auto__id",
+            "match" => "Op.match"
+          ),
+          $__Union__1__TempOp__1
+        )
+      )
+    )
+  )
+);
+
+$Union3 =
+Union(
+  Project(
+    (
+      "Op.match" => "match",
+      "@@genericModule@@Union3_1@@__auto__id" => "__auto__id",
+      "@@genericModule@@Union3_1@@__stmt__type" => "__stmt__type",
+      "Op.__auto__id" => "__union_op__id"
+    ),
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_UNION"
+      ) => "@@genericModule@@Union3_1@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@Union3_1@@__auto__id",
+        Project(
+          (
+            "__auto__id" => "Op.__auto__id",
+            "match" => "Op.match"
+          ),
+          $__Union__3__TempOp__0
+        )
+      )
+    )
+  ),
+  Project(
+    (
+      "Op.match" => "match",
+      "@@genericModule@@Union3_2@@__auto__id" => "__auto__id",
+      "@@genericModule@@Union3_2@@__stmt__type" => "__stmt__type",
+      "Op.__auto__id" => "__union_op__id"
+    ),
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_UNION"
+      ) => "@@genericModule@@Union3_2@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@Union3_2@@__auto__id",
+        Project(
+          (
+            "__auto__id" => "Op.__auto__id",
+            "match" => "Op.match"
+          ),
+          $__Union__3__TempOp__1
+        )
+      )
+    )
+  )
+);
+
+$__Union__2__TempOp__1 =
+Project(
+  (
+    "P.person" => "match",
+    "@@genericModule@@__Union__2__TempOp__1@@__auto__id" => "__auto__id",
+    "@@genericModule@@__Union__2__TempOp__1@@__stmt__type" => "__stmt__type",
+    "P.__auto__id" => "PersonPhoneAll_____sep_____P____id"
+  ),
+  ApplyFunc(
+    StringConst(
+      "STMT_TYPE_SELECT"
+    ) => "@@genericModule@@__Union__2__TempOp__1@@__stmt__type",
+    ApplyFunc(
+      AutoID()
+ => "@@genericModule@@__Union__2__TempOp__1@@__auto__id",
+      Project(
+        (
+          "__auto__id" => "P.__auto__id",
+          "person" => "P.person"
+        ),
+        $PersonPhoneAll
+      )
+    )
+  )
+);
+
+$Union2 =
+Union(
+  Project(
+    (
+      "Op.match" => "match",
+      "@@genericModule@@Union2_1@@__auto__id" => "__auto__id",
+      "@@genericModule@@Union2_1@@__stmt__type" => "__stmt__type",
+      "Op.__auto__id" => "__union_op__id"
+    ),
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_UNION"
+      ) => "@@genericModule@@Union2_1@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@Union2_1@@__auto__id",
+        Project(
+          (
+            "__auto__id" => "Op.__auto__id",
+            "match" => "Op.match"
+          ),
+          $__Union__2__TempOp__0
+        )
+      )
+    )
+  ),
+  Project(
+    (
+      "Op.match" => "match",
+      "@@genericModule@@Union2_2@@__auto__id" => "__auto__id",
+      "@@genericModule@@Union2_2@@__stmt__type" => "__stmt__type",
+      "Op.__auto__id" => "__union_op__id"
+    ),
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_UNION"
+      ) => "@@genericModule@@Union2_2@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@Union2_2@@__auto__id",
+        Project(
+          (
+            "__auto__id" => "Op.__auto__id",
+            "match" => "Op.match"
+          ),
+          $__Union__2__TempOp__1
+        )
+      )
+    )
+  )
+);
+
+Output: $FirstName, $PersonPhoneAll, $PhoneNumber, $Union1, $Union2, $Union3, $__Union__1__TempOp__0, $__Union__1__TempOp__1, $__Union__2__TempOp__0, $__Union__2__TempOp__1, $__Union__3__TempOp__0, $__Union__3__TempOp__1;

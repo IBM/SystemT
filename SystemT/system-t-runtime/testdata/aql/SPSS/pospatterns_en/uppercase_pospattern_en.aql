@@ -1,0 +1,93 @@
+--
+-- PoS Patterns to extract Uppercase patterns
+--
+
+module pospatterns_en;
+
+import module pos_forced_en;
+
+-- Upper Case algorithm
+
+-- extract all tokens starting with an UpperCase and assign each as Part of Speech 'Z' except if they are stop words
+
+create view pos_Z_clean_en as
+(select * from pos_en.pos_Z_en)
+minus (
+	(select * from pos_base_en.pos_base_s_en)
+	union all
+	(select * from pos_forced_en.pos_s_forced_def_en)
+);
+
+export view pos_Z_clean_en;
+
+-- output view pos_Z_clean_en;
+
+-- Patterns to extract concepts regarding "UpperCase algorithm" (ie ZZZZZ, ZZZZ, ZZZ, ZZ patterns)
+
+create view PosPattern_ZZZZZ_en as
+extract 
+pZ1.partOfSpeech as token1,
+pZ2.partOfSpeech as token2,
+pZ3.partOfSpeech as token3,
+pZ4.partOfSpeech as token4,
+pZ5.partOfSpeech as token5,
+pattern (<pZ1.partOfSpeech> ('\''|'\'s')? <pZ2.partOfSpeech> ('\''|'\'s')? <pZ3.partOfSpeech> ('\''|'\'s')? <pZ4.partOfSpeech> ('\''|'\'s')? <pZ5.partOfSpeech> )
+return group 0 as concept 
+from pos_Z_clean_en pZ1, pos_Z_clean_en pZ2, pos_Z_clean_en pZ3, pos_Z_clean_en pZ4, pos_Z_clean_en pZ5;
+
+export view PosPattern_ZZZZZ_en;
+
+-- output view PosPattern_ZZZZZ_en;
+
+create view PosPattern_ZZZZ_en as
+extract 
+pZ1.partOfSpeech as token1,
+pZ2.partOfSpeech as token2,
+pZ3.partOfSpeech as token3,
+pZ4.partOfSpeech as token4,
+pattern (<pZ1.partOfSpeech> ('\''|'\'s')? <pZ2.partOfSpeech> ('\''|'\'s')? <pZ3.partOfSpeech> ('\''|'\'s')? <pZ4.partOfSpeech> )
+return group 0 as concept 
+from pos_Z_clean_en pZ1, pos_Z_clean_en pZ2, pos_Z_clean_en pZ3, pos_Z_clean_en pZ4;
+
+export view PosPattern_ZZZZ_en;
+
+-- output view PosPattern_ZZZZ_en;
+
+create view PosPattern_ZZZ_en as
+extract 
+pZ1.partOfSpeech as token1,
+pZ2.partOfSpeech as token2,
+pZ3.partOfSpeech as token3,
+pattern (<pZ1.partOfSpeech> ('\''|'\'s')? <pZ2.partOfSpeech> ('\''|'\'s')? <pZ3.partOfSpeech> )
+return group 0 as concept 
+from pos_Z_clean_en pZ1, pos_Z_clean_en pZ2, pos_Z_clean_en pZ3;
+
+export view PosPattern_ZZZ_en;
+
+-- output view PosPattern_ZZZ_en;
+
+create view PosPattern_RealZZ_en as
+extract 
+pZ1.partOfSpeech as token1,
+pZ2.partOfSpeech as token2,
+pattern (<pZ1.partOfSpeech> ('\''|'\'s')? <pZ2.partOfSpeech>)
+return group 0 as concept 
+from pos_Z_clean_en pZ1, pos_Z_clean_en pZ2;
+
+create view PosPattern_AposSZ_en as
+extract 
+pZ1.partOfSpeech as token1,
+pattern (('\'s') <pZ1.partOfSpeech>)
+return group 0 as concept 
+from pos_Z_clean_en pZ1;
+
+create view PosPattern_ZZ_en as
+(select PosPattern_RealZZ_en.concept from PosPattern_RealZZ_en)
+union all
+(select PosPattern_AposSZ_en.concept from PosPattern_AposSZ_en);
+
+-- output view PosPattern_ZZ_en;
+
+export view PosPattern_ZZ_en;
+
+

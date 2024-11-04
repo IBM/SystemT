@@ -1,0 +1,42 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module ZipCode;
+
+import view Country_ from module Country as Country_;
+import view Zipcode from module CommonFeatures as Zipcode;
+
+require document with columns
+text Text;
+
+
+create view ZipCodeCountry as
+select Z.match as zip, C.country as country, Z.match as reference
+from Zipcode Z,
+	 Country_ C
+where FollowsTok(Z.match, C.country, 0, 1)
+  and MatchesRegex(/\s*[,]?\s*/, SpanBetween(Z.match, C.country))
+  and Not(ContainsRegex(/[\n\r]/, SpanBetween(Z.match, C.country)));
+
+create view ZipCodeAll as
+	(select Z.zip as zip, Z.country as country, Z.reference as reference from ZipCodeCountry Z)
+	union all
+	(select Z.match as zip, '' as country, Z.match as reference from Zipcode Z);
+
+create view ZipCode_ as
+select Z.zip as zip, Z.reference as reference
+from ZipCodeAll Z
+consolidate on Z.zip;

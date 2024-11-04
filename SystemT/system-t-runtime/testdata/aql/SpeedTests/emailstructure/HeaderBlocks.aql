@@ -1,0 +1,213 @@
+/*********************************************************************
+	HEADER BLOCKS
+	= Spans that comprise a header segment.
+	We combine adjacent HeaderFields in order to find a header block.
+**********************************************************************/
+-- Only one newline within a Header block is allowed.
+create view HeaderBlock_1 as
+	select X.match as match
+	from
+	(extract 
+		pattern ('>'{0,10} <H.match>){3,8}
+		return group 0 as match
+		from HeaderField H) X
+	where Not(ContainsRegex(/\r?\n([\t >]*\r?\n[\t >]*\r?\n)/, X.match))
+	consolidate on X.match using 'ContainedWithin';
+
+
+-- ADD SENDER LINES, which don't belong to any header yet, TO HEADER,
+-- also if there is more than one new line between
+-- the SenderLine and the header (but no non-empty lines!).
+create view HeaderBlock_2 as
+	select CombineSpans(S.match, H.match) as match
+	from HeaderBlock_1 H, SenderLine S, HeaderField F
+	where FollowsTok(F.match, H.match, 0, 10)
+		and Not(Contains(H.match, F.match))
+		and Contains(F.match, S.match);
+		
+create view HeaderBlock_3 as
+	(select H.* from HeaderBlock_1 H)
+	union all
+	(select H.* from HeaderBlock_2 H);
+	
+create view HeaderBlock_4 as
+	select H.* from HeaderBlock_3 H
+	consolidate on H.match using 'ContainedWithin';
+
+-- ADD FORWARD LINES TO HEADER, also if more than one new line in between!! --
+create view HeaderBlock_5 as
+	extract
+	pattern (<F.match> <H.match>)
+	return group 1 as match
+	from FwLine F, HeaderBlock_4 H;
+		
+create view HeaderBlock_6 as
+	(select H.*, 'REPLY' as type from HeaderBlock_4 H)
+	union all
+	(select H.*, 'FORWARDED' as type from HeaderBlock_5 H);
+
+
+/*****************************************************************************
+	COMPACT HEADERS
+	= Internet Style Headers, usually consisting of one line.
+	So far, only the most common English and German patterns are implemented.
+	For performance reasons, if we find a pattern indicating a compact header,
+	we assume that the line containing this pattern is the header.
+	Sometimes we add the previous / next line to the header if it is not empty.
+*****************************************************************************/
+create dictionary EndOfCompactHeaderWords
+	with case insensitive
+	as ('geschrieben:', 'wrote:', 'schrieb');
+	
+create view EndOfCompactHeaderWordsMatch as
+	extract dictionary 'EndOfCompactHeaderWords' on D.text
+	as match
+	from Document D;
+
+create view CompactHeader_0a as
+	extract
+	pattern (('on'|'On') <D.match> /./? 'at'? <T.match>)
+	return group 1 as match
+	from Dates D, Times T;
+	
+-- on 19.02.2010 11:08 Uhr, annemarie@friedrich-family.de wrote:
+create view CompactHeader_0 as
+	select
+		CombineSpans(C.match, E.match) as match, SpanBetween(C.match, E.match) as sender
+	from CompactHeader_0a C, EndOfCompactHeaderWordsMatch E
+	where FollowsTok(C.match, E.match, 0, 20) and
+		Not(ContainsRegex(/\r?\n[\t >]*\r?\n/, SpanBetween(C.match, E.match)));
+	
+-- 2010/3/8 annemarie@friedrich-family.de <annemarie@friedrich-family.de>
+create view CompactHeader_1 as
+	select NE.match as match, CombineSpans(RightContext(D.match, 0), RightContext(NE.match, 0)) as sender
+	from NonEmptyLine NE, Dates D, InternetEmail E
+	where Contains(NE.match, D.match)
+		and Contains(NE.match, E.match)
+		and FollowsTok(LeftContext(D.match, 0), LeftContext(NE.match, 0), 0, 3)
+	consolidate on NE.match using 'ContainedWithin';
+
+-- On 03.02.2010; at 10:31; Thomas Hampp wrote:
+create view CompactHeader_2a as
+	extract
+	pattern (('on'|'On') <D.match> /./? 'at' <T.match>)
+	return group 1 as match
+	from Dates D, Times T;
+	
+-- Am 04.12.09 07:04 schrieb ClickandBuy:
+create view CompactHeader_2b as
+	extract
+	pattern ('Am' <D.match> 'um'{0,1} <T.match> 'schrieb')
+	return group 1 as match
+	from Dates D, Times T
+	having Not(ContainsRegex(/\n[ \t>]*\n/, match));
+	
+create view CompactHeader_2_Start as
+	(select C.* from CompactHeader_2a C)
+	union all
+	(select C.* from CompactHeader_2b C);
+
+create view CompactHeader_2c as
+select NE.match as match, CombineSpans(LeftContext(X.match,0), RightContext(NE.match,0)) as sender
+	from CompactHeader_2_Start X, NonEmptyLine NE
+	where Contains(NE.match, X.match)
+	consolidate on X.match using 'ContainedWithin';
+	
+-- If there is a non-empty line directly after CompactHeader_2c, we assume it belongs to it.
+create view CompactHeader_2d as
+	(select C.* from CompactHeader_2c C)
+	union all
+	(select CombineSpans(C.match, NE.match) as match, CombineSpans(C.sender, NE.match) as sender
+		from CompactHeader_2c C, NonEmptyLine NE
+		where FollowsTok(C.match, NE.match, 0, 0)
+			and Not(ContainsRegex(/\r?\n[> \t]*\r?\n/, CombineSpans(C.match, NE.match))));
+		
+create view CompactHeader_2 as
+	select C.* from CompactHeader_2d C
+	consolidate on C.match using 'ContainedWithin';
+	
+-- At 06:04 PM 3/21/00 -0600; you wrote:
+create view CompactHeader_3a as
+	extract
+	pattern ('At' <T.match> <D.match>)
+	return group 1 as match
+	from Times T, Dates D;
+	
+create view CompactHeader_3 as
+	select NE.match as match, CombineSpans(RightContext(C.match, 0), RightContext(NE.match, 0)) as sender
+	from NonEmptyLine NE, CompactHeader_3a C
+	where Overlaps(NE.match, C.match) 
+	    and FollowsTok(LeftContext(NE.match, 0), C.match, 0, 100)
+	    and Follows(RightContext(C.match, 0), RightContext(NE.match, 0), 0, 200);
+	
+-- "Larry W. Bass" <lwbthemarine@bigplanet.com> on 09/05/2000 01:42:17 PM
+create view CompactHeader_4a as
+	select NE.match as match, CombineSpans(LeftContext(NE.match, 0), RightContext(X.sender,0)) as sender from (
+	extract
+	pattern (('<' <E.match> '>') 'on' <D.match> <T.match>)
+	return group 1 as match and group 2 as sender
+	from Dates D, Times T, InternetEmail E) X, NonEmptyLine NE
+	where Contains(NE.match, X.match)
+	consolidate on X.match using 'ContainedWithin';
+
+-- If there is a non-empty line directly before the CompactHeader_4a, we assume it belongs to the header.
+create view CompactHeader_4b as
+	(select CombineSpans(NE.match, C.match) as match, CombineSpans(NE.match, C.sender) as sender from
+	NonEmptyLine NE, CompactHeader_4a C
+	where Follows(NE.match, C.match, 0, 1))
+	union all
+	(select C.* from CompactHeader_4a C);
+
+create view CompactHeader_4 as
+	select C.* from CompactHeader_4b C
+	consolidate on C.match using 'ContainedWithin';
+	
+-- Annemarie Friedrich5 <AFRIEDR@de.ibm.com> hat am 8. Maerz 2010 um 15:43 geschrieben:
+create view CompactHeader_5a as
+	extract
+	pattern ('hat' 'am' <D.match> '>'{0,3} 'um' '>'{0,3} <T.match> '>'{0,3} 'geschrieben' ':')
+	return group 1 as match and group 1 as sender
+	from Dates D, Times T;
+	
+create view CompactHeader_5 as
+	select CombineSpans(NE.match, C.match) as match, CombineSpans(LeftContext(NE.match, 0), LeftContext(C.match, 0)) as sender
+	from NonEmptyLine NE, CompactHeader_5a C
+	where Overlaps(NE.match, C.match) and FollowsTok(LeftContext(NE.match,0), C.match, 0, 100);
+	
+/** TODO: find 'real' end of header with a dictionary.
+**/
+	
+create view CompactHeader as
+	(select C.* from CompactHeader_0 C)
+	union all
+	(select C.* from CompactHeader_1 C)
+	union all
+	(select C.* from CompactHeader_2 C)
+	union all
+	(select C.* from CompactHeader_3 C)
+	union all
+	(select C.* from CompactHeader_4 C)
+	union all
+	(select C.* from CompactHeader_5 C);
+	
+/**********************************************
+	CREATE HEADER VIEW
+**********************************************/
+
+-- ADD COMPACT HEADERS AND FORWARD LINES TO HEADER BLOCKS, but only those which are not in a header yet! --
+create view HeaderBlock_7 as
+	(select H.* from HeaderBlock_6 H)
+	union all
+	(select F.*, 'FORWARDED' as type from FwLine F, HeaderBlock_6 H
+		where Not(Contains(H.match, F.match)))
+	union all
+	(select C.match as match, 'REPLY' as type from CompactHeader C);
+	
+create view Header as
+	select H.* from HeaderBlock_7 H
+	consolidate on H.match using 'ContainedWithin';
+	
+create view SystemTHeader as select H.match as match --, H.type as type
+from Header H;
+
+output view SystemTHeader as 'com.ibm.systemT.Header';

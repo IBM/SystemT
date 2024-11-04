@@ -1,0 +1,41 @@
+require document with columns text Text;
+
+--detag Document.text into Doc;
+	
+
+-- Find first names, using an exhaustive dictionary.
+create view FirstName as
+select D.match as first
+from Dictionary('first.dict', Document.text) D
+where MatchesRegex(/[A-Z][a-z]*/, D.match);
+
+-- Find last names, using an exhaustive dictionary.
+create view LastName as
+select D.match as last
+from Dictionary('last.dict', Document.text) D
+where MatchesRegex(/[A-Z][a-z]*/, D.match);
+
+--find first names followed buy a last name
+create view FirstLast as 
+select F.first as first, L.last as last
+from FirstName F, LastName L
+where FollowsTok(F.first, L.last, 0,0);
+
+--Find first names that are not followed by a last name
+create view FirstWithoutLast as
+(select F.first as first from FirstName F)
+minus
+(select F.first as first from FirstLast F);
+
+
+create view FirstEmptyLast as
+select P.first as first, '' as last from FirstWithoutLast P;
+
+--union together person names
+create view Person as 
+(select P.first as first, P.last as last from FirstLast P)
+union all
+(select P.first as first, P.last as last from FirstEmptyLast P);
+
+
+output view Person;

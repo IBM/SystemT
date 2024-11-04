@@ -1,0 +1,79 @@
+module NotesEmailAddress;
+
+import view DocumentDetagged from module DocumentDetagger as DocumentText;
+
+import dictionary NotesEmailAddressAbbreviations from module Dictionaries as NotesEmailAddressAbbreviations;
+
+import view URLAll from module URL as URLAll;
+
+/**
+ * Rule 2: identifies emails in Lotus Notes format
+ * Examples: 
+ *           John Doe/Almaden/IBM
+ *
+ */
+
+--Non Person email (only one capitalized word before the first slash symbol)
+
+create view Email2_a as
+select R.match as annot
+from (extract regex /((\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*[\p{Ll}\p{Lu}\p{Lt}\p{Lo}\p{Nd}\p{Pc}]\p{M}*{1,20}\s*[\/]\s*)((\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}(\p{Nd}\p{M}*){0,3}\s*){1,2}[\/]\s*){1,2}(\p{Lu}\p{M}*){2,20}(@(\p{L}\p{M}*){2,20})?)/
+		on between 1 and 15 tokens in D.text
+		as match from DocumentText D) R 
+where  Not(MatchesRegex(/\/|\p{L}|_|\p{Nd}/,RightContext(R.match,1)))
+  and  Not(ContainsDict('NotesEmailAddressAbbreviations', R.match));
+
+
+-- Person email (more than one capitalized words before the first '/')
+
+create view Email2_b as
+select R.match as annot
+from (extract regex /((\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,10}(['-]\p{L}\p{M}*)?(\p{L}\p{M}*){1,10}\s+)((\p{Lu}\p{M}*)\s+)?(\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}(['-]\p{L}\p{M}*(\p{L}\p{M}*){1,8})?((\p{L}|\p{Nd}|_)\p{M}*){0,2}\s*[\/]\s*)(((\p{Lu}\p{M}*)(\p{L}\p{M}*){1,20}(\p{Nd}\p{M}*){0,3}\s*){1,2}[\/]\s*){1,2}(\p{Lu}\p{M}*){2,20}(@(\p{L}\p{M}*){1,20})?)/
+		on between 1 and 15 tokens in D.text
+		as match from DocumentText D) R
+where  Not(MatchesRegex(/\/|\p{L}|_|\p{Nd}/,RightContext(R.match,1)))
+  and  Not(ContainsDict('NotesEmailAddressAbbreviations', R.match));
+
+
+-- Allow lower case in server names when the domain information presents
+-- Person email (more than one capitalized words before the first '/')
+
+create view Email2_c as
+select R.match as annot
+from (extract regex /((\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,10}(['-]\p{L}\p{M}*)?(\p{L}\p{M}*){1,10}\s+)((\p{Lu}\p{M}*)\s+)?(\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}(['-]\p{L}\p{M}*(\p{L}\p{M}*){1,8})?((\p{L}|\p{Nd}|_)\p{M}*){0,2}\s*[\/]\s*)(((\p{Lu}\p{M}*)(\p{L}\p{M}*){1,20}(\p{Nd}\p{M}*){0,3}\s*){1,2}[\/]\s*){1,2}(\p{Lu}\p{M}*)(\p{L}\p{M}*){1,20}(@(\p{L}\p{M}*){1,20}))/
+		on between 1 and 15 tokens in D.text
+		as match from DocumentText D) R
+where  Not(MatchesRegex(/\/|\p{L}|_|\p{Nd}/,RightContext(R.match,1)));
+
+ 
+ /**
+  * Output Lotus Notes email addresses
+  */
+
+ create view NotesEmailAddressAll as
+  (select Email2_a.annot as annot, 'NONPERS' as type from Email2_a)
+  union all
+  (select Email2_b.annot as annot, 'PERSONAL' as type from Email2_b)
+  union all
+  (select Email2_c.annot as annot, 'PERSONAL' as type from Email2_c); 
+
+
+-- Filter out emails contained within URL
+ create view WrongNotesEmail as
+ select E.annot as annot, E.type as type 
+ from NotesEmailAddressAll E, URLAll U
+ where Contains(U.annot, E.annot);
+ 
+ 
+ create view NotesEmailCand as
+ (select E.annot as annot, E.type as type from NotesEmailAddressAll E)
+ minus
+ (select E.annot as annot, E.type as type from WrongNotesEmail E);
+ 
+ 
+  create view NotesEmailConsolidated as
+  select E.annot as annot, E.type as type
+  from NotesEmailCand E
+  consolidate on E.annot;
+
+ 

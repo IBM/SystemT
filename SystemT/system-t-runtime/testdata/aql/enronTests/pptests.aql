@@ -1,0 +1,65 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- pptests.aql
+--
+-- personphone.aog, translated to AvatarSQL in several ways.
+-------------------------------------------------------------------------------
+
+-- Find first names
+create view FirstName as 
+select D.match as annot
+from Dictionary('dictionaries/first.dict', Document.text) D
+where MatchesRegex(/\A[A-Z][a-z]*\Z/, D.match);
+
+-- Find phone numbers
+create view PhoneNumber as
+( 
+	select R.match as annot
+	from Regex(/\+?\([1-9]\d{2}\)\d{3}-\d{4}/, Document.text) R
+)
+union all
+(
+	select R.match as annot
+	from Regex(/\+?[Xx]\.?\d{4,5}/, Document.text) R
+);
+
+-- Find instances of first name followed within 5 chars by phone number
+select CombineSpans(name.annot, phone.annot) as annot
+into PersonPhone1
+from FirstName name, PhoneNumber phone
+where Follows(name.annot, phone.annot, 0, 5);
+
+-- Reverse the arguments in PersonPhone1 and change params
+select CombineSpans(name.annot, phone.annot) as annot
+into PersonPhone2
+from PhoneNumber phone, FirstName name
+where Follows(name.annot, phone.annot, 40, 50);
+
+-- Version of PersonPhone1 that uses a predicate on tokens, not chars
+select CombineSpans(name.annot, phone.annot) as annot
+into PersonPhone3
+from FirstName name, PhoneNumber phone
+where FollowsTok(name.annot, phone.annot, 0, 0);
+
+-- Reverse the arguments in PersonPhone3 and change params
+select CombineSpans(name.annot, phone.annot) as annot
+into PersonPhone4
+from PhoneNumber phone, FirstName name
+where FollowsTok(name.annot, phone.annot, 0, 5);
+
+-- Union everything together to generate regression test output.
+create view AllPersonPhone as 
+	(select P.annot as annot from PersonPhone1 P)
+union all
+	(select P.annot as annot from PersonPhone2 P)
+union all
+	(select P.annot as annot from PersonPhone3 P)
+union all
+	(select P.annot as annot from PersonPhone4 P);
+	
+select A.annot as annot
+into PPOutput
+from AllPersonPhone A;
+
+

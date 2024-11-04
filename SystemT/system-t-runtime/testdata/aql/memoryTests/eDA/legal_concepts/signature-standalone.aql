@@ -1,0 +1,127 @@
+-- include 'namedentity-nooutput.aql';
+include 'ne-ediscovery-personorgphoneaddress.aql';
+
+-- input types expected : 
+--     Person with an attribute called person 
+--     PhoneNumber with an attribute num
+--     Address with an attribute loc
+--     Organization with an attribute org
+--     EmailAll with an attribute email
+--     Url with an attribute url
+-- output type : 
+--     Signature     
+
+-- identify person names to ignore, e.g., manager name in secretary's signature
+ 
+create view PersonToIgnore as
+select P.name as name
+from Person P
+where MatchesRegex(/(assistant|ta).{0,25}(for|to).{0,100}$/,LeftContext(P.name,125));
+
+-- remaining persons may start a signature block
+
+create view CandidatePersonForSB as
+(select P.name as name from Person P)
+minus 
+(select P.name as name from PersonToIgnore P);
+
+--extract right context of persons
+create view PersonForSB as
+select P.name as name, CombineSpans(P.name,RightContext(P.name,250)) as personblock
+from CandidatePersonForSB P;
+--where ContainsRegex(/[\n\r]/,RightContext(P.name,10));
+
+-- for each block, pair with any "ambiguous" person appearing in the block
+-- retain person beginning the block, original block and truncated block 
+-- (i.e., up to beginning of the "ambiguous"  person)
+
+create view PersonBlockTruncated as
+select P.name as name, P.personblock as personblockorig, CombineSpans(P.name,SpanBetween(P.name,P1.name)) as personblock
+from PersonForSB P, CandidatePersonForSB P1
+where Contains(P.personblock,P1.name) and GreaterThan(GetBegin(P1.name),GetEnd(P.name));
+
+-- same personblock may have multiple "ambiguous" persons in it. 
+-- if so, multiple truncated block tuples will be present for that personblock
+-- consolidate to retain only the shortest entry
+create view PersonBlockMin as
+select PB.name as name, PB.personblock as personblock
+from PersonBlockTruncated PB 
+consolidate on PB.personblock
+using 'NotContainedWithin';
+
+-- personblocks that do not have any "ambiguous" persons in-between are retained as is
+
+create view PersonBlockRetained as
+(select P.name as name, P.personblock as personblock from PersonForSB P)
+minus
+(select P.name as name, P.personblockorig as personblock from PersonBlockTruncated P);
+
+-- combine personblocks for truncated and non-truncated entries
+create view PersonBlock as
+(select P.name as name, P.personblock as personblock from PersonBlockRetained P)
+union all
+(select P.name as name, P.personblock as personblock from PersonBlockMin P);
+
+-- five types used as evidence
+
+create view Evidence as
+(select R.num  as annot from PhoneNumber R)
+union all
+(select R.loc as annot from Address R)
+union all
+(select R.org as annot from Organization R)
+union all 
+(select R.email as annot from EmailAll R)
+union all 
+(select R.url as annot from Url R);
+
+-- find all blocks
+create view EvidenceBlockGood as
+select B.block as annot
+from BlockTok(6,2,6,Evidence.annot) B;
+
+-- find all blocks
+create view EvidenceBlockStrong as
+select B.block as annot
+from BlockTok(6,4,6,Evidence.annot) B;
+
+-- personblocks where person followed by newline
+create view PersonBlockNewline as
+select P.name as name, P.personblock as personblock
+from PersonBlock P
+where ContainsRegex(/[\n\r]/,RightContext(P.name,10))
+and ContainsRegex(/[\n\r]/,LeftContextTok(P.name,5));
+
+create view PersonBlockNoNewline as
+(select P.name as name, P.personblock as personblock
+from PersonBlock P)
+minus
+(select P.name as name, P.personblock as personblock
+from PersonBlockNewline P);
+
+create view SignatureBlockCand1 as
+select P.name as name, CombineSpans(P.name,E.annot) as personSig
+from PersonBlockNewline P, EvidenceBlockGood E
+where Contains(P.personblock, E.annot);
+
+create view SignatureBlockCand2 as
+select P.name as name, CombineSpans(P.name,E.annot) as personSig
+from PersonBlockNoNewline P, EvidenceBlockStrong E
+where Contains(P.personblock, E.annot);
+
+create view SignatureBlockCandAll as
+(select S.name as name, S.personSig as personSig from SignatureBlockCand1 S)
+union all
+(select S.name as name, S.personSig as personSig from SignatureBlockCand2 S);
+
+create view SignatureBlockCandRetained as
+select S.name as name, S.personSig as personSig
+from SignatureBlockCandAll S, PhoneNumber N
+where Contains(S.personSig, N.num)
+and Not(ContainsRegex(/((\n\s*\n)|(\r\s*\r)|(\n\s*\r)|(\r\s+\n)|(thanks)|(bye)|(regards)|(thank)|(\Whave\W)|(\Wme\W)|(\Wmy\W)|(\Wyou\W)|(\WI\W))/,S.personSig));
+
+--create view Signature as
+select S.name as name, S.personSig as block
+into Signature
+from SignatureBlockCandRetained S
+consolidate on S.personSig;

@@ -1,0 +1,69 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- createFunction.aql
+--
+-- Used for testing create function statement
+
+create function udf1(p1 Integer, p2 Integer, p3 String, p4 String)
+return String
+--specific udf1
+external_name 'udfjars/udfs.jar:com.ibm.test.udfs.udf1!f1'
+language java
+--parameter ccsid ascii 
+deterministic
+return null on null input;
+
+create function udfCombineSpans(p1 Span, p2 Span)
+return Span like p1
+--specific udf2
+external_name 'udfjars/udfs.jar:com.ibm.test.udfs.udf1!combineSpans'
+language java
+--parameter ccsid ascii 
+deterministic
+return null on null input;
+
+create view FirstName1 as
+select udf1(1, 2, GetText(D.match), GetText(D.match)) as name
+from Dictionary('dictionaries/first.dict', Document.text) D
+where MatchesRegex(/\A[A-Z][a-z]*\Z/, D.match);
+
+output view FirstName1;
+
+create view FirstName2 as
+select udfCombineSpans(D.match, RightContext(D.match, 50)) as name
+from Dictionary('dictionaries/first.dict', Document.text) D
+where MatchesRegex(/\A[A-Z][a-z]*\Z/, D.match);
+
+output view FirstName2;
+
+create function udfSpanGreaterThan(span Span, size Integer)
+return Boolean
+--specific udf2
+external_name 'udfjars/udfs.jar:com.ibm.test.udfs.udf1!spanGreaterThan'
+language java
+--parameter ccsid ascii 
+deterministic;
+
+
+
+create view FirstName3 as
+select D.match
+from Dictionary('dictionaries/first.dict', Document.text) D
+where udfSpanGreaterThan(D.match, 7);
+
+output view FirstName3;
+
+create function udfFormat(span Span, truncate Boolean)
+return Span like span
+--specific udf2
+external_name 'udfjars/udfs.jar:com.ibm.test.udfs.udf1!format'
+language java
+--parameter ccsid ascii 
+deterministic;
+
+create view FirstName4 as
+select udfFormat(D.match, udfSpanGreaterThan(D.match, 7))
+from Dictionary('dictionaries/first.dict', Document.text) D;
+
+output view FirstName4;

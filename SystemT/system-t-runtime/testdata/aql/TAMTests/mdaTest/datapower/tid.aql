@@ -1,0 +1,25 @@
+module datapower;
+
+-------------------------------------------------------------------------------
+-- tid.aql
+--
+-- Rules for identifying transaction IDs in DataPower logs.
+--
+-- Authors: Sonali Surange, Fred Reiss
+------------------------------------------------------------------------------
+
+-- Main rule for finding a transaction ID; looks for the pattern
+-- tid(<number>) and flags the number as a transaction ID
+create view tidBuildingBlock as 
+extract pattern 
+	'tid(' ( /\d+/ ) ')' 
+return group 1 as match
+from Document D;
+
+-- Format the output in a way that is consistent with other outputs of the
+-- extractor.
+create view tidOutput as
+select D.match as span, GetText(D.match) as text, GetString('Tid') as field_type
+from tidBuildingBlock D;
+
+export view tidOutput;

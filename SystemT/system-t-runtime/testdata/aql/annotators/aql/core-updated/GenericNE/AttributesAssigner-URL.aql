@@ -1,0 +1,25 @@
+-----------------------------------------------------------------
+-- This file create and assign attributes for all the URL output type
+-----------------------------------------------------------------
+
+
+----------------------------------------------------------------
+--                  URL 
+----------------------------------------------------------------
+create view UrlWithAttr as
+  extract 
+        regex /^((\p{L}\p{M}*)+):.+$/ on U.annot
+       return group 0 as reference and group 1 as protocol
+  from URLAll U;
+
+create view UrlWithoutAttr as
+(select U.annot as reference from URLAll U)
+minus
+(select U.reference as reference from UrlWithAttr U);
+
+create view UrlWithAttrAll as
+(select U.reference as url, U.protocol as protocol, U.reference as reference from UrlWithAttr U)
+union all
+(select U.reference as url, '' as protocol, U.reference as reference from UrlWithoutAttr U);
+
+

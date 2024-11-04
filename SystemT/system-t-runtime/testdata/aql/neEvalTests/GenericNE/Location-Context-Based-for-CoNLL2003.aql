@@ -1,0 +1,57 @@
+----------------------------------------------------
+-- High precision rules: no need for filtering
+----------------------------------------------------
+-- Cargo Flow Trend
+-- Saarbruecken 626 up 28.3 
+-- [Muenster] / Osnabrueck 382 up 28.2
+-- Tempelhof 202 down 60.0 
+
+create view CargoFlowStatLine as
+	extract 
+	 regex /([\r\n][^\r\n]*)\s+((\d{1,3},)?\d{3}\s+(up|down)\s*\d{1,2}\.\d{1,2}[^\r\n]*)/
+			on D.text 
+			return group 0 as line
+			  and  group 1 as cities
+			  and  group 2 as stat
+			from Doc D;
+
+output view CargoFlowStatLine;
+
+create view PatternBasedLocation1 as
+select C.match as loc
+from CapsPlaceOnetoTwo C,
+     CargoFlowStatLine S
+where Contains(S.line, C.match)
+  and FollowsTok(C.match, S.stat, 0, 5)
+  and Not(ContainsRegex(/([a-z]+\s+){2,}|sales/, S.cities));
+	
+output view PatternBasedLocation1;
+
+-- For the second line of each news article
+-- <Location>, <Location>? -- DATE
+  
+create view NewsReportSecondLine as
+	extract
+		regex /[\r\n]\s*(([a-zA-Z]+-?[a-zA-Z]+[ ]*){1,3})(,[ ]*([a-zA-Z]+[ ]*){1,3})?\s*\d{4}\-\d{2}-\d{2}\s*[\r\n]/
+		 on D.text
+		 return group 1 as city
+		    and group 4 as country 
+		 from Doc D;
+		 
+create view LocationFromNewsReportSecondLine as
+	(select L.city as loc from NewsReportSecondLine L)
+	union all
+	(select L.country as loc from NewsReportSecondLine L where NotNull(L.country));
+	
+output view LocationFromNewsReportSecondLine;
+	
+--create view PatternBasedLocation as
+--select P.* from PatternBasedLocation1 P;
+
+create view PatternBasedLocation as
+	(select P.* from PatternBasedLocation1 P)
+	union all
+	(select P.* from LocationFromNewsReportSecondLine P); 
+
+output view PatternBasedLocation;
+

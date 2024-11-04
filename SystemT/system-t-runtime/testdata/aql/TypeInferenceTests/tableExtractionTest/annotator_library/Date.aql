@@ -1,0 +1,48 @@
+/**
+	This module contains generic annotators that are domain independent.
+	The annotation extractor runs on the detagged document and
+	hence the import statement.
+*/
+module annotator_library;
+import view Doc from module detag_doc as Doc;
+-------------------------------------------------------------------------------
+--  create external dictionary for month
+-------------------------------------------------------------------------------
+create external dictionary month 
+allow_empty false;
+export dictionary month;
+    
+--  extract the month dictionary
+create view Month as
+	select
+		D.match as match
+	from
+		Dictionary('month', Doc.text) D;
+
+
+-------------------------------------------------------------------------------
+--  Create external table for time period with start month, startDate, endMonth 
+--	endDate as attributes.
+-------------------------------------------------------------------------------
+create external table Time_Period_Table 
+(period Text, startMonth Text, startDate Text, endMonth Text, endDate Text)
+allow_empty false;
+
+
+-------------------------------------------------------------------------------
+--  Create dictionary for time period from external table
+-------------------------------------------------------------------------------
+create dictionary Time_Period_Conversion_Dict
+from table Time_Period_Table 
+with entries from period 
+and case insensitive;
+
+
+-------------------------------------------------------------------------------
+--  Create dictionary for time period conversion dict from external table
+-------------------------------------------------------------------------------
+create view Time_Period_Conversion_temp as
+extract
+	dictionary 'Time_Period_Conversion_Dict'
+on D.text as time_period_conv
+from Doc D;	

@@ -1,0 +1,24 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- 
+-- Test case for comparing Strings and Texts and for removing GetString.
+--
+-------------------------------------------------------------------------------
+
+-- Create a view with a string column
+create view R as 
+select 'hello world' as str 
+from Document D;
+
+-- Works prior to 4Q 2013. Continue to work.
+create view S1 as 
+select Equals('hello world', GetString(R.str))
+from R;
+output view S1;
+
+-- Did not work prior to 4Q 2013.  Works since.
+create view S as 
+select Equals('hello world', R.str)
+from R;
+output view S;

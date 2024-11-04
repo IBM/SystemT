@@ -1,0 +1,26 @@
+-- ******************************************
+-- Extract the Thread ID that is
+-- (i) composed of chars in the regex mentioned in _base view and is of the specified length
+-- (ii)surrounded by a single white space
+-- Eg:
+-- [1/5/12 16:41:31:266 PST] 0000000a ServiceLogger I com.ibm.ws.ffdc.IncidentStreamImpl resetIncidentStream FFDC0010I: FFDC closed incident stream file /apps/WebSphere/ProcServer-6.2/profiles/EISNAP01/logs/ffdc/WDPE-PROD.AppTarget.czzpwa01Node01.0_0000000a_12.01.05_16.41.31_1.txt
+-- Here '0000000a' is the Thread ID
+-- ******************************************
+
+create view threadID_base as 
+    extract regex /[0-9a-fA-F]{8}/ on 1 token in D.text as match
+    from Doc D;
+    	
+create view ThreadID as 
+    select C.match as threadID
+    from threadID_base C
+    where MatchesRegex(/\s/, LeftContext(C.match, 1))
+    and MatchesRegex(/\s/, RightContext(C.match, 1));
+
+create view ThreadIDOutputInterim as 
+select D.threadID as threadID_Span, GetText(D.threadID) as threadID_Text
+from ThreadID D;
+
+create view ThreadIDOutput as
+select D.threadID_Span as span, D.threadID_Text as text, GetString('ThreadIDWS') as field_type
+from ThreadIDOutputInterim D;

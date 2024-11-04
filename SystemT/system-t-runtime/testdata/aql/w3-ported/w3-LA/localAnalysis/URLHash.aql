@@ -1,0 +1,73 @@
+-------------------------------------------------------------------------------
+-- URLHash.aql from Java Revision No 130 for Java class URLHashAnnotator.java
+--
+--
+-- Depends on URL.aql, UrlSpecialDedup
+--
+-- Based on Huiayu's original Java implementation.
+-------------------------------------------------------------------------------
+
+-- All URLs with default dedup, normalized, and more_normalized strings.
+create view URLAllCand as
+select 
+		NMD.dedupString as url3,
+		NMD.moreNormalizedURL as url2,
+		NMD.normalizedURL as url1,
+		U.url as url0
+from NormMoreNormDedup NMD, PageMainUrls U;
+
+
+-- URLs with special dedup strings
+create view URLSpecialDedup as
+select 
+		U.url3 as url3,
+		U.url2 as url2,
+		U.url1 as url1,
+		U.url0 as url0,
+		D.id as specialDedup
+from URLAllCand U, URLDedupSpecial D;
+
+
+-- URLs without special dedup string
+create view URLDefaultDedup as
+(select U.url3 as url3, U.url2 as url2, U.url1 as url1, U.url0 as url0 from URLAllCand U)
+minus 
+(select U.url3 as url3, U.url2 as url2, U.url1 as url1, U.url0 as url0 from URLSpecialDedup U);
+
+
+-- All URLs with default and special dedup strings
+create view URLAll as
+(select GetString(U.specialDedup) as url3, GetString(U.url2) as url2, GetString(U.url1) as url1, GetString(U.url0) as url0 from URLSpecialDedup U)
+union all 
+(select GetString(U.url3) as url3, GetString(U.url2) as url2, GetString(U.url1) as url1, GetString(U.url0) as url0 from URLDefaultDedup U);
+
+
+-- All URLs with hash codes
+create view URLHashAll as
+select 
+		GenerateHashCode(GetString(U.url3)) as url3_hash,
+		GenerateHashCode(GetString(U.url2)) as url2_hash,
+		GenerateHashCode(GetString(U.url1)) as url1_hash,
+		GenerateHashCode(GetString(U.url0)) as url0_hash
+from URLAll U;
+
+
+-- URLHash for URLs for which normalization failed
+create view URLHashNotNormalized as
+select * 
+from URLHashAll U
+where Equals(U.url1_hash, 0);
+
+
+-- URLHash for URLs with normalized form
+create view URLHashNormalized as
+(select * from URLHashAll)
+minus
+(select * from URLHashNotNormalized);
+
+-- URLHash for all URLs, where for non-normalized URLs
+-- we use the hash of original URL to populate the other three hashes
+create view URLHash as
+(select U.url3_hash as url3_hash, U.url2_hash as url2_hash, U.url1_hash as url1_hash, U.url0_hash as url0_hash from URLHashNormalized U)
+union all
+(select U.url0_hash as url3_hash, U.url0_hash as url2_hash, U.url0_hash as url1_hash, U.url0_hash as url0_hash from URLHashNotNormalized U);

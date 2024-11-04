@@ -1,0 +1,111 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- brandRuleTest.aql
+--
+-- Test case for a basic translation of COBRA brand identification rules.
+
+-- Will get snippets later use full document for now
+create view InputSnippet as
+select D.text as text
+from Document D;
+
+-- Translation of brand rules directly into AQL
+create view BrandRuleMatchInSnippet1  as
+(
+	extract 'Nike' as brand, S.text as snippet, regex /Nike|NIKE|nike/ on S.text as match
+	from InputSnippet S
+	having Not(ContainsRegex(/Samotrake|Samothrace/, snippet))
+) union all (
+	extract 'VW' as brand, S.text as snippet, regex /Polo|POLO/ on S.text as match
+	from InputSnippet S
+	having Not(ContainsRegex(/horse|game|team/, snippet))
+) union all (
+	extract 'VW' as brand, S.text as snippet, regex /Golf/ on S.text as match
+	from InputSnippet S
+	having Not(ContainsRegex(/Tiger Woods|stream/, snippet))
+) union all (
+	extract 'Enron' as brand, S.text as snippet, regex /Enron\b/ on S.text as match
+	from InputSnippet S
+	having Not(ContainsRegex(/Power/, snippet))
+);
+
+output view BrandRuleMatchInSnippet1;
+
+-------------------------------------------------------------------------------
+-- Translation of the COBRA rules that uses lookup tables
+
+-- Lookup table of positive terms (terms that must be in the snippet in order
+-- for it to match)
+create table BrandRulesTab_Positive (ruleID Integer, brand Text, incl Text) as
+values 
+	(1, 'Nike', 'Nike'), 
+	(1, 'Nike', 'NIKE'), 
+	(1, 'Nike', 'nike'), 
+	(2, 'VW', 'Polo'), 
+	(2, 'VW', 'POLO'), 
+	(3, 'VW', 'Golf'),
+	(4, 'Enron', 'Enron')
+	;
+
+-- Lookup table of negative terms; each negative term negates ONLY the 
+-- positive terms with the same rule ID.
+create table BrandRulesTab_Negative (ruleID Integer, brand Text, excl Text) as
+values 
+	(1, 'Nike', 'Samotrake'), 
+	(1, 'Nike', 'Samothrace'), 
+	(2, 'VW', 'horse'), 
+	(2, 'VW', 'game'), 
+	(2, 'VW', 'team'), 
+	(3, 'VW', 'Tiger Woods'),
+	(3, 'VW', 'stream'),
+	(4, 'Enron', 'Power')
+	;
+	
+-- Turn the lookup tables into dictionaries
+create dictionary BrandRulesDict_Positive
+from table BrandRulesTab_Positive
+with entries from incl
+and case exact;
+
+create dictionary BrandRulesDict_Negative
+from table BrandRulesTab_Negative
+with entries from excl
+and case exact;
+
+-- Find all positive term matches, and augment them with rule IDs
+create view BrandRule_PosMatch as
+select T.ruleID as ruleID, E.snippet as snippet, E.match as match
+from BrandRulesTab_Positive T,
+	(
+		extract S.text as snippet, 
+		dictionary BrandRulesDict_Positive on S.text as match
+		from InputSnippet S
+	) E
+where Equals(GetText(T.incl), GetText(E.match));
+
+-- Find all negative term matches, and augment them with rule IDs
+create view BrandRule_NegMatch as
+select T.ruleID as ruleID, E.snippet as snippet, E.match as match
+from BrandRulesTab_Negative T,
+	(
+		extract S.text as snippet, 
+		dictionary BrandRulesDict_Negative on S.text as match
+		from InputSnippet S
+	) E
+where Equals(GetText(T.excl), GetText(E.match));
+
+
+-- Find false positives
+create view BrandRule_FalsePositive as
+select P.*
+from BrandRule_PosMatch P, BrandRule_NegMatch N
+where Equals(P.snippet, N.snippet) and Equals(P.ruleID, N.ruleID);
+
+-- Remove false positives
+create view BrandRuleMatchInSnippet2 as
+(select * from BrandRule_PosMatch) minus (select * from BrandRule_FalsePositive);
+
+output view BrandRuleMatchInSnippet2;
+
+

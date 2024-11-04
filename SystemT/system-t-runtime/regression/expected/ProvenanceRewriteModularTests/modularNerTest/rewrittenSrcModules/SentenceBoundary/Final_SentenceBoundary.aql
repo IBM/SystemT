@@ -1,0 +1,134 @@
+module SentenceBoundary;
+
+
+import dictionary MiscellaneousAbbreviations from module Dictionaries as MiscellaneousAbbreviations
+;
+
+
+create view SentenceBoundary as
+  select  __t2.boundary as boundary,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__39__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__39__Temp__1 __t1,
+        __Consolidate__39__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.boundary;
+
+output view SentenceBoundary;
+
+export view SentenceBoundary.HeadlineMixedCaps;
+
+
+export view SentenceBoundary.SentenceBoundary;
+
+
+create view __Consolidate__39__Temp__1 as
+  select  S.boundary as boundary,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as __Subquery__38__Temp_____sep_____S____id,
+          S.boundary as __consolidate__target
+  from  __Subquery__38__Temp S;
+
+output view __Consolidate__39__Temp__1;
+
+create view __Consolidate__39__Temp__2 as
+  select  __t1.boundary as boundary,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__39__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__39__Temp__2;
+
+create view __Subquery__37__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    regex /(([\.\?!]+\s)|(\n\s*\n))/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as match
+  from DocumentText D;
+
+output view __Subquery__37__Temp;
+
+create view __Subquery__38__Temp as
+  (select  Op.boundary as boundary,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__36__TempOp__0 Op)
+  union all
+  (select  Op.boundary as boundary,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__36__TempOp__1 Op)
+  union all
+  (select  Op.boundary as boundary,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__36__TempOp__2 Op)
+  union all
+  (select  Op.boundary as boundary,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__36__TempOp__3 Op)
+  union all
+  (select  Op.boundary as boundary,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__36__TempOp__4 Op);
+
+output view __Subquery__38__Temp;
+
+create view __Union__36__TempOp__0 as
+  select  R.match as boundary,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__37__Temp_____sep_____R____id
+  from  __Subquery__37__Temp R
+  where Not(ContainsDict('MiscellaneousAbbreviations', CombineSpans(LeftContextTok(R.match, 1), R.match)));
+
+output view __Union__36__TempOp__0;
+
+create view __Union__36__TempOp__1 as
+  select  H.lb as boundary,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          H.__auto__id as HeadlineMixedCaps_____sep_____H____id
+  from  HeadlineMixedCaps H;
+
+output view __Union__36__TempOp__1;
+
+create view __Union__36__TempOp__2 as
+  select  H.rb as boundary,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          H.__auto__id as HeadlineMixedCaps_____sep_____H____id
+  from  HeadlineMixedCaps H;
+
+output view __Union__36__TempOp__2;
+
+create view __Union__36__TempOp__3 as
+  select  H.lb as boundary,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          H.__auto__id as HTMLTagBoundary_____sep_____H____id
+  from  HTMLTagBoundary H;
+
+output view __Union__36__TempOp__3;
+
+create view __Union__36__TempOp__4 as
+  select  H.rb as boundary,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          H.__auto__id as HTMLTagBoundary_____sep_____H____id
+  from  HTMLTagBoundary H;
+
+output view __Union__36__TempOp__4;
+

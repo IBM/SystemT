@@ -1,0 +1,61 @@
+-- ------------------------------------------
+-- Consolidation:
+-- For now, we just remove annotations that are completely
+-- contained within other annotations.
+
+create view OrgSentence1 as
+(
+	select OA.org as org	 
+	from OrgAllNoNewLine OA
+	where
+		-- Laura 8/5/09: added knob for turning on/off matches over single new lines
+		-- in Organization-FilterSingleNewLineTab.aql
+        -- Not(ContainsRegex(/[\n\r]/, OA.org)) and
+           Not(ContainsDict('FilterOrgDict', OA.org))
+        and Not(ContainsDict('filterOrg_german.dict', OA.org))
+        --and Not(ContainsDict('acquisition/acquisitioncluebetween.dict', OA.org))
+	 	--and Not(ContainsDict('acquisition/acquisitionclueafter.dict', OA.org))
+	 	--and Not(ContainsDict('acquisition/saleclue.dict', OA.org))
+	 	--and Not(ContainsDict('acquisition/announcedclue.dict', OA.org))
+		--and Not(ContainsDict('acquisition/cancelledclue.dict', OA.org))
+		--and Not(ContainsDict('acquisition/plannedclue.dict', OA.org))
+		--and Not(ContainsDict('acquisition/postponedclue.dict', OA.org))
+		--and Not(ContainsDict('acquisition/updatedclue.dict', OA.org))
+		--and Not(ContainsDict('merger/mergerclue.dict', OA.org))
+		--and Not(ContainsDict('merger/plannedclue.dict', OA.org))
+		--and Not(ContainsDict('merger/postponedclue.dict', OA.org))
+		--and Not(ContainsDict('merger/updatedclue.dict', OA.org))  
+		--Laura 04/21/09: replaced reference to financial dicts with new filtering dict
+		and Not(ContainsDict('filterOrg_domain.dict', OA.org))      
+		----and Not(ContainsDict('industryType_prefix.dict',OA.org))
+)
+minus
+(
+	select OA.org as org	 
+	from SentenceBoundary S, OrgAll OA
+	where Contains(OA.org, S.boundary)
+);
+
+-- Yunyao: added 03/20/2009
+-- avoid matching long company suffixes such as "Company, Inc." 
+create view OrgSentence as
+	(select O.org as org from OrgSentence1 O)
+	minus 
+	(select O.match as org from OrgClueStSuffixCaps O);
+
+/*
+create view OrgSentence as
+	select OA.org as org	 
+	from
+		sentence S, OrgAll OA
+	where
+		Contains(S.sentence, OA.org) 
+		--and Not(ContainsDict('FilterPersonDict', OA.org))
+		-- do not allow new line
+        and Not(ContainsRegex(/[\n\r]/, OA.org))
+        and Not(ContainsDict('FilterOrgDict', OA.org))
+        and Not(ContainsDict('filterOrg_german.dict', OA.org));		
+		--and Not(ContainsDict(industryType_prefix.dict',OA.org));
+*/
+
+	

@@ -1,0 +1,138 @@
+module common;
+
+
+create view startsWithProtocol as
+  select  R.match as annot,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__36__Temp_____sep_____R____id
+  from  __Subquery__36__Temp R;
+
+output view startsWithProtocol;
+
+create view startsWithoutProtocol as
+  select  R.match as annot,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__37__Temp_____sep_____R____id
+  from  __Subquery__37__Temp R;
+
+output view startsWithoutProtocol;
+
+create view URLAll as
+  (select  Op.annot as annot,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__38__TempOp__0 Op)
+  union all
+  (select  Op.annot as annot,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__38__TempOp__1 Op);
+
+output view URLAll;
+
+export view common.URLAll;
+
+
+create view URLAllConsolidated as
+  select  __t2.annot as annot,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__39__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__39__Temp__1 __t1,
+        __Consolidate__39__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.annot;
+
+output view URLAllConsolidated;
+
+create view URLAllInterim as
+  select  D.annot as URL_Span,
+          GetText(D.annot) as URL_Text,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as URLAllConsolidated_____sep_____D____id
+  from  URLAllConsolidated D;
+
+output view URLAllInterim;
+
+export view common.URLAllInterim;
+
+
+create view URLOutput as
+  select  D.URL_Span as URL_span,
+          D.URL_Text as URL_text,
+          GetString('URL') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as URLAllInterim_____sep_____D____id
+  from  URLAllInterim D;
+
+output view URLOutput;
+
+export view common.URLOutput;
+
+
+create view __Consolidate__39__Temp__1 as
+  select  C.annot as annot,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as URLAll_____sep_____C____id,
+          C.annot as __consolidate__target
+  from  URLAll C;
+
+output view __Consolidate__39__Temp__1;
+
+create view __Consolidate__39__Temp__2 as
+  select  __t1.annot as annot,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__39__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__39__Temp__2;
+
+create view __Subquery__36__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____Document____id,
+    regex /((ht|f)tps?:\/\/\w+[\w\-:&=_?\/~.<>@:]+[\w\-:&=_?\/~]{2,100})/
+    with flags 'DOTALL'
+    on between 1 and 50 tokens in Document.text
+    return group 0 as match
+  from Document Document;
+
+output view __Subquery__36__Temp;
+
+create view __Subquery__37__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____Document____id,
+    regex /((www\d{0,3}|(w\d[a-zA-Z\-\d]*)+)\.\w+[\w\-:&=_?\/~.<>@:]+[\w\-:&=_?\/~]{2,100})/
+    with flags 'DOTALL'
+    on between 1 and 50 tokens in Document.text
+    return group 0 as match
+  from Document Document;
+
+output view __Subquery__37__Temp;
+
+create view __Union__38__TempOp__0 as
+  select  U.annot as annot,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as startsWithProtocol_____sep_____U____id
+  from  startsWithProtocol U;
+
+output view __Union__38__TempOp__0;
+
+create view __Union__38__TempOp__1 as
+  select  U.annot as annot,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as startsWithoutProtocol_____sep_____U____id
+  from  startsWithoutProtocol U;
+
+output view __Union__38__TempOp__1;
+

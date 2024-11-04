@@ -1,0 +1,515 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- USAddress.aql
+-- 
+-- Standalone version of the U.S. address annotator from the named-entity 
+-- stack, converted to SystemT 0.3 syntax.
+-------------------------------------------------------------------------------
+
+-- Point the Document view to "Doc", so that we can substitute a detagged
+-- documents view if necessary.
+create view Doc as
+select D.text as text from Document D;
+
+-------------------------------------------------------------------------------
+-- Dictionary matches
+
+
+create dictionary CanadianProvinceStrongAbbrevDict 
+from file 'provinceAbbrev_canada.dict'
+with case exact;
+
+create view CanadianProvinceStrongAbbrev  as
+extract dictionary CanadianProvinceStrongAbbrevDict on D.text as match
+from Doc D;
+
+create dictionary CanadianProvinceWeakAbbrevDict
+from file 'provinceAbbrev_canada.dict';
+
+create view CanadianProvinceWeakAbbrev  as
+extract dictionary CanadianProvinceWeakAbbrevDict on D.text as match
+from Doc D;
+ 
+-- Major cities around the world
+create dictionary MajorCityDict1 from file 'majorCity_world.dict';
+create dictionary MajorCityDict2 from file 'majorCities.dict';
+
+-- Make sure that we capture cities in the bay area
+create dictionary MajorCityDict3 from file 'city_bayarea.dict';
+     
+create view MajorCity as
+extract dictionaries MajorCityDict1 and MajorCityDict2 and MajorCityDict3
+	on D.text as match
+from Doc D;
+
+
+create dictionary CountryDict from file 'country.dict' with case exact;
+create view CountryCandidate as
+extract dictionary CountryDict on D.text as match
+from Doc D;
+    
+
+create dictionary USStateDict from file 'stateList.dict';
+create view USStateCandidate as
+extract dictionary CountryDict on D.text as match from Doc D;
+
+
+create dictionary CanadianProvinceDict from file 'province_canada.dict';
+create view CanadianProvinceCandidate  as
+extract dictionary CanadianProvinceDict on D.text as match from Doc D;
+        
+create view StateCandidate as
+    (select C.match as match from USStateCandidate C)
+    union all    
+    (select C.match as match from CanadianProvinceCandidate C);
+        
+-- The following do exact dictionary matching may missing entries such as 'Al', 'Ms'
+-- to avoid false positives in weak rules (e.g. the one w/o zipcode)   
+create dictionary USStateAbbrevDict from file 'stateListAbbrev.dict';
+
+create view USStateStrongAbbrev as
+extract dictionary USStateAbbrevDict 
+	with flags 'Exact'
+	on D.text as match 
+from Doc D;
+
+create view USStateWeakAbbrev as
+extract dictionary USStateAbbrevDict on D.text as match 
+from Doc D;
+     
+        
+create view StateStrongAbbrev as
+    (select A.match as match from USStateStrongAbbrev A)
+    union all
+    (select A.match as match from CanadianProvinceStrongAbbrev A);
+    
+create view StateWeakAbbrev as
+    (select A.match as match from USStateWeakAbbrev A)
+    union all
+    (select A.match as match from CanadianProvinceWeakAbbrev A);
+        
+  create view StateStrongAll
+    as
+    (select S.match as match from StateCandidate S)
+    union all
+     (select S.match as match from StateStrongAbbrev S);    
+     
+  create view StateWeakAll
+    as
+    (select S.match as match from StateCandidate S)
+    union all
+     (select S.match as match from StateWeakAbbrev S);    
+
+create dictionary USCityDict from file 'city.dict' with case exact;     
+create view USCity as
+extract dictionary USCityDict on D.text as match from Doc D;
+
+create dictionary StreetSuffixDict from file 'streetSuffix.dict';
+create view StreetSuffixNoCase as
+extract dictionary StreetSuffixDict on D.text as match from Doc D;
+
+create dictionary StreetSuffixWeakDict from file 'streetSuffix_weak.dict';
+create view StreetSuffixWeakNoCase as
+extract dictionary StreetSuffixWeakDict on D.text as match from Doc D;
+
+create dictionary SecondaryUnitDict from file 'secondaryUnit.dict';
+create view SecondaryUnitNoCase  as
+extract dictionary SecondaryUnitDict on D.text as match from Doc D;
+
+-- Highway
+create dictionary HighwayDict with case exact as
+(
+   'Route', 'Rte', 'US', 'Hwy', 'Highway', 'SR'
+);
+
+create view HighwayDictionary as
+extract dictionary HighwayDict on D.text as match
+from Doc D;
+  
+-------------------------------------------------------------------------------
+-- Regular expressions
+
+create view OptionalGapBlock as
+extract regex /(>>)+/ on between 1 and 12 tokens in D.text as match
+from Doc D;
+
+create view CapsPlace as
+extract regex /\p{Upper}[\p{Lower}\&\.-\/]{1,20}/ 
+	on between 1 and 25 tokens in D.text as match
+from Doc D;
+          
+create view Zipcode as
+extract regex /[0-9]{5}(\-[0-9]{4})?/ 
+    on between 1 and 3 tokens in D.text as match
+from Doc D;
+
+create view NumCP as
+extract regex /(([1-9\p{Alpha}][\d\p{Alpha}\-\,]*)?\d[\d\p{Alpha}\-\,]*)\b/
+    on between 1 and 20 tokens in D.text as match
+from Doc D
+having Not(MatchesRegex(/[1-9]\d{3}[,-]\s+.*/, match));
+
+-- Highway
+create view NumForHighwayAddress as
+extract regex /\d{1,5}-?[A-Z]?/ on between 1 and 3 tokens in D.text as match
+from Doc D;
+
+create view HighwayNum as
+extract regex /[1-9]\d{0,2}(\s*(N|S|E|W))?(\s*(N|S|E|W))?/
+    on between 1 and 3 tokens in D.text as match
+from Doc D;
+
+-----------------------------------------------------------------------------
+-- Composite rules
+
+create view CapsPlaceTwo as
+select
+    CombineSpans(cp1.match, cp2.match) as match
+from
+    CapsPlace cp1,
+    CapsPlace cp2
+where
+    FollowsTok(cp1.match, cp2.match, 0, 0);    
+           
+create view CapsPlaceOnetoTwo as
+(select R.match as match from CapsPlace R)
+    union all
+(select R.match as match from CapsPlaceTwo R);
+ 
+ 
+create view StreetSuffix as
+select S.match as match
+from StreetSuffixNoCase S
+where MatchesRegex(/\p{Upper}[\p{Lower}\&]{1,20}.?/, S.match);     
+         
+create view StreetSuffixWeak as
+select S.match as match
+from StreetSuffixWeakNoCase S
+where MatchesRegex(/\p{Upper}[\p{Lower}\&]{1,20}/, S.match);       
+       
+create view StreetSuffixAllWithDuplicates as
+(select S.match as match from StreetSuffix S)
+    union all
+(select S.match as match from StreetSuffixWeak S);
+     
+create view StreetSuffixAll as
+select R.match as match
+from StreetSuffixAllWithDuplicates R
+consolidate on R.match;
+     
+create view SecondaryUnit as
+select S.match as match
+from SecondaryUnitNoCase S
+where MatchesRegex(/(\#)|(\p{Upper}[\p{Lower}\&]{1,20})/, S.match);        
+        
+-- Rule 4
+
+--streetaddress
+        
+create view StreetAddressAllCandidates as
+select
+     nc.match as number, CombineSpans(SpanBetween(nc.match,ssw.match),ssw.match) as streetname, CombineSpans(nc.match, ssw.match) as matchedText,
+     RightContext(CombineSpans(nc.match, ssw.match),10) as rc
+from
+    NumCP nc,
+    StreetSuffixAll ssw
+where
+    FollowsTok(nc.match,ssw.match, 1, 7)  and
+    --MatchesRegex(/\s*(\p{Upper}\.?\s+){0,2}(\p{Upper}[\p{Lower}\&]{1,20}|\d{1,3}(st|nd|rd|th))\s*(\p{Upper}[\p{Lower}\&]+\s*){0,3}/, SpanBetween(nc.match,ssw.match)) and
+    MatchesRegex(/\s*((\p{Upper}\.?\s*){1,2})?(\p{Upper}[\p{Lower}\&]{1,20}|\d{1,3}(st|nd|rd|th))\s*(\p{Upper}[\p{Lower}\&]+\s*){0,3}/, SpanBetween(nc.match,ssw.match)) 
+    and Not(ContainsRegex(/[\n\r]/, CombineSpans(nc.match,ssw.match)));
+    
+-- expand StreetAddressAll to include direction such as N.E.
+create view StreetAddressExpansion as
+select R.match as expansion
+from Regex(/^\W*([NSEW]\.?\s*){1,2}\b/, StreetAddressAllCandidates.rc) R;
+
+create view StreetAddressAllCandidatesWithExpansion as
+select
+     S.number as number, CombineSpans(S.streetname,SAE.expansion) as streetname, CombineSpans(S.matchedText,SAE.expansion) as matchedText,
+     S.streetname as oldstreetname, S.matchedText as oldmatch
+from StreetAddressAllCandidates S, StreetAddressExpansion SAE
+where FollowsTok(S.matchedText, SAE.expansion,0,0);
+
+create view StreetAddressAllCandidatesWithoutExpansion as
+(select S.number as number, S.streetname as streetname, S.matchedText as matchedText
+from StreetAddressAllCandidates S)
+minus
+(select S.number as number, S.oldstreetname as streetname, S.oldmatch as matchedText
+from StreetAddressAllCandidatesWithExpansion S
+);
+
+create view StreetAddressAll as
+(select S.number as number, S.streetname as streetname, S.matchedText as match from StreetAddressAllCandidatesWithoutExpansion S)
+union all
+(select S.number as number, S.streetname as streetname, S.matchedText as match from StreetAddressAllCandidatesWithExpansion S)
+;
+
+       
+----- highway address
+        
+create view HighwayStateDictionary as
+(select R.match as match from HighwayDictionary R)
+union all
+(select R.match as match from StateStrongAbbrev R);
+    
+create view HighwayAddressPart as
+select
+     nc.match as number, CombineSpans(SpanBetween(nc.match,rs.match),rs.match) as highwayname, CombineSpans(nc.match, rs.match) as match
+from
+    NumForHighwayAddress nc,
+    HighwayStateDictionary rs
+ where
+    FollowsTok(nc.match,rs.match, 0, 2)  and
+    MatchesRegex(/\W+((N|S|E|W)\W+)?/, SpanBetween(nc.match,rs.match)) and
+    Not(ContainsRegex(/[\n\r]/, CombineSpans(nc.match,rs.match)));
+    
+        
+create view HighwayAddress as
+select
+     ra.number as number, ra.highwayname as highwayname, CombineSpans(ra.match, hn.match) as match
+from
+    HighwayAddressPart ra,
+    HighwayNum hn
+ where
+    FollowsTok(ra.match,hn.match, 0, 1)  and
+    MatchesRegex(/\W+/, SpanBetween(ra.match,hn.match)) and
+    -- Yunyao: updated on 02/01/2008
+    -- No new lines allowed between
+    Not(ContainsRegex(/[\n\r]/, CombineSpans(ra.match,hn.match)));
+    
+                
+-- unit
+         
+ create view StreetHighwayAddressAll as
+(select S.number as number, S.streetname as streetname, S.match as match from StreetAddressAll S)
+union all
+(select S.number as number, S.highwayname as streetname, S.match as match from HighwayAddress S);
+
+             
+create view StreetAddressUnit  as
+select
+     S.number as number, S.streetname as streetname,
+      Su.match as secondaryUnit, CombineSpans(S.match, Su.match) as match
+from
+    StreetHighwayAddressAll S,
+    SecondaryUnit Su
+where
+    FollowsTok(S.match,Su.match, 0, 2) and
+    MatchesRegex(/\s*\d*\s*,?\s*$/, SpanBetween(S.match,Su.match));
+    
+    
+-- Yunyao: added 06/01/2008
+create view StreetAddressUnitWithGap  as
+select
+    S.number as number, S.streetname as streetname,
+    Su.match as secondaryUnit, CombineSpans(S.match, Su.match) as match
+from
+    StreetHighwayAddressAll S,
+    OptionalGapBlock G,
+    SecondaryUnit Su
+where
+    FollowsTok(S.match, G.match, 0, 0) and
+    FollowsTok(G.match, Su.match, 0, 0);
+    
+        
+create view StreetAddressOptionalUnitCandidates as
+(select S.number as number, S.streetname as streetname,
+ RightContext(S.match,0) as secondaryUnit, S.match as match from StreetHighwayAddressAll S)
+union all
+ (select S.number as number, S.streetname as streetname, S.secondaryUnit as secondaryUnit, S.match as match from StreetAddressUnit S)
+-- Yunyao: added 06/01/2008
+union all
+ (select S.number as number, S.streetname as streetname,S.secondaryUnit as secondaryUnit, S.match as match from StreetAddressUnitWithGap S);
+ 
+    
+create view StreetAddressOptionalUnit as
+select R.number as number, R.streetname as streetname, R.secondaryUnit as secondaryUnit, R.match as match
+from StreetAddressOptionalUnitCandidates R
+consolidate on R.match;
+
+create view StreetAddressWithCityNoGap as
+select
+-- Sekar : combining secondary unit with what appears before city
+     S.number as number,S.streetname as streetname,
+     CombineSpans(S.secondaryUnit,SpanBetween(S.secondaryUnit,cp.match)) as secondaryUnit, cp.match as city, CombineSpans(S.match, cp.match) as match
+from
+    StreetAddressOptionalUnit S,
+    CapsPlaceOnetoTwo cp
+ where
+    FollowsTok(S.match,cp.match, 0, 5)
+--FollowsTok(S.match,cp.match, 0, 3)
+--        and
+--        MatchesRegex(/\s*,?\s*[\d\p{Alpha}]{1,20}([\.\ \-\,\d\p{Alpha}]{0,10}\s*){0,2},?\s*/, SpanBetween(S.match,cp.match))
+    ;
+    
+
+-- Yunyao: added 06/01/2008
+create view StreetAddressWithCityWithGap as
+select
+     S.number as number, S.streetname as streetname,
+     CombineSpans(S.secondaryUnit,SpanBetween(S.secondaryUnit,G.match)) as secondaryUnit,cp.match as city, CombineSpans(S.match, cp.match) as match
+from
+    StreetAddressOptionalUnit S,
+    OptionalGapBlock G,
+    CapsPlaceOnetoTwo cp
+where
+    FollowsTok(S.match,G.match, 0, 5) and
+    FollowsTok(G.match, cp.match, 0, 0);
+
+    
+        
+create view StreetAddressWithCity as
+(select C.number as number, C.streetname as streetname, C.secondaryUnit as secondaryUnit, C.city as city,C.match as match from StreetAddressWithCityNoGap C)
+    union all
+(select C.number as number, C.streetname as streetname, C.secondaryUnit as secondaryUnit, C.city as city,C.match as match from StreetAddressWithCityWithGap C);
+    
+        
+--  addresswithstate
+
+create view StreetAddressWithCityStrongState as
+select
+     Sawc.number as number, Sawc.streetname as streetname, Sawc.secondaryUnit as secondaryUnit, Sawc.city as city, Sa.match as state, CombineSpans(Sawc.match, Sa.match) as match
+from
+    StreetAddressWithCity Sawc,
+    StateStrongAll Sa
+where
+    FollowsTok(Sawc.match,Sa.match, 0, 1)  and
+    MatchesRegex(/\s*,?\s*/, SpanBetween(Sawc.match,Sa.match));
+    
+    
+create view StreetAddressWithCityWeakState as
+select
+    Sawc.number as number, 
+    Sawc.streetname as streetname, 
+    Sawc.secondaryUnit as secondaryUnit, 
+    Sawc.city as city, 
+    Sa.match as state, 
+    CombineSpans(Sawc.match, Sa.match) as match
+from
+    StreetAddressWithCity Sawc,
+    StateWeakAll Sa
+where
+    FollowsTok(Sawc.match,Sa.match, 0, 1)  and
+    MatchesRegex(/\s*,?\s*/, SpanBetween(Sawc.match,Sa.match));
+    
+        
+create view StreetAddressWithCityOptionalWeakStateCandidates
+as
+(select S.number as number, S.streetname as streetname, S.secondaryUnit as secondaryUnit, S.city as city, RightContext(S.match,0) as state, S.match as match from StreetAddressWithCity S)
+union all  
+(select S.number as number, S.streetname as streetname,S.secondaryUnit as secondaryUnit, S.city as city, S.state as state, S.match as match from StreetAddressWithCityWeakState S);
+ 
+     
+create view StreetAddressWithCityOptionalWeakState  as
+select S.number as number, S.streetname as streetname, S.secondaryUnit as secondaryUnit,
+S.city as city, S.state as state, S.match as match
+from  StreetAddressWithCityOptionalWeakStateCandidates S
+consolidate on S.match;
+
+     
+create view StreetAddressWithCityOptionalStateZipcodeCandidate as
+select
+     Sawcos.number as number, Sawcos.streetname as streetname,Sawcos.secondaryUnit as secondaryUnit, Sawcos.city as city, Sawcos.state as state, z.match as zipcode,
+     CombineSpans(Sawcos.match, z.match) as match
+from
+    StreetAddressWithCityOptionalWeakState Sawcos,
+    Zipcode z
+where
+    FollowsTok(Sawcos.match,z.match, 0, 1)  and
+    -- allow both dot and comma in between
+    ContainsRegex(/^\s*[,\.]?\s*$/, SpanBetween(Sawcos.match,z.match));
+    
+        
+     
+create view StreetAddressWithCityStateZipcode as
+select
+     Sawcs.number as number, Sawcs.streetname as streetname,Sawcs.secondaryUnit as secondaryUnit, Sawcs.city as city, Sawcs.state as state, z.match as zipcode,
+     CombineSpans(Sawcs.match, z.match) as match
+from
+    StreetAddressWithCityStrongState Sawcs,
+    Zipcode z
+ where
+    FollowsTok(Sawcs.match,z.match, 0, 1)  and
+    -- allow both dot and comma in between
+    ContainsRegex(/^\s*[,\.]?\s*$/, SpanBetween(Sawcs.match,z.match));
+
+create view StreetAddressWithCityOptionalStateZipcodeOverlap as
+select R.number as number, R.streetname as streetname,
+       R.secondaryUnit as secondaryUnit, R.city as city, R.state as state,
+       R.zipcode as zipcode, R.match as match
+from StreetAddressWithCityOptionalStateZipcodeCandidate R, StreetAddressWithCityStateZipcode R1
+where Overlaps(R.match,R1.match);
+
+create view StreetAddressWithCityOptionalStateZipcode as
+(select R.number as number, R.streetname as streetname,
+       R.secondaryUnit as secondaryUnit, R.city as city, R.state as state,
+       R.zipcode as zipcode, R.match as match
+from StreetAddressWithCityOptionalStateZipcodeCandidate R)
+minus
+(select R.number as number, R.streetname as streetname,
+       R.secondaryUnit as secondaryUnit, R.city as city, R.state as state,
+       R.zipcode as zipcode, R.match as match
+from StreetAddressWithCityOptionalStateZipcodeOverlap R);
+
+create view USAddressCandidates as
+  (select S.number as number, S.streetname as streetname, S.secondaryUnit as secondaryUnit, S.city as city, S.state as state, S.zipcode as zipcode, S.match as loc from StreetAddressWithCityStateZipcode S)
+  union all
+  (select S.number as number, S.streetname as streetname, S.secondaryUnit as secondaryUnit, S.city as city, S.state as state, S.zipcode as zipcode, S.match as loc from StreetAddressWithCityOptionalStateZipcode S)
+  union all
+  (select S.number as number, S.streetname as streetname, S.secondaryUnit as secondaryUnit, S.city as city, S.state as state, RightContext(S.match,0) as zipcode, S.match as loc from StreetAddressWithCityStrongState S);
+
+ 
+        
+create view USAddressCandidateStrong as
+select  S.number as number, S.streetname as streetname, S.secondaryUnit as secondaryUnit, S.city as city, S.state as state, S.zipcode as zipcode, S.loc as loc
+from USAddressCandidates S,
+     USCity C
+where --Overlaps(S.city,C.match) and
+      Equals(S.city,C.match);
+  
+create view USAddressCandidateOverlap as
+select R.number as number, R.streetname as streetname,
+       R.secondaryUnit as secondaryUnit, R.city as city, R.state as state,
+       R.zipcode as zipcode, R.loc as loc
+from USAddressCandidates R, USAddressCandidateStrong R1
+where Overlaps(R.city,R1.city);
+--    where Overlaps(R.loc,R1.loc) and Overlaps(R.city,R1.city) and Not(Equals(R.city,R1.city));
+--    where Overlaps(R.loc,R1.loc) and Contains(R.city,R1.city) and Not(Contains(R1.city,R.city));
+--    where Overlaps(R.loc,R1.loc) and  Or(And(Contains(R.city,R1.city),Not(Contains(R1.city,R.city))),
+--                                         And(Contains(R1.city,R.city),Not(Contains(R.city,R1.city))));
+
+    
+create view USAddressWeakCandidatesRemoved as
+(select R.number as number, R.streetname as streetname,
+       R.secondaryUnit as secondaryUnit, R.city as city, R.state as state,
+       R.zipcode as zipcode, R.loc as loc
+from USAddressCandidates R)
+minus
+(select R.number as number, R.streetname as streetname,
+       R.secondaryUnit as secondaryUnit, R.city as city, R.state as state,
+       R.zipcode as zipcode, R.loc as loc
+from USAddressCandidateOverlap R);
+
+create view USAddressAll as
+(select R.number as number, R.streetname as streetname,
+       R.secondaryUnit as secondaryUnit, R.city as city, R.state as state,
+       R.zipcode as zipcode, R.loc as loc
+from USAddressWeakCandidatesRemoved R)
+union all
+(select R.number as number, R.streetname as streetname,
+       R.secondaryUnit as secondaryUnit, R.city as city, R.state as state,
+       R.zipcode as zipcode, R.loc as loc
+from USAddressCandidateStrong R
+);
+
+create view USAddress as
+select S.number as number, S.streetname as streetname, S.secondaryUnit as secondaryUnit, S.city as city, S.state as state, S.zipcode as zipcode, S.loc as loc
+from USAddressAll S
+consolidate on S.loc
+--using 'ContainsButNotEqual'
+;
+
+output view USAddress;
+

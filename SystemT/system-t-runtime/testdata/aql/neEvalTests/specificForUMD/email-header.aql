@@ -1,0 +1,385 @@
+create view PersonInNotesEmail as
+select E.name as person
+from PersonalNotesEmailWithAttr E;
+
+
+create dictionary PersonInitialNameInvalidDict as(
+	'Financial', 'LWkly'
+);
+
+
+----------------------------------------------------------------
+-- ENRON Meetings customization 1:
+-- Capture names of the form "SKathy", "SGandhi-Gupta" or "S.Kathy"
+----------------------------------------------------------------
+
+
+create view PersonInitialName_a as
+extract regex /(\p{Lu}\p{M}*){2}(\p{Ll}\p{M}*){2,}(-\p{Lu}\p{M}*(\p{Ll}\p{M}*){2,})?/
+	on between 1 and 3 tokens in D.text as person
+from Doc D
+having Not(MatchesDict('PersonInitialNameInvalidDict', person));
+
+
+-- Capture names of the form "S.Kathy"
+create view PersonInitialName_b as
+extract regex /\p{Lu}\p{M}*[ ]?\.\p{Lu}\p{M}*(\p{Ll}\p{M}*){2,}/
+	on 3 tokens in D.text as person
+from Doc D;
+
+
+----------------------------------------------------------------
+-- ENRON Meetings customization 2:
+-- Capture names of the form "Last, First Initial."
+----------------------------------------------------------------
+
+create view InitialDot as
+extract pattern /\p{Lu}\p{M}*/ (/\./)?
+	as initial
+	with inline_match on Doc.text
+from Doc D
+having Not(ContainsRegex(/\s+/, initial));
+
+create view PersonLastFirstExpandedInitial as
+extract pattern <P.person> <I.initial>
+	as person
+	with inline_match on Doc.text
+from PersonWithAttrAllValid P, InitialDot I
+having ContainsRegex(/,/, person)
+consolidate on person;
+
+
+
+
+----------------------------------------------------------------
+-- ENRON Meetings customization 3:
+-- Identify more names based on tokens of Enron emails
+-- E.g., dave.perrino@enron.com: get "dave" and "perrino" 
+-- and do a value based join in the entire document
+----------------------------------------------------------------
+
+-- Identify CapsWord tokens of the form "Perrino", or "McMichaels"
+create view StrictCapsWord as
+extract 
+	regex /\p{Lu}\p{M}*(\p{Ll}\p{M}*\p{Lu}\p{M}*)?(\p{Ll}\p{M}*)+/
+	on 1 token in D.text as match
+from Doc D;
+
+
+
+-- All Caps Words , e.g., "SKILLING"
+create view AllCapsWord as
+extract 
+	regex /(\p{Lu}\p{M}*){2,}/
+	on 1 token in D.text as match
+from Doc D;
+
+create view StrictAllCapsWord as
+(select * from StrictCapsWord)
+union all
+(select * from AllCapsWord);
+
+
+create view EnronEmailName as
+extract
+	regex /((\p{Ll}\p{M}*){2,})\.((\p{Ll}\p{M}*){2,})@enron.com/ 
+	on 7 tokens in D.text
+	return group 1 as first
+	   and group 3 as last
+from Doc D;
+
+
+create view EnronEmailFirst as
+select E.first, E.last, CW.match
+from StrictAllCapsWord CW, EnronEmailName E
+where equalsIgnoreCaseNormalized(CW.match, E.first);
+
+
+create view EnronEmailLast as
+select E.first, E.last, CW.match
+from StrictAllCapsWord CW, EnronEmailName E
+where equalsIgnoreCaseNormalized(CW.match, E.last);
+
+
+-- New person match 1: <First> <Last>
+create view EnronEmailFullName1 as
+select CombineSpans(F.match, L.match) as person
+from EnronEmailFirst F, EnronEmailLast L
+where FollowsTok(F.match, L.match, 0, 0)
+  and Equals(F.first, L.first)
+  and Equals(F.last, L.last);
+
+
+-- New person match 2: <Last>, <First>
+create view EnronEmailFullName2 as
+select CombineSpans(L.match, F.match) as person
+from EnronEmailFirst F, EnronEmailLast L
+where FollowsTok(L.match, F.match, 1, 1)
+  and Equals(F.first, L.first)
+  and Equals(F.last, L.last)
+  and MatchesRegex(/,/, Chomp(SpanBetween(L.match, F.match)));
+
+
+----------------------------------------------------------------
+
+
+
+create view PersonAllSoFar as
+select P.person as person
+from
+(
+	(select P.person as person from PersonWithAttrAllValid P)
+	union all
+	(select P.person as person from PersonInNotesEmail P)
+	union all
+	(select P.person as person from PersonInitialName_a P)
+	union all
+	(select P.person as person from PersonInitialName_b P)
+	union all
+	(select P.person as person from PersonLastFirstExpandedInitial P)
+	union all
+	(select P.person as person from EnronEmailFullName1 P)
+	union all
+	(select P.person as person from EnronEmailFullName2 P)
+) P
+consolidate on P.person;
+
+
+
+
+----------------------------------------------------------------
+-- ENRON Meetings customization 4:
+-- Identify more names in lists based on existing names
+----------------------------------------------------------------
+
+create view PersonInListNewLineSep as
+extract pattern (<P1.person>) (<CW1.match> 'St.'? <CW2.match> (<S.suffix> | 'Jr.')?)  (<P2.person>)
+	return group 1 as person1
+	   and group 4 as person2
+	   and group 2 as newperson
+	with inline_match on Doc.text
+from PersonAllSoFar P1, StrictAllCapsWord CW1, StrictAllCapsWord CW2, PersonSuffix S, PersonAllSoFar P2
+having MatchesRegex(/\r?\n\r?([ ]|\t)*/, SpanBetween(person1, newperson))
+   and MatchesRegex(/\r?\n\r?([ ]|\t)*/, SpanBetween(newperson, person2));
+
+
+create view PersonInListCommaSep as
+extract pattern (<P1.person>) /,/ (<CW1.match> (/\p{Lu}\p{M}*/ /'/)? <CW2.match>) /,/ (<P2.person>) --'
+	return group 1 as person1
+	   and group 4 as person2
+	   and group 2 as newperson
+	with inline_match on Doc.text
+from PersonAllSoFar P1, StrictCapsWord CW1, StrictCapsWord CW2, PersonAllSoFar P2;
+
+
+create view PersonInListSemiColumnSep as
+select Chomp(P.newperson) as newperson
+from
+(
+	select SpanBetween(RightContextTok(P1.person, 1), LeftContextTok(P2.person,1)) as newperson
+	from PersonAllSoFar P1, PersonAllSoFar P2
+	where FollowsTok(P1.person, P2.person, 5, 9)
+	 and ContainsRegex(/;/, RightContextTok(P1.person,1))
+	 and ContainsRegex(/;/, LeftContextTok(P2.person,1))
+) P
+where Not(ContainsRegex(/[^\p{Lu}\p{M}*\p{Ll}\p{M}*',\.\s]/, P.newperson)); --'
+
+create dictionary EmailFieldSenderDict as(
+	'From', 'To', 'Cc', 'Bcc'
+);
+
+create view EmailFieldSender as
+extract 
+	dictionary 'EmailFieldSenderDict'
+		on D.text as match
+from Doc D
+having MatchesRegex(/:/, RightContextTok(match, 1));
+	
+	
+create view PersonInListAfterEmailSenderField as
+select Chomp(P.newperson) as newperson
+from
+(
+	select SpanBetween(RightContextTok(F.match, 1), LeftContextTok(P.person,1)) as newperson
+	from EmailFieldSender F, PersonAllSoFar P
+	where FollowsTok(F.match, P.person, 3, 7)
+	  and ContainsRegex(/;/, LeftContextTok(P.person,1))
+) P
+where Not(ContainsRegex(/[^\p{Lu}\p{M}*\p{Ll}\p{M}*',\.\s]/, P.newperson)); --'
+
+create dictionary EmailFieldSubjectDict as(
+	'Subject'
+);
+
+create view EmailFieldSubject as
+extract 
+	dictionary 'EmailFieldSubjectDict'
+		on D.text as match
+from Doc D
+having MatchesRegex(/:/, RightContextTok(match, 1));
+	
+	
+create view PersonInListBeforeEmailSubjectField as
+select P.person as person, P.field, Chomp(P.newperson) as newperson
+from
+(
+	select P.person as person, F.match as field, 
+	       SpanBetween(RightContextTok(P.person, 1), F.match) as newperson
+	from PersonAllSoFar P, EmailFieldSubject F
+	where FollowsTok(P.person, F.match, 4, 8)
+	  and ContainsRegex(/;/, RightContextTok(P.person, 1))
+) P
+where Not(ContainsRegex(/[^\p{Lu}\p{M}*\p{Ll}\p{M}*',\.\s]/, P.newperson)); --'
+
+
+----------------------------------------------------------------
+
+
+create dictionary InvalidENAPerson as (
+	'ENA', 'SAP', 'Room', 'RAO', 'Start-Up', 'JC Penny', 'LIM', 'Hagler Bailey'
+);
+
+
+create view PersonAllCand as
+select P.person as person
+from
+(
+	(select P.person as person from PersonAllSoFar P)
+	union all
+	(select P.newperson as person from PersonInListNewLineSep P)
+	union all
+	(select P.newperson as person from PersonInListCommaSep P)
+	union all
+	(select P.newperson as person from PersonInListSemiColumnSep P)
+	union all
+	(select P.newperson as person from PersonInListAfterEmailSenderField P)
+	union all
+	(select P.newperson as person from PersonInListBeforeEmailSubjectField P)
+) P
+where Not(ContainsDict('InvalidENAPerson', 'Exact', P.person))
+consolidate on P.person;
+
+
+
+---------------------------------------------------------------
+-- Customization 5: FInd additional matches for first and last name
+-- identified from enron email addresses
+-- that do not overlap with an existing person
+----------------------------------------------------------------
+
+create view EmailNameSingleTokenCand as
+select E.match
+from
+(
+	(select E.match from EnronEmailFirst E)
+	union all
+	(select E.match from EnronEmailLast E)
+) E
+consolidate on E.match using 'ExactMatch';
+		
+
+create view EmailNameSingleTokenInvalid as
+select E.match 
+from PersonAllCand P, EmailNameSingleTokenCand E
+where Overlaps(E.match, P.person);
+
+
+create view EmailNameSingleToken as
+(select E.match from EmailNameSingleTokenCand E)
+minus
+(select E.match from EmailNameSingleTokenInvalid E);
+
+
+
+----------------------------------------------------------------
+-- FINAL FILTERING AND CONSOLIDATION
+----------------------------------------------------------------
+
+-- Identify person matches of the form "Smith, Regan M ."
+-- Need to remove the final space-dot and replace the match with "Smith, Regan M" instead
+create view PersonEndingInSpaceDot as
+select P.person as wrongperson,
+       SpanBetween(LeftContext(P.person,0), P.spacedot) as correctperson
+from
+(
+	extract P.person as person,
+	        regex /\s+\p{Lu}\p{M}*(\s+\.)/ 
+	        	on P.person 
+	        return group 1 as spacedot
+	from PersonAllCand P
+	having Equals(GetEnd(person), GetEnd(spacedot))
+) P;
+
+
+create view PersonAllCandFinal as
+(select E.match as person from EmailNameSingleToken E )
+union all
+(select P.person as person from PersonAllCand P)
+union all
+(select P.correctperson as person from PersonEndingInSpaceDot P);
+
+
+-- Person in Internet-style email - to filter out
+create view PersonInInternetEmail as
+select P.person
+from PersonAllCandFinal P, InternetEmailFinal E
+where Contains(E.email, P.person);
+
+-- Persons with '+' sign to left or right e.g., "...Courtnay+5F..." - to filter out
+create view PersonWithPlusSign as
+ select P.person 
+ from PersonAllCandFinal P 
+ where Or(MatchesRegex(/\+/, RightContext(P.person,1)),
+ 	      MatchesRegex(/\+/, LeftContext(P.person,1))
+ 	      );
+
+
+-- Final Person filtering
+create view PersonInvalid as
+--(select P.person from PersonInHeader P)
+--union all
+( select P.person from PersonInInternetEmail P )
+union all
+( select P.person from PersonWithPlusSign P )
+union all
+( select P.wrongperson as person from PersonEndingInSpaceDot P );
+
+
+
+create view Person as
+select P.name as name
+from
+(
+	(select P.person as name from PersonAllCandFinal P)
+	minus
+	(select P.person as name from PersonInvalid P)
+) P
+consolidate on P.name;
+
+
+
+
+output view StrictCapsWord;
+output view EnronEmailName;		 
+output view EnronEmailFirst;
+output view EnronEmailLast;
+output view EnronEmailFullName1;
+output view EnronEmailFullName2;
+output view InitialDot;
+output view PersonInitialName_a;
+output view PersonInitialName_b;
+output view PersonLastFirstExpandedInitial;
+output view PersonAllSoFar;
+output view EmailFieldSender;
+output view PersonInListAfterEmailSenderField;
+output view EmailFieldSubject;
+output view PersonInListBeforeEmailSubjectField;
+output view PersonInListNewLineSep;
+output view PersonInListCommaSep;
+output view PersonInListSemiColumnSep;
+output view PersonAllCand;
+output view EmailNameSingleTokenInvalid;
+output view EmailNameSingleToken;
+output view PersonEndingInSpaceDot;
+output view PersonInvalid;
+

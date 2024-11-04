@@ -1,0 +1,104 @@
+-------------------------------------------------------------------------------
+-- Segment.aql
+--
+-- Segment Title and H1 annotations
+--
+-- This file produces the input to PersonHome and TitleHome annotators
+--
+-- Depends on HTML.aql
+--
+-- Author: Laura Chiticariu
+-------------------------------------------------------------------------------
+
+
+-- ***********************************************************************
+-- ***                                 H1 SEG                         ****
+-- ***********************************************************************
+-- Split H1
+create view H1SegWithDelimiter as
+	extract 
+		E.match as match,
+		split using E.delim on E.match as elem
+	from 
+	(
+		extract
+			H.match as match, 
+			regex /\s*[\|—]\s*|\s*[-:]\s+/ on H.match as delim
+		from H1 H
+	) E;
+
+-- H1s containing no delimiter
+create view H1SegNoDelimiter as
+select H.match as match, Chomp(H.match) as elem
+from H1 H
+where Not(ContainsRegex(/\s*[\|—]\s*|\s*[-:]\s+/, H.match));
+
+-- H1s that start with a delimiter
+create view H1SegStartsWithDelimiter as
+select H.match as match, Chomp(H.match) as elem
+from H1 H
+where ContainsRegex(/\A\s*[\|—]\s*|\s*[-:]\s+/, H.match);
+
+create view H1SegCand as
+select S.match as match, S.elem as elem
+from
+(
+	(select S.match as match, Chomp(S.elem) as elem from H1SegWithDelimiter S)
+	union all
+	(select S.match as match, Chomp(S.elem) as elem from H1SegNoDelimiter S)
+	-- Laura 7/6: add titles that start with a delimiter due to bug 
+	-- SystemT bug #148046: [Extract split returns no answers when string to be split starts with a split point]
+	-- To remove once bug  #148046  is fixed
+	union all
+	(select S.match as match, Chomp(S.elem) as elem from H1SegStartsWithDelimiter S)
+) S
+where Not(Equals(GetLength(S.elem), 0));
+
+
+/*
+create view H1Count as 
+select Count(*) as cnt
+from H1;
+
+create view H1SegCount as 
+select Count(*) as cnt
+from H1SegCand;
+
+output view H1Count;
+output view H1SegCount;
+*/
+
+create view H1Seg as
+select S.match, S.elem
+from H1SegCand S
+-- Laura 7/6: consolidate retaining the smaller spans, to avoid overlap 
+-- due to adding back titles that start with a delimiter 
+-- To remove once SystemT bug  #148046 is fixed.
+consolidate on S.elem using 'NotContainedWithin';
+
+
+-- Union together TitleSeg and H1Seg 
+create view Seg as
+(select Chomp(S.title) as match, S.elem as elem from TitleSeg S)
+union all
+(select Chomp(S.match) as match, S.elem as elem from H1Seg S);
+
+
+create view TitleH1WithID as
+(select Chomp(T.title) as match, -1 as id from FirstTitle T)
+union all
+(select Chomp(H.match) as match, AutoID() as id from H1 H);
+
+
+create view SegWithID as
+select S.elem as elem, T.id as id 
+from Seg S, TitleH1WithID T
+where Equals(T.match, S.match)
+order by T.id, S.elem;
+
+create view SegIDAll as
+select S.id
+from SegWithID S
+group by S.id;
+
+

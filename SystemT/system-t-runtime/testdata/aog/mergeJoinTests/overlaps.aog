@@ -1,0 +1,68 @@
+###############################################################################
+# overlaps.aog
+#
+# ("aog" stands for Avatar Operator Graph.)
+#
+# Test of the Overlaps join/selection predicates.  Looks for "first names"
+# that overlap with "city names".
+###############################################################################
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+CreateDict(
+    "name" => "dictionaries/first.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+CreateDict(
+    "name" => "dictionaries/lotus/CITY.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+# Find potential first names.
+$FirstName = 
+Project(( "match" => "name" ), 
+	Dictionary("dictionaries/first.dict", "text", $Document));
+
+# Find city names
+$CityName = 
+Project(( "match" => "city" ), 
+	Dictionary("dictionaries/lotus/CITY.dict", "text", $Document));
+
+# Use a cross-product and selection predicate
+$SelectOverlaps = 
+	Select(Overlaps(GetCol("name"), GetCol("city")),
+		CrossProduct($FirstName, $CityName)
+	);
+	
+# Use a nested loops join
+$NLJoinOverlaps =
+	NLJoin(Overlaps(GetCol("name"), GetCol("city")), $FirstName, $CityName);
+
+# Use a merge join with $FirstName as the outer.
+$MergeOverlaps =
+	SortMergeJoin(Overlaps(GetCol("name"), GetCol("city")), $FirstName, $CityName);
+
+# Use a merge join with $CityName as the outer.
+# Project operator swaps the order so we get the same tuples as $MergeOverlaps.
+$MergeOverlaps2 =
+Project(("name" => "name", "city" => "city"),
+	SortMergeJoin(Overlaps(GetCol("city"), GetCol("name")), $CityName, $FirstName)
+);
+
+# Throw in a sanity test of the BlockTok operator.
+$BlockTokTest = 
+	BlockTok(0, 1, 1, "name", Sort((GetBegin(GetCol("name"))), $FirstName));
+
+################################################################################
+# OUTPUT SPEC
+Output: $FirstName, $CityName, $SelectOverlaps, $NLJoinOverlaps, 
+	$MergeOverlaps, $MergeOverlaps2, $BlockTokTest;
+

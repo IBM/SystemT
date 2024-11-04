@@ -1,0 +1,58 @@
+-- Laura: added 04/30/2010 to avoid common mistakes in news headlines
+
+/*create dictionary OrgInHeadlineInvalidDict as(
+	'Target', 'Pioneer', 'Violent', 'Companies', 'Foods', 'Latest', 
+	'College', 'School', 'Gap'
+);*/
+
+create view OrgInHeadline as
+select O.org as org
+from OrgSentence O, HeadlineMixedCaps H
+where Contains(H.headline, O.org);
+			
+create view OrgInHeadlineInvalid1 as
+select O.org as org
+from OrgInHeadline O
+where ContainsDicts(
+  			--'OrgInHeadlineInvalidDict',
+  			'orgs/filter_org_headline_negClue_en.dict',
+			--'pos/advs-list',
+			'pos/lang_adverbs_en.dict', 
+			--'pos/verbs-list',
+			'pos/lang_verbs_en.dict', 
+			--'pos/auxs-list',
+			'pos/lang_verbs_aux_en.dict',
+			--'pos/pronouns-list',
+			'pos/lang_pronouns_en.dict',
+			O.org);
+			
+create view OrgInHeadlineInvalid2 as
+select O.org as org
+from OrgInHeadline O
+where Or(
+		MatchesRegex(/-/, LeftContext(O.org,0)),
+		MatchesRegex(/-/, RightContext(O.org,0)),
+		ContainsRegex(/ing\s/, O.org)
+		);
+		
+create view OrgInHeadlineInvalidCand as
+(select OP.org as org from OrgInHeadlineInvalid1 OP)
+union all
+(select OP.org as org from OrgInHeadlineInvalid2 OP);
+
+-- Allow matches that span the entire headline
+create view OrgInHeadlineInvalid as
+select O.org 
+from OrgInHeadlineInvalidCand O
+where Not(ContainsRegex(/[\n\r]/, LeftContextTok(O.org, 1)))
+  and Not(ContainsRegex(/[\n\r]/, RightContextTok(O.org, 1)));
+
+
+create view OrgInHeadlineValid as
+(select O.org from OrgSentence O, HeadlineMixedCaps H where Contains(H.headline, O.org))
+minus
+(select O.org from OrgInHeadlineInvalid O);
+
+--output view OrgInHeadlineInvalid;
+--output view OrgInHeadlineValid;
+

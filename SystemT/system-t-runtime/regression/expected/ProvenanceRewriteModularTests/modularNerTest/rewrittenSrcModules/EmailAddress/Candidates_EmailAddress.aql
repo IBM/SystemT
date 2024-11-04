@@ -1,0 +1,61 @@
+module EmailAddress;
+
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText
+;
+
+
+require document with columns
+  text Text;
+
+create view Email1 as
+  select  R.match as annot,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__106__Temp_____sep_____R____id
+  from  __Subquery__106__Temp R;
+
+output view Email1;
+
+create view InternetEmailFinal as
+  select  __t2.email as email,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__107__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__107__Temp__1 __t1,
+        __Consolidate__107__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.email;
+
+output view InternetEmailFinal;
+
+create view __Consolidate__107__Temp__1 as
+  select  Email1.annot as email,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          Email1.__auto__id as Email1_____sep_____Email1____id,
+          Email1.annot as __consolidate__target
+  from  Email1 Email1;
+
+output view __Consolidate__107__Temp__1;
+
+create view __Consolidate__107__Temp__2 as
+  select  __t1.email as email,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__107__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__107__Temp__2;
+
+create view __Subquery__106__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    regex /((([\p{L}\p{Nd}]\p{M}*)([\p{L}\p{Nd}_-]\p{M}*)*(\.([\p{L}\p{Nd}_-]\p{M}*)+)*@([\p{L}\p{Nd}_-]\p{M}*)+(\.([\p{L}\p{Nd}_-]\p{M}*)+)*\.(((\p{Nd}\p{M}*){1,3})|((\p{L}\p{M}*){2,3})|(aero|coop|info|museum|name))))/
+    with flags 'CASE_INSENSITIVE'
+    on between 1 and 15 tokens in D.text
+    return group 0 as match
+  from DocumentText D;
+
+output view __Subquery__106__Temp;
+

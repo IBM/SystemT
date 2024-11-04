@@ -1,0 +1,108 @@
+module genericModule;
+
+
+create view AnchorHomeRegex1 as
+  extract S.normalizedURL as norm_url,
+    S.urlid as urlid,
+    S.url as url,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    S.__auto__id as AnchorNormURLAfterSkip_____sep_____S____id,
+    regex /\A(?:.*>)?\s*([^<>']+)'s? (?:(?:Home|Info)\s*Page|Intranet (?:Site|Page)|\bHome\b)\s*(?:<.*)?\Z/
+    with flags 'CASE_INSENSITIVE'
+    on S.anchortext
+    return group 1 as name
+  from AnchorNormURLAfterSkip S;
+
+output view AnchorHomeRegex1;
+
+create view AnchorHomeRegex2 as
+  extract S.normalizedURL as norm_url,
+    S.urlid as urlid,
+    S.url as url,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    S.__auto__id as AnchorNormURLAfterSkip_____sep_____S____id,
+    regex /\A(?:.*>)?\s*([^<>']+) (?:(?:Home|Info)\s*Page|Intranet (?:Site|Page)|\bHome\b)\s*(?:<.*)?\Z/
+    with flags 'CASE_INSENSITIVE'
+    on S.anchortext
+    return group 1 as name
+  from AnchorNormURLAfterSkip S;
+
+output view AnchorHomeRegex2;
+
+create view AnchorHomeRegex3 as
+  extract S.normalizedURL as norm_url,
+    S.urlid as urlid,
+    S.url as url,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    S.__auto__id as AnchorNormURLAfterSkip_____sep_____S____id,
+    regex /\A(?:.*>)?\s*(?:(?:Home|Info)\s*Page|Intranet (?:Site|Page)|\bHome\b)\s+of ([^<>']+)\s*(?:<.*)?\Z/
+    with flags 'CASE_INSENSITIVE'
+    on S.anchortext
+    return group 1 as name
+  from AnchorNormURLAfterSkip S;
+
+output view AnchorHomeRegex3;
+
+create view AnchorHome as
+  (select  Op.name as name,
+            Op.norm_url as norm_url,
+            Op.url as url,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__1__TempOp__0 Op)
+  union all
+  (select  Op.name as name,
+            Op.norm_url as norm_url,
+            Op.url as url,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__1__TempOp__1 Op)
+  union all
+  (select  Op.name as name,
+            Op.norm_url as norm_url,
+            Op.url as url,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__1__TempOp__2 Op);
+
+output view AnchorHome;
+
+create view __Union__1__TempOp__0 as
+  select  GetText(S.name) as name,
+          S.norm_url as norm_url,
+          S.url as url,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as AnchorHomeRegex1_____sep_____S____id
+  from  AnchorHomeRegex1 S;
+
+output view __Union__1__TempOp__0;
+
+create view __Union__1__TempOp__1 as
+  select  GetText(S.name) as name,
+          S.norm_url as norm_url,
+          S.url as url,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as AnchorHomeRegex2_____sep_____S____id
+  from  AnchorHomeRegex2 S;
+
+output view __Union__1__TempOp__1;
+
+create view __Union__1__TempOp__2 as
+  select  GetText(S.name) as name,
+          S.norm_url as norm_url,
+          S.url as url,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as AnchorHomeRegex3_____sep_____S____id
+  from  AnchorHomeRegex3 S;
+
+output view __Union__1__TempOp__2;
+

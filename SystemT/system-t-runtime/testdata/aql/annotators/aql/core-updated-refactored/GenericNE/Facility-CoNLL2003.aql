@@ -1,0 +1,108 @@
+-- Yunyao: created on 08/31/2009 to extract facilities including
+--     1. public places (e.g. parks, parking lots, etc)
+--     2. commerical places (e.g., nightclub, pubs)
+--     3. associated buildings (e.g., mills, castles)
+--     4. structures (e.g. bridges, ports, dams)
+
+
+ 
+create view CapsFacilityCandidate1 as
+    select
+        R.match as match
+    from
+       -- Sudarshan regex : 10/12/2011 - changed below regex to its unicode equivalent. line 16
+       -- Sudarshan regex : 10/12/2011 - backreference in line 16
+       --RegexTok(/(\p{Upper}[\p{Lower}\&\.-\/]{1,20})/, 25, Doc.text) R;
+      -- RegexTok(/(\p{Lu}\p{M}*[\p{Lu}\&\.-\/]\p{M}*{1,20})/, 25, Doc.text) R;
+      (extract regex /(\p{Lu}\p{M}*[\p{Lu}\&\.-\/]\p{M}*{1,20})/
+      		on between 1 and 25 tokens in D.text
+      		as match from Doc D) R;
+
+create view CapsFacilityCandidate2 as
+    select
+        R.match as match
+    from
+       -- Sudarshan regex : 10/12/2011 - changed below regex to its unicode equivalent. line 25
+       -- Sudarshan regex : 10/12/2011 - backreference in line 25	
+       --RegexTok(/(\p{Upper}[\p{Lower}\&\.-\/]{1,20})(\s+(\p{Upper}[\p{Lower}\&\.-\/]{1,20}))/, 25, Doc.text) R;
+       --RegexTok(/(\p{Lu}\p{M}*[\p{Lu}\&\.-\/]\p{M}*{1,20})(\s+(\p{Lu}\p{M}*[\p{Lu}\&\.-\/]\p{M}*{1,20}))/, 25, Doc.text) R;
+       (extract regex /(\p{Lu}\p{M}*[\p{Lu}\&\.-\/]\p{M}*{1,20})(\s+(\p{Lu}\p{M}*[\p{Lu}\&\.-\/]\p{M}*{1,20}))/
+      		on between 1 and 25 tokens in D.text
+      		as match from Doc D) R;
+
+create view CapsFacilityCandidate as
+	(select C.match as match from CapsFacilityCandidate1 C)
+	union all
+	(select C.match as match from CapsFacilityCandidate2 C);
+
+-- no facility name should be just solely for the following dictionary
+/*create dictionary FacilityFilterDict as (
+	'The', 'World', 'That', 'At'
+);*/
+
+create view FacilityFilter1 as 
+	extract
+		dictionaries
+			--'FacilityFilterDict'
+			'location/facilities/filter_loc_facility_en.dict'
+		on D.text
+		as match
+		from Doc D;
+		
+create view FacilityFilter as
+	(select F.* from FacilityFilter1 F)
+	union all
+	(select N.* from Nationalities N);
+
+create view CapsFacility as
+	(select C.* from CapsFacilityCandidate C)
+	minus
+	(select F.* from FacilityFilter F);
+
+-- no facility name should contain the following entries
+/*create dictionary FacilityStrongFilterDict as (
+	'That', 'At'
+);*/
+          
+-- Note: this view requires view CapsPlaceOnetoTwo defined in Address.aql 
+create view FacilityAll1 as
+select CombineSpans(C.match, F.match) as facility 
+from CapsFacility C,
+	 FacilitySuffix F
+where FollowsTok(C.match, F.match, 0, 0)
+--and  Not(ContainsDict('FacilityStrongFilterDict', C.match));
+and  Not(ContainsDict('location/facilities/filter_loc_facility_strong_en.dict', C.match));
+
+create view FacilityAll2 as
+select C.match as facility 
+from CapsFacility C,
+	 FacilitySuffixLowerCase F
+where FollowsTok(C.match, F.match, 0, 0)
+--and  Not(ContainsDict('FacilityStrongFilterDict', C.match));
+and  Not(ContainsDict('location/facilities/filter_loc_facility_strong_en.dict', C.match));
+
+--output view FacilityAll2;
+
+create view FacilityAll as
+	(select F.facility as facility from FacilityAll1 F)
+	union all
+	(select F.facility as facility from FacilityAll2 F);
+
+/*create dictionary InvalidFacilityClue as (
+	'a', 'an'
+);*/
+
+create view FacilityInvalid as
+select F.facility as facility
+from FacilityAll F
+--where ContainsDict('InvalidFacilityClue', LeftContextTok(F.facility,1));
+where ContainsDict('location/facilities/loc_facility_negClue_en.dict', LeftContextTok(F.facility,1));
+
+create view FacilityValid as
+	(select F.* from FacilityAll F)
+	minus
+	(select F.* from FacilityInvalid F);
+	
+create view Facility as
+select F.* 
+from  FacilityValid F;

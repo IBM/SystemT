@@ -1,0 +1,24 @@
+/*
+Test to verify, that the internal dictionaries coming from external tables are loaded into the operator graph. To
+assert this, we perform extraction using the internal dictionaries dependent on external tables.
+*/
+
+module loadInternalDictFromExtTableTest;
+
+require document with columns text Text;
+
+-- external table
+create external table extTab1(id Integer, firstName Text)
+allow_empty false;
+
+-- internal dictionary dependent on external table extTab1
+create dictionary internalDict
+from table extTab1
+with entries from firstName;
+
+-- extract using the internalDict
+create view testView as
+extract dictionary internalDict on D.text as match
+from Document D;
+
+output view testView;

@@ -1,0 +1,367 @@
+module annotator_library; 
+
+
+-----------------------------------------------------------------------------
+--  This file is used to extract various date patterns from the detagged document.
+--  Date is displayed in the complete match, date, month and year format for all the patterns
+-------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
+-- 	Extracting Two digit numbers from detagged document
+-- 	Dates like 31st,2nd are also handled
+--  e.g.12,51
+-------------------------------------------------------------------------------
+create view TwoDigits as
+select R.match as num
+from RegexTok(/\d{1,2}/, 2, Doc.text) R;
+
+-------------------------------------------------------------------------------
+--  Pattern for day
+--  e.g. 3rd ,1st
+-------------------------------------------------------------------------------
+create view TwoDigitsDay as
+select R.match as num
+from RegexTok(/(0|1|2|3){0,1}\d(st|nd|rd|th){0,1}/, 2, Doc.text) R;
+
+-------------------------------------------------------------------------------
+--  four digits patterns for year 
+--  e.g. 1785,2000
+-------------------------------------------------------------------------------
+create view FourDigitYear as
+select R.match as yearFourDigit
+from RegexTok(/((20)|(19)|(18)|(17)|(16))[\d][\d]/, 4, Doc.text) R;
+
+-------------------------------------------------------------------------------
+--  Pattern 1: only a year is present 
+--				e.g. 2012
+--  Pattern 2: month followed by date
+--				e.g. July 14
+--  Pattern 3: date followed by month without year  
+--				e.g. 31 March 
+--  Pattern 4: month followed by year
+--  			e.g. January , 2003
+--  Pattern 5:  month followed by date and year
+--  			e.g. January 9, 2003
+--  Pattern 6: day followed by month and year
+--  			e.g. 1 November 2010, 31st of December 2008
+--  Pattern 7: mm/dd/yy
+--  			e.g.  03/31/2012
+--  Pattern 8: mm/dd/yyyy 
+-- 				e.g. 06/30/2012
+--  Pattern 9: yyyy/mm/dd
+--				e.g.2012/12/31
+--  Pattern 10: Year followed by month and date. separated by '-' or '.' 
+--              e.g. 2003-Nov-16, 2003. nov. 16 
+--  Pattern 11: 12 months
+--  Pattern 12: FY2007, QTR2007
+-------------------------------------------------------------------------------
+
+
+--  Pattern 1: only a year is present e.g. 2012
+create view Date1 as
+extract	
+	pattern <Year.yearFourDigit>  
+	return group 0 as match
+		and group 0 as year
+	with inline_match on Doc.text
+from FourDigitYear Year;
+
+--  Pattern 2: month followed by date
+--  e.g. July 14
+create view Date2 as
+extract
+	pattern   (<M.match>) ','? (<Day.num>) 
+	return group 0 as match
+		and group 1 as month
+		and group 2 as date
+with inline_match on Doc.text
+from TwoDigitsDay Day,Month M;
+
+--  Pattern 3: date followed by month without year  
+--  e.g. 31 March 
+create view Date3 as
+extract	
+	pattern (<T.num>) ','? (<M.match>) 
+	return group 0 as match
+		and group 1 as date
+		and group 2 as month
+with inline_match on Doc.text
+from TwoDigits T, Month M;
+
+--  Pattern 4: month followed by year
+--  e.g. January , 2003
+create view Date4 as
+extract 
+	pattern (<M.match>)','? (<Year.yearFourDigit>)
+	return group 0 as match
+		and group 1 as month
+		and group 2 as year
+with inline_match on Doc.text
+from Month M, FourDigitYear Year;
+
+--  Pattern 5:  month followed by date and year
+--  e.g. January 9, 2003
+create view Date5_temp_1 as
+extract 
+	pattern (<M.match>) ','? (<Day.num>) ','? (<Year.yearFourDigit>)
+	return group 0 as match
+		and group 1 as month
+		and group 2 as date
+		and group 3 as year
+with inline_match on Doc.text
+from Month M, TwoDigitsDay Day, FourDigitYear Year;
+
+--  Get the span in between the right context token and year for pattern 5(above) 
+create view Date5_temp as 
+select S.match,S.year,S.date,S.month,
+	SpanBetween(RightContextTok(S.date,1),S.year)as spanBetweenDateandYear 
+from Date5_temp_1 S;
+
+-------------------------------------------------------------------------------
+--  Semantics:  each record is a datematch where the length of the span in between
+--  	a right context token of a date and a year is either 0 or 1
+--	This pattern assumes consecutive date and year
+--	If year is in the next TD, then there are more than 2 spaces between date & year
+-------------------------------------------------------------------------------
+create view Date5 as
+select S.match,S.year,S.date,S.month
+from Date5_temp S
+where Or(Equals(GetLength(S.spanBetweenDateandYear),1),
+Equals(GetLength(S.spanBetweenDateandYear),0));
+
+--  pattern 5_1: month followed with any character and year
+--  e.g. Jun/09 
+create view Date5_1 as
+extract	 
+	pattern (<M.match>)/(?:\s{0,2}[\/\,])/ (/\d{2,4}/)
+	return group 1 as month
+	and group 2 as year
+	and group 0 as match
+with inline_match on Doc.text
+from Month M
+;	
+
+--  Pattern 6: day followed by month and year
+--  e.g. 1 November 2010, 31st of December 2008
+create view Date6 as
+extract 
+	pattern  (<Day.num>) 'of'? (<M.match>) (<Year.yearFourDigit>) 
+	return group 0 as match
+		and group 1 as date
+		and group 2 as month
+		and group 3 as year
+with inline_match on Doc.text
+from Month M, TwoDigitsDay Day , FourDigitYear Year;
+
+--  Pattern 7: mm/dd/yy
+--  e.g.  03/31/12
+ create view Date7 as
+extract	
+	pattern (<Num1.num>) '/' (<Num2.num>)  '/' (<Num3.num>) 
+	return group 0 as match
+		and group 1 as month
+		and group 2 as date
+		and group 3 as year
+with inline_match on Doc.text
+from TwoDigits Num1,TwoDigits Num2,TwoDigits Num3
+;
+
+--  Pattern 8: mm/dd/yyyy 
+--  e.g. 03/12/2012
+create view Date8 as
+extract	
+	pattern (<Num1.num>) '/'(<Num2.num>) '/' (<Year.yearFourDigit>) 
+	return group 0 as match
+		and group 1 as month
+		and group 2 as date
+		and group 3 as year
+with inline_match on Doc.text
+from TwoDigits Num1,TwoDigits Num2,FourDigitYear Year
+;
+	
+--  Pattern 9:yyyy/mm/dd
+--  e.g. 2012/03/12
+create view Date9 as
+extract	
+	pattern (<Year.yearFourDigit>) /[\.\/-]/ (<Num1.num>) /[\.\/-]/ (<Num2.num>) 
+	return group 0 as match
+		and group 1 as year
+		and group 2 as month
+		and group 3 as date
+with inline_match on Doc.text
+from TwoDigits Num1,TwoDigits Num2,FourDigitYear Year 
+having Not(ContainsRegex(/\s*/,match));
+
+
+--  Pattern 10: Year followed by month and date. separated by '-' or '.' 
+--  e.g. 2003-Nov-16, 2003. nov. 16 
+create view Date10 as
+extract 
+	pattern (<Year.yearFourDigit>) ('-'|'.')  (<M.match>) ('-'|'.') (<Day.num>) 
+	return 
+	group 0 as match
+		and group 1 as year
+		and group 3 as month
+		and group 5 as date
+with inline_match on Doc.text
+from Month M, TwoDigitsDay Day, FourDigitYear Year;
+
+--  Pattern 11: 12 months
+create view Date11 as
+extract regex /(\d{1,2})\s{0,2}(?:month|mth)s?\b/
+on D.text
+return group 0 as match
+and group 1 as period
+from Doc D;
+
+
+--  Pattern 12: FY2007, Q2 2010
+create view Date12 as
+extract regex /(FY|QTR|Q1|Q2|Q3|Q4)\s{0,2}(\d{4}|\d{2})/
+on D.text
+return group 0 as match
+and group 2 as year
+from Doc D;
+
+
+
+-------------------------------------------------------------------------------
+--  Union of date patterns having month, date and year
+-------------------------------------------------------------------------------
+create view Date_Pattern_All as
+(select D.match,D.month, D.date, D.year from Date5 D)
+union all
+(select D.match,D.month, D.date, D.year from Date6 D)
+union all
+(select D.match,D.month, D.date, D.year from Date7 D)
+union all
+(select D.match,D.month, D.date, D.year from Date8 D)
+union all
+(select D.match,D.month, D.date, D.year from Date9 D)
+union all
+(select D.match,D.month, D.date, D.year from Date10 D);
+
+-------------------------------------------------------------------------------
+--  Union of date patterns having month or date or year not present.
+--  Assign '' to that particular attribute
+-------------------------------------------------------------------------------
+create view Date_Pattern_Partial as
+(select D.match,'' as date,'' as month ,D.year from Date1 D)
+union all
+(select D.match,D.date,D.month,'' as year from Date2 D)
+union all
+(select D.match,D.date,D.month,'' as year from Date3 D)
+union all
+(select D.match, '' as date,D.month,D.year from Date4 D)
+union all
+(select D.match, '' as date,D.month,D.year from Date5_1 D)
+union all
+(select D.match,'' as date, '' as month, '' as year from Date11 D)
+union all
+(select D.match,'' as date, '' as month, D.year from Date12 D);
+
+
+-------------------------------------------------------------------------------
+--  Union of all date patterns
+-------------------------------------------------------------------------------
+create view All_Dates_United as
+(select R.match as match,
+		R.month as month,
+		R.date as date,
+		R.year as year 
+from Date_Pattern_Partial R)
+union all
+(select R.match as match,
+		R.month as month,
+		R.date as date,
+		R.year as year 
+from Date_Pattern_All R);
+
+
+-------------------------------------------------------------------------------
+--  Consolidate all date patterns
+-------------------------------------------------------------------------------
+create view DatesWithoutNormalized_consolidated as
+select C.match as match,
+		C.month as month,
+		C.date as date,
+		C.year as year 
+from All_Dates_United C
+consolidate on C.match using 'LeftToRight';
+
+-------------------------------------------------------------------------------
+--  Internal table for month with month and norm_month columns
+-------------------------------------------------------------------------------
+create table Month_Normalized(month Text, month_norm Text) as
+values
+('january', '01'),
+('jan','01'),
+('01', '01'),
+('1', '01'),
+
+('february', '02'),
+('feb','02'),
+('02', '02'),
+('2', '02'),
+
+('march', '03'),
+('mar','03'),
+('03', '03'),
+('3', '03'),
+
+('april', '04'),
+('apr','04'),
+('04', '04'),
+('4', '04'),
+
+('may', '05'),
+('05', '05'),
+('5', '05'),
+
+('june', '06'),
+('jun','06'),
+('06', '06'),
+('6', '06'),
+
+('july', '07'),
+('jul','07'),
+('07', '07'),
+('7', '07'),
+
+('august', '08'),
+('aug','08'),
+('08', '08'),
+('8', '08'),
+
+('september', '09'),
+('sep','09'),
+('sept','09'),
+('09', '09'),
+('9', '09'),
+
+('october', '10'),
+('oct','10'),
+('10', '10'),
+
+('november', '11'),
+('nov','11'),
+('10', '11'),
+
+
+('december', '12'),
+('dec','12'),
+('12', '12'),
+
+('','');
+
+-------------------------------------------------------------------------------
+--  Final output view with mapping with normalized month from the table(Month_Normalized)
+-------------------------------------------------------------------------------
+create view Dates as
+select
+	D.date as date,
+	M.month_norm as month,
+	D.year as year,
+	D.match as match
+from DatesWithoutNormalized_consolidated D, Month_Normalized M
+where Equals(ToLowerCase(GetString(D.month)),ToLowerCase(GetString(M.month)));

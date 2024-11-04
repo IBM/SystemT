@@ -1,0 +1,688 @@
+module PersonCandidates;
+
+
+create view NamesAll as
+  (select  Op.name as name,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__315__TempOp__0 Op)
+  union all
+  (select  Op.name as name,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__315__TempOp__1 Op)
+  union all
+  (select  Op.name as name,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__315__TempOp__2 Op)
+  union all
+  (select  Op.name as name,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__315__TempOp__3 Op)
+  union all
+  (select  Op.name as name,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__315__TempOp__4 Op)
+  union all
+  (select  Op.name as name,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__315__TempOp__5 Op)
+  union all
+  (select  Op.name as name,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__315__TempOp__6 Op)
+  union all
+  (select  Op.name as name,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__315__TempOp__7 Op);
+
+output view NamesAll;
+
+create view PersonDict as
+  select  __t2.name as name,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__316__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__316__Temp__1 __t1,
+        __Consolidate__316__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.name;
+
+output view PersonDict;
+
+create view Person3P1 as
+  select  CombineSpans(F.firstname, L.lastname) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          F.__auto__id as StrictFirstName_____sep_____F____id,
+          S.__auto__id as StrictCapsPersonR_____sep_____S____id,
+          L.__auto__id as StrictLastName_____sep_____L____id
+  from  StrictFirstName F,
+        StrictCapsPersonR S,
+        StrictLastName L
+  where FollowsTok(F.firstname, S.name, 0, 0)
+     and FollowsTok(F.firstname, L.lastname, 1, 1)
+     and Not(Equals(GetText(F.firstname), GetText(L.lastname)))
+     and Not(Equals(GetText(F.firstname), GetText(S.name)))
+     and Not(Equals(GetText(S.name), GetText(L.lastname)));
+
+output view Person3P1;
+
+create view Person3P2 as
+  select  CombineSpans(P.name, L.lastname) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonDict_____sep_____P____id,
+          S.__auto__id as StrictCapsPersonR_____sep_____S____id,
+          L.__auto__id as StrictLastName_____sep_____L____id
+  from  PersonDict P,
+        StrictCapsPersonR S,
+        StrictLastName L
+  where FollowsTok(P.name, S.name, 0, 0)
+     and FollowsTok(P.name, L.lastname, 1, 1)
+     and Not(Equals(GetText(P.name), GetText(L.lastname)))
+     and Not(Equals(GetText(P.name), GetText(S.name)))
+     and Not(Equals(GetText(S.name), GetText(L.lastname)));
+
+output view Person3P2;
+
+create view Person3P3 as
+  select  CombineSpans(F.firstname, P.name) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonDict_____sep_____P____id,
+          S.__auto__id as StrictCapsPersonR_____sep_____S____id,
+          F.__auto__id as StrictFirstName_____sep_____F____id
+  from  PersonDict P,
+        StrictCapsPersonR S,
+        StrictFirstName F
+  where FollowsTok(F.firstname, S.name, 0, 0)
+     and FollowsTok(F.firstname, P.name, 1, 1)
+     and Not(Equals(GetText(P.name), GetText(F.firstname)))
+     and Not(Equals(GetText(P.name), GetText(S.name)))
+     and Not(Equals(GetText(S.name), GetText(F.firstname)));
+
+output view Person3P3;
+
+create view Person1 as
+  select  CombineSpans(CP1.name, CP2.name) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          I.__auto__id as Initial_____sep_____I____id,
+          CP1.__auto__id as CapsPerson_____sep_____CP1____id,
+          IW.__auto__id as InitialWord_____sep_____IW____id,
+          CP2.__auto__id as CapsPerson_____sep_____CP2____id
+  from  Initial I,
+        CapsPerson CP1,
+        InitialWord IW,
+        CapsPerson CP2
+  where FollowsTok(I.initial, CP1.name, 0, 0)
+     and FollowsTok(CP1.name, IW.word, 0, 0)
+     and FollowsTok(IW.word, CP2.name, 0, 0);
+
+output view Person1;
+
+create view Person1a1 as
+  select  CP1.name as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          I.__auto__id as Initial_____sep_____I____id,
+          CP1.__auto__id as CapsPerson_____sep_____CP1____id
+  from  Initial I,
+        CapsPerson CP1
+  where FollowsTok(I.initial, CP1.name, 0, 0);
+
+output view Person1a1;
+
+create view Person1a2 as
+  select  CombineSpans(name.block, CP1.name) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          I.__auto__id as Initial_____sep_____I____id,
+          name.__auto__id as __Subquery__318__Temp_____sep_____name____id,
+          CP1.__auto__id as CapsPerson_____sep_____CP1____id
+  from  Initial I,
+        __Subquery__318__Temp name,
+        CapsPerson CP1
+  where FollowsTok(I.initial, name.block, 0, 0)
+     and FollowsTok(name.block, CP1.name, 0, 0);
+
+output view Person1a2;
+
+create view Person1a as
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__319__TempOp__0 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__319__TempOp__1 Op);
+
+output view Person1a;
+
+create view Person1a_more as
+  select  name.block as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          I.__auto__id as Initial_____sep_____I____id,
+          name.__auto__id as __Subquery__321__Temp_____sep_____name____id
+  from  Initial I,
+        __Subquery__321__Temp name
+  where FollowsTok(I.initial, name.block, 0, 0)
+     and Not(ContainsRegex(/[\n\t]/, name.block));
+
+output view Person1a_more;
+
+create view Person3 as
+  select  CombineSpans(P1.name, P2.name) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P1.__auto__id as PersonDict_____sep_____P1____id,
+          IW.__auto__id as WeakInitialWord_____sep_____IW____id,
+          P2.__auto__id as PersonDict_____sep_____P2____id
+  from  PersonDict P1,
+        WeakInitialWord IW,
+        PersonDict P2
+  where FollowsTok(P1.name, IW.word, 0, 0)
+     and FollowsTok(IW.word, P2.name, 0, 0)
+     and Not(Equals(GetText(P1.name), GetText(P2.name)));
+
+output view Person3;
+
+create view Person3r1 as
+  select  CombineSpans(FN.firstname, CP.name) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          FN.__auto__id as FirstName_____sep_____FN____id,
+          IW.__auto__id as InitialWord_____sep_____IW____id,
+          CP.__auto__id as CapsPerson_____sep_____CP____id
+  from  FirstName FN,
+        InitialWord IW,
+        CapsPerson CP
+  where FollowsTok(FN.firstname, IW.word, 0, 0)
+     and FollowsTok(IW.word, CP.name, 0, 0);
+
+output view Person3r1;
+
+create view Person3r2 as
+  select  CombineSpans(CP.name, LN.lastname) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          LN.__auto__id as LastName_____sep_____LN____id,
+          IW.__auto__id as InitialWord_____sep_____IW____id,
+          CP.__auto__id as CapsPerson_____sep_____CP____id
+  from  LastName LN,
+        InitialWord IW,
+        CapsPerson CP
+  where FollowsTok(CP.name, IW.word, 0, 0)
+     and FollowsTok(IW.word, LN.lastname, 0, 0);
+
+output view Person3r2;
+
+create view Person4WithNewLine as
+  select  CombineSpans(FN.firstname, LN.lastname) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          FN.__auto__id as FirstName_____sep_____FN____id,
+          LN.__auto__id as LastName_____sep_____LN____id
+  from  FirstName FN,
+        LastName LN
+  where FollowsTok(FN.firstname, LN.lastname, 0, 0);
+
+output view Person4WithNewLine;
+
+create view Person4WrongCandidates as
+  select  FN.firstname as firstname,
+          LN.lastname as lastname,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          FN.__auto__id as FirstName_____sep_____FN____id,
+          LN.__auto__id as LastName_____sep_____LN____id
+  from  FirstName FN,
+        LastName LN
+  where FollowsTok(FN.firstname, LN.lastname, 0, 0);
+
+output view Person4WrongCandidates;
+
+create view Person4 as
+  select  Op.person as person,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__322__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__322__TempOp__1 Op,
+        __Minus__322__Temp __t
+  where Equals(Op.person, __t.person);
+
+output view Person4;
+
+create view Person4a as
+  select  CombineSpans(LN.lastname, FN.firstname) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          FN.__auto__id as FirstName_____sep_____FN____id,
+          LN.__auto__id as LastName_____sep_____LN____id
+  from  FirstName FN,
+        LastName LN
+  where FollowsTok(LN.lastname, FN.firstname, 1, 1)
+     and ContainsRegex(/,/, SpanBetween(LN.lastname, FN.firstname));
+
+output view Person4a;
+
+create view Person4aextended as
+  select  CombineSpans(LN.lastname, FN.firstname) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          FN.__auto__id as FirstName_____sep_____FN____id,
+          S.__auto__id as PersonSuffix_____sep_____S____id,
+          LN.__auto__id as LastName_____sep_____LN____id
+  from  FirstName FN,
+        PersonSuffix S,
+        LastName LN
+  where FollowsTok(LN.lastname, S.suffix, 0, 0)
+     and FollowsTok(S.suffix, FN.firstname, 1, 1)
+     and ContainsRegex(/,/, SpanBetween(S.suffix, FN.firstname));
+
+output view Person4aextended;
+
+create view Person4ar1temp as
+  select  FN.firstname as firstname,
+          CP.name as name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          FN.__auto__id as FirstName_____sep_____FN____id,
+          CP.__auto__id as CapsPerson_____sep_____CP____id
+  from  FirstName FN,
+        CapsPerson CP
+  where FollowsTok(CP.name, FN.firstname, 1, 1)
+     and ContainsRegex(/,/, SpanBetween(CP.name, FN.firstname));
+
+output view Person4ar1temp;
+
+create view Person4ar1 as
+  select  CombineSpans(P.name, P.firstname) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as Person4ar1temp_____sep_____P____id
+  from  Person4ar1temp P
+  where Not(MatchesRegex(/(.|\n|\r)*(\.|\?|!|'|\sat|\sin)( )*/, LeftContext(P.name, 10)))
+     and Not(MatchesRegex(/(?i)(.+fully)/, P.name))
+     and GreaterThan(GetBegin(P.name), 10)
+     and Not(ContainsDict('StatesOfUSA', P.name));
+
+output view Person4ar1;
+
+create view Person4ar2 as
+  select  CombineSpans(LN.lastname, CP.name) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CP.__auto__id as CapsPerson_____sep_____CP____id,
+          LN.__auto__id as LastName_____sep_____LN____id
+  from  CapsPerson CP,
+        LastName LN
+  where FollowsTok(LN.lastname, CP.name, 0, 1)
+     and ContainsRegex(/,/, SpanBetween(LN.lastname, CP.name))
+     and Not(ContainsDict('StatesOfUSA', CP.name));
+
+output view Person4ar2;
+
+create view Person2 as
+  select  CombineSpans(IW.word, CP.name) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          IW.__auto__id as InitialWord_____sep_____IW____id,
+          P.__auto__id as PersonDict_____sep_____P____id,
+          CP.__auto__id as CapsPerson_____sep_____CP____id
+  from  InitialWord IW,
+        PersonDict P,
+        CapsPerson CP
+  where FollowsTok(IW.word, P.name, 0, 0)
+     and FollowsTok(P.name, CP.name, 0, 0);
+
+output view Person2;
+
+create view Person2a as
+  select  CombineSpans(IW.word, P.name) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          IW.__auto__id as InitialWord_____sep_____IW____id,
+          CP.__auto__id as CapsPerson_____sep_____CP____id,
+          P.__auto__id as PersonDict_____sep_____P____id
+  from  InitialWord IW,
+        CapsPerson CP,
+        PersonDict P
+  where FollowsTok(IW.word, CP.name, 0, 0)
+     and FollowsTok(CP.name, P.name, 0, 0);
+
+output view Person2a;
+
+create view Person4r1 as
+  select  CombineSpans(FN.firstname, CP.name) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          FN.__auto__id as FirstName_____sep_____FN____id,
+          CP.__auto__id as CapsPerson_____sep_____CP____id
+  from  FirstName FN,
+        CapsPerson CP
+  where FollowsTok(FN.firstname, CP.name, 0, 0);
+
+output view Person4r1;
+
+create view Person4r2 as
+  select  CombineSpans(CP.name, LN.lastname) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CP.__auto__id as CapsPerson_____sep_____CP____id,
+          LN.__auto__id as LastName_____sep_____LN____id
+  from  CapsPerson CP,
+        LastName LN
+  where FollowsTok(CP.name, LN.lastname, 0, 0);
+
+output view Person4r2;
+
+create view Person5 as
+  select  CombineSpans(IW.word, FN.firstname) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          IW.__auto__id as InitialWord_____sep_____IW____id,
+          FN.__auto__id as FirstName_____sep_____FN____id
+  from  InitialWord IW,
+        FirstName FN
+  where FollowsTok(IW.word, FN.firstname, 0, 0);
+
+output view Person5;
+
+create view Person6 as
+  select  CombineSpans(IW.word, LN.lastname) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          IW.__auto__id as InitialWord_____sep_____IW____id,
+          LN.__auto__id as LastName_____sep_____LN____id
+  from  InitialWord IW,
+        LastName LN
+  where FollowsTok(IW.word, LN.lastname, 0, 0);
+
+output view Person6;
+
+create view ChineseLastName as
+  select  D.match as lastname,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__323__Temp_____sep_____D____id
+  from  __Subquery__323__Temp D
+  where MatchesRegex(/\p{Lu}\p{M}*.{1,10}/, D.match);
+
+output view ChineseLastName;
+
+create view ChineseFullName as
+  select  CombineSpans(C.lastname, CP.name) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as ChineseLastName_____sep_____C____id,
+          CP.__auto__id as CapsPerson_____sep_____CP____id
+  from  ChineseLastName C,
+        CapsPerson CP
+  where FollowsTok(C.lastname, CP.name, 0, 0);
+
+output view ChineseFullName;
+
+create view ThreeTokenPersonAll as
+  select  CombineSpans(F.firstname, L.lastname) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          F.__auto__id as FirstName_____sep_____F____id,
+          CP.__auto__id as CapsPerson_____sep_____CP____id,
+          L.__auto__id as LastName_____sep_____L____id
+  from  FirstName F,
+        CapsPerson CP,
+        LastName L
+  where FollowsTok(F.firstname, CP.name, 0, 0)
+     and FollowsTok(CP.name, L.lastname, 0, 0);
+
+output view ThreeTokenPersonAll;
+
+create view ThreeTokenPerson as
+  select  Op.person as person,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__324__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__324__TempOp__1 Op,
+        __Minus__324__Temp __t
+  where Equals(Op.person, __t.person);
+
+output view ThreeTokenPerson;
+
+create view __Base__317__Temp as
+  extract blocks
+    with count between 1 and 2
+    and separation between 0 and 0 tokens
+    on IW.word as block
+  from InitialWord IW;
+
+output view __Base__317__Temp;
+
+create view __Base__320__Temp as
+  extract blocks
+    with count between 2 and 3
+    and separation between 0 and 0 tokens
+    on CapsPerson.name as block
+  from CapsPerson CapsPerson;
+
+output view __Base__320__Temp;
+
+create view __Consolidate__316__Temp__1 as
+  select  C.name as name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as NamesAll_____sep_____C____id,
+          C.name as __consolidate__target
+  from  NamesAll C
+  where Not(MatchesRegex(/[ ]*[\u0093\u0094\u2018\u2019\u0022\u0027\u00AB\u00BB\u201A\u201B\u201C\u201D\u201E\u301D\u301E\u301F]\p{M}*[^sld]/, RightContextTok(C.name, 2)));
+
+output view __Consolidate__316__Temp__1;
+
+create view __Consolidate__316__Temp__2 as
+  select  __t1.name as name,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__316__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__316__Temp__2;
+
+create view __Minus__322__Temp as
+  select  __t.person as person
+  from  
+    ((select  Op.person as person
+      from  __Minus__322__TempOp__1 Op)
+    minus
+    (select  Op.person as person
+      from  __Minus__322__TempOp__2 Op)
+    ) __t
+  group by __t.person;
+
+output view __Minus__322__Temp;
+
+create view __Minus__322__TempOp__1 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as Person4WithNewLine_____sep_____P____id
+  from  Person4WithNewLine P;
+
+output view __Minus__322__TempOp__1;
+
+create view __Minus__322__TempOp__2 as
+  select  CombineSpans(P.firstname, P.lastname) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as Person4WrongCandidates_____sep_____P____id
+  from  Person4WrongCandidates P
+  where Equals(GetText(P.firstname), GetText(P.lastname));
+
+output view __Minus__322__TempOp__2;
+
+create view __Minus__324__Temp as
+  select  __t.person as person
+  from  
+    ((select  Op.person as person
+      from  __Minus__324__TempOp__1 Op)
+    minus
+    (select  Op.person as person
+      from  __Minus__324__TempOp__2 Op)
+    ) __t
+  group by __t.person;
+
+output view __Minus__324__Temp;
+
+create view __Minus__324__TempOp__1 as
+  select  C.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as ThreeTokenPersonAll_____sep_____C____id
+  from  ThreeTokenPersonAll C;
+
+output view __Minus__324__TempOp__1;
+
+create view __Minus__324__TempOp__2 as
+  select  C.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as ThreeTokenPersonAll_____sep_____C____id,
+          H.__auto__id as HeadlineMixedCaps_____sep_____H____id
+  from  ThreeTokenPersonAll C,
+        HeadlineMixedCaps H
+  where Overlaps(H.headline, C.person);
+
+output view __Minus__324__TempOp__2;
+
+create view __Subquery__318__Temp as
+  select  Op.block as block,
+          AutoID() as __auto__id
+  from  __Base__317__Temp Op;
+
+output view __Subquery__318__Temp;
+
+create view __Subquery__321__Temp as
+  select  Op.block as block,
+          AutoID() as __auto__id
+  from  __Base__320__Temp Op;
+
+output view __Subquery__321__Temp;
+
+create view __Subquery__323__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'LastNamesUsedInChina'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__323__Temp;
+
+create view __Union__315__TempOp__0 as
+  select  P.name as name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as NameDict_____sep_____P____id
+  from  NameDict P;
+
+output view __Union__315__TempOp__0;
+
+create view __Union__315__TempOp__1 as
+  select  P.name as name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as NameDict1_____sep_____P____id
+  from  NameDict1 P;
+
+output view __Union__315__TempOp__1;
+
+create view __Union__315__TempOp__2 as
+  select  P.name as name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as NameDict2_____sep_____P____id
+  from  NameDict2 P;
+
+output view __Union__315__TempOp__2;
+
+create view __Union__315__TempOp__3 as
+  select  P.name as name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as NameDict3_____sep_____P____id
+  from  NameDict3 P;
+
+output view __Union__315__TempOp__3;
+
+create view __Union__315__TempOp__4 as
+  select  P.name as name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as NameDict4_____sep_____P____id
+  from  NameDict4 P;
+
+output view __Union__315__TempOp__4;
+
+create view __Union__315__TempOp__5 as
+  select  P.firstname as name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as FirstName_____sep_____P____id
+  from  FirstName P;
+
+output view __Union__315__TempOp__5;
+
+create view __Union__315__TempOp__6 as
+  select  P.lastname as name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as LastName_____sep_____P____id
+  from  LastName P;
+
+output view __Union__315__TempOp__6;
+
+create view __Union__315__TempOp__7 as
+  select  P.name as name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as NameDict5_____sep_____P____id
+  from  NameDict5 P;
+
+output view __Union__315__TempOp__7;
+
+create view __Union__319__TempOp__0 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as Person1a1_____sep_____P____id
+  from  Person1a1 P;
+
+output view __Union__319__TempOp__0;
+
+create view __Union__319__TempOp__1 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as Person1a2_____sep_____P____id
+  from  Person1a2 P;
+
+output view __Union__319__TempOp__1;
+

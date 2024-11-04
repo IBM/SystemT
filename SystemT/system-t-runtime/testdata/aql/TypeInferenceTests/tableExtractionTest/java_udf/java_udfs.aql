@@ -1,0 +1,103 @@
+module java_udf; 
+
+
+-------------------------------------------------------------------------------
+--UDF declaration for finding out the sum of the colspan values of all the TDs in a row
+-------------------------------------------------------------------------------
+create function GetColspanSum(h_ColspanList ScalarList)
+return Integer
+external_name 'FinancialTables.jar:com.ibm.lod.sec.FinancialTables!FinTable_GetColspanSum'
+language java
+deterministic
+return null on null input;
+
+export function GetColspanSum;
+
+
+-------------------------------------------------------------------------------
+--	UDF declaration for getting the additional start column number and end column 
+--	number attributes for each TD (cell) of a TR (row)
+-------------------------------------------------------------------------------
+create function GetStEndColumnNumber(header ScalarList,h_ColspanList ScalarList,cell Span,h_ColspanList2 ScalarList)
+return ScalarList like h_ColspanList
+external_name 'FinancialTables.jar:com.ibm.lod.sec.FinancialTables!FinTable_GetStEndColumnNumber'
+language java
+deterministic
+return null on null input;
+
+export function GetStEndColumnNumber;
+
+
+-------------------------------------------------------------------------------
+--  returns TRUE if header cell colspan contains value cell colspan
+-------------------------------------------------------------------------------
+create function udfOverlapColStartEnd(header_col_start_end ScalarList, value_col_start_end ScalarList)
+return Boolean
+external_name 'bondsUDFs.jar:com.ibm.midas.bonds.javaudf.bondsUDFs!udfOverlapColStartEnd'
+language java 
+deterministic;
+
+export function udfOverlapColStartEnd;
+
+-------------------------------------------------------------------------------
+--  UDF declaration for getting normalized cellvalue for each cellvalue
+------------------------------------------------------------------------------- 
+create function udfGetStandardCellValue(cellvalue String, normalizedDenomination String)
+return String
+external_name 'StandardizeCellValue.jar:com.ibm.waterfund.standardizeCellValue.StandardizeCellValue!udfGetStandardCellValue'
+language java 
+deterministic
+called on null input;
+
+export function udfGetStandardCellValue;
+
+
+-------------------------------------------------------------------------------
+--  UDF declaration for getting missing values of any of the attribute from startDate,
+--  endDate and period returns complete startDate,endDate and period in a scalarlist
+------------------------------------------------------------------------------- 
+create function udfGetRemaningTimePeriodValue(StartDate String, startMonth String, startYear String, endDate
+			String, endMonth String, endYear String, period String, att_list ScalarList)
+return ScalarList like att_list
+external_name 'DateCalculator.jar:com.ibm.waterfund.javaudf.DateCalculator!computeTimePeriodInformation'
+language java 
+deterministic;
+
+export function udfGetRemaningTimePeriodValue;
+
+-------------------------------------------------------------------------------
+--  Returns all attributes from the scalarlist i.e.startDate, endDate and period
+------------------------------------------------------------------------------- 
+create function udfGetValuesFromScalarList(att_list ScalarList, index Integer)
+return String
+external_name 'DateCalculator.jar:com.ibm.waterfund.javaudf.DateCalculator!getElementFromStrList'
+language java 
+deterministic;
+
+export function udfGetValuesFromScalarList;
+
+-------------------------------------------------------------------------------
+-- 	created fused value for currency using info from passed standardized 
+--	currency list and current standardized currency value
+-------------------------------------------------------------------------------
+create function udfCombineCurrencyInfoList(currList ScalarList, curr String)
+return String
+external_name 'StandardizeCellValue.jar:com.ibm.waterfund.standardizeCellValue.StandardizeCellValue!udfCombineCurrencyInfoList'
+language java 
+deterministic
+called on null input;
+
+export function udfCombineCurrencyInfoList;
+
+-------------------------------------------------------------------------------
+-- 	created fused value using info from passed list of values to be normaluzed
+-- 	 and current standardized value
+-------------------------------------------------------------------------------
+create function udfGetNomalizedInfo(listOfValues ScalarList, currentvalue String)
+return String
+external_name 'StandardizeCellValue.jar:com.ibm.waterfund.standardizeCellValue.StandardizeCellValue!udfGetNomalizedInfo'
+language java 
+deterministic
+called on null input;
+
+export function udfGetNomalizedInfo;

@@ -1,0 +1,28 @@
+module City;
+
+import view County_ from module County as County_;
+import view AddressFinal from module Address as AddressFinal;
+
+create view CityCounty as
+select CC.match as city, C.county as county, C.stateorprovince as stateorprovince, C.country as country, C.continent as continent, CombineSpans(CC.match, C.reference) as reference
+from CityConsolidatedValid CC,
+	 County_ C
+where FollowsTok(CC.match, C.county, 0, 1)
+  and MatchesRegex(/\s*[,]?\s*/, SpanBetween(CC.match, C.county))
+  and Not(ContainsRegex(/[\n\r]/, SpanBetween(CC.match, C.county)));
+ 
+create view CityCandidates as
+	(select C.city as city, '' as county, C.state as stateorprovince, C.country as country, C.continent as continent, C.reference as reference
+	 from CityStateCountryValid C
+	 where Equals(GetText(C.subtype), 'city'))
+	 union all
+	 (select A.city as city, '' as county, A.stateorprovince as stateorprovince, '' as country, '' as continent, A.city as reference
+	 from AddressFinal A)
+	 union all
+	 (select C.city as city, C.county as county, C.stateorprovince as stateorprovince, C.country as country, C.continent as continent, C.reference as reference
+	 from CityCounty C);
+	 
+create view City_ as
+select C.city as city, C.stateorprovince as stateorprovince, C.country as country, C.continent as continent, C.reference as reference
+from CityCandidates C
+consolidate on C.reference;

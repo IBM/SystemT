@@ -1,0 +1,50 @@
+create view Country as
+select
+	D.match as match
+from
+	Dictionary('dictionaries/country.dict', 'Exact', Document.text) D;
+	
+ create view State  as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/stateList.dict',  Document.text) D;
+	
+		
+-- The following do exact dictionary matching may missing entries such as 'Al', 'Ms'
+ -- to avoid false positives in weak rules (e.g. the one w/o zipcode)	
+ create view StateStrongAbbrev  as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/stateListAbbrev.dict',  'Exact', Document.text) D;
+
+create view StateWeakAbbrev  as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/stateListAbbrev.dict',  Document.text) D;
+		
+  create view StateStrongAll
+	as
+	(select S.match as match from State S)
+	union all 
+	 (select S.match as match from StateStrongAbbrev S);	
+	 
+  create view StateWeakAll
+	as
+	(select S.match as match from State S)
+	union all 
+	 (select S.match as match from StateWeakAbbrev S);	
+
+create view USCity as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/city.dict', 'Exact', Document.text) D;	
+
+create view GermanCities as
+	select
+		D.match as match 
+	from
+		Dictionary('dictionaries/city_german.dict', Document.text) D;  

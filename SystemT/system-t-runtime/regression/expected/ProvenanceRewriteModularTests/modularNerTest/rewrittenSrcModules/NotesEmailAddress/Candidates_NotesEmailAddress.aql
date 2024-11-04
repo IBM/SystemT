@@ -1,0 +1,235 @@
+module NotesEmailAddress;
+
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText
+;
+
+
+import dictionary NotesEmailAddressAbbreviations from module Dictionaries as NotesEmailAddressAbbreviations
+;
+
+
+import view URLAll from module URL as URLAll
+;
+
+
+require document with columns
+  text Text;
+
+create view Email2_a as
+  select  R.match as annot,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__118__Temp_____sep_____R____id
+  from  __Subquery__118__Temp R
+  where Not(MatchesRegex(/\/|\p{L}|_|\p{Nd}/, RightContext(R.match, 1)))
+     and Not(ContainsDict('NotesEmailAddressAbbreviations', R.match));
+
+output view Email2_a;
+
+create view Email2_b as
+  select  R.match as annot,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__119__Temp_____sep_____R____id
+  from  __Subquery__119__Temp R
+  where Not(MatchesRegex(/\/|\p{L}|_|\p{Nd}/, RightContext(R.match, 1)))
+     and Not(ContainsDict('NotesEmailAddressAbbreviations', R.match));
+
+output view Email2_b;
+
+create view Email2_c as
+  select  R.match as annot,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__120__Temp_____sep_____R____id
+  from  __Subquery__120__Temp R
+  where Not(MatchesRegex(/\/|\p{L}|_|\p{Nd}/, RightContext(R.match, 1)));
+
+output view Email2_c;
+
+create view NotesEmailAddressAll as
+  (select  Op.annot as annot,
+            Op.type as type,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__121__TempOp__0 Op)
+  union all
+  (select  Op.annot as annot,
+            Op.type as type,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__121__TempOp__1 Op)
+  union all
+  (select  Op.annot as annot,
+            Op.type as type,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__121__TempOp__2 Op);
+
+output view NotesEmailAddressAll;
+
+create view WrongNotesEmail as
+  select  E.annot as annot,
+          E.type as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          E.__auto__id as NotesEmailAddressAll_____sep_____E____id,
+          U.__auto__id as URLAll_____sep_____U____id
+  from  NotesEmailAddressAll E,
+        URLAll U
+  where Contains(U.annot, E.annot);
+
+output view WrongNotesEmail;
+
+create view NotesEmailCand as
+  select  Op.annot as annot,
+          Op.type as type,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__122__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__122__TempOp__1 Op,
+        __Minus__122__Temp __t
+  where Equals(Op.annot, __t.annot)
+     and Equals(Op.type, __t.type);
+
+output view NotesEmailCand;
+
+create view NotesEmailConsolidated as
+  select  __t2.annot as annot,
+          __t2.type as type,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__123__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__123__Temp__1 __t1,
+        __Consolidate__123__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.annot, __t2.type;
+
+output view NotesEmailConsolidated;
+
+create view __Consolidate__123__Temp__1 as
+  select  E.annot as annot,
+          E.type as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          E.__auto__id as NotesEmailCand_____sep_____E____id,
+          E.annot as __consolidate__target
+  from  NotesEmailCand E;
+
+output view __Consolidate__123__Temp__1;
+
+create view __Consolidate__123__Temp__2 as
+  select  __t1.annot as annot,
+          __t1.type as type,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__123__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__123__Temp__2;
+
+create view __Minus__122__Temp as
+  select  __t.annot as annot,
+          __t.type as type
+  from  
+    ((select  Op.annot as annot,
+              Op.type as type
+      from  __Minus__122__TempOp__1 Op)
+    minus
+    (select  Op.annot as annot,
+              Op.type as type
+      from  __Minus__122__TempOp__2 Op)
+    ) __t
+  group by __t.annot, __t.type;
+
+output view __Minus__122__Temp;
+
+create view __Minus__122__TempOp__1 as
+  select  E.annot as annot,
+          E.type as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          E.__auto__id as NotesEmailAddressAll_____sep_____E____id
+  from  NotesEmailAddressAll E;
+
+output view __Minus__122__TempOp__1;
+
+create view __Minus__122__TempOp__2 as
+  select  E.annot as annot,
+          E.type as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          E.__auto__id as WrongNotesEmail_____sep_____E____id
+  from  WrongNotesEmail E;
+
+output view __Minus__122__TempOp__2;
+
+create view __Subquery__118__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    regex /((\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*([\p{Ll}\p{Lu}\p{Lt}\p{Lo}\p{Nd}\p{Pc}]\p{M}*){1,20}\s*[\/]\s*)((\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}(\p{Nd}\p{M}*){0,3}\s*){1,2}[\/]\s*){1,2}(\p{Lu}\p{M}*){2,20}(@(\p{L}\p{M}*){2,20})?)/
+    with flags 'DOTALL'
+    on between 1 and 15 tokens in D.text
+    return group 0 as match
+  from DocumentText D;
+
+output view __Subquery__118__Temp;
+
+create view __Subquery__119__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    regex /((\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,10}(['-]\p{L}\p{M}*)?(\p{L}\p{M}*){1,10}\s+)((\p{Lu}\p{M}*)\s+)?(\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}(['-]\p{L}\p{M}*(\p{L}\p{M}*){1,8})?([\p{L}\p{Nd}_]\p{M}*){0,2}\s*[\/]\s*)(((\p{Lu}\p{M}*)(\p{L}\p{M}*){1,20}(\p{Nd}\p{M}*){0,3}\s*){1,2}[\/]\s*){1,2}(\p{Lu}\p{M}*){2,20}(@(\p{L}\p{M}*){1,20})?)/
+    with flags 'DOTALL'
+    on between 1 and 15 tokens in D.text
+    return group 0 as match
+  from DocumentText D;
+
+output view __Subquery__119__Temp;
+
+create view __Subquery__120__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    regex /((\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,10}(['-]\p{L}\p{M}*)?(\p{L}\p{M}*){1,10}\s+)((\p{Lu}\p{M}*)\s+)?(\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}(['-]\p{L}\p{M}*(\p{L}\p{M}*){1,8})?([\p{L}\p{Nd}_]\p{M}*){0,2}\s*[\/]\s*)(((\p{Lu}\p{M}*)(\p{L}\p{M}*){1,20}(\p{Nd}\p{M}*){0,3}\s*){1,2}[\/]\s*){1,2}\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}(@(\p{L}\p{M}*){1,20}))/
+    with flags 'DOTALL'
+    on between 1 and 15 tokens in D.text
+    return group 0 as match
+  from DocumentText D;
+
+output view __Subquery__120__Temp;
+
+create view __Union__121__TempOp__0 as
+  select  Email2_a.annot as annot,
+          'NONPERS' as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          Email2_a.__auto__id as Email2_a_____sep_____Email2_a____id
+  from  Email2_a Email2_a;
+
+output view __Union__121__TempOp__0;
+
+create view __Union__121__TempOp__1 as
+  select  Email2_b.annot as annot,
+          'PERSONAL' as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          Email2_b.__auto__id as Email2_b_____sep_____Email2_b____id
+  from  Email2_b Email2_b;
+
+output view __Union__121__TempOp__1;
+
+create view __Union__121__TempOp__2 as
+  select  Email2_c.annot as annot,
+          'PERSONAL' as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          Email2_c.__auto__id as Email2_c_____sep_____Email2_c____id
+  from  Email2_c Email2_c;
+
+output view __Union__121__TempOp__2;
+

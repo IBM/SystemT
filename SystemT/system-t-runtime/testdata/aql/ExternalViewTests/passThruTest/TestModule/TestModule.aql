@@ -1,0 +1,32 @@
+-------------------------------------------------------------------------------
+-- Very simple test of external views.  Just passes through the tuples of
+-- two external views.
+-------------------------------------------------------------------------------
+module TestModule;
+
+require document with columns text Text;
+
+create external view MyExternalView(
+  text_attr Text,
+  float_attr Float,
+  int_attr Integer
+)
+external_name 'TestExternalView';
+
+-- Need two views to test functionality fully
+create external view SecondExternalView(
+  text_attr1 Text,
+  text_attr2 Text
+)
+external_name 'OtherExternalView';
+
+-- eventually comment this out and the last outviews so we can test straight output
+-- without going through this hack
+create view MyExternalViewCopy as select * from MyExternalView;
+create view SecondExternalViewCopy as select * from SecondExternalView;
+
+output view MyExternalViewCopy;
+output view SecondExternalViewCopy;
+
+output view MyExternalView;
+output view SecondExternalView;

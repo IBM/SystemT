@@ -1,0 +1,33 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- flagsTest2.aql
+--
+-- Used for testing flag support in ContainsRegex
+
+-- ****************************************************************************
+/**
+ * Rule 1: identifies urls that begins with protocol names http or ftp
+ * Examples: http://explorer.msn.com
+ *           ftp://cvs.ibm.com
+ */
+create view URL1 as
+select R.match as annot
+from Regex(/((ht|f)tps?:\/\/\w+[\w\-:&=_?\/~.<>@]+[\w\-:&=_?\/~]{2,})/, Document.text) R
+where ContainsRegex(/[A-Z][a-z]*\Z/, R.match);
+
+output view URL1;
+
+create view URL2 as
+select R.match as annot
+from Regex(/((ht|f)tps?:\/\/\w+[\w\-:&=_?\/~.<>@]+[\w\-:&=_?\/~]{2,})/, Document.text) R
+where ContainsRegex(/[A-Z][a-z]*\Z/, 'CASE_INSENSITIVE', R.match);
+
+output view URL2;
+
+create view URL3 as
+select R.match as annot
+from Regex(/((ht|f)tps?:\/\/\w+[\w\-:&=_?\/~.<>@]+[\w\-:&=_?\/~]{2,})/, Document.text) R
+where ContainsRegex(/[A-Z][a-z]*\Z/, 'CASE_INSENSITIVE|DOTALL', R.match);
+
+output view URL3;

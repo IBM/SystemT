@@ -1,0 +1,42 @@
+-------------------------------------------------------------------------------
+-- multipleValidationErrorFromGroupByClause.aql
+
+-- Test for a defect# 17974
+-- Aql with multiple error in group by clause
+-------------------------------------------------------------------------------
+
+-- this is correct usage of group by clause
+create view CorrectGroupBy as
+select GetText(P.firstname) as name, Count(P.firstname) as occurrences
+from 
+(
+	extract dictionary 'first.dict'
+		on D.text as firstname
+	from Document D
+) P
+group by GetText(P.firstname);
+
+-- group by clause can contain just contain column and 
+create view InCorrectGroupBy as
+select GetText(P.firstname) as name, Count(P.firstname) as occurrences
+from 
+(
+	extract dictionary 'first.dict'
+		on D.text as firstname
+	from Document D
+) P
+group by Count(P.firstname),1;
+ 
+-- view stmt containing aggregate function without group by clause 
+create view CorrectGroupBy2 as
+select P.someText as name, Count(P.firstname) as occurrences
+from 
+(
+	
+	extract
+	1 as someText, 
+	dictionary 'first.dict'
+		on D.text as firstname
+	from Document D
+) P ;
+

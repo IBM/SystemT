@@ -1,0 +1,65 @@
+-------------------------------------------------------------------------------
+-- Test to verify that Text fields are correctly tagged with applicable column
+-- names.
+-------------------------------------------------------------------------------
+module textColnameTest;
+
+require document with columns text Text;
+
+-- The column 'yo' should get tagged with "CapsWord.yo"
+-- The column 'beaufort' should get tagged with "CapsWord.beaufort"
+-- The column 'docText' should be tagged with "Document.text"
+create view CapsWord as 
+extract 'yo' as yo, 'Beaufort' as beaufort, D.text as docText,
+    regex /[A-Z][a-z]+/ on 1 token in D.text as word
+from Document D;
+
+output view CapsWord;
+
+
+-- The column "beaufort" in this view should still be tagged with
+-- "CapsWord.beaufort",
+-- since the Text object "lives" in the CapsWord view.
+create view CapsWordCopy as select C.beaufort as col from CapsWord C;
+
+output view CapsWordCopy;
+
+create dictionary BeaufortDict as ('Beaufort');
+
+create view Beaufort as 
+extract 'hello' as hello, dictionary BeaufortDict on D.text as name
+from Document D;
+
+
+-- Among the outputs, only nameStr and textCopy should be "local"
+-- The column 'hello' should be labeled "Beaufort.hello"
+-- The column 'yo' should get tagged with "CapsWord.yo"
+-- The column 'beaufort' should get tagged with "CapsWord.beaufort"
+-- The column 'docText' should be tagged with "Document.text"
+-- The column 'textCopy' should be labeled as "Document.text", since the FieldCopier does not create new objects of the same type.
+-- The column 'nameStr' should be labeled as "JoinResult.nameStr"
+create view JoinResult as
+select B.*, C.*, GetText(B.name) as nameStr, GetText(C.docText) as textCopy
+from CapsWord C, Beaufort B
+where Equals(GetString(C.beaufort), GetString(B.name));
+
+output view JoinResult;
+
+-- Make sure that the detag statement also correctly tags its outputs.
+-- The column 'text' in DetaggedDoc1 should be labeled 'DetaggedDoc1.text'
+detag Document.text into DetaggedDoc1;
+detag Document.text as DetaggedDoc2;
+detag Document.text as DetaggedDoc3;
+output view DetaggedDoc3;
+
+-- The column 'text' in IndirectDetaggedDoc1 should be labeled
+--     'DetaggedDoc1.text'
+create view IndirectDetaggedDoc1 as select * from DetaggedDoc1;
+output view IndirectDetaggedDoc1;
+
+-- The column 'text' in IndirectDetaggedDoc2 should be labeled
+--     'DetaggedDoc2.text'
+create view IndirectDetaggedDoc2 as select * from DetaggedDoc2;
+output view IndirectDetaggedDoc2;
+
+

@@ -1,0 +1,79 @@
+$Document = DocScan(
+  (
+    "text" => "Text",
+    "label" => "Text"
+  )
+);
+$_{"___Base__CapsWord__Temp_TmpView_/[A-Z][a-z]+/__1"} =
+Project(
+  (
+    "group_0" => "group_0"
+  ),
+  FastRegexTok(/[A-Z][a-z]+/, (0 => "group_0"), "DOTALL", 1, 1,"D.text",
+    Project(
+      (
+        "text" => "D.text"
+      ),
+      $Document
+    )
+  )
+);
+
+$__Base__CapsWord__Temp =
+Project(
+  (
+    "V.group_0" => "name"
+  ),
+  Project(
+    (
+      "group_0" => "V.group_0"
+    ),
+    $_{"___Base__CapsWord__Temp_TmpView_/[A-Z][a-z]+/__1"}
+  )
+);
+
+$CapsWord =
+Project(
+  (
+    "Op.name" => "name",
+    "@@genericModule@@CapsWord@@__auto__id" => "__auto__id"
+  ),
+  ApplyFunc(
+    AutoID()
+ => "@@genericModule@@CapsWord@@__auto__id",
+    Project(
+      (
+        "name" => "Op.name"
+      ),
+      $__Base__CapsWord__Temp
+    )
+  )
+);
+
+$CapsWordCopy =
+Project(
+  (
+    "CapsWord.name" => "name",
+    "@@genericModule@@CapsWordCopy@@__auto__id" => "__auto__id",
+    "@@genericModule@@CapsWordCopy@@__stmt__type" => "__stmt__type",
+    "CapsWord.__auto__id" => "CapsWord_____sep_____CapsWord____id"
+  ),
+  ApplyFunc(
+    StringConst(
+      "STMT_TYPE_SELECT"
+    ) => "@@genericModule@@CapsWordCopy@@__stmt__type",
+    ApplyFunc(
+      AutoID()
+ => "@@genericModule@@CapsWordCopy@@__auto__id",
+      Project(
+        (
+          "__auto__id" => "CapsWord.__auto__id",
+          "name" => "CapsWord.name"
+        ),
+        $CapsWord
+      )
+    )
+  )
+);
+
+Output: $CapsWord, $CapsWordCopy, $__Base__CapsWord__Temp;

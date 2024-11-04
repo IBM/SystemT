@@ -1,0 +1,101 @@
+require document with columns text Text;
+
+------------------------------------------------------------------------------
+-- Tests for the Case() built-in scalar function
+------------------------------------------------------------------------------
+
+
+create dictionary CommonWords as (
+	'a', 'the', 'of', 'of a', 'of the'
+);
+
+-- Find pairs of common words within 20 tokens of each other.
+create view Word as
+select D.match as word, GetText(D.match) as wordText
+from Dictionary('CommonWords', Document.text) D;
+
+create view WordOnWord as
+select D.match as word
+from Dictionary('CommonWords', Word.wordText) D;
+
+create view WordLengthWithDefaultValue as
+select W.word as word,
+	--Case(Equals(GetLength(W.word), 1), 'one', 
+	--    Equals(GetLength(W.word), 2), 'two',
+	--     Equals(GetLength(W.word), 3), 'three',
+	--     'more than three') as length
+	case 
+		when Equals(GetLength(W.word), 1) then  'one'
+	    when Equals(GetLength(W.word), 2) then 'two'
+	    when Equals(GetLength(W.word), 3) then 'three'
+	    else 'more than three' as length
+from Word W;
+
+create view WordLengthWithDefaultValueSingleCase as
+select W.word as word,
+	-- Case(Equals(GetLength(W.word), 1), 'one', 
+	--      'more than one') 
+	   case
+	   		when Equals(GetLength(W.word), 1) then  'one'
+	    	else 'more than one'
+	   as length
+from Word W;
+
+create view WordLengthWithDefaultValueSingleCaseBoolean as
+select W.word as word,
+	-- Case(Equals(GetLength(W.word), 1), 'one', 
+	--      'more than one') 
+	   case
+	   		when Equals(GetLength(W.word), 1) then  'one'
+	    	else 'more than one'
+	   as length
+from Word W;
+
+create view WordLengthWithoutDefaultValue as
+select W.word as word,
+	 --Case(Equals(GetLength(W.word), 1), GetLength(W.word), 
+	 --     Equals(GetLength(W.word), 2), GetLength(W.word),
+	 --     Equals(GetLength(W.word), 3), GetLength(W.word))
+	  case 
+	  	when Equals(GetLength(W.word), 1) then  GetLength(W.word)
+	    when Equals(GetLength(W.word), 2) then  GetLength(W.word)
+	    when Equals(GetLength(W.word), 3) then  GetLength(W.word)
+	  as length
+from Word W;
+
+create view WordLengthWithoutDefaultValueSingleCase as
+select W.word as word,
+	--Case(Equals(GetLength(W.word), 1), W.word )
+	  case
+	  	when Equals(GetLength(W.word), 1) then W.word
+	  as length
+from Word W;
+
+-- This should fail due to different return types
+/*
+create view Word1 as
+select W.word as word,
+	Case(Equals(GetLength(W.word), 1), W.word, 
+	     GetText(W.word)
+	     ) as length
+from Word W;
+*/
+
+-- This should fail due to different underlying text objects for the two returned span types
+/*
+create view Word2 as
+select W1.word as word1, W2.word as word2,
+	Case(Equals(GetLength(W1.word), 1), W1.word, 
+	     Equals(GetLength(W1.word), 1), W2.word
+	     ) as length
+from Word W1, WordOnWord W2
+where Equals(W1.word, W2.word);
+*/
+
+output view Word;
+output view WordLengthWithDefaultValue;
+output view WordLengthWithDefaultValueSingleCase;
+output view WordLengthWithoutDefaultValue;
+output view WordLengthWithoutDefaultValueSingleCase;
+--output view Word2;
+

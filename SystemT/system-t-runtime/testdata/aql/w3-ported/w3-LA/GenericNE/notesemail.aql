@@ -1,0 +1,69 @@
+	/**
+ * Rule 2: identifies emails in Lotus Notes format
+ * Examples: 
+ *           John Doe/Almaden/IBM
+ *
+ */
+--Non Person email (only one capitalized word before the first slash symbol)
+create view Email2_a as
+select R.match as annot
+--from   Regex(/(([A-Z]\w{1,20}\s+)?([A-Z]\s+)?([A-Z]\w{1,20}\s*[\/]\s*){2,3}[A-Z]{2,20})/, DocScan.text) R;
+-- updated to handle non-email address such as USD NG/MMBTU/USD, From NORTHWEST/SOUTHWEST/CALIFORNIA
+--from   Regex(/(([A-Z][a-z]\w{1,20}\s*[\/]\s*)(([A-Z]\w{1,20}\s*){1,2}[\/]\s*){1,2}[A-Z]{2,20})/, DocScan.text) R;
+-- updated to disallow number for domain names and capture optional @domain name
+--from   Regex(/\b(([A-Z][a-z]\w{1,20}\s*[\/]\s*)(([A-Z][a-zA-Z]{1,20}\s*){1,2}[\/]\s*){1,2}[A-Z]{2,20}(@[a-zA-Z]{2,20})?)\b/, DocScan.text) R;
+-- updated to avoid mistakes such as [Notes/Domino/DWA]/Expeditor products
+--from   Regex(/\b(([A-Z][a-z]\w{1,20}\s*[\/]\s*)(([A-Z][a-zA-Z]{1,20}\s*){1,2}[\/]\s*){1,2}[A-Z]{2,20}(@[a-zA-Z]{2,20})?)(?!\/)\b/, DocScan.text) R;
+-- Support for unicode (TODO: whether to do it for '\s', in unicode [\f\n\r\t\v\x85\p{Z}])
+--from   Regex(/\b((\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*[\p{Ll}\p{Lu}\p{Lt}\p{Lo}\p{Nd}\p{Pc}]{1,20}\s*[\/]\s*)((\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}\s*){1,2}[\/]\s*){1,2}(\p{Lu}\p{M}*){2,20}(@(\p{L}\p{M}*){2,20})?)(?!\/)\b/, DocScan.text) R;
+from   RegexTok(/((\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*[\p{Ll}\p{Lu}\p{Lt}\p{Lo}\p{Nd}\p{Pc}]{1,20}\s*[\/]\s*)((\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}\s*){1,2}[\/]\s*){1,2}(\p{Lu}\p{M}*){2,20}(@(\p{L}\p{M}*){2,20})?)/, 15, DocScan.text) R
+where  Not(MatchesRegex(/\/|\p{L}/,RightContext(R.match,1)));
+
+-- Person email (more than one capitalized words before the first '/')
+create view Email2_b as
+select R.match as annot
+--from   Regex(/(([A-Z]\w{1,20}\s+)?([A-Z]\s+)?([A-Z]\w{1,20}\s*[\/]\s*){2,3}[A-Z]{2,20})/, DocScan.text) R;
+-- updated to handle non-email address such as USD NG/MMBTU/USD, From NORTHWEST/SOUTHWEST/CALIFORNIA
+--from   Regex(/(([A-Z]\w{1,20}\s+)([A-Z]\s+)?([A-Z][a-z]\w{1,20}\s*[\/]\s*)(([A-Z]\w{1,20}\s*){1,2}[\/]\s*){1,2}[A-Z]{2,20})/, DocScan.text) R;
+-- updated to disallow number for domain names and digits for person name can only be at the end
+--from   Regex(/\b(([A-Z]\w{1,20}\s+)([A-Z]\s+)?([A-Z][a-z][a-zA-Z]{0,18}\w{0,2}\s*[\/]\s*)(([A-Z][a-zA-Z]{1,20}\s*){1,2}[\/]\s*){1,2}[A-Z]{2,20}(@[a-zA-Z]{1,20})?)\b/, DocScan.text) R;
+-- Updated to be relaxed in similar way as CapsPerson
+--\b\p{Upper}\p{Lower}[\p{Alpha}]{0,10}(['-][\p{Alpha}])?[\p{Alpha}]{1,10}\b
+--from   Regex(/\b((\p{Upper}\p{Lower}[\p{Alpha}]{0,10}(['-][\p{Alpha}])?[\p{Alpha}]{1,10}\s+)([A-Z]\s+)?(\p{Upper}\p{Lower}[\p{Alpha}]{0,10}(['-][\p{Alpha}])?[\p{Alpha}]{1,8}\w{0,2}\s*[\/]\s*)(([A-Z][a-zA-Z]{1,20}\s*){1,2}[\/]\s*){1,2}[A-Z]{2,20}(@[a-zA-Z]{1,20})?)\b/, DocScan.text) R;
+--from   Regex(/\b((\p{Upper}\p{Lower}[\p{Alpha}]{0,10}(['-][\p{Alpha}])?[\p{Alpha}]{1,10}\s+)([A-Z]\s+)?(\p{Upper}\p{Lower}[\p{Alpha}]{0,20}(['-][\p{Alpha}][\p{Alpha}]{1,8})?\w{0,2}\s*[\/]\s*)(([A-Z][a-zA-Z]{1,20}\s*){1,2}[\/]\s*){1,2}[A-Z]{2,20}(@[a-zA-Z]{1,20})?)\b/, DocScan.text) R;
+-- Support for unicode (TODO: whether to do it for '\s', in unicode [\f\n\r\t\v\x85\p{Z}])
+--from   Regex(/\b(((\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,10}(['-]\p{L}\p{M}*)?(\p{L}\p{M}*){1,10}\s+))?((\p{Lu}\p{M}*\.?){1,2}\s+)?(\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}(['-]\p{L}\p{M}*(\p{L}\p{M}*){1,8})?\w{0,2}\s*[\/]\s*)((\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}\s*){1,2}[\/]\s*){1,2}(\p{Lu}\p{M}*){2,20}(@(\p{L}\p{M}*){1,20})?)(?!\/)\b/, DocScan.text) R;
+from   RegexTok(/(((\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,10}(['-]\p{L}\p{M}*)?(\p{L}\p{M}*){1,10}\s+))?((\p{Lu}\p{M}*\.?){1,2}\s+)?(\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}(['-]\p{L}\p{M}*(\p{L}\p{M}*){1,8})?\w{0,2}\s*[\/]\s*)((\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}\s*){1,2}[\/]\s*){1,2}(\p{Lu}\p{M}*){2,20}(@(\p{L}\p{M}*){1,20})?)/, 15, DocScan.text) R
+where  Not(MatchesRegex(/\/|\p{L}/,RightContext(R.match,1)));
+
+ 
+ /**
+  * Output Lotus Notes email addresses
+  */
+ create view Email2 as 
+  (select Email2_a.annot as annot from Email2_a)
+  union all
+  (select Email2_b.annot as annot from Email2_b); 
+
+	
+	
+	create view OrgWithinNotesEmail1 as
+	select
+		R.match as match
+	from
+		RegexTok(/[a-zA-Z]+/, 1, Email2.annot) R
+	where
+		MatchesRegex(/[\/]/, LeftContext(R.match, 1)) and
+		MatchesRegex(/[\s@]/, RightContext(R.match, 1));  	 
+
+	create view OrgWithinNotesEmail2 as
+	select
+		R.match as match
+	from
+		RegexTok(/[a-zA-Z]+/, 1, Email2.annot) R
+	where
+		MatchesRegex(/[@]/, LeftContext(R.match, 1)); 
+		
+select O.match as match into
+OrgWithinNotesEmail2_output
+from OrgWithinNotesEmail2 O;

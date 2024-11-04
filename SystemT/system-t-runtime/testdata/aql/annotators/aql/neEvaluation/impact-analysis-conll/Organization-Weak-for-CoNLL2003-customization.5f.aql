@@ -1,0 +1,591 @@
+------------------------------------
+-- ADDITIONAL WEAK PATTERNS FOR CoNLL2003
+------------------------------------
+
+create view AnyCapsWordOnetoFour as
+  select R.block as match
+  from BlockTok(0,1,4,AnyCapsOrg.match) R;
+  
+---******************************************************** 
+--- Pattern 1: E.g., [Le Monde] reported; [Kekkila] reports
+---********************************************************
+create dictionary RightClue1Dict as
+(
+	'reported', 'reports', 'quoted', 'quotes', 'workers', 'television'
+	--, 'party'
+);
+
+
+create view RightClue1 as
+extract 
+	dictionary 'RightClue1Dict' with flags 'Exact' on D.text as match 
+from Doc D;
+
+
+create dictionary NegativeClue1Dict as(
+	'They', 'He', 'She', 'It', 'Its',
+	'Dealers', 'Preliminary', 'The', 'Media', 'Brokers', 'Unknown',
+	'Newspapers'
+);
+ 
+  
+create view OrgAdditional1 as
+extract pattern (<O.match>) <C.match>
+	return group 1 as match
+from RightClue1 C, AnyCapsWordOnetoFour O
+having Not(ContainsDict('NegativeClue1Dict', match))
+   and Not(ContainsDict('nationality.dict', match))
+   and Not(MatchesDict('wkday.dict', match))
+   and Not(MatchesDict('country.dict', match));
+
+
+---******************************************************** 
+--- Pattern 2: E.g., [Bernama] news agency 
+---                  news agency [Hina]
+--                   daily newspaper [Iltalehti]
+---********************************************************
+create dictionary Clue2Dict as
+(
+	'news agency',  'medical journal'
+);
+
+create dictionary Clue2Dict_a as
+(
+	'newspaper', 'daily', 'weekly'
+);
+
+create dictionary NegativeClue2Dict as(
+	'The', 'HK'
+);
+  
+create view OrgAdditional2 as
+select O.match 
+from AnyCapsWordOnetoFour O
+where Or( ContainsDict('Clue2Dict', LeftContextTok(O.match,2)),
+		  ContainsDict('Clue2Dict', RightContextTok(O.match,2))
+		  )
+  and Not(ContainsDict('nationality.dict', O.match))
+  and Not(ContainsDict('NegativeClue2Dict', O.match));
+  
+create view OrgAdditional2_a as
+select O.match 
+from AnyCapsWordOnetoFour O
+where ContainsDict('Clue2Dict_a', LeftContextTok(O.match,1))
+  and Not(ContainsDict('nationality.dict', O.match))
+  and Not(ContainsDict('country.dict', O.match))
+  and Not(ContainsDict('NegativeClue2Dict', O.match));
+  
+create view OrgAdditional2_b as
+extract pattern (<O.match>) ('newspaper'|'daily'|'weekly')
+	return group 0 as fullmatch
+	   and group 1 as match
+	with inline_match on Doc.text
+from AnyCapsWordOnetoFour O
+having Not(ContainsDict('nationality.dict', match))
+  and Not(MatchesDict('country.dict', match))
+  and Not(ContainsDict('stateList.dict', match))
+  and Not(ContainsDict('NegativeClue2Dict', match))
+  and Not(MatchesRegex(/[Aa]\s+/, LeftContextTok(match,1)))
+  --require that token to right is not capitalized to avoid wrong matches such as "the Maputo daily Noticias"
+  and Not(MatchesRegex(/\s+\p{Lu}\p{M}*.*/, RightContextTok(fullmatch,1)));
+
+--output view OrgAdditional2_a;
+--output view OrgAdditional2_b;
+
+---******************************************************** 
+--- Pattern 4: to capture "AllCaps{1,4} said" 
+---********************************************************
+
+create dictionary Clue4Dict as(
+	'said',  'force', 'faction', 'spokesman', 'union', 'group', 'firm'
+);
+
+create dictionary NegativeClue4Dict as(
+	'I', 'US', 'UK', 'UAE'
+);
+
+
+create view AllCapsDashOneToFour as
+select Chomp(O.match) as match
+from
+(
+	extract
+		regex /(\p{Lu}\p{M}*){2,}(([ ]|-)(\p{Lu}\p{M}*)+){0,3}/ 
+		on D.text 
+		as match
+	from Doc D
+	consolidate on match
+) O;
+
+create view OrgAdditional4 as
+select C.match as match
+from AllCapsDashOneToFour C
+where MatchesDict('Clue4Dict', RightContextTok(C.match, 1))
+  and Not(MatchesDict('NegativeClue4Dict', RightContextTok(C.match, 1)))
+  and Not(MatchesDict('NegativeClue4Dict', C.match));
+
+  
+---******************************************************** 
+--- Pattern 4_a: to capture "- AllCaps{1,4} <sequence of 2-3 numbers" 
+--- E.g.   - [AHOLD] 7,190 1,123 10.01
+---        - [BOLSWESSANEN] 4,420 705 6.17 
+---********************************************************  
+
+
+create view Num as
+extract regex /\d+([.,]?\d+)*/
+	on D.text as match
+from Doc D;
+
+
+create view OrgAdditional4_a as
+extract pattern /-/ (<C.match>) <N.match>{2,3}
+	return group 0 as fullmatch
+	   and group 1 as match
+	with inline_match on Doc.text
+from AllCapsDashOneToFour C, Num N
+having ContainsRegex(/[\n\r]+\s*\z/, LeftContextTok(fullmatch, 1))
+consolidate on match;
+
+
+
+---******************************************************** 
+--- Pattern 5: to capture "<AnyCaps>{1,4} financial clue"
+---            in the news title
+---********************************************************
+
+
+
+
+create dictionary RightClue5Dict as
+(
+	'sees', 'sets', 'says', 'repeats', 'closes', 'cuts', 'H1', 'H2', 'Q1', 'Q2', 'Q3', 'Q4',
+	'details', 'CEO', 'posts', 'to procure', 'set to', 'swells', 'rises','files', 'shareholders',
+	'buys', 'buying', 'to buy', 'shares', 'stock', 'stake', 'sets', 'upgrades', 'ups','lowers', 
+	'ODV', 'interim', 'net', 'profit', 'income',
+	'sells', 'to sell', 'acquires', 'to acquire', 'official', 'to inject', 
+	'injects', 'slides', 'closed', 'trades', 'traded', 'revises', 'gets', 'forms', 'confirms',
+	'reviews', 'to review', 'plunges', 'rises', 'jumps', 'wins contract', 'expects', 'analyst', 'year',
+	'deputy', 'deputies'
+);
+
+create dictionary NegativeClue5Dict as
+(
+	'Further', 'The', 'Budget', 'UK', 'US'
+);
+
+
+create view RightClue5 as
+extract 
+	dictionary 'RightClue5Dict' on D.text as match 
+from Doc D;
+
+  
+create view OrgAdditional5Cand as
+	extract pattern (<O.match> ) <C.match>
+		return group 1 as match
+	from RightClue5 C, AnyCapsWordOnetoFour O
+	having 
+	       Or( 
+	           MatchesRegex(/[\n\r]+/, LeftContext(match,10)),
+	           MatchesRegex(/[-]{2}\s*/, LeftContext(match,3)),
+	           MatchesRegex(/\s*(RTRS)\s*[-]\s*/, LeftContextTok(match,10))
+	         )
+	   and Not(ContainsDict('RightClue5Dict', match))
+	   and Not(ContainsDict('NegativeClue5Dict', match))
+	   and Not(ContainsDict('nationality.dict', match))
+	   and Not(ContainsDict('country.dict', match))
+	   and Not(MatchesDict('location/cities/nationalCapitals.dict', match))
+consolidate on match;
+
+--output view OrgAdditional5Cand;
+
+--to avoid matches such as "Bonn says Moscow will..."
+create view OrgAdditional5Invalid as
+select O.match as match
+from OrgAdditional5Cand O, CityConsolidated C
+where Equals(C.match, O.match);
+
+create view OrgAdditional5 as
+(select * from OrgAdditional5Cand)
+minus
+(select * from OrgAdditional5Invalid);
+   
+   
+---******************************************************** 
+--- Pattern 6: to capture "begin-of-line Issuer : <Org> end-of-line" - not used yet
+---********************************************************
+
+create view OrgAdditional6 as
+extract 
+	pattern <'Issuer' [with case exact]> /:/ (<CW.match>)
+	return group 1 as match
+	with inline_match on Doc.text
+from AnyCapsWordOnetoFour CW
+having Not(ContainsRegex(/[\n\r]/, match));
+
+
+---******************************************************** 
+--- Pattern 7: to capture more newspaper names - not used yet
+---********************************************************
+
+create dictionary NewspaperPrefixDict as (
+	'La', 'Le', 'L\'' , 'El' --'
+);
+
+create view NewspaperPrefix as
+extract dictionary 'NewspaperPrefixDict'
+	with flags 'Exact'
+	on D.text as match
+from Doc D;
+
+create view OrgAdditional7 as
+extract 
+	pattern <N.match> <CW.match> as match
+from NewspaperPrefix N, AnyCapsOrg CW
+having Not(ContainsRegex(/[\n\r]/, match));
+ 
+  
+
+create dictionary NegativeClue6Dict as(
+	'SOCCER', 'CRICKET', 'BASEBALL', 'RACING', 'CYCLING', 'TENNIS',
+	'ATHLETICS', 'GOLF', 'BASKETBALL', 'FOOTBALL', 'BADMINTON', 
+	'SWIMMING', 'ROWING' ,'HOCKEY', 'ICE HOCKEY', 'SQUASH',
+	'PRESS DIGEST', 'FORECAST', 'RESEARCH ALERT', 'OPTIONS', 'RALLYING', 'MOTOCROSS', 'MOTORCYCLING', 'FEATURE',
+	'AFTER THE BELL', 'FOCUS', 'IPO FILING', 'INTERVIEW'
+);
+
+create view CwOneToFour as
+(select * from AnyCapsWordOnetoFour)
+union all
+(select * from AllCapsDashOneToFour);
+
+create dictionary RightClue8Dict as
+(
+    'upgrades',
+	'rose', 'gained', 'soared', 'jumped', 'climbed', 'lost', 'shed', 'fell', 'has fallen', 
+	'slid', 'slipped', 'slips', 'slumped',
+	'was up', 'is up', 'is down', 'was down', 'posts', 'posted',
+	'closed down', 'closed up', 'topping', 'closing up', 'closing down', 'closed',
+	--'forecast', 
+	'finished', 'was off',
+	'on reports', 'on market talk', 'on announcement',
+	'rising', 'adding', 'saw its price', 'surged', 'shareholders', 'stockholders', 
+	'is based', ', based in',
+	--'\'s stock', 
+	'\'s shares', 'division', 'estimates', 'fans', 'trade balance' --'
+);
+
+create dictionary NegativeClue8Dict as(
+	'They', 'That', 'This', 'He', 'She', 'It', 'We', 'Authorities','With','Polls','Analysts',
+	'Dealers', 'Preliminary', 'The', 'Media', 
+	'Conglomerate', 'Manufacturer', 'Group', 'Insurer', 'Maker', 'Privately-owned', 'Turnover', 'Things',
+	'GDP', 'Product', 'Fed',  
+	'Revenue', 'Revenues', 'Profit', 'Profits', 'Shares','Sales','Stocks', 'Rates', 'Supply', 'Exports',
+	'Inflation', 'Unemployment',
+	'T-notes', 'T-bonds', 'T-bond', 'T-note', 'Treasuries','T-bills','T-bill',
+	'Dollars', 'Eurodollars', 'Sterling', 
+	'Index', 'Composite', 'Average', 'GDR', 'GDS',
+	'Congress', 'Republicans', 'Democrats', 'Conservatives',
+	'based', 'Berlin Wall', 'East Europe', 'Frankfurt', 'Korea', 'Shanghai', 'America', 'New York', 'East Asia'
+);
+
+create dictionary CommoditiesDict as(
+	'Nickel', 'Copper', 'Gold', 'Zinc', 'Platinum', 'Silver', 'Crude',
+	'Aluminium', 'Tin', 'Lead', 'Aluminium alloy', 'Cobalt', 'Molybdenum', 'palladium',
+	'iron', 'oil', 'coal', 'ethanol', 
+	'salt', 'sugar', 'coffee', 'soybeans', 'rice', 'wheat',
+	'barley', 'maize', 'cotton', 'cocoa'
+);
+
+create dictionary MarketIndicesDict as(
+	'Dow', 'Dow Jones', 'Nasdaq', 'Nikkei', 'Hang Seng', 'All Ordinaries', 'S&P', 'MERV'
+);
+
+
+create view RightClue8 as
+extract 
+	dictionary 'RightClue8Dict' with flags 'Exact' on D.text as match 
+from NonSportDoc D;
+
+create view OrgAdditional8 as
+select O.match as match
+from
+(
+	extract pattern (<O.match> ) <C.match>
+		return group 1 as match
+	from RightClue8 C, AnyCapsWordOnetoFour O
+	having Not(ContainsDict('RightClue8Dict', match))
+	   and Not(ContainsDict('NegativeClue8Dict', match))
+	   and Not(ContainsRegex(/[\n\r]/, match))
+	   --and Not(MatchesRegex(/[Ii]n\s*/, LeftContextTok(match, 1)))
+	consolidate on match
+) O
+where Not(MatchesDict('country.dict', O.match))
+  and Not(MatchesDict('CommoditiesDict', O.match))
+  and Not(MatchesDict('MarketIndicesDict', O.match))
+  and Not(ContainsDict('month.dict', O.match))
+  and Not(MatchesDict('location/cities/nationalCapitals.dict', O.match))
+  and Not(MatchesDict('location/regions/internationalRegions.dict', O.match))
+  and Not(MatchesDict('country.dict', O.match))
+  and Not(ContainsDict('nationality.dict', O.match))
+  and Not(MatchesDict('wkday.dict', O.match));
+  
+--output view OrgAdditional8; 
+
+
+
+--need to check them as right clue too
+-- e.g., Aerostan firm
+create dictionary LeftClue9SingleDict as(
+	'maker', 'chipmaker', 'carmaker', 'manufacturer',  
+	'conglomerate', 'monopoly', 'concern', 'paper', 'newspaper', 'giant', 
+	--'trader', 'traders',
+	'firm', 'contractor', 'group', 'insurer', 'reinsurer', 'company', 
+	'distributor', 'supplier', 'provider', 'retailer', 'bank', 'lender', 'competitor',
+	'shipper', 'airline', 'corporation', 'association', 'chain'
+);
+
+create dictionary LeftClue9CaseDict as(
+	'Group', 'Bank', 'Company'
+);
+
+create dictionary LeftClue9PluralDict as(
+	'makers', 'chipmakers', 
+	'carmakers', 'manufacturers', 
+	'conglomerates','concerns',	'giants', 
+	--'traders',
+	'firms', 'contractors','groups', 'insurers', 'reinsurers',
+	'companies','distributors','suppliers','providers',
+	'retailers','banks', 'lenders', 'competitors',
+	'shippers', 'airlines', 'corporations', 'associations'
+);
+
+create view LeftClue9Single as
+extract 
+	dictionaries 'LeftClue9SingleDict' 
+	         and 'LeftClue9PluralDict'
+	         on D.text as match 
+from NonSportDoc D
+-- require that the clue is not in AllCaps
+having Not(MatchesRegex(/[\p{Lu}\p{M} ]+/, match))
+   -- require that the clue <group> to be lower case
+   and Not(MatchesDict('LeftClue9CaseDict', 'Exact', match));
+   
+create view LeftClue9Plural as
+extract 
+	dictionary 'LeftClue9PluralDict'
+	         on D.text as match 
+from NonSportDoc D
+-- require that the clue is not in AllCaps
+having Not(MatchesRegex(/[\p{Lu}\p{M} ]+/, match));
+
+create dictionary NegativeClue9Dict as(
+	'Internet'
+);
+
+create view OrgAdditional9Single as
+select O.org as org
+from
+(
+	extract pattern  <C.match> ('--')? (<O.match> )
+		return group 0 as match
+		   and group 2 as org
+		with inline_match on NonSportDoc.text
+	from LeftClue9Single C, CwOneToFour O
+	having Not(ContainsRegex(/[\n\r]/, match))
+	consolidate on match
+) O
+where Not(MatchesDict('country.dict', O.org))
+  and Not(MatchesDict('nationality.dict', O.org))
+  and Not(MatchesDict('NegativeClue9Dict', O.org));
+  
+  
+create view OrgAdditional9Plural as
+select O.org as org
+from
+(
+	extract pattern  <O1.org>  ('and'|',') (<O2.match> )
+		return group 0 as match
+		   and group 2 as org
+		   with inline_match on NonSportDoc.text
+	from OrgAdditional9Single O1, CwOneToFour O2
+	having Not(ContainsRegex(/[\n\r]/, org))
+	   and ContainsDict('LeftClue9PluralDict', LeftContextTok(match, 1))
+	consolidate on match
+) O
+where Not(MatchesDict('country.dict', O.org))
+  and Not(MatchesDict('nationality.dict', O.org));
+
+--output view OrgAdditional9Plural;
+
+
+create dictionary LeftClue10Dict as(
+	'Shares in', 'Shares of', 'stocks of', 'stake in', 'shares issued by',
+	'acquisition of', 'acquisition by', 'acquired by', 'acquired',
+	'merged with', 'merge with', 'merger with', 'offer by',
+	'subsidiary of', 'subsidiaries of', 'subsidiary', 'subsidiaries',
+	'unit of', 'units', 'unit', 'subsidiary', 'division of', 'owner of',
+	'bid for', 'buy on'
+);
+
+create dictionary NegativeClue10Dict as(
+	'based', 'related', 'owned', 'U.', 'UK'
+);
+
+create view LeftClue10 as
+extract 
+	dictionaries 'LeftClue10Dict'
+	         on D.text as match 
+from NonSportDoc D
+-- avoid clues in title
+having Not(MatchesRegex(/[\p{Lu}\p{M}* ]+/, match));
+
+create view OrgAdditional10 as
+select O.org as org
+from
+(
+	extract pattern  <C.match> (<O.match> )
+		return group 0 as match
+		   and group 1 as org
+	from LeftClue10 C, CwOneToFour O
+	having Not(ContainsRegex(/[\n\r]/, match))
+	consolidate on match
+) O
+where Not(ContainsDict('country.dict', O.org))
+  and Not(MatchesDict('nationality.dict', O.org))
+  and Not(MatchesRegex(/\s*'\s*s/, RightContextTok(O.org,2)))--'
+  and Not(ContainsDict('NegativeClue10Dict', O.org));
+
+--output view OrgAdditional10;
+-- Capture financial news
+
+  
+create dictionary RightClue11Dict as(
+	'military forces', 'fans', 'division'
+);
+
+
+-- Union together all weaker organizations
+create view OrgAllWeak as
+
+	(select R.match as org from OrgAdditional1 R)
+/*union all
+	(select R.match as org from OrgAdditional2 R)
+union all
+	(select R.match as org from OrgAdditional2_a R)
+union all
+	(select R.match as org from OrgAdditional2_b R)
+union all
+	(select R.match as org from OrgAdditional4 R)
+union all
+	(select R.match as org from OrgAdditional4_a R)*/
+union all
+	(select R.match as org from OrgAdditional5 R)
+union all
+	( select R.match as org from OrgAdditional8 R)
+/*union all
+   ( select R.org as org from OrgAdditional9Single R)
+union all
+   ( select R.org as org from OrgAdditional9Plural R)
+union all
+   ( select R.org as org from OrgAdditional10 R)*/;
+
+output view OrgAdditional9Single; 
+output view OrgAdditional9Plural;
+output view OrgAdditional1;
+output view OrgAdditional2;
+output view OrgAdditional2_a;
+output view OrgAdditional2_b;
+output view OrgAdditional4;
+output view OrgAdditional4_a;
+output view OrgAdditional5;
+output view OrgAdditional8;
+
+
+
+create view OrgWeakVBJTokens as
+select GetText(O.org) as org
+from OrgAllWeak O
+where NotNull(O.org)
+group by GetText(O.org);
+
+create view OrgWeakFromVBJ as
+select CW.match as org
+from 
+	(select O.org as org, normalize(O.org) as normOrg from OrgWeakVBJTokens O) O, 
+	(select CW.match as match, normalize(CW.match) as normMatch from CwOneToFour CW)  CW
+where Equals(GetText(O.normOrg), GetText(CW.normMatch));
+
+create view OrgWeakAll as
+(select * from OrgAllWeak)
+union all
+(select * from OrgWeakFromVBJ);
+
+	output view OrgWeakFromVBJ;
+--------------------------------------------------
+----             FILTER SECTION
+--------------------------------------------------
+
+-- remove entries with new lines or tabs
+create view OrgWeakNoNewLine as
+	select OA.org as org	 
+	from OrgWeakAll OA
+	where
+		-- do not allow new line or tab
+        Not(ContainsRegex(/[\n\r\t]/, OA.org));
+
+-- remove entries crossing sentence boundaries and certain contextual negative clues
+create view OrgWeakSentence1 as
+(
+	select OA.org as org	 
+	from OrgWeakNoNewLine OA
+	where
+           Not(ContainsDict('FilterOrgDict', 'Exact', OA.org))
+        and Not(ContainsDict('filterOrg_german.dict', 'Exact', OA.org))
+		and Not(ContainsDict('filterOrg_domain.dict', OA.org))      
+		----and Not(ContainsDict('industryType_prefix.dict',OA.org))
+		and Not(MatchesDict('filterOrg_exact_match.dict', OA.org))
+		and Not(MatchesRegex(/the/, SubSpanTok(OA.org,0,1)))
+)
+minus
+(
+	select OA.org as org	 
+	from SentenceBoundary S, OrgWeakNoNewLine OA
+	where Contains(OA.org, S.boundary)
+);
+
+
+-- Weak orgs contained within a Person
+create view OrgWeakWithinPerson as
+select O.org 
+from OrgWeakSentence1 O, PersonSentence P 
+where Contains(P.person, O.org);
+
+-- All valid weak orgs
+create view OrgWeakSentence as 
+(select O.org from OrgWeakSentence1 O)
+minus
+(select O.org from OrgWeakWithinPerson O);
+
+
+/*
+output view OrgAdditional1;
+output view OrgAdditional2;
+output view OrgAdditional2_a;
+output view OrgAdditional3;
+output view OrgAdditional4;
+output view OrgAdditional4_a;
+output view Num;
+output view OrgAdditional5;
+output view OrgAdditional6;
+output view OrgAdditional7;
+output view OrgAdditional8;
+output view OrgWeakNoNewLine;
+output view OrgAllWeak;
+output view OrgWeakSentence;
+output view OrgWeakSentence1;
+output view OrgWeakWithinPerson;
+*/
+
+

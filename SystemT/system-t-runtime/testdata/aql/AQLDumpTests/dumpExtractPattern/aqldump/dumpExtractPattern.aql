@@ -1,0 +1,76 @@
+module aqldump;
+
+create view Revenue as 
+  select '$100' as match from 
+Document D;
+
+
+create view Division as 
+  select 'Software' as match from Document D;
+  
+  
+create view RevenueOfDivision as
+  extract pattern <R.match> ('from'|'to') <Token>{0,2} (<D.match>)
+  return group 0 as match
+  		 and group 2 as division
+  from Revenue R, Division D;
+       
+output view RevenueOfDivision;
+
+create view FirstName as
+  select 'George' as firstName from Document D;
+
+create view MiddleInitial as
+  select 'W' as initial from Document D;
+  
+create view LastName as 
+  select 'Bush' as last from Document D;
+  
+
+create view Person as
+extract F.firstName as firstName,
+	M.initial as middle,
+	L.last as last,
+	pattern ('Mr.'|'Ms.'|'Miss')? (<F.firstName> <M.initial>? <L.last>)
+return group 0 as reference
+  and group 1 as salutation
+  and group 2 as personName
+  with inline_match on Document.text  
+from FirstName F,
+	 MiddleInitial M,
+	 LastName L;
+
+output view Person;
+
+create view Literal as
+  extract pattern ('Location')
+  return group 0 as Literal_1
+
+  with inline_match on _Document.text  from  _Document D;
+  
+ output view Literal;
+ 
+create view TestLemma as
+  extract pattern <'go'[with lemma_match and case insensitive]> as match
+  from Document D;
+
+output view TestLemma;
+
+create view Project as
+extract 
+regex /[Pp]roject\s?\w*/ on D.text as name
+from Document D;
+
+create view Title as
+extract regex /[A-z][a-z]+.*/ 
+on between 1 and 20 tokens in D.text as match
+from Document D;
+
+create view TestMatchParameters as
+extract pattern <'Meeting Notes:'[with case exact]> (<P.name>)
+return group 0 as match
+  and group 1 as projectname
+with inline_match on Title.match
+from Project P;
+
+output view TestMatchParameters;

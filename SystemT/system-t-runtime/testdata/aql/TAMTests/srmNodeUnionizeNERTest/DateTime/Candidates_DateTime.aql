@@ -1,0 +1,42 @@
+module DateTime;
+
+import view Dates from module Date as Dates;
+import view Times from module Time as Times;
+
+create view DateTime1 as
+select CombineSpans(D.match, T.match) as match
+from Dates D, Times T
+where FollowsTok(D.match, T.match, 0, 0);
+
+create view DateTimeAll as
+	(select DT.match as match from DateTime1 DT)
+	union all
+	(select D.match as match from Dates D)
+	union all
+	(select T.match as match from Times T);
+	
+create view DateTimeCandidates as
+select DT.match as match
+from DateTimeAll DT
+consolidate on DT.match;
+
+
+-- Handle overlapping date and time
+-- E.g. [Sat Feb 05 [17]:20:00 PST 2011]
+
+create view DateTimeMerged as
+select CombineSpans(D1.match, D2.match) as match
+from DateTimeCandidates D1,
+	 DateTimeCandidates D2
+where Overlaps(D1.match, D2.match)
+  and GreaterThan(GetEnd(D2.match), GetEnd(D1.match));
+  
+create view DateTimeMergedAll as
+	(select D.* from DateTimeCandidates D)
+	union all
+	(select D.* from DateTimeMerged D);
+
+create view DateTimes as
+select D.*
+from DateTimeMergedAll D
+consolidate on D.match; 

@@ -1,0 +1,30 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test case for comparisons
+--
+-------------------------------------------------------------------------------
+
+-- create a view with a Span column
+create view CapsWord as
+extract regex /[A-Z][a-z]*/
+        on 1 token in D.text
+        as word
+from Document D;
+
+-- comparison of text columns
+-- select ... where Equals(R.a, S.b) ..., where R.a and S.b are both columns of type Text --> should produce a string comparison
+create view View2 as
+	select D.text 
+	from Document D
+	where Equals(D.text, D.label);
+output view View2;
+
+-- comparison of text and Span should not be allowed
+-- select ... where Equals(R.a, S.b) ..., where R.a is of type Text and S.b is of type Span --> should produce a compiler error (comparing incompatible types)
+create view View3 as
+	select D.text
+	from CapsWord C, Document D
+	where Equals(D.text, C.word);
+output view View3;
+
+

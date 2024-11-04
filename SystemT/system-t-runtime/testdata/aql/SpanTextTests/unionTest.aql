@@ -1,0 +1,152 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test case for union of different combination of Text and Span
+--
+-------------------------------------------------------------------------------
+require document with columns text Text;
+
+-- create a view with a Span column
+create view CapitalizedWord as
+extract regex /[A-Z][a-z]*/ with flags 'CANON_EQ'
+        on 1 token in D.text
+        as word
+from Document D;
+
+-- create a view with a Span column
+create view NoMatch as
+extract regex /invalid/ with flags 'CANON_EQ'
+        on 1 token in D.text
+        as word
+from Document D;
+
+-------------------------------------
+create view EmptyEmpty as
+    (select E.word as col1 from NoMatch E)
+    union all
+    (select E.word as col1 from NoMatch E)
+    ;
+ 
+create view EmptyString as
+    (select E.word as col1 from NoMatch E)
+    union all
+    (select 'b' as col1 from Document D)
+    ;
+ 
+create view EmptyText as
+    (select E.word as col1 from NoMatch E)
+    union all
+    (select D.text as col1 from Document D)
+    ;
+ 
+create view EmptySpan as
+    (select E.word as col1 from NoMatch E)
+    union all
+    (select S.word as col1 from CapitalizedWord S)
+    ;
+
+-------------------------------------
+
+create view StringEmpty as
+    (select 'a' as col1 from Document D)
+    union all
+    (select E.word as col1 from NoMatch E)
+    ;
+ 
+create view StringString as
+    (select 'a' as col1 from Document D)
+    union all
+    (select 'b' as col1 from Document D)
+    ;
+ 
+create view StringText as
+    (select 'a' as col1 from Document D)
+    union all
+    (select D.text as col1 from Document D)
+    ;
+ 
+create view StringSpan as
+    (select 'a' as col1 from Document D)
+    union all
+    (select S.word as col1 from CapitalizedWord S)
+    ;
+ 
+-------------------------------------
+
+create view TextEmpty as
+    (select D.text as col1 from Document D)
+    union all
+    (select E.word as col1 from NoMatch E)
+    ;
+ 
+create view TextString as
+    (select D.text as col1 from Document D)
+    union all
+    (select 'a' as col1 from Document D)
+    ;
+
+create view TextText as
+    (select D.text as col1 from Document D)
+    union all
+    (select D.text as col1 from Document D)
+    ;
+
+create view TextSpan as
+    (select D.text as col1 from Document D)
+    union all
+    (select S.word as col1 from CapitalizedWord S)
+    ;
+    
+-------------------------------------
+
+create view SpanEmpty as
+    (select S.word as col1 from CapitalizedWord S)
+    union all
+    (select E.word as col1 from NoMatch E)
+    ;
+ 
+create view SpanString as
+    (select S.word as col1 from CapitalizedWord S)
+    union all
+    (select 'a' as col1 from Document D)
+    ;
+
+
+create view SpanText as
+    (select S.word as col1 from CapitalizedWord S)
+    union all
+    (select D.text as col1 from Document D)
+    ;
+
+
+create view SpanSpan as
+    (select S.word as col1 from CapitalizedWord S)
+    union all
+    (select S.word as col1 from CapitalizedWord S)
+    ;
+
+-------------------------------------
+
+output view EmptyEmpty;
+output view EmptyString;
+output view EmptyText;
+output view EmptySpan;
+
+output view StringEmpty;
+output view StringString;
+output view StringText;
+output view StringSpan;
+
+output view TextEmpty;
+output view TextString;
+output view TextText;
+output view TextSpan;
+
+output view SpanEmpty;
+output view SpanString;
+output view SpanText;
+output view SpanSpan;
+    
+    
+
+
+

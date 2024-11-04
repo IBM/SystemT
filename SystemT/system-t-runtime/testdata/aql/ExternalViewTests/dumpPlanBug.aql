@@ -1,0 +1,27 @@
+require document with columns text Text;
+--
+-- Test case for bug #168205: ExternalViewScanOp dump() method not in synch with the AOG syntax
+--
+
+-- Declare an external view that is populated at runtime
+create external view Word(match Span) 
+external_name 'WordExternal'; 
+
+-- Select the contents of the external view
+-- Causes the plan nodes for Word and WordAll to be merged into a single node, 
+-- causing the invocation of SystemT.Single.getExternalViewSchema("Word") to fail.
+/*
+create view WordAll as 
+select * 
+from Word; 
+*/
+
+-- Select the contents of the external view, but join with Document 
+-- to make sure the plan nodes of Word and WordAll are not merged.
+create view WordAll as 
+select W.* 
+from Word W, Document D; 
+
+
+output view WordAll;
+

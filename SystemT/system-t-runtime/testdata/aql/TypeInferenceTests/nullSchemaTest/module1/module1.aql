@@ -1,0 +1,49 @@
+module module1;
+
+create function MySimpleTableFunc(
+  intArg Integer)
+return table (stringVal Text, realVal Float)
+external_name 
+	-- Path relative to module root; udfjars is inside <project root>/testdata
+	'../../../../udfjars/tableFnTestsUDFs.jar:com.ibm.test.udfs.BasicTableFunc!eval'
+language java
+deterministic
+called on null input;
+
+create function MyScalarFunc(
+  firstArg table (spanVal Span) as locator  ,secondArg table (spanVal Span, strVal Text) as locator)
+return String
+external_name 
+	-- Path relative to module root; udfjars is inside <project root>/testdata
+	'../../../../udfjars/tableFnTestsUDFs.jar:com.ibm.test.udfs.TableConsumingScalarFunc!eval'
+language java
+deterministic
+called on null input;
+
+
+-- One view that fails type inference
+create view FailTypeInference as
+select GetBegin(1234) as match
+from Document D;
+
+-- Another view that depends on the previous view, should result in a compiler exception "Error determining schema for'FailTypeInference'"
+create view Test as
+  select
+    T.* 
+  from
+    MySimpleTableFunc(
+      Case(
+        Equals(
+          'hello world',
+          MyScalarFunc(
+            FailTypeInference,
+            FailTypeInference
+          )
+        ),
+        2,
+        3
+      )
+    ) T;
+
+output view FailTypeInference;
+output view Test;

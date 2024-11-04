@@ -1,0 +1,48 @@
+create dictionary LeftClueTownDict as
+('town of', 'suburb of');
+
+create view TownLeftClue as
+select D.match as match
+--from   Dictionary('LeftClueTownDict', Doc.text) D;
+from (extract dictionary 'location/clues/loc_town_posClue_ctxtLeft_en.dict' on D.text as match from Doc D) D;
+
+/*create dictionary RightClueTownDict as
+('town');*/
+
+-- Sudarshan regex : added 10/12/2011 : changed lines 17 and 26 to let regex match letters with or without combined marks too. 
+
+create view TownRightClue as
+select D.match as match
+--from   Dictionary('RightClueTownDict', Doc.text) D
+from (extract dictionary 'location/clues/loc_town_posClue_ctxtRight_en.dict' on D.text as match from Doc D) D
+
+--where MatchesRegex(/\p{Lu}.*/, D.match);
+where MatchesRegex(/\p{Lu}\p{M}*.*/, D.match);
+
+create view TownCandidates1 as
+select C.match as match
+from TownLeftClue CC,
+     CapsPlace C	 
+where FollowsTok(CC.match, C.match, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(CC.match, C.match)))
+  --and Not(MatchesRegex(/\s*\p{L}.*/, RightContext(C.match, 5)));
+  and Not(MatchesRegex(/\s*\p{L}\p{M}*.*/, RightContext(C.match, 5)));
+  
+create view TownCandidates2 as
+select CombineSpans(C.match, RC.match) as match
+from CapsPlace C,
+     TownRightClue RC
+where FollowsTok(C.match, RC.match, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(C.match, RC.match)));
+
+create view TownCandidates as
+	(select C.* from TownCandidates1 C)
+	union all
+	(select C.* from TownCandidates2 C);
+	
+create view TownConsolidated as
+select C.match as match
+from TownCandidates C
+consolidate on C.match;
+
+--output view TownConsolidated;

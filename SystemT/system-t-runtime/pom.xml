@@ -1,0 +1,442 @@
+<!-- Copyright IBM Licensed under the Apache License, Version 2.0 (the "License"); 
+	you may not use this file except in compliance with the License. You may 
+	obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0 
+	Unless required by applicable law or agreed to in writing, software distributed 
+	under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES 
+	OR CONDITIONS OF ANY KIND, either express or implied. See the License for 
+	the specific language governing permissions and limitations under the License. -->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<artifactId>system-t-runtime</artifactId>
+	<name>SystemT Runtime</name>
+	
+	<description>SystemT Runtime Engine</description>
+
+	<parent>
+		<groupId>com.ibm.ai.systemt</groupId>
+		<artifactId>systemT</artifactId>
+		<version>5.0.0-SNAPSHOT</version>
+		<relativePath>../pom.xml</relativePath>
+	</parent>
+
+
+	<build>
+
+		<resources>
+			<!-- FOR BUILD PURPOSES -->
+			<resource>
+				<directory>src/main/resources</directory>
+				<filtering>true</filtering>
+				<includes>
+					<include>**/version.txt</include>
+				</includes>
+			</resource>
+			<resource>
+				<directory>src/main/resources</directory>
+				<filtering>false</filtering>
+				<excludes>
+					<exclude>**/version.txt</exclude>
+				</excludes>
+			</resource>
+		</resources>
+
+		<plugins>
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>javacc-maven-plugin</artifactId>
+				<configuration>
+					<sourceDirectory>${basedir}/src/main/javacc</sourceDirectory>
+				</configuration>
+				<executions>
+					<execution>
+						<id>javacc</id>
+						<goals>
+							<goal>javacc</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<!-- STDERR/STDOUT to individual .txt files instead of console -->
+					<redirectTestOutputToFile>true</redirectTestOutputToFile>
+
+					<!-- Write a summary of test results to a file so we don't have to comb 
+						through 25 files to determine which test failed. -->
+					<aggregate>true</aggregate>
+
+					<!-- Run 4 tests in parallel, each in a separate process -->
+					<!-- only run 1 for defect until resolved -->
+					<!-- Memory allocation failure happens in Travis CI build, so try to 
+						run only #cores. -->
+					<forkCount>1</forkCount>
+					<reuseForks>true</reuseForks>
+
+					<!-- Third argument prevents Java from popping up lots of windows on 
+						MacOS -->
+					<argLine>-Dfile.encoding=UTF-8 -Xmx8g -Djava.awt.headless=true</argLine>
+					<includes>
+						<include>**/*Test.java</include>
+						<include>**/*Tests.java</include>
+					</includes>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>default-jar</id>
+						<phase>never</phase>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-javadoc-plugin</artifactId>
+				<configuration>
+					<doclint>none</doclint>
+					<source>1.8</source>
+					<doctitle>Text Analytics Runtime Java APIs</doctitle>
+					<author>false</author>
+					<!-- These two configuration parameters are for the goal javadoc:fix, 
+						which should only be run interactively once in a while. -->
+					<fixTags>link</fixTags>
+					<includes>
+						**/AQLProfiler.java,
+						**/Chunker.java,
+						**/CompilationSummary.java,
+						**/CompileAQL.java,
+						**/CompileAQLParams.java,
+						**/DocReader.java,
+						**/EmailChunker.java,
+						**/ExplainModule.java,
+						**/ExternalTypeInfo.java,
+						**/ExternalTypeInfoFactory.java,
+						**/OperatorGraph.java,
+						**/AbstractTupleSchema.java,
+						**/FieldCopier.java,
+						**/FieldGetter.java,
+						**/FieldSetter.java,
+						**/FieldType.java,
+						**/Pair.java,
+						**/Triple.java,
+						**/ScalarList.java,
+						**/Span.java,
+						**/TLIter.java,
+						**/Text.java,
+						**/TextGetter.java,
+						**/TextSetter.java,
+						**/Tuple.java,
+						**/TupleList.java,
+						**/TupleSchema.java,
+						**/LangCode.java,
+						**/StringPairList.java,
+						**/TokenizerConfig.java,
+						**/*Exception.java,
+						**/DictionaryMetadata.java,
+						**/FunctionMetadata.java,
+						**/ModuleMetadata.java,
+						**/ModuleMetadataFactory.java,
+						**/Param.java,
+						**/TableMetadata.java,
+						**/ViewMetadata.java,
+						**/TableUDFBase.java,
+						**/MultiModuleMetadata.java
+					</includes>
+					<!-- end parameters for javadoc:fix -->
+
+					<sourceFileIncludes>
+						<include>AQLProfiler.java</include>
+						<include>Chunker.java</include>
+						<include>CompilationSummary.java</include>
+						<include>CompileAQL.java</include>
+						<include>CompileAQLParams.java</include>
+						<include>DocReader.java</include>
+						<include>EmailChunker.java</include>
+						<include>ExplainModule.java</include>
+						<include>ExternalTypeInfo.java</include>
+						<include>ExternalTypeInfoFactory.java</include>
+						<include>OperatorGraph.java</include>
+						<include>AbstractTupleSchema.java</include>
+						<include>FieldCopier.java</include>
+						<include>FieldGetter.java</include>
+						<include>FieldSetter.java</include>
+						<include>FieldType.java</include>
+						<include>Pair.java</include>
+						<include>Triple.java</include>
+						<include>ScalarList.java</include>
+						<include>Span.java</include>
+						<include>TLIter.java</include>
+						<include>Text.java</include>
+						<include>TextGetter.java</include>
+						<include>TextSetter.java</include>
+						<include>Tuple.java</include>
+						<include>TupleList.java</include>
+						<include>TupleSchema.java</include>
+						<include>LangCode.java</include>
+						<include>StringPairList.java</include>
+						<include>TokenizerConfig.java</include>
+						<include>*Exception.java</include>
+						<include>DictionaryMetadata.java</include>
+						<include>FunctionMetadata.java</include>
+						<include>ModuleMetadata.java</include>
+						<include>ModuleMetadataFactory.java</include>
+						<include>Param.java</include>
+						<include>TableMetadata.java</include>
+						<include>ViewMetadata.java</include>
+						<include>TableUDFBase.java</include>
+						<include>MultiModuleMetadata.java</include>
+					</sourceFileIncludes>
+					<sourcepath>${basedir}/src/main/java/com/ibm/avatar/api;${basedir}/src/main/java/com/ibm/avatar/algebra/util/lang;${basedir}/src/main/java/com/ibm/avatar/algebra/util/data;${basedir}/src/main/java/com/ibm/avatar/algebra/util/tokenize;${basedir}/src/main/java/com/ibm/avatar/algebra/datamodel;${basedir}/src/main/java/com/ibm/avatar/api/exceptions;${basedir}/src/main/java/com/ibm/avatar/api/exceptions;${basedir}/src/main/java/com/ibm/avatar/api/tam</sourcepath>
+				</configuration>
+			</plugin>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-assembly-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>systemT-main</id>
+						<phase>package</phase>
+						<goals>
+							<goal>single</goal>
+						</goals>
+						<configuration>
+							<descriptors>
+								<descriptor>${basedir}/systemt-bin-asmbl.xml</descriptor>
+							</descriptors>
+						</configuration>
+					</execution>
+					<execution>
+						<id>systemT-main-source</id>
+						<phase>package</phase>
+						<goals>
+							<goal>single</goal>
+						</goals>
+						<configuration>
+							<descriptors>
+								<descriptor>${basedir}/systemt-src-asmbl.xml</descriptor>
+							</descriptors>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+			<plugin>
+				<artifactId>maven-antrun-plugin</artifactId>
+				<executions>
+					<execution>
+						<phase>process-resources</phase>
+						<configuration>
+							<target>
+								<copy file="${project.build.outputDirectory}/version.txt"
+									toFile="../../version.txt" overwrite="true" />
+							</target>
+						</configuration>
+						<goals>
+							<goal>run</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>
+
+
+
+	<dependencies>
+
+		<dependency>
+			<groupId>com.ibm.ai.systemt</groupId>
+			<artifactId>simple-regex</artifactId>
+			<version>${project.version}</version>
+		</dependency>
+
+		<!-- JPMML library for scoring machine learning models. Used in the CREATE 
+			MINING MODEL statement. -->
+		<dependency>
+			<groupId>org.jpmml</groupId>
+			<artifactId>pmml-model</artifactId>
+			<version>${pmml.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.jpmml</groupId>
+			<artifactId>pmml-schema</artifactId>
+			<version>${pmml.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.jpmml</groupId>
+			<artifactId>pmml-evaluator</artifactId>
+			<version>${pmml.version}</version>
+		</dependency>
+		<!-- END JPPML library -->
+
+		<dependency>
+			<groupId>org.apache.maven.surefire</groupId>
+			<artifactId>surefire-booter</artifactId>
+			<version>${maven.surefire.plugin.version}</version>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- Various doc readers -->
+		<dependency>
+			<groupId>xerces</groupId>
+			<artifactId>xercesImpl</artifactId>
+			<version>${xercesimpl.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.ant</groupId>
+			<artifactId>ant</artifactId>
+			<version>${ant.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-core</artifactId>
+			<version>${jackson.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
+			<version>${jackson.version}</version>
+		</dependency>
+
+		<!-- External tables support -->
+
+		<dependency>
+			<groupId>com.opencsv</groupId>
+			<artifactId>opencsv</artifactId>
+			<version>${opencsv.version}</version>
+		</dependency>
+
+		<!-- Hadoop jars for loading compiled TAM modules from DFS -->
+		<!-- This functionality is not used by any SYstemT consumer anymore, so 
+			changing the scope to provided for now If any consumers still require to 
+			compile AQL code to or from DFS they would have to include Hadoop-related 
+			jars by themselves -->
+
+		<dependency>
+			<groupId>commons-logging</groupId>
+			<artifactId>commons-logging</artifactId>
+			<version>${commons.logging.version}</version>
+			<scope>provided</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>com.google.guava</groupId>
+			<artifactId>guava</artifactId>
+			<version>${guava.version}</version>
+		</dependency>
+		
+		<dependency>
+			<groupId>commons-configuration</groupId>
+			<artifactId>commons-configuration</artifactId>
+			<version>${commons.configuration.version}</version>
+			<scope>provided</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-api</artifactId>
+			<version>${slf4j.version}</version>
+			<scope>provided</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-slf4j-impl</artifactId>
+			<version>${log4j.version}</version>
+			<scope>provided</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-1.2-api</artifactId>
+			<version>${log4j.version}</version>
+			<scope>provided</scope>
+		</dependency>
+
+		<!-- Detagging support -->
+
+		<dependency>
+			<groupId>org.htmlparser</groupId>
+			<artifactId>htmllexer</artifactId>
+			<version>${htmldetagger.version}</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.htmlparser</groupId>
+			<artifactId>htmlparser</artifactId>
+			<version>${htmldetagger.version}</version>
+		</dependency>
+
+		<!-- Junit -->
+
+		<dependency>
+			<groupId>junit-addons</groupId>
+			<artifactId>junit-addons</artifactId>
+			<version>${junit.addons.version}</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.hamcrest</groupId>
+			<artifactId>hamcrest-core</artifactId>
+			<version>${hamcrest.core.version}</version>
+		</dependency>
+
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<version>${junit.version}</version>
+		</dependency>
+
+		<!-- JAXB (Java Architecture for XML Binding). need to be included when 
+			build with openJDK11. -->
+		<dependency>
+			<groupId>javax.xml.bind</groupId>
+			<artifactId>jaxb-api</artifactId>
+			<version>2.3.1</version>
+		</dependency>
+
+		<dependency>
+			<groupId>com.sun.xml.bind</groupId>
+			<artifactId>jaxb-core</artifactId>
+			<version>2.3.0.1</version>
+		</dependency>
+
+		<dependency>
+			<groupId>com.sun.xml.bind</groupId>
+			<artifactId>jaxb-impl</artifactId>
+			<version>2.3.2</version>
+		</dependency>
+
+		<!-- JAF (JavaBeans Activation Framework). need to be included when build 
+			with openJDK11. This library is for Action API. -->
+		<dependency>
+			<groupId>javax.activation</groupId>
+			<artifactId>javax.activation-api</artifactId>
+			<version>1.2.0</version>
+		</dependency>
+
+	</dependencies>
+
+
+	<reporting>
+		<plugins>
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>findbugs-maven-plugin</artifactId>
+				<configuration>
+					<findbugsXmlOutput>true</findbugsXmlOutput>
+					<findbugsXmlWithMessages>true</findbugsXmlWithMessages>
+					<xmlOutput>true</xmlOutput>
+					<findbugsXmlOutputDirectory>${project.build.directory}/findbugs</findbugsXmlOutputDirectory>
+				</configuration>
+			</plugin>
+		</plugins>
+	</reporting>
+</project>

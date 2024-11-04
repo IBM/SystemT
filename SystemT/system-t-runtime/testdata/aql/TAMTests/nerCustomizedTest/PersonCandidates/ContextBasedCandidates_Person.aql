@@ -1,0 +1,125 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module PersonCandidates;
+
+--- find Position + Person Name
+create view Position as
+	extract
+	   dictionaries 'RolesAsFiltersForPerson'
+	          and 'RolesInSport'
+	          and 'RolesInFamily'
+	  on D.text   
+      as pos
+	  from DocumentText D
+	  having MatchesRegex(/((\p{Lu}\p{M}*){2}|((\p{Lu}\p{M}*)?(\p{Ll}\p{M}*){1,10}\s*){1,2})/, pos);
+
+/**create view OfficialCandidates1All as
+select C.name as person
+from OneOrTwoCapPerson C,
+     Position P
+where FollowsTok(P.pos, C.name, 0, 1)
+ and  MatchesRegex(/\s*[,-]?\s*//**, SpanBetween(P.pos, C.name))
+ and  Not(ContainsRegex(/[\r\n\t]/, SpanBetween(P.pos, C.name)))
+ and  Not(ContainsRegex(/[\r\n\t]/, C.name));*/
+ 
+/**create view OfficialCandidates1 as
+	(select C.* from OfficialCandidates1All C)
+	minus
+	(
+	 select C.* 
+	 from OfficialCandidates1All C,
+	      HeadlineMixedCaps H
+	 where Overlaps(H.headline, C.person)
+	);*/
+
+ 
+-- to identify names before "who **** "
+create view PersonBeforeWhoClause as
+extract pattern
+      <C.name>{1,2} as person
+from   CapsPerson C
+having Not(ContainsRegex(/[\r\n\t]/, person))
+  and  MatchesRegex(/^\s*,?\s*(\s+(\p{Ll}\p{M}*)+\s+)?(who|whose)\s+.+/, RightContext(person, 10))
+  -- to enforce only use the clue when the name is in a middle of a sentence
+  and  MatchesRegex(/\p{Ll}\p{M}*.*/, LeftContextTok(person, 1));
+ 
+-- in the format of Regula Susana Siegfried , 50 , and Nicola Fleuchaus , 25 ,
+create view PersonAsSubject1 as
+select L.name as person
+from   OneOrTwoCapPerson L
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  MatchesRegex(/\s*[,]\s*\d{1,2}\s*[,]\s*.*/, RightContext(L.name, 10));
+  
+  
+create view PersonAsVictims as
+select L.name as person
+from   OneOrTwoCapPerson L
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  MatchesRegex(/.*\s*(((death|killing)\s*of)|victim\s*was)\s*/, LeftContext(L.name, 20))
+  and  MatchesRegex(/\s*[,.\r\n].*/, RightContext(L.name, 5));  
+  
+--- to identify names in "said *** " or with age "40-years-old"
+create view PersonAsSpeaker1 as
+select L.name as person
+from   OneOrTwoCapPerson L
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  MatchesRegex(/.*\s*([^an]\s*\d{1,2}\s*-?\s*years?\s*-?\s*old)\s+/, LeftContext(L.name, 15))
+  and  MatchesRegex(/\s+,?\s*(\p{Ll}\p{M}*){2}\s*.*/, RightContext(L.name, 10))
+  -- avoid matching "the 47-year-old Frenchman"
+  and Not(ContainsDict('WorldNationalities', L.name));
+  
+--- to identify names in " ,***, said"
+create view PersonAsSpeaker2 as
+select L.name as person
+from   OneOrTwoCapPerson L
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  MatchesRegex(/.*[,.]\s*/, LeftContext(L.name, 2))
+  and  MatchesRegex(/\s*[,]\s*(said|told|says)\s+.*/, RightContext(L.name, 10));
+
+
+-- to identify names in "***, a 40-years-old ..."
+create view PersonAsSpeaker3 as
+select L.name as person
+from   OneOrTwoCapPerson L
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  MatchesRegex(/\s*,\s*an?\s*\d{1,2}\s*-?\s*years?\s*-?\s*old\s+.*/, RightContextTok(L.name, 10));
+
+-- to identify names from weak dictionary
+-- this rule may not be suitable for informal text
+create view PersonPerson as
+select CombineSpans(P1.name, P2.name) as person
+from PersonDict P1,
+	 PersonDict P2
+where FollowsTok(P1.name, P2.name, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(P1.name, P2.name)));
+
+create view PatternBasedPerson as
+	--(select P.person as person from OfficialCandidates1 P)
+--union all
+	(select P.person as person from PersonBeforeWhoClause P)
+union all
+	(select P.* from PersonAsSpeaker1 P)
+union all
+	(select P.* from PersonAsSpeaker2 P)
+union all
+	(select P.* from PersonAsSpeaker3 P)
+union all
+	(select P.* from PersonAsSubject1 P)
+union all
+	(select P.* from PersonPerson P)
+union all
+	(select P.* from PersonAsVictims P);

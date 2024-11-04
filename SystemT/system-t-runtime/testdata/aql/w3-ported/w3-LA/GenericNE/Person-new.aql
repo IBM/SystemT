@@ -1,0 +1,1064 @@
+create view Salutation__1 as 
+select D.match as matchText
+from Dictionary('SalutationDict.dict', DocScan.text) D 
+;
+
+create view NameSuffix__1 as 
+select D.match as matchText
+from Dictionary('PersonSuffixDict.dict', DocScan.text) D 
+;
+
+create view titlePrefix__1 as 
+select D.match as matchText
+from Dictionary('officialTitles.Prefix.dict', DocScan.text) D 
+;
+
+create view CapitalizedWordOptionalHyphenApostrophe__1 as 
+select R.match as matchText
+from RegexTok(/\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}/,4, DocScan.text) R 
+;
+
+create view CapitalizedWordOptionalHyphenApostrophe__2 as 
+select R.matchText as matchText
+from CapitalizedWordOptionalHyphenApostrophe__1 R
+where Not(ContainsDict('FilterPersonDict.dict', R.matchText) )
+ and Not(ContainsDict('filterPerson_german.dict', R.matchText) )
+ and Not(ContainsDict('SalutationDict.dict', R.matchText) )
+ and Not(ContainsDict('StrongPhoneVariantDictionary.dict', R.matchText) )
+ and Not(ContainsDict('stateList.dict', R.matchText) )
+ and Not(ContainsDict('organization_suffix.dict', R.matchText) )
+ and Not(ContainsDict('industryType_suffix.dict', R.matchText) )
+ and Not(ContainsDict('streetSuffix_forPerson.dict', R.matchText) )
+;
+
+create view CapitalizedWordOptionalHyphenApostrophe__4 as 
+select R.matchText as matchText
+from CapitalizedWordOptionalHyphenApostrophe__2 R
+where Not(MatchesRegex(/(\p{Lu}\p{M}*)+-.*([\p{Ll}\p{Lo}]\p{M}*).*/, R.matchText))
+ and Not(MatchesRegex(/.*([\p{Ll}\p{Lo}]\p{M}*).*-(\p{Lu}\p{M}*)+/, R.matchText))
+;
+
+create view CapitalizedWordOptionalHyphen__1 as 
+select CombineSpans(R0.matchText,R0.matchText) as matchText
+from CapitalizedWordOptionalHyphenApostrophe__4 R0 
+;
+
+create view CapitalizedWordOptionalHyphen__3 as 
+select R.matchText as matchText
+from CapitalizedWordOptionalHyphen__1 R
+where Not(ContainsRegex(/'/, R.matchText))
+;
+
+create view CapitalizedWord__1 as 
+select R.match as matchText
+from RegexTok(/\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}/,1, CapitalizedWordOptionalHyphen__3.matchText) R 
+;
+
+create view CapitalizedNameWord__1 as 
+select CombineSpans(R0.matchText,R0.matchText) as matchText
+from CapitalizedWord__1 R0 
+;
+
+create view CapitalizedNameWord__2 as 
+select R.matchText as matchText
+from CapitalizedNameWord__1 R
+where MatchesRegex(/\b\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){1,20}\b/, R.matchText)
+;
+
+create view StrictLastName__1 as 
+(select D.match as matchText
+from Dictionary('StrictLast.dict', DocScan.text) D )
+union all 
+(select D.match as matchText
+from Dictionary('strictLast_german.dict', DocScan.text) D )
+union all 
+(select D.match as matchText
+from Dictionary('strictLast_german_bluePages.dict', DocScan.text) D )
+union all 
+(select D.match as matchText
+from Dictionary('uniqMostCommonSurname.dict', DocScan.text) D )
+union all 
+(select D.match as matchText
+from Dictionary('names/strictLast_italy.dict', DocScan.text) D )
+union all 
+(select D.match as matchText
+from Dictionary('names/strictLast_france.dict', DocScan.text) D )
+union all 
+(select D.match as matchText
+from Dictionary('names/strictLast_spain.dict', DocScan.text) D )
+union all 
+(select D.match as matchText
+from Dictionary('names/strictLast_india.partial.dict', DocScan.text) D )
+union all 
+(select D.match as matchText
+from Dictionary('names/strictLast_israel.dict', DocScan.text) D )
+;
+
+create view StrictLastName__2 as 
+select R.matchText as matchText
+from StrictLastName__1 R
+where MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, R.matchText)
+;
+
+create view HyphenatedLastNamePattern1__1 as 
+select CombineSpans(R0.matchText,R1.matchText) as matchText
+from StrictLastName__2 R0 ,CapitalizedNameWord__2 R1 
+where FollowsTok(R0.matchText,R1.matchText,0,1) and MatchesRegex(/-/, SpanBetween(R0.matchText,R1.matchText));
+
+create view HyphenatedLastNamePattern2__1 as 
+select CombineSpans(R0.matchText,R1.matchText) as matchText
+from CapitalizedNameWord__2 R0 ,StrictLastName__2 R1 
+where FollowsTok(R0.matchText,R1.matchText,0,1) and MatchesRegex(/-/, SpanBetween(R0.matchText,R1.matchText));
+
+create view LastName__1 as 
+(select R.matchText as matchText
+from StrictLastName__2 R )
+union all 
+(select R.matchText as matchText
+from HyphenatedLastNamePattern1__1 R )
+union all 
+(select R.matchText as matchText
+from HyphenatedLastNamePattern2__1 R )
+;
+
+create view LastName__3 as 
+select R.matchText as matchText
+from LastName__1 R
+where Not(MatchesRegex(/(\p{Lu}\p{M}*)+-.*([\p{Ll}\p{Lo}]\p{M}*).*/, R.matchText))
+ and Not(MatchesRegex(/.*([\p{Ll}\p{Lo}]\p{M}*).*-(\p{Lu}\p{M}*)+/, R.matchText))
+;
+
+create view LastName__4 as 
+select C.matchText as matchText
+from LastName__3 C 
+consolidate on C.matchText;
+
+create view StrictFirstName__1 as 
+(select D.match as matchText
+from Dictionary('StrictFirst.dict', DocScan.text) D )
+union all 
+(select D.match as matchText
+from Dictionary('strictFirst_german.dict', DocScan.text) D )
+union all 
+(select D.match as matchText
+from Dictionary('strictNickName.dict', DocScan.text) D )
+union all 
+(select D.match as matchText
+from Dictionary('strictFirst_german_bluePages.dict', DocScan.text) D )
+union all 
+(select D.match as matchText
+from Dictionary('names/strictFirst_italy.dict', DocScan.text) D )
+union all 
+(select D.match as matchText
+from Dictionary('names/strictFirst_france.dict', DocScan.text) D )
+union all 
+(select D.match as matchText
+from Dictionary('names/strictFirst_spain.dict', DocScan.text) D )
+union all 
+(select D.match as matchText
+from Dictionary('names/strictFirst_india.partial.dict', DocScan.text) D )
+union all 
+(select D.match as matchText
+from Dictionary('names/strictFirst_israel.dict', DocScan.text) D )
+;
+
+create view StrictFirstName__2 as 
+select R.matchText as matchText
+from StrictFirstName__1 R
+where MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, R.matchText)
+;
+
+create view HyphenatedFirstNamePattern1__1 as 
+select CombineSpans(R0.matchText,R1.matchText) as matchText
+from StrictFirstName__2 R0 ,CapitalizedNameWord__2 R1 
+where FollowsTok(R0.matchText,R1.matchText,0,1) and MatchesRegex(/-/, SpanBetween(R0.matchText,R1.matchText));
+
+create view HyphenatedFirstNamePattern2__1 as 
+select CombineSpans(R0.matchText,R1.matchText) as matchText
+from CapitalizedNameWord__2 R0 ,StrictFirstName__2 R1 
+where FollowsTok(R0.matchText,R1.matchText,0,1) and MatchesRegex(/-/, SpanBetween(R0.matchText,R1.matchText));
+
+create view FirstName__1 as 
+(select R.matchText as matchText
+from StrictFirstName__2 R )
+union all 
+(select R.matchText as matchText
+from HyphenatedFirstNamePattern1__1 R )
+union all 
+(select R.matchText as matchText
+from HyphenatedFirstNamePattern2__1 R )
+;
+
+create view FirstName__3 as 
+select R.matchText as matchText
+from FirstName__1 R
+where Not(MatchesRegex(/(\p{Lu}\p{M}*)+-.*([\p{Ll}\p{Lo}]\p{M}*).*/, R.matchText))
+ and Not(MatchesRegex(/.*([\p{Ll}\p{Lo}]\p{M}*).*-(\p{Lu}\p{M}*)+/, R.matchText))
+;
+
+create view FirstName__4 as 
+select C.matchText as matchText
+from FirstName__3 C 
+consolidate on C.matchText;
+
+create view FirstorLastMaybeAmbiguous__1 as 
+(select D.match as matchText
+from Dictionary('names.dict', DocScan.text) D )
+union all 
+(select D.match as matchText
+from Dictionary('names/name_italy.dict', DocScan.text) D )
+union all 
+(select D.match as matchText
+from Dictionary('names/name_france.dict', DocScan.text) D )
+union all 
+(select D.match as matchText
+from Dictionary('names/name_spain.dict', DocScan.text) D )
+union all 
+(select D.match as matchText
+from Dictionary('names/name_israel.dict', DocScan.text) D )
+union all 
+(select D.match as matchText
+from Dictionary('names/popularBabyName.dict', DocScan.text) D )
+;
+
+create view FirstorLastMaybeAmbiguous__2 as 
+select R.matchText as matchText
+from FirstorLastMaybeAmbiguous__1 R
+where MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, R.matchText)
+;
+
+create view FirstorLastMaybeAmbiguous__3 as 
+(select R.matchText as matchText
+from FirstorLastMaybeAmbiguous__2 R )
+union all 
+(select R.matchText as matchText
+from FirstName__4 R )
+;
+
+create view FirstorLastMaybeAmbiguous__4 as 
+(select R.matchText as matchText
+from FirstorLastMaybeAmbiguous__3 R )
+union all 
+(select R.matchText as matchText
+from LastName__4 R )
+;
+
+create view FirstorLastMaybeAmbiguous__5 as 
+select C.matchText as matchText
+from FirstorLastMaybeAmbiguous__4 C 
+consolidate on C.matchText;
+
+create view Initials__1 as 
+select R.match as matchText
+from RegexTok(/([\p{Upper}]\.\s*){1,5}/,10, DocScan.text) R 
+;
+
+create view Initials__3 as 
+select R.matchText as matchText
+from Initials__1 R
+where Not(MatchesRegex(/M\.D\./, R.matchText))
+;
+
+create view InitialsMaybeAmbiguous__1 as 
+select R.match as matchText
+from RegexTok(/([\p{Upper}]\.?\s*){1,5}/,10, DocScan.text) R 
+;
+
+create view InitialsMaybeAmbiguous__3 as 
+select R.matchText as matchText
+from InitialsMaybeAmbiguous__1 R
+where Not(ContainsRegex(/[\p{Upper}]{3}/, R.matchText))
+;
+
+create view FirstMiddleLastPattern1__1 as 
+select CombineSpans(R0.matchText,R2.matchText) as matchText
+from StrictFirstName__2 R0 ,CapitalizedWord__1 R1 ,StrictLastName__2 R2 
+where FollowsTok(R0.matchText,R1.matchText,0,0) and FollowsTok(R1.matchText,R2.matchText,0,0) and Not(Equals(GetText(R0.matchText),GetText(R1.matchText))) and Not(Equals(GetText(R0.matchText),GetText(R2.matchText))) and Not(Equals(GetText(R1.matchText),GetText(R2.matchText)));
+
+create view FirstMiddleLastPattern1__3 as 
+select R.matchText as matchText
+from FirstMiddleLastPattern1__1 R
+where Not(ContainsRegex(/[\n\r\t]/, R.matchText))
+;
+
+create view FirstMiddleLastPattern2__1 as 
+select CombineSpans(R0.matchText,R2.matchText) as matchText
+from FirstorLastMaybeAmbiguous__5 R0 ,CapitalizedWord__1 R1 ,StrictLastName__2 R2 
+where FollowsTok(R0.matchText,R1.matchText,0,0) and FollowsTok(R1.matchText,R2.matchText,0,0) and Not(Equals(GetText(R0.matchText),GetText(R1.matchText))) and Not(Equals(GetText(R0.matchText),GetText(R2.matchText))) and Not(Equals(GetText(R1.matchText),GetText(R2.matchText)));
+
+create view FirstMiddleLastPattern2__3 as 
+select R.matchText as matchText
+from FirstMiddleLastPattern2__1 R
+where Not(ContainsRegex(/[\n\r\t]/, R.matchText))
+;
+
+create view FirstMiddleLastPattern3__1 as 
+select CombineSpans(R0.matchText,R2.matchText) as matchText
+from StrictFirstName__2 R0 ,CapitalizedWord__1 R1 ,FirstorLastMaybeAmbiguous__5 R2 
+where FollowsTok(R0.matchText,R1.matchText,0,0) and FollowsTok(R1.matchText,R2.matchText,0,0) and Not(Equals(GetText(R0.matchText),GetText(R1.matchText))) and Not(Equals(GetText(R0.matchText),GetText(R2.matchText))) and Not(Equals(GetText(R1.matchText),GetText(R2.matchText)));
+
+create view FirstMiddleLastPattern3__3 as 
+select R.matchText as matchText
+from FirstMiddleLastPattern3__1 R
+where Not(ContainsRegex(/[\n\r\t]/, R.matchText))
+;
+
+create view SalutationCapsWordInitialsCapsWord__1 as 
+select CombineSpans(R0.matchText,R3.matchText) as matchText
+from Salutation__1 R0 ,CapitalizedWordOptionalHyphenApostrophe__4 R1 ,Initials__3 R2 ,CapitalizedWordOptionalHyphenApostrophe__4 R3 
+where FollowsTok(R0.matchText,R1.matchText,0,0) and FollowsTok(R1.matchText,R2.matchText,0,0) and FollowsTok(R2.matchText,R3.matchText,0,0);
+
+create view SalutationName__1 as 
+select CombineSpans(R0.matchText,R1.matchText) as matchText
+from Salutation__1 R0 ,CapitalizedWordOptionalHyphenApostrophe__4 R1 
+where FollowsTok(R0.matchText,R1.matchText,0,0);
+
+create view SalutationInitialsName__1 as 
+select CombineSpans(R0.matchText,R2.matchText) as matchText
+from Salutation__1 R0 ,Block(0,1,2,Initials__3.matchText) B1 ,CapitalizedWordOptionalHyphenApostrophe__4 R2 
+where FollowsTok(R0.matchText,B1.block,0,0) and FollowsTok(B1.block,R2.matchText,0,0);
+
+create view SalutationName__2 as 
+(select R.matchText as matchText
+from SalutationName__1 R )
+union all 
+(select R.matchText as matchText
+from SalutationInitialsName__1 R )
+;
+
+create view SalutationName__4 as 
+select R.matchText as matchText
+from SalutationName__2 R
+where Not(ContainsRegex(/[\n\r\t]/, R.matchText))
+;
+
+create view SalutationMultiPartName__1 as 
+select CombineSpans(R0.matchText,B1.block) as matchText
+from Salutation__1 R0 ,Block(0,2,3,CapitalizedWordOptionalHyphenApostrophe__4.matchText) B1 
+where FollowsTok(R0.matchText,B1.block,0,0);
+
+create view SalutationMultiPartName__3 as 
+select R.matchText as matchText
+from SalutationMultiPartName__1 R
+where Not(ContainsRegex(/[\n\r\t]/, R.matchText))
+;
+
+create view NameInitialsNameAmbiguous__1 as 
+select CombineSpans(R0.matchText,R2.matchText) as matchText
+from FirstorLastMaybeAmbiguous__5 R0 ,InitialsMaybeAmbiguous__3 R1 ,FirstorLastMaybeAmbiguous__5 R2 
+where FollowsTok(R0.matchText,R1.matchText,0,0) and FollowsTok(R1.matchText,R2.matchText,0,0) and Not(Equals(GetText(R0.matchText),GetText(R1.matchText))) and Not(Equals(GetText(R0.matchText),GetText(R2.matchText))) and Not(Equals(GetText(R1.matchText),GetText(R2.matchText)));
+
+create view FirstInitialsCapsWord__1 as 
+select CombineSpans(R0.matchText,R2.matchText) as matchText
+from FirstName__4 R0 ,Initials__3 R1 ,CapitalizedWordOptionalHyphenApostrophe__4 R2 
+where FollowsTok(R0.matchText,R1.matchText,0,0) and FollowsTok(R1.matchText,R2.matchText,0,0);
+
+create view CapsWordInitialsLast__1 as 
+select CombineSpans(R0.matchText,R2.matchText) as matchText
+from CapitalizedWordOptionalHyphenApostrophe__4 R0 ,Initials__3 R1 ,LastName__4 R2 
+where FollowsTok(R0.matchText,R1.matchText,0,0) and FollowsTok(R1.matchText,R2.matchText,0,0);
+
+create view FirstLast__1 as 
+select CombineSpans(R0.matchText,R1.matchText) as matchText
+from FirstName__4 R0 ,LastName__4 R1 
+where FollowsTok(R0.matchText,R1.matchText,0,0);
+
+create view FirstLast__3 as 
+select R.matchText as matchText
+from FirstLast__1 R
+where Not(ContainsRegex(/[\n\r\t]/, R.matchText))
+;
+
+create view LastCommaFirst__1 as 
+select CombineSpans(R0.matchText,R1.matchText) as matchText
+from LastName__4 R0 ,FirstName__4 R1 
+where FollowsTok(R0.matchText,R1.matchText,0,1) and MatchesRegex(/\s*,\s*/, SpanBetween(R0.matchText,R1.matchText));
+
+create view CapsWordCommaFirst__1 as 
+select CombineSpans(R0.matchText,R1.matchText) as matchText
+from CapitalizedWordOptionalHyphenApostrophe__4 R0 ,FirstName__4 R1 
+where FollowsTok(R0.matchText,R1.matchText,0,1) and MatchesRegex(/\s*,\s*/, SpanBetween(R0.matchText,R1.matchText));
+
+create view CapsWordCommaFirst__3 as 
+select R.matchText as matchText
+from CapsWordCommaFirst__1 R
+where Not(MatchesRegex(/(?i)(.+fully),.+/, R.matchText))
+;
+
+create view CapsWordCommaFirst__5 as 
+select R.matchText as matchText
+from CapsWordCommaFirst__3 R
+where Not(MatchesRegex(/(.|\n|\r)*(\.|\?|!|'|\sat|\sin)( )*/, LeftContext(R.matchText, 10)))
+;
+
+create view CapsWordCommaFirst__7 as 
+select R.matchText as matchText
+from CapsWordCommaFirst__5 R
+where Not(MatchesRegex(/$.{0,10}^/, LeftContext(R.matchText, 15)))
+;
+
+create view LastCommaCapsWord__1 as 
+select CombineSpans(R0.matchText,R1.matchText) as matchText
+from LastName__4 R0 ,CapitalizedWordOptionalHyphenApostrophe__4 R1 
+where FollowsTok(R0.matchText,R1.matchText,0,1) and MatchesRegex(/\s*,\s*/, SpanBetween(R0.matchText,R1.matchText));
+
+create view InitialsAmbiguousNameCapsWord__1 as 
+select CombineSpans(R0.matchText,R2.matchText) as matchText
+from Initials__3 R0 ,FirstorLastMaybeAmbiguous__5 R1 ,CapitalizedWordOptionalHyphenApostrophe__4 R2 
+where FollowsTok(R0.matchText,R1.matchText,0,0) and FollowsTok(R1.matchText,R2.matchText,0,0);
+
+create view InitialsCapsWordLast__1 as 
+select CombineSpans(R0.matchText,R2.matchText) as matchText
+from Initials__3 R0 ,CapitalizedWordOptionalHyphenApostrophe__4 R1 ,FirstorLastMaybeAmbiguous__5 R2 
+where FollowsTok(R0.matchText,R1.matchText,0,0) and FollowsTok(R1.matchText,R2.matchText,0,0);
+
+create view FirstCapsWord__1 as 
+select CombineSpans(R0.matchText,R1.matchText) as matchText
+from FirstName__4 R0 ,CapitalizedWordOptionalHyphenApostrophe__4 R1 
+where FollowsTok(R0.matchText,R1.matchText,0,0);
+
+create view CapsWordLast__1 as 
+select CombineSpans(R0.matchText,R1.matchText) as matchText
+from CapitalizedWordOptionalHyphenApostrophe__4 R0 ,LastName__4 R1 
+where FollowsTok(R0.matchText,R1.matchText,0,0);
+
+create view InitialsFirst__1 as 
+select CombineSpans(R0.matchText,R1.matchText) as matchText
+from Initials__3 R0 ,FirstName__4 R1 
+where FollowsTok(R0.matchText,R1.matchText,0,0);
+
+create view InitialsLast__1 as 
+select CombineSpans(R0.matchText,R1.matchText) as matchText
+from Initials__3 R0 ,LastName__4 R1 
+where FollowsTok(R0.matchText,R1.matchText,0,0);
+
+create view FirstOrLast__1 as 
+select CombineSpans(R0.matchText,R1.matchText) as matchText
+from titlePrefix__1 R0 ,FirstorLastMaybeAmbiguous__5 R1 
+where FollowsTok(R0.matchText,R1.matchText,0,0);
+
+create view FirstOrLast__3 as 
+select R.matchText as matchText
+from FirstOrLast__1 R
+where Not(ContainsRegex(/[\t\r\n]/, R.matchText))
+;
+
+create view CapsPerson__1 as 
+select CombineSpans(R0.matchText,R1.matchText) as matchText
+from titlePrefix__1 R0 ,CapitalizedWordOptionalHyphenApostrophe__4 R1 
+where FollowsTok(R0.matchText,R1.matchText,0,0);
+
+create view CapsPerson__3 as 
+select R.matchText as matchText
+from CapsPerson__1 R
+where Not(ContainsRegex(/[\t\r\n]/, R.matchText))
+;
+
+create view InitialsMaybeAmbiguous__4 as 
+select R.match as matchText
+from RegexTok(/([\p{Upper}]\.?\s*){1,5}/,10, DocScan.text) R 
+;
+
+create view InitialsMaybeAmbiguous__6 as 
+select R.matchText as matchText
+from InitialsMaybeAmbiguous__4 R
+where Not(ContainsRegex(/[\p{Upper}]{3}/, R.matchText))
+;
+
+create view CapsPersonAmbigousLast__1 as 
+select CombineSpans(R0.matchText,R1.matchText) as matchText
+from CapsPerson__3 R0 ,FirstorLastMaybeAmbiguous__5 R1 
+where FollowsTok(R0.matchText,R1.matchText,0,0);
+
+create view CapsPersonAmbigousLast__3 as 
+select R.matchText as matchText
+from CapsPersonAmbigousLast__1 R
+where Not(ContainsRegex(/[\t\r\n]{2}/, R.matchText))
+;
+
+create view CapsPersonAmbigousLast__4 as 
+select C.matchText as matchText
+from CapsPersonAmbigousLast__3 C 
+consolidate on C.matchText using 'ContainedWithin';
+
+create view CapsPersonAmbigousInitialAmbigousLast__1 as 
+select CombineSpans(R0.matchText,R2.matchText) as matchText
+from CapsPerson__3 R0 ,InitialsMaybeAmbiguous__6 R1 ,FirstorLastMaybeAmbiguous__5 R2 
+where FollowsTok(R0.matchText,R1.matchText,0,0) and FollowsTok(R1.matchText,R2.matchText,0,0);
+
+create view CapsPersonAmbigousInitialAmbigousLast__3 as 
+select R.matchText as matchText
+from CapsPersonAmbigousInitialAmbigousLast__1 R
+where Not(ContainsRegex(/[\t\r\n]{2}/, R.matchText))
+;
+
+create view CapsPersonAmbigousInitialAmbigousLast__4 as 
+select C.matchText as matchText
+from CapsPersonAmbigousInitialAmbigousLast__3 C 
+consolidate on C.matchText using 'ContainedWithin';
+
+create view AmbigousFirstCapsPerson__1 as 
+select CombineSpans(R0.matchText,R1.matchText) as matchText
+from FirstOrLast__3 R0 ,CapitalizedWordOptionalHyphenApostrophe__4 R1 
+where FollowsTok(R0.matchText,R1.matchText,0,0);
+
+create view AmbigousFirstCapsPerson__3 as 
+select R.matchText as matchText
+from AmbigousFirstCapsPerson__1 R
+where Not(ContainsRegex(/[\t\r\n]{2}/, R.matchText))
+;
+
+create view AmbigousFirstCapsPerson__4 as 
+select C.matchText as matchText
+from AmbigousFirstCapsPerson__3 C 
+consolidate on C.matchText using 'ContainedWithin';
+
+create view AmbigousFirstAmbigousInitialCapsPerson__1 as 
+select CombineSpans(R0.matchText,R2.matchText) as matchText
+from FirstOrLast__3 R0 ,InitialsMaybeAmbiguous__6 R1 ,CapitalizedWordOptionalHyphenApostrophe__4 R2 
+where FollowsTok(R0.matchText,R1.matchText,0,0) and FollowsTok(R1.matchText,R2.matchText,0,0);
+
+create view AmbigousFirstAmbigousInitialCapsPerson__3 as 
+select R.matchText as matchText
+from AmbigousFirstAmbigousInitialCapsPerson__1 R
+where Not(ContainsRegex(/[\t\r\n]{2}/, R.matchText))
+;
+
+create view AmbigousFirstAmbigousInitialCapsPerson__4 as 
+select C.matchText as matchText
+from AmbigousFirstAmbigousInitialCapsPerson__3 C 
+consolidate on C.matchText using 'ContainedWithin';
+
+create view InitialCapsPerson__1 as 
+select CombineSpans(R0.matchText,R2.matchText) as matchText
+from titlePrefix__1 R0 ,InitialsMaybeAmbiguous__6 R1 ,CapitalizedWordOptionalHyphenApostrophe__4 R2 
+where FollowsTok(R0.matchText,R1.matchText,0,0) and FollowsTok(R1.matchText,R2.matchText,0,0);
+
+create view InitialCapsPerson__3 as 
+select R.matchText as matchText
+from InitialCapsPerson__1 R
+where Not(ContainsRegex(/[\t\r\n]/, R.matchText))
+;
+
+create view InitialCapsPerson__4 as 
+select C.matchText as matchText
+from InitialCapsPerson__3 C 
+consolidate on C.matchText using 'ContainedWithin';
+
+create view MultiPartName__1 as 
+select CombineSpans(R0.matchText,R3.matchText) as matchText
+from titlePrefix__1 R0 ,FirstorLastMaybeAmbiguous__5 R1 ,CapitalizedWordOptionalHyphenApostrophe__4 R2 ,FirstorLastMaybeAmbiguous__5 R3 
+where FollowsTok(R0.matchText,R1.matchText,0,0) and FollowsTok(R1.matchText,R2.matchText,0,0) and FollowsTok(R2.matchText,R3.matchText,0,0);
+
+create view MultiPartName__3 as 
+select R.matchText as matchText
+from MultiPartName__1 R
+where Not(ContainsRegex(/[\n\r\t]/, R.matchText))
+;
+
+create view MultiPartName__4 as 
+select C.matchText as matchText
+from MultiPartName__3 C 
+consolidate on C.matchText using 'ContainedWithin';
+
+create view OptionalFirstOptionalInitialLast__1 as 
+(select R.matchText as matchText
+from CapsPersonAmbigousLast__4 R )
+union all 
+(select R.matchText as matchText
+from CapsPersonAmbigousInitialAmbigousLast__4 R )
+union all 
+(select R.matchText as matchText
+from AmbigousFirstCapsPerson__4 R )
+union all 
+(select R.matchText as matchText
+from AmbigousFirstAmbigousInitialCapsPerson__4 R )
+union all 
+(select R.matchText as matchText
+from InitialCapsPerson__4 R )
+union all 
+(select R.matchText as matchText
+from FirstOrLast__3 R )
+union all 
+(select R.matchText as matchText
+from MultiPartName__4 R )
+;
+
+create view OptionalFirstOptionalInitialLast__2 as 
+select C.matchText as matchText
+from OptionalFirstOptionalInitialLast__1 C 
+consolidate on C.matchText using 'ContainedWithin';
+
+create view WorldLeaders__1 as 
+select D.match as matchText
+from Dictionary('names/worldLeaders03-08.dict', DocScan.text) D 
+;
+
+create view USPresidents__1 as 
+select D.match as matchText
+from Dictionary('names/uspresidents.dict', DocScan.text) D 
+;
+
+create view GreatAmerican__1 as 
+select D.match as matchText
+from Dictionary('names/greatestAmerican.dict', DocScan.text) D 
+;
+
+create view FamousPeople__1 as 
+select D.match as matchText
+from Dictionary('names/famousPeople.dict', DocScan.text) D 
+;
+
+create view FamousPeople__2 as 
+(select R.matchText as matchText
+from FamousPeople__1 R )
+union all 
+(select R.matchText as matchText
+from WorldLeaders__1 R )
+;
+
+create view FamousPeople__3 as 
+(select R.matchText as matchText
+from FamousPeople__2 R )
+union all 
+(select R.matchText as matchText
+from USPresidents__1 R )
+;
+
+create view FamousPeople__4 as 
+(select R.matchText as matchText
+from FamousPeople__3 R )
+union all 
+(select R.matchText as matchText
+from GreatAmerican__1 R )
+;
+
+create view HighConfidencePerson__1 as 
+(select R.matchText as matchText
+from SalutationCapsWordInitialsCapsWord__1 R )
+union all 
+(select R.matchText as matchText
+from SalutationMultiPartName__3 R )
+union all 
+(select R.matchText as matchText
+from NameInitialsNameAmbiguous__1 R )
+union all 
+(select R.matchText as matchText
+from FirstLast__3 R )
+union all 
+(select R.matchText as matchText
+from FirstMiddleLastPattern1__3 R )
+union all 
+(select R.matchText as matchText
+from FamousPeople__4 R )
+union all 
+(select R.matchText as matchText
+from OptionalFirstOptionalInitialLast__2 R )
+;
+
+create view HighConfidencePerson__3 as 
+select R.matchText as matchText
+from HighConfidencePerson__1 R
+where Not(ContainsRegex(/[ ]{3}|[\t]|(\r?\n){2}/, R.matchText))
+;
+
+create view HighConfidencePersonNewLine__1 as 
+select CombineSpans(R0.matchText,R0.matchText) as matchText
+from HighConfidencePerson__3 R0 
+;
+
+create view HighConfidencePersonNewLine__2 as 
+select R.matchText as matchText
+from HighConfidencePersonNewLine__1 R
+where ContainsRegex(/[\r\n]/, R.matchText)
+;
+
+create view HighConfidencePersonNewLine__4 as 
+select R.matchText as matchText
+from HighConfidencePersonNewLine__2 R
+where Not(ContainsRegex(/[\r\n]/, LeftContext(R.matchText, 30)))
+;
+
+create view HighConfidencePerson__5 as 
+select R.matchText as matchText
+from HighConfidencePerson__3 R
+where Not(ContainsRegex(/[\r\n]/, R.matchText))
+;
+
+create view MediumConfidencePerson__1 as 
+(select R.matchText as matchText
+from InitialsAmbiguousNameCapsWord__1 R )
+union all 
+(select R.matchText as matchText
+from InitialsCapsWordLast__1 R )
+union all 
+(select R.matchText as matchText
+from FirstInitialsCapsWord__1 R )
+union all 
+(select R.matchText as matchText
+from CapsWordInitialsLast__1 R )
+union all 
+(select R.matchText as matchText
+from FirstMiddleLastPattern2__3 R )
+union all 
+(select R.matchText as matchText
+from FirstMiddleLastPattern3__3 R )
+union all 
+(select R.matchText as matchText
+from FirstCapsWord__1 R )
+union all 
+(select R.matchText as matchText
+from CapsWordLast__1 R )
+;
+
+create view HighConfidencePersonNewLine__5 as 
+select R.matchText as matchText
+from HighConfidencePerson__5 R ;
+
+create view HighConfidencePersonNewLine__6 as 
+select R1.matchText as matchText
+from HighConfidencePersonNewLine__4 R1, HighConfidencePersonNewLine__5 R2 
+where Overlaps(R1.matchText,R2.matchText);
+
+create view HighConfidencePersonNewLine__7 as 
+(select R.matchText as matchText from HighConfidencePersonNewLine__4 R )
+minus
+(select R.matchText as matchText from HighConfidencePersonNewLine__6 R )
+;
+
+
+
+create view MediumConfidencePerson__3 as 
+select R.matchText as matchText
+from MediumConfidencePerson__1 R
+where Not(ContainsRegex(/[ ]{3}|[\t]|(\r?\n){2}/, R.matchText))
+;
+
+create view MediumConfidencePersonNewLine__1 as 
+select CombineSpans(R0.matchText,R0.matchText) as matchText
+from MediumConfidencePerson__3 R0 
+;
+
+create view MediumConfidencePersonNewLine__2 as 
+select R.matchText as matchText
+from MediumConfidencePersonNewLine__1 R
+where ContainsRegex(/[\r\n]/, R.matchText)
+;
+
+create view MediumConfidencePersonNewLine__4 as 
+select R.matchText as matchText
+from MediumConfidencePersonNewLine__2 R
+where Not(ContainsRegex(/[\r\n]/, LeftContext(R.matchText, 30)))
+;
+
+create view MediumConfidencePersonNewLine__5 as 
+(select R.matchText as matchText
+from MediumConfidencePerson__3 R )
+union all 
+(select R.matchText as matchText
+from HighConfidencePerson__5 R )
+;
+
+create view MediumConfidencePersonNewLine__6 as 
+select R1.matchText as matchText
+from MediumConfidencePersonNewLine__4 R1, MediumConfidencePersonNewLine__5 R2 
+where Overlaps(R1.matchText,R2.matchText);
+
+create view MediumConfidencePersonNewLine__7 as 
+(select R.matchText as matchText from MediumConfidencePersonNewLine__4 R )
+minus
+(select R.matchText as matchText from MediumConfidencePersonNewLine__6 R )
+;
+
+
+
+create view MediumConfidencePerson__5 as 
+select R.matchText as matchText
+from MediumConfidencePerson__3 R
+where Not(ContainsRegex(/[\r\n]/, R.matchText))
+;
+
+create view MediumConfidencePersonLastCommaFirst__1 as 
+(select R.matchText as matchText
+from LastCommaFirst__1 R )
+union all 
+(select R.matchText as matchText
+from CapsWordCommaFirst__7 R )
+union all 
+(select R.matchText as matchText
+from LastCommaCapsWord__1 R )
+;
+
+create view MediumConfidencePersonLastCommaFirst__2 as 
+select R.matchText as matchText
+from MediumConfidencePersonLastCommaFirst__1 R
+where Not(ContainsDict('GreetingsDict.dict', LeftContext(R.matchText, 15)) )
+;
+
+create view MediumConfidencePersonLastCommaFirst__4 as 
+select R.matchText as matchText
+from MediumConfidencePersonLastCommaFirst__2 R
+where Not(ContainsRegex(/[ ]{3}|[\t]|(\r?\n){2}/, R.matchText))
+;
+
+create view MediumConfidencePersonLastCommaFirst__6 as 
+select R.matchText as matchText
+from MediumConfidencePersonLastCommaFirst__4 R
+where Not(MatchesRegex(/(.|\n|\r)*,[ \t]*(\p{Lu}\p{M}*(\p{L}\p{M}*|[-'.])*[ \t]*){0,2}/, LeftContext(R.matchText, 50)))
+;
+
+create view MediumConfidencePersonLastCommaFirst__8 as 
+select R.matchText as matchText
+from MediumConfidencePersonLastCommaFirst__6 R
+where Not(MatchesRegex(/[ \t]*(\p{Lu}\p{M}*(\p{L}\p{M}*|[-'.])*[ \t]*){0,2}([,&]|(\b(and)[ \t]+))(.|\s)*/, RightContext(R.matchText, 50)))
+;
+
+create view MediumConfidencePersonLastCommaFirst__9 as 
+(select R.matchText as matchText
+from HighConfidencePerson__5 R )
+union all 
+(select R.matchText as matchText
+from MediumConfidencePerson__5 R )
+;
+
+create view MediumConfidencePersonLastCommaFirst__10 as 
+select R1.matchText as matchText
+from MediumConfidencePersonLastCommaFirst__8 R1, MediumConfidencePersonLastCommaFirst__9 R2 
+where Overlaps(R1.matchText,R2.matchText);
+
+create view MediumConfidencePersonLastCommaFirst__11 as 
+(select R.matchText as matchText from MediumConfidencePersonLastCommaFirst__8 R )
+minus
+(select R.matchText as matchText from MediumConfidencePersonLastCommaFirst__10 R )
+;
+
+
+
+create view MediumConfidencePersonLastCommaFirstNewLine__1 as 
+select CombineSpans(R0.matchText,R0.matchText) as matchText
+from MediumConfidencePersonLastCommaFirst__11 R0 
+;
+
+create view MediumConfidencePersonLastCommaFirstNewLine__2 as 
+select R.matchText as matchText
+from MediumConfidencePersonLastCommaFirstNewLine__1 R
+where ContainsRegex(/[\r\n]/, R.matchText)
+;
+
+create view MediumConfidencePerson__6 as 
+select R.matchText as matchText
+from HighConfidencePerson__5 R ;
+
+create view MediumConfidencePerson__7 as 
+select R1.matchText as matchText
+from MediumConfidencePerson__5 R1, MediumConfidencePerson__6 R2 
+where Overlaps(R1.matchText,R2.matchText);
+
+create view MediumConfidencePerson__8 as 
+(select R.matchText as matchText from MediumConfidencePerson__5 R )
+minus
+(select R.matchText as matchText from MediumConfidencePerson__7 R )
+;
+
+
+
+create view MediumConfidencePersonLastCommaFirstNewLine__4 as 
+select R.matchText as matchText
+from MediumConfidencePersonLastCommaFirstNewLine__2 R
+where Not(ContainsRegex(/[\r\n]/, LeftContext(R.matchText, 30)))
+;
+
+create view HighConfidencePersonNewLine__8 as 
+select R.matchText as matchText
+from MediumConfidencePerson__8 R ;
+
+create view HighConfidencePersonNewLine__9 as 
+select R1.matchText as matchText
+from HighConfidencePersonNewLine__7 R1, HighConfidencePersonNewLine__8 R2 
+where Overlaps(R1.matchText,R2.matchText);
+
+create view HighConfidencePersonNewLine__10 as 
+(select R.matchText as matchText from HighConfidencePersonNewLine__7 R )
+minus
+(select R.matchText as matchText from HighConfidencePersonNewLine__9 R )
+;
+
+
+
+create view MediumConfidencePersonLastCommaFirst__13 as 
+select R.matchText as matchText
+from MediumConfidencePersonLastCommaFirst__11 R
+where Not(ContainsRegex(/[\r\n]/, R.matchText))
+;
+
+create view Person__1 as 
+(select R.matchText as matchText
+from HighConfidencePerson__5 R )
+union all 
+(select R.matchText as matchText
+from MediumConfidencePerson__8 R )
+union all 
+(select R.matchText as matchText
+from MediumConfidencePersonLastCommaFirst__13 R )
+;
+
+create view Person__3 as 
+select R.matchText as matchText
+from Person__1 R
+where Not(MatchesRegex(/((\p{L}\p{M}*)+\s)?((\p{Lu}\p{M}*){3}|-)+[,\s]+((\p{L}\p{M}*)+\s)?\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*.*/, R.matchText))
+ and Not(MatchesRegex(/((\p{L}\p{M}*)+\s)?\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*.*[,\s]+((\p{L}\p{M}*)+\s)?((\p{Lu}\p{M}*)|-)+/, R.matchText))
+ and Not(MatchesRegex(/U\.\s*S\.\s*.+/, R.matchText))
+;
+
+create view PersonWithNewLine__1 as 
+(select R.matchText as matchText
+from HighConfidencePersonNewLine__10 R )
+union all 
+(select R.matchText as matchText
+from MediumConfidencePersonNewLine__7 R )
+;
+
+create view Person__4 as 
+(select R.matchText as matchText
+from Person__3 R )
+union all 
+(select R.matchText as matchText
+from PersonWithNewLine__1 R )
+;
+
+create view PersonWithSuffix__1 as 
+select CombineSpans(R0.matchText,R1.matchText) as matchText
+from Person__4 R0 ,NameSuffix__1 R1 
+where FollowsTok(R0.matchText,R1.matchText,0,0);
+
+create view Person__5 as 
+(select R.matchText as matchText
+from Person__4 R )
+union all 
+(select R.matchText as matchText
+from PersonWithSuffix__1 R )
+;
+
+create view Person__6 as 
+select C.matchText as matchText
+from Person__5 C 
+consolidate on C.matchText using 'LeftToRight';
+
+create view HighConfidenceSingleTokenPerson__1 as 
+(select R.matchText as matchText
+from SalutationName__4 R )
+union all 
+(select R.matchText as matchText
+from InitialsFirst__1 R )
+union all 
+(select R.matchText as matchText
+from InitialsLast__1 R )
+union all 
+(select R.matchText as matchText
+from FirstName__4 R )
+union all 
+(select R.matchText as matchText
+from LastName__4 R )
+;
+
+create view HighConfidenceSingleTokenPersonWithSuffix__1 as 
+select CombineSpans(R0.matchText,R1.matchText) as matchText
+from HighConfidenceSingleTokenPerson__1 R0 ,NameSuffix__1 R1 
+where FollowsTok(R0.matchText,R1.matchText,0,0);
+
+create view HighConfidenceSingleTokenPerson__2 as 
+(select R.matchText as matchText
+from HighConfidenceSingleTokenPerson__1 R )
+union all 
+(select R.matchText as matchText
+from HighConfidenceSingleTokenPersonWithSuffix__1 R )
+;
+
+create view HighConfidenceSingleTokenPerson__3 as 
+select R.matchText as matchText
+from Person__6 R ;
+
+create view HighConfidenceSingleTokenPerson__4 as 
+select R1.matchText as matchText
+from HighConfidenceSingleTokenPerson__2 R1, HighConfidenceSingleTokenPerson__3 R2 
+where Overlaps(R1.matchText,R2.matchText);
+
+create view HighConfidenceSingleTokenPerson__5 as 
+(select R.matchText as matchText from HighConfidenceSingleTokenPerson__2 R )
+minus
+(select R.matchText as matchText from HighConfidenceSingleTokenPerson__4 R )
+;
+
+
+
+create view HighConfidenceSingleTokenPerson__7 as 
+select R.matchText as matchText
+from HighConfidenceSingleTokenPerson__5 R
+where Not(MatchesRegex(/.{1,2}/, R.matchText))
+;
+
+create view Person__7 as 
+(select R.matchText as matchText
+from Person__6 R )
+union all 
+(select R.matchText as matchText
+from HighConfidenceSingleTokenPerson__7 R )
+;
+
+create view InvalidPersonFragments__1 as 
+select D.match as matchText
+from Dictionary('invalidPersonFragment.dict', DocScan.text) D 
+;
+
+create view Person__8 as 
+select R.matchText as matchText
+from InvalidPersonFragments__1 R ;
+
+create view Person__9 as 
+select R1.matchText as matchText
+from Person__7 R1, Person__8 R2 
+where Overlaps(R1.matchText,R2.matchText);
+
+create view Person__10 as 
+(select R.matchText as matchText from Person__7 R )
+minus
+(select R.matchText as matchText from Person__9 R )
+;
+
+
+
+create view Person__11 as 
+select R.matchText as matchText
+from Person__10 R
+where Not(ContainsDict('filterPerson_LCOneToken.dict', LeftContextTok(R.matchText, 1)) )
+;
+
+create view Person__12 as 
+select R.matchText as matchText
+from Person__11 R
+where Not(ContainsDict('filterPerson_LCTwoTokens.dict', LeftContextTok(R.matchText, 2)) )
+;
+
+create view Person__13 as 
+select R.matchText as matchText
+from Person__12 R
+where Not(ContainsDict('filterPerson_RC.dict', RightContextTok(R.matchText, 1)) )
+;
+
+create view Person__14 as 
+select C.matchText as matchText
+from Person__13 C 
+consolidate on C.matchText using 'LeftToRight';
+
+--select R.matchText as matchText
+--into Person 
+--from Person__14 R; 
+
+create view PersonSentence as
+(select PA.matchText as person from Person__14 PA)
+minus
+(
+	select PA.matchText as person
+	from Person__14 PA, SentenceBoundary S
+	where Contains(PA.matchText, S.boundary)
+);  

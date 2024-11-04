@@ -1,0 +1,64 @@
+module common;
+
+
+create view TwoDigitsInterval as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__21__Temp_____sep_____R____id
+  from  __Subquery__21__Temp R;
+
+output view TwoDigitsInterval;
+
+create view WKDay as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__22__Temp_____sep_____D____id
+  from  __Subquery__22__Temp D;
+
+output view WKDay;
+
+create view TimeZone as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__23__Temp_____sep_____D____id
+  from  __Subquery__23__Temp D;
+
+output view TimeZone;
+
+create view __Subquery__21__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____Document____id,
+    regex /((0)|(1)|(2)|(3))?[\d]( )*[\-]( )*((0)|(1)|(2)|(3))?[\d]/
+    with flags 'DOTALL'
+    on between 1 and 5 tokens in Document.text
+    return group 0 as match
+  from Document Document;
+
+output view __Subquery__21__Temp;
+
+create view __Subquery__22__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____Document____id,
+    dictionary 'dicts/wkday.dict'
+    with flags 'IgnoreCase'
+    on Document.text as match
+  from Document Document;
+
+output view __Subquery__22__Temp;
+
+create view __Subquery__23__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____Document____id,
+    dictionary 'dicts/timeZone.dict'
+    with flags 'IgnoreCase'
+    on Document.text as match
+  from Document Document;
+
+output view __Subquery__23__Temp;
+

@@ -1,0 +1,96 @@
+require document with columns text Text;
+
+------------------------------------------------------------------------------
+-- Tests of the GROUP BY clause, the List() aggregate function, 
+-- and the rest of standard aggregate functions.
+------------------------------------------------------------------------------
+
+-- Note that we capture some two-word phrases, to make things more interesting.
+create dictionary CommonWords as (
+	'a', 'the', 'of', 'of a', 'of the'
+);
+
+-- Find pairs of common words within 20 tokens of each other.
+create view WordPairs_Unsorted as
+select D1.match as first, D2.match as second, 
+	CombineSpans(D1.match, D2.match) as annot
+from Dictionary('CommonWords', Document.text) D1,
+	Dictionary('CommonWords', Document.text) D2
+where FollowsTok(D1.match, D2.match, 0, 20);
+
+
+create view WordPairs_Grouped1 as
+select W.first as first, List(W.second) as second
+from WordPairs_Unsorted W
+group by W.first;
+
+create view WordPairs_Grouped2 as
+select W.first as first, List(GetBegin(W.second)) as second
+from WordPairs_Unsorted W
+group by W.first;
+
+create view WordPairs_Grouped3 as
+select W.first as first, GetText(W.second) as second, List(CombineSpans(W.first,W.second)) as match
+from WordPairs_Unsorted W
+group by W.first, GetText(W.second);
+
+
+-- Tests for standard aggreaget functions
+create view WordPairs_Aggs as
+select W.first as first,
+        Count(W.second) as cnt,
+		Sum(GetBegin(W.second)) as sum, 
+		Avg(GetBegin(W.second)) as avg,
+		Min(GetBegin(W.second)) as min,
+		Max(GetBegin(W.second)) as max
+from WordPairs_Unsorted W
+group by W.first
+order by GetText(W.first);
+
+create view WordPairs_GroupedEvenMore as
+select GetText(W.first), 
+		Count(W.cnt) as cnt,
+		Sum(W.avg) as sum, 
+		Avg(W.avg) as avg
+from WordPairs_Aggs W
+group by GetText(W.first);
+
+-- Tests for Count(*)
+create view WordPairs_CountStar as
+select Count(*)
+from WordPairs_Unsorted W;
+
+create view WordPairs_CountStarGroup as
+select W.first, Count(*) as cnt
+from WordPairs_Unsorted W
+group by W.first;
+
+
+create view WordPairs_CountStarGroup2 as
+select Count(*) as cnt
+from WordPairs_Unsorted W
+group by W.first;
+
+
+create view WordPairs_SimulateCount as
+select Sum(W.cnt)
+from WordPairs_CountStarGroup W;
+
+create view Test as
+select List(W.cnt) as cnt
+from WordPairs_CountStarGroup W;
+
+output view Test;
+
+--output view WordPairs_Unsorted;
+output view WordPairs_Grouped1;
+output view WordPairs_Grouped2;
+output view WordPairs_Grouped3;
+output view WordPairs_Aggs;
+output view WordPairs_GroupedEvenMore;
+output view WordPairs_CountStar;
+output view WordPairs_CountStarGroup;
+
+
+output view WordPairs_CountStarGroup2;
+output view WordPairs_SimulateCount;

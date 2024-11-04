@@ -1,0 +1,61 @@
+
+-- ******************************************
+-- Split the WAS log record as:  
+-- (i) Exception Trace Blocks
+-- (ii) Each line from the input log which does not belong to a trace block
+-- ******************************************
+
+--In place of the "Doc" view that detag.aql would generate:
+create view Doc as select D.text from Document D;
+
+include 'logRecord_singleLine.aql';
+include 'logRecord_stackTrace.aql';
+
+-- (A) get single line records that overlap with any stack trace
+create view SingleLine_OverTrace as
+	select L.logSpan as logSpan
+	from SingleLine L, TraceBlockOutput T
+	where Overlaps(L.logSpan, T.span);
+
+
+-- (B) remove all single line entries that overlap with any stack trace
+create view SingleLine_NoTrace as 
+    (
+		select L.logSpan as logSpan
+		from SingleLine L
+    )
+    minus
+    (
+		select L.logSpan as logSpan
+		from SingleLine_OverTrace L
+    );
+    
+-- (C) merge single lines of (A) that form the beginning of a stack trace
+create view SingleLine_MergeTrace as
+		select CombineSpans(L.logSpan, T.span) as logSpan
+		from SingleLine_OverTrace L, TraceBlockOutput T
+		where Overlaps(L.logSpan, T.span) 
+		and GreaterThan(GetBegin(T.span), GetBegin(L.logSpan));
+
+-- (D) merge all to get the final list
+create view LogRecord_Intermediate as
+	(
+		select L.logSpan as logSpan
+		from SingleLine_NoTrace L
+    )
+    union all
+    (
+		select S.logSpan as logSpan
+		from SingleLine_MergeTrace S
+    );
+
+-- (E) create the output view
+create view LogRecord as
+	select L.logSpan as logSpan, GetText(L.logSpan) as logText
+	from LogRecord_Intermediate L;
+
+output view LogRecord;
+
+
+
+

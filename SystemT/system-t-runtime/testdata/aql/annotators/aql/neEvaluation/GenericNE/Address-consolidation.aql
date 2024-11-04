@@ -1,0 +1,28 @@
+-- Laura 04/29/2009: added a similar consolidation phase as in Place-simplecons.aql
+
+create view WrongAddress as
+(select A.address as address, A.city as city, A.stateorprovince as stateorprovince, A.zip as zip, A.loc as loc
+from   AddressAll A,
+	   Dates D 
+where Overlaps(D.match,A.loc))
+union all
+(select A.address as address, A.city as city, A.stateorprovince as stateorprovince, A.zip as zip, A.loc as loc
+from   AddressAll A,
+	   Times T 
+where Overlaps(T.match,A.loc))
+union all
+(select A.address as address, A.city as city, A.stateorprovince as stateorprovince, A.zip as zip, A.loc as loc
+from   AddressAll A,
+	   PhoneNumCons T 
+where Overlaps(T.num,A.loc))
+-- Laura 05/05/2009: no need to filter based on WrongPlaces
+-- This semantics is now achieved in the consolidation phase for USAddress, which is a subset of AddressAll
+--union all
+--(select A.address as address, A.city as city, A.state as stateorprovince, A.zipcode as zip, A.loc as loc
+--from WrongPlaces A)
+;
+
+create view AddressFinal as
+	(select A.address as address, A.city as city, A.stateorprovince as stateorprovince, A.zip as zip, A.loc as reference from AddressAll A)
+	minus
+	(select WA.address as address, WA.city as city, WA.stateorprovince as stateorprovince, WA.zip as zip, WA.loc as reference from WrongAddress WA);

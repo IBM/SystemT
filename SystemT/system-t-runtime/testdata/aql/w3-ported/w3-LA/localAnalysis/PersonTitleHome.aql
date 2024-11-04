@@ -1,0 +1,354 @@
+-------------------------------------------------------------------------------
+-- homepage.aql
+--
+-- Identify homepage from title
+--
+-- This file produces the contents of the following local analysis outputs:
+--      a. TitleHome
+--      b. PersonHome
+-- It is the union of PersonalHomepage and OtherHomepage in original implementation
+--
+-- Depends on HTML.aql, Title.aql, Segment.aql, HomepageFeatures.aql
+-- Based on Huiayu's original Java implementation.
+--
+-- Author: Laura Chiticariu
+-------------------------------------------------------------------------------
+
+
+------------------------------------------------------------------
+--                  PRIORITY RULES FOR HOMEPAGE
+------------------------------------------------------------------
+-- Rule1: 
+-- CheckSingleSeg > CheckLastSegRegexFinal
+create view HomepageCount0_ as
+select Max(S.cnt) as cnt, S.id as id 
+from 
+(
+	(select Count(S.id) as cnt, S.id as id from CheckSingleSeg S group by S.id)
+	union all
+	(select 0 as cnt, S.id as id from SegIDAll S)
+) S
+group by S.id;
+
+create view Homepage0_ as
+select R2.*
+from CheckLastSegRegexFinal R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists, S.id as id
+		from (select S.cnt as cnt, S.id as id from HomepageCount0_ S) S
+	) R1
+where Equals(R1.xsists, 0)
+  and Equals(R1.id, R2.id);
+
+create view Homepage0 as (select * from CheckSingleSeg) union all (select * from Homepage0_);
+
+
+
+
+-- Rule 2:
+-- CheckSingleSeg > CheckLastSegRegexFinal > CheckLastSegDictFinal
+create view HomepageCount1_ as
+select Max(S.cnt) as cnt, S.id as id 
+from 
+(
+	(select Count(S.id) as cnt, S.id as id from Homepage0 S group by S.id)
+	union all
+	(select 0 as cnt, S.id as id from SegIDAll S)
+) S
+group by S.id;
+
+create view Homepage1_ as
+select R2.*
+from CheckLastSegDictFinal R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists, S.id as id
+		from (select S.cnt as cnt, S.id as id from HomepageCount1_ S) S
+	) R1
+where Equals(R1.xsists, 0)
+  and Equals(R1.id, R2.id);
+
+create view Homepage1 as (select * from Homepage0) union all (select * from Homepage1_);
+
+-- Rule 3:
+-- CheckSingleSeg > CheckLastSegRegexFinal > CheckLastSegDictFinal > CheckFirstSegDictFinal
+create view HomepageCount2_ as
+select Max(S.cnt) as cnt, S.id as id 
+from 
+(
+	(select Count(S.id) as cnt, S.id as id from Homepage1 S group by S.id)
+	union all
+	(select 0 as cnt, S.id as id from SegIDAll S)
+) S
+group by S.id;
+
+create view Homepage2_ as
+select R2.*
+from CheckFirstSegDictFinal R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists, S.id as id
+		from (select S.cnt as cnt, S.id as id from HomepageCount2_ S) S
+	) R1
+where Equals(R1.xsists, 0)
+  and Equals(R1.id, R2.id);
+
+
+create view Homepage2 as (select * from Homepage1) union all (select * from Homepage2_);
+
+-- RUle 4:
+-- CheckSingleSeg > CheckLastSegRegexFinal > CheckLastSegDictFinal > CheckFirstSegDictFinal > CheckFirstSegRegex
+create view HomepageCount3_ as
+select Max(S.cnt) as cnt, S.id as id 
+from 
+(
+	(select Count(S.id) as cnt, S.id as id from Homepage2 S group by S.id)
+	union all
+	(select 0 as cnt, S.id as id from SegIDAll S)
+) S
+group by S.id;
+
+create view Homepage3_ as
+select R2.*
+from CheckFirstSegRegex R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists, S.id as id
+		from (select S.cnt as cnt, S.id as id from HomepageCount3_ S) S
+	) R1
+where Equals(R1.xsists, 0)
+  and Equals(R1.id, R2.id);
+
+create view Homepage3 as (select * from Homepage2) union all (select * from Homepage3_);
+
+-- RUle 5:
+--  CheckSingleSeg > CheckLastSegRegexFinal > CheckLastSegDictFinal > CheckFirstSegDictFinal > CheckFirstSegRegex > CheckFirstSegHRRegex
+create view HomepageCount4_ as
+select Max(S.cnt) as cnt, S.id as id 
+from 
+(
+	(select Count(S.id) as cnt, S.id as id from Homepage3 S group by S.id)
+	union all
+	(select 0 as cnt, S.id as id from SegIDAll S)
+) S
+group by S.id;
+
+create view Homepage4_ as
+select R2.*
+from CheckFirstSegHRRegex R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists, S.id as id
+		from (select S.cnt as cnt, S.id as id from HomepageCount4_ S) S
+	) R1
+where Equals(R1.xsists, 0)
+  and Equals(R1.id, R2.id);
+
+create view Homepage4 as (select * from Homepage3) union all (select * from Homepage4_);
+
+-- Rule 6:
+-- CheckSingleSeg > CheckLastSegRegexFinal > CheckLastSegDictFinal > CheckFirstSegDictFinal > CheckFirstSegRegex > CheckFirstSegHRRegex > CheckFirstSegLQ
+create view HomepageCount5_ as
+select Max(S.cnt) as cnt, S.id as id 
+from 
+(
+	(select Count(S.id) as cnt, S.id as id from Homepage4 S group by S.id)
+	union all
+	(select 0 as cnt, S.id as id from SegIDAll S)
+) S
+group by S.id;
+
+create view Homepage5_ as
+select R2.*
+from CheckFirstSegLQ R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists, S.id as id
+		from (select S.cnt as cnt, S.id as id from HomepageCount5_ S) S
+	) R1
+where Equals(R1.xsists, 0)
+  and Equals(R1.id, R2.id);
+
+create view Homepage5 as (select * from Homepage4) union all (select * from Homepage5_);
+
+-- Rule 7:
+-- CheckSingleSeg > CheckLastSegRegexFinal > CheckLastSegDictFinal > CheckFirstSegDictFinal > CheckFirstSegRegex > CheckFirstSegHRRegex > CheckFirstSegLQ > CheckEachSegFinal
+create view HomepageCount6_ as
+select Max(S.cnt) as cnt, S.id as id 
+from 
+(
+	(select Count(S.id) as cnt, S.id as id from Homepage5 S group by S.id)
+	union all
+	(select 0 as cnt, S.id as id from SegIDAll S)
+) S
+group by S.id;
+
+create view Homepage6_ as
+select R2.*
+from CheckEachSegFinal R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists, S.id as id
+		from (select S.cnt as cnt, S.id as id from HomepageCount6_ S) S
+	) R1
+where Equals(R1.xsists, 0)
+  and Equals(R1.id, R2.id);
+
+create view Homepage6 as (select * from Homepage5) union all (select * from Homepage6_);
+
+create view HomePagePrioritized as
+select H.*
+from Homepage6 H;
+
+
+
+
+
+------------------------------------------------------------------
+--       TYPE ASSIGNMENT FOR HOMEPAGE - Personal or Other
+------------------------------------------------------------------
+
+-- Homepages with label 'person'
+-- E.g., Gino Salari - User Profile - w3ki
+create view HomePageWithLabelPerson as
+select H.name as name, H.id as id, 'person' as label
+from HomePagePrioritized H, SegWithID TS
+where MatchesRegex(/user profile/, 'CASE_INSENSITIVE', TS.elem)
+  and Equals(H.id, TS.id);
+
+-- Homepages with label 'inplace'
+create view HomePageWithLabelInplace as
+select H.*
+from HomePagePrioritized H
+where Equals('inplace',GetText(H.label));
+
+
+-- Pass through the Person annotator
+-- only if the following semlabels  are detected 
+create table SemlabelForPersonTable(label Text)
+as values
+	('sites_research'), ('ibm_exec_corner'), ('w3_directory'),
+	('sites_globalservices'), ('sites_finance'), ('fringe');
+
+create view SemlabelForPerson as
+select S.*
+from SemlabelNormalized S, SemlabelForPersonTable T
+where Equals(GetText(S.label), GetText(T.label))
+limit 1;
+
+create view HomePageWithSemlabelForPerson as
+select  H.*
+from HomePagePrioritized H, SemlabelForPerson;
+
+-- Titles that don't contain a Homepage annotation
+/*
+create view TitleOther as
+select T.name as name
+from TitleFinal T,
+	(
+		select case when GreaterThan(H.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from HomePagePrioritized) H
+	) H
+where Equals(H.xsists, 0);
+*/
+create view TitleOtherCount0_ as
+select Max(S.cnt) as cnt, S.id as id 
+from 
+(
+	(select Count(S.id) as cnt, S.id as id from HomePagePrioritized S group by S.id)
+	union all
+	(select 0 as cnt, S.id as id from SegIDAll S)
+) S
+group by S.id;
+
+
+create view TitleOther as
+select R2.*
+from TitleH1WithID R2, 
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists, S.id as id
+		from (select S.cnt as cnt, S.id as id from TitleOtherCount0_ S) S
+	) R1
+where Equals(R1.xsists, 0)
+  and Equals(R1.id, R2.id);
+
+---------------------------------------------------------------
+-- Run the PERSON annotator 
+-- on titles without a strong Personal Homepage annotation
+-- (i.e., that have an 'inplace' label or one of the semlabels in SemlabelForPersonTable)
+-- and titles without a Homepage annotation
+---------------------------------------------------------------
+create view Doc as
+( select H.name as text from HomePageWithLabelInplace H)
+union all
+( select H.name as text from HomePageWithSemlabelForPerson H)
+union all
+( select Chomp(T.match) as text from TitleOther T);
+
+include 'GenericNE/namedentity-ediscovery-personorgphoneaddress.aql';
+
+create view PersonInTitle as
+select P.person as person 
+from PersonFinalAllWithoutDots P
+consolidate on P.person;
+
+-- Person annotations that span the entire title
+create view PersonInTitleExact as
+select P.person as person
+from PersonInTitle P, Doc D
+where Equals(P.person, D.text);
+
+create view PersonInTitleExactWithDoc as
+select P.person as person, D.text
+from PersonInTitle P, Doc D;
+
+
+-- All PersonHome annotations obtained from title
+create view PersonHomeFromTitle as
+(select H.name as name from HomePageWithLabelPerson H)
+union all
+(select P.person as name from PersonInTitleExact P);
+
+---------------------------------------------------------------
+
+------------------------------------------------------------------
+--       PersonHome final output
+------------------------------------------------------------------
+
+-- Homepage annotations with Person name
+create view HomePageWithPerson as
+select H.name as name 
+from PersonHomeFromTitle H; 
+
+
+-- Homepage annotations without a Person name
+create view HomePageWithoutPerson as
+(select H.name as name from HomePagePrioritized H)
+minus
+(select H.name as name from HomePageWithPerson H);
+
+------------------------------------------------------------------
+-- Split Homepage annotations based on their provenance: Title or H1
+------------------------------------------------------------------
+
+create view HomePageWithType as
+(select H.name as name, 'PersonHome' as type from HomePageWithPerson H)
+union all
+(select H.name as name, 'TitleHome' as type from HomePageWithoutPerson H);
+
+-- Homepage from Title
+create view HomePageWithType_Title as
+select H.*
+from HomePageWithType H, TitleFinal T
+where Contains(T.content, H.name);
+
+-- Homepage from H1
+create view HomePageWithType_H1 as
+(select * from HomePageWithType)
+minus
+(select * from HomePageWithType_Title);
+
+-- Homepage from Title and H1 with appropriate labels
+create view HomePageWithTypeAndLabel as
+(select H.name as name, H.type as type, 'title' as label from HomePageWithType_Title H)
+union all
+(select H.name as name, H.type as type, 'h1' as label  from HomePageWithType_H1 H);
+
+
+
+
+

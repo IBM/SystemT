@@ -1,0 +1,46 @@
+###############################################################################
+# teeBug3.aog
+#
+# Yet *another* test case for a bug in the Tee operator's handling of tuple
+# buffers.
+###############################################################################
+
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+$Zipcode =
+Project(
+  (
+    "match" => "match"
+  ),
+      Regex(
+        /\b[0-9]{5}(\-[0-9]{4})?\b/, (0 => "match"), "DOTALL",
+        "text",
+        $Document
+      )
+);
+
+
+$Zipcode2 =
+Project(
+  (
+    "match" => "match"
+  ),
+      Regex(
+        /\b[0-9]{5}(\-[0-9]{4})?\b/, (0 => "match"), "DOTALL",
+        "text",
+        $Document
+      )
+);
+
+
+$A = Difference($Zipcode2, $Zipcode);
+
+$B = Union($Zipcode, $A);
+
+$C = Union($Zipcode2, $B);
+
+Output: $A, $C;

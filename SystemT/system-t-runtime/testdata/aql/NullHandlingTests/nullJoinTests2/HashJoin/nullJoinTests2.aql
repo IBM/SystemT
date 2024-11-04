@@ -1,0 +1,30 @@
+module HashJoin;
+require document with columns text Text;
+
+--------------------------------------------
+-- Extract names and nulls from the document
+create view _Name as
+  extract regex 
+    /!(\w+)?,(\w+)?,(\w+)?/
+  on D.text
+  return 
+    group 1 as firstname
+    and group 2 as middlename
+    and group 3 as lastname
+  from Document D;
+  
+output view _Name;
+
+
+-- HASH JOIN
+
+
+-- Uses HashJoin with nulls in inputs
+create view NullHashJoinTest as
+select
+       N1.firstname as match1,
+       N2.lastname as match2
+from _Name N1, _Name N2
+where Equals(GetText(N1.firstname), GetText(N2.lastname));
+
+output view NullHashJoinTest;

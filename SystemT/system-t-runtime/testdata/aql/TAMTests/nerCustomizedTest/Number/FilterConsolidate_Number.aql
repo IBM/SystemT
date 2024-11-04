@@ -1,0 +1,70 @@
+module Number; 
+-------------------------------------------------------------------------------
+-- Identify Decimal, Integer and Number candidate in both text and digital format
+-- Identify wrongInteger and wrongDecimal
+-- Union and consolidate these candidates
+-------------------------------------------------------------------------------
+	
+create view Decimal_Candidate as
+	extract pattern <IC.integerview>? <DDP.match> as decimal
+	from IntegerCandidate IC, DecimalDigitalPart_ DDP;
+		
+create view DecimalDigital as
+	select D.decimal as decimal
+	from Decimal_Candidate D
+	consolidate on D.decimal;
+	
+create view DecimalAllCandidate as
+	(select DD.decimal as decimal from 
+	DecimalDigital DD)
+	union all
+	(select DT.match as decimal from
+	DecimalText DT);
+		
+create view WrongInteger as
+select IC.integerview as match
+from   IntegerCandidate IC,
+	   DecimalAllCandidate D 
+where Overlaps(D.decimal,IC.integerview);
+
+
+create view IntegerViewDigital as
+	select I.integerview from
+	((select IC.integerview as integerview 
+		from IntegerCandidate IC)
+	minus
+	(select WI.match as integerview
+		from WrongInteger WI)
+	) I
+	consolidate on I.integerview using 'ContainedWithin';
+	
+
+create view IntegerAllCandidate as
+	(select IVD.integerview as integerview from 
+	IntegerViewDigital IVD)
+	union all
+	(select IT.match as integerview from
+	IntegerText IT);		
+
+		
+create view NumberCandidate as
+	select P.match as number
+	from(
+		(select I.integerview as match from IntegerAllCandidate I)
+		union all
+		(select D.decimal as match from DecimalAllCandidate D)
+	) P
+	consolidate on P.match;	
+
+create view WrongInteger2 as
+select IC.integerview as match
+from   IntegerAllCandidate IC,
+	   Percentage P 
+where Overlaps(P.percentage,IC.integerview);
+
+create view WrongDecimal as
+select DC.decimal as match
+from   DecimalAllCandidate DC,
+	   Percentage P 
+where Overlaps(P.percentage,DC.decimal);
+			

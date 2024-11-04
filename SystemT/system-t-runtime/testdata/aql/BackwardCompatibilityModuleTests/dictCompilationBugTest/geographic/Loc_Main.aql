@@ -1,0 +1,117 @@
+-- Overview: Code can be expressed in four modules
+-- Module A: Extraction Step where all available extractions are performed on the input text
+-- Module B: Identifying US locations
+-- Module C: Identifying non-US locations
+-- Module D: Disambiguating between US and non-US locations
+
+
+create function equalsIgnoreCaseSmarc(string1 String,string2 String) 
+return Boolean
+external_name 'udfjars/smarc_4aql.jar:com.ibm.midas.utils.StringManipulation!equalsIgnoreCase'
+language java
+deterministic
+return null on null input;
+
+create function normalizeKeepAlphaNumeric(string1 String)
+return String
+external_name 'udfjars/smarc_4aql.jar:com.ibm.midas.utils.StringManipulation!normalizeKeepAlphaNumeric'
+language java
+deterministic
+return null on null input;
+
+create function toUpperCase(string String)
+return String
+external_name 'udfjars/smarc_4aql.jar:com.ibm.midas.utils.StringManipulation!toUpperCase'
+language java
+deterministic
+return null on null input;
+
+
+
+-- REQUIRED INPUT VIEW Loc_InputText
+-- The driver should include an input view containing a "text" field of type Span or Text
+-- This is an example of one way to create such an input view
+--create view Loc_InputText as
+--  --extract regex /.*/  on D.text as text -- this makes fullspan a span
+--    select D.text as text  -- this makes fullspan a text
+--    from Document D;
+
+
+-- Extract information that matches dictionaries
+include 'geographic/Loc_Extract.aql';
+
+-- Attempt to resolve US locations
+include 'geographic/Loc_USA.aql';
+
+-- Attempt to resolve non-US locations
+include 'geographic/Loc_NonUSA.aql';
+
+-- Disambiguate between US and non-US locations
+include 'geographic/Loc_Disambig_All.aql';
+        
+-- Output view candidate. Contains city, state, country information.
+create view Loc_MappedAddressOutput as 
+    (
+    select  'citystate' as prov, GetString(normalizeKeepAlphaNumeric(GetString(D.city))) as city, 
+        GetString(toUpperCase(GetString(D.state))) as state, GetString('US') as country,  GetString('US') as countryISO,
+        D.fullspan as fullspan,GetString(D.fullspan) as fulltext, GetString('true') as hasCityState
+    from Loc_CityState D
+    )
+    union all
+    (
+    select  'cityonly' as prov, GetString(normalizeKeepAlphaNumeric(GetString(D.city))) as city, 
+        GetString(toUpperCase(GetString(D.state))) as state, GetString('US') as country, GetString('US') as countryISO,
+        D.fullspan as fullspan, GetString(D.fullspan) as fulltext, GetString('false') as hasCityState
+    from Loc_CityOnly D
+    )
+    union all
+    (
+    select  D.prov as prov, GetString(normalizeKeepAlphaNumeric(GetString(D.city))) as city, 
+        GetString(D.state) as state, GetString(normalizeKeepAlphaNumeric(GetString(D.country))) as country, GetString(D.countryISO) as countryISO,
+        D.fullspan as fullspan,GetString(D.fullspan) as fulltext, GetString('false') as hasCityState
+    from Loc_ForeignEntries D
+    )
+    union all
+    (
+    select 'stateonly' as prov, GetString('') as city, GetString(toUpperCase(GetString(D.state))) as state, GetString('US') as country, GetString('US') as countryISO,
+        D.fullspan as fullspan,GetString(D.fullspan) as fulltext, GetString('false') as hasCityState
+    from Loc_StateOnly D
+    )
+    union all
+    (
+    select  'countryonly' as prov, GetString('') as city, GetString('') as state, GetString('US') as country, GetString('US') as countryISO,
+        D.fullspan as fullspan,GetString(D.fullspan) as fulltext, GetString('false') as hasCityState
+    from Loc_CountryOnlyUS D
+    )
+    ;
+    
+create view Loc_NotInExplicitOutput as
+    (
+    select L.text 
+    from Loc_InputText L
+    )
+    minus
+    (
+    select L.text 
+    from Loc_InputText L, Loc_MappedAddressOutput O 
+    where Overlaps(L.text, O.fullspan)
+    );
+    
+create view Loc_NotInExplicitOutputNonNull as
+    select D.*
+    from Loc_NotInExplicitOutput D
+    where Not(ContainsRegex(/userlocation\": (\"\")|(null})/, D.text));
+
+------------ GET GEO-S --------------------
+
+-- Output view candidate. Contains lat/long information
+create view Loc_Geos as
+    extract D.text as text, regex /\-?\d\d?\d?\.\d(\d)*.?[A-Z]?((,\s*)|(\s+))\-?\d\d?\d?\.\d(\d)*(.?[EWSN])?/ on D.text as match
+    from Loc_NotInExplicitOutputNonNull D;
+    
+
+-- NEED REVERSE GEOCODING TO INTERPRET
+
+create view Loc_GeosOutput as     
+    select GetString(D.match) as geo 
+    from Loc_Geos D;

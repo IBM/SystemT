@@ -1,0 +1,185 @@
+-------------------------------------------------------------------------------
+-- URLHome.aql  
+--
+--
+-- Depends on URL.aql
+--
+-- Based on Huiayu's original Java implementation.
+-------------------------------------------------------------------------------
+
+include 'localAnalysis/URLHomeFeatures.aql';
+---------------------------------------------------------------------------------
+
+-- UrlNewsWithDate = union of UrlNewsPattern*
+create view UrlNewsWithDate as
+	(select * from UrlNewsPattern1)		union all
+	(select * from UrlNewsPattern1a)	union all
+	(select * from UrlNewsPattern1c)	union all
+	(select * from UrlNewsPattern2)		union all
+	(select * from UrlNewsPattern3)		union all
+	(select * from UrlNewsPattern4)		union all
+	(select * from UrlNewsPattern4a)	union all
+	(select * from UrlNewsPattern4b)
+;
+
+
+-- UrlNews = UrlNewsWithDate ( name, label )
+create view UrlNews as 
+(select T.name, T.label, GetBegin(T.name) as name_begin, GetEnd(T.name) as name_end from UrlNewsWithDate T)
+union all
+(select T.name, T.label, GetBegin(T.name) as name_begin, GetEnd(T.name) as name_end from UrlNewsPatternCatchAll T)
+;
+
+
+-- UrlDate = UrlNewsWithDate ( date )
+create view UrlDate as 
+select
+	T.date as content 
+from
+	UrlNewsWithDate T
+where
+	NotNull(T.date)
+;
+
+
+-- UrlPr = union of UrlPrPattern*
+create view UrlPr as
+	(select T.name, T.label, GetBegin(T.name) as name_begin, GetEnd(T.name) as name_end from UrlPrPattern1 T)	
+	union all
+	(select T.name, T.label, GetBegin(T.name) as name_begin, GetEnd(T.name) as name_end from UrlPrPattern2 T)
+;
+
+-- UrlSpecialHosts = union of [Urlw3kiPattern, UrlBluepediaLinksandCategory}
+create view UrlSpecialHosts as
+	(select T.name, T.label, GetBegin(T.name) as name_begin, GetEnd(T.name) as name_end from Urlw3kiPattern T)	
+	union all
+	(select T.name, T.label, GetBegin(T.name) as name_begin, GetEnd(T.name) as name_end from UrlBluepediaLinksandCategory T)
+;
+---------------------------------------------------------------------------------
+-- Conditional rules. 
+create view UrlHostRootTmp as
+select T.*, P.actualPath as path, P.query
+from
+	UrlHostName T,
+	PageURL P
+;
+
+-- URLHome0 = UrlHostRoot > UrlNews
+create view UrlHostRoot as
+select
+	T.name,
+	T.label,
+	GetBegin(T.name) as name_begin, 
+	GetEnd(T.name) as name_end
+from
+	UrlHostName T,
+	PageURL P
+where Equals('', GetText(P.actualPath))
+	and Equals('', GetText(P.query))
+;
+
+	
+-- UrlNormalName = UrlSegmenthomelike + UrlImbeddedhomelike + UrlImbeddeduserlike
+/*
+create view UrlNormalName as
+	(select * from UrlSegmenthomelike)
+union all
+	(select * from UrlImbeddedhomelike)
+union all
+	(select * from UrlImbeddeduserlike)
+;
+*/
+
+
+-- Normal name, when there is no query
+create view UrlNormalNameCand as
+select getNormalName(U.normUrl, U.host, U.actualPath,  L.list) as result
+from PageURL U, TempViewForList L
+where Equals('', GetText(U.query));
+
+create view UrlNormalName as
+select getElementFromStrList(U.result, 0) as name, 
+	   getElementFromStrList(U.result, 1) as label,
+	   getIntElementfromStrList(U.result, 2) as name_begin, 
+	   getIntElementfromStrList(U.result, 3) as name_end
+from UrlNormalNameCand U
+where NotNull(U.result)
+;
+
+
+-- UrlNormalOrLogon = UrlNormalName + UrlLoginwssCode
+create view UrlNormalOrLogon as
+	(select T.name, T.label, T.name_begin, T.name_end from UrlNormalName T)
+	union all
+	(select T.name, T.label, GetBegin(T.name) as name_begin, GetEnd(T.name) as name_end from UrlLoginwssCode T)
+;
+---------------------------------------------------------------------------------
+-- Priority rules.  Starting with A1, A2, A3, ...
+-- Calcualte B1=A1, C1=B1, B2=A2-C1, C2=C1+B2, B3=A3-C2, C3=C2+B3.
+
+-- URLHome0 = UrlHostRoot > UrlNews
+create view URLHome0_ as
+select R2.*
+from UrlNews R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from UrlHostRoot) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view URLHome0 as (select * from UrlHostRoot) union all (select * from URLHome0_);
+
+
+-- URLHome1 = UrlHostRoot > UrlNews > UrlPr
+create view URLHome1_ as
+select R2.*
+from UrlPr R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from URLHome0) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view URLHome1 as (select * from URLHome0) union all (select * from URLHome1_);
+
+
+-- URLHome2 = UrlHostRoot > UrlNews > UrlPr > UrlSpecialHosts
+create view URLHome2_ as
+select R2.*
+from UrlSpecialHosts R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from URLHome1) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view URLHome2 as (select * from URLHome1) union all (select * from URLHome2_);
+
+
+-- URLHome3 = UrlHostRoot > UrlNews > UrlPr > UrlSpecialHosts > UrlNormalOrLogon
+create view URLHome3_ as
+select R2.*
+from UrlNormalOrLogon R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from URLHome2) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view URLHome3 as (select * from URLHome2) union all (select * from URLHome3_);
+
+create view URLHomeFinal
+as select
+   	T.name as name,
+	T.label as label,
+	T.name_begin,
+	T.name_end
+from
+	URLHome3 T
+-- Laura 8/2: added consolidation to remove duplicates
+consolidate on T.name using 'ExactMatch';
+
+-- Final output with schema conforming to the Jaql schema
+create view URLHome as
+select GetText(U.name) as name_text, U. name_begin as name_begin, U. name_end as name_end, U.label as label
+from URLHomeFinal U;

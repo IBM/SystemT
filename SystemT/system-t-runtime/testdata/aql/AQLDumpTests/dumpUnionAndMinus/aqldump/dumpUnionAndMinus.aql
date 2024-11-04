@@ -1,0 +1,48 @@
+module aqldump;
+
+create view City1 as
+ select 'Athens' as city,
+ 	'Greece' as country,
+ 	'Europe' as continent 
+ from Document D;
+ 
+create view Organization as 
+ select 'IBM' as organization from Document D;
+ 
+ 
+create view MinusView as
+(
+  select
+    C.city,
+    C.country,
+    C.continent
+  from City1 C
+)
+  minus
+( 
+  select
+    C.city,
+    C.country,
+    C.continent
+  from City1 C, Organization O
+  where Overlaps (C.city, O.organization)
+);
+
+output view MinusView;
+
+create view UnionAll as
+(
+  select
+    C.city,
+    C.continent
+  from City1 C
+)
+  union all
+( 
+  select
+    C.continent
+  from City1 C, Organization O
+  where Overlaps (C.city, O.organization)
+);
+
+output view UnionAll;

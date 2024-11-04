@@ -1,0 +1,25 @@
+-- ************************************************************
+-- Used for filtering Person names containing a single new line
+-- Currently used by all versions, except SEC
+-- ************************************************************
+
+-- remove entries with new lines per Brian's request	
+create view PersonStrong as
+select P.person as person
+from PersonStrongWithNewLine P
+--where Not(ContainsRegex(/[\n\r\t]{2}/, P.person));
+-- Sudarshan regex : 10/12/2011 : backreference on lines 12 and 18
+where Not(ContainsRegex(/((\r\n|\t){2,}|(\r|\t){2,}|(\n|\t){2,})/, P.person));
+
+create view PersonWeak1 as
+select P.person as person
+from PersonWeak1WithNewLine P
+--where Not(ContainsRegex(/[\n\r\t]{2}/, P.person));
+where Not(ContainsRegex(/((\r\n|\t){2,}|(\r|\t){2,}|(\n|\t){2,})/, P.person));
+
+create view PersonWeak2NoNewLine as
+select P.person as person
+from PersonWeak2WithNewLine P
+where Not(ContainsRegex(/[\n\r\t]/, P.person));
+
+

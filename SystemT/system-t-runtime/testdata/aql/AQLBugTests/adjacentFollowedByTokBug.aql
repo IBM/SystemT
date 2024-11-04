@@ -1,0 +1,42 @@
+-------------------------------------------------------------------------------
+-- adjacentFollowedByTokBug.aql
+--
+-- Test for defect 29471: Defect in AdjacentJoin with the FollowedByTok predicate 
+-------------------------------------------------------------------------------
+
+--------------------------------------------------------
+-- ORIGINAL (BUT SIMPLIFIED) TESTCASE FROM KRIS HILDRUM
+--------------------------------------------------------
+create view travel_I_all as
+extract regex /^/  on D.text as firstPerson
+from Document D;
+
+create dictionary travel_transitplace_dict as (
+	'airport'
+ );
+
+create view travel_transit as 
+extract D.text as text,
+	dictionary 'travel_transitplace_dict' on D.text as transit
+from Document D;
+
+-- The views travel_transit_NLJoin and travel_transit_AdjacentJoin
+-- are equivalent and should produce identical output
+create view travel_transit_NLJoin as 
+select 
+	CombineSpans(I.firstPerson,D.transit) as keyPhrase
+from travel_transit D, travel_I_all I
+where 
+    And(FollowsTok(I.firstPerson, D.transit,0,4));
+    
+create view travel_transit_AdjacentJoin as 
+select 
+	CombineSpans(I.firstPerson,D.transit) as keyPhrase
+from travel_transit D, travel_I_all I
+where 
+    FollowsTok(I.firstPerson, D.transit,0,4);
+
+output view travel_transit_NLJoin;
+output view travel_transit_AdjacentJoin;
+
+

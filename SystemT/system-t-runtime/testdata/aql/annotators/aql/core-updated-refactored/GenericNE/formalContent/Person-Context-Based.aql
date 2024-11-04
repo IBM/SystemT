@@ -1,0 +1,152 @@
+--- find Position + Person Name
+create view Position as
+	extract
+	   --dictionaries 'filterPerson_position.dict'
+	   dictionaries 'filter_per_role_en.dict'
+	          --and   'misc/sports_related_positions.dict'
+	          and 'misc/role_imp_sport_en.dict'
+	          --and   'misc/relatives.dict'
+	          and 'misc/role_imp_family_en.dict'
+	  on D.text   
+      as pos
+	  from Doc D
+	  -- Sudarshan regex : 10/13/2011 - backreference on line 13
+	  -- Sudarshan regex : 10/13/2011 - changed regex on line 12 to 13 - unicode equivalent + combination mark detection
+	  --having MatchesRegex(/((\p{Lu}\p{M}*){2}|((\p{Lu}\p{M}*)?\p{Lower}{1,10}\s*){1,2})/, pos);
+	  having MatchesRegex(/((\p{Lu}\p{M}*){2}|((\p{Lu}\p{M}*)?(\p{Ll}\p{M}*){1,10}\s*){1,2})/, pos);
+
+create view OfficialCandidates1All as
+select C.name as person
+from OneOrTwoCapPerson C,
+-- possible customization from CoNLL: changing CapsPerson to AllPersonCandidate
+     Position P
+where FollowsTok(P.pos, C.name, 0, 1)
+ and  MatchesRegex(/\s*[,-]?\s*/, SpanBetween(P.pos, C.name))
+ and  Not(ContainsRegex(/[\r\n\t]/, SpanBetween(P.pos, C.name)))
+ and  Not(ContainsRegex(/[\r\n\t]/, C.name));
+ 
+-- Yunyao: added on 03/31/2010 remove those in Headline
+create view OfficialCandidates1 as
+	(select C.* from OfficialCandidates1All C)
+	minus
+	(
+	 select C.* 
+	 from OfficialCandidates1All C,
+	      HeadlineMixedCaps H
+	 where Overlaps(H.headline, C.person)
+	);
+
+ 
+-- to identify names before "who **** "
+-- TODO: merge all the common patterns into views
+create view PersonBeforeWhoClause as
+extract pattern
+      <C.name>{1,2} as person
+from   CapsPerson C
+having Not(ContainsRegex(/[\r\n\t]/, person))
+	-- Sudarshan regex : 10/13/2011 - backreference on line 47
+	-- Sudarshan regex : 10/13/2011 - changed regex on line 46 to 47 - unicode equivalent + combination mark detection	  
+  --and  MatchesRegex(/^\s*,?\s*(\s+\p{Lower}+\s+)?(who|whose)\s+.+/, RightContext(person, 10))
+  and  MatchesRegex(/^\s*,?\s*(\s+(\p{Ll}\p{M}*)+\s+)?(who|whose)\s+.+/, RightContext(person, 10))
+  -- Yunyao: added on 03/29/2010 to enforce only use the clue when the name is in a middle of a sentence
+  and  MatchesRegex(/\p{Ll}\p{M}*.*/, LeftContextTok(person, 1));
+ 
+-- in the format of Regula Susana Siegfried , 50 , and Nicola Fleuchaus , 25 ,
+create view PersonAsSubject1 as
+select L.name as person
+from   OneOrTwoCapPerson L
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  MatchesRegex(/\s*[,]\s*\d{1,2}\s*[,]\s*.*/, RightContext(L.name, 10));
+  
+--create view PersonAsSubject2 as
+--extract
+--	pattern <P.name><L.name>
+--	return group 0 as person
+--from   PersonDict P,
+--	   OneOrTwoCapPerson L
+--having Not(ContainsRegex(/[\r\n\t]/, L.name))
+--  and  MatchesRegex(/.*[,]\s*/, LeftContext(L.name, 2))
+--  and  MatchesRegex(/\s*[,]\s*.*/, RightContext(L.name, 3));
+
+create view PersonAsVictims as
+select L.name as person
+from   OneOrTwoCapPerson L
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+	-- Sudarshan regex : 10/13/2011 - backreference on line 73
+  and  MatchesRegex(/.*\s*(((death|killing)\s*of)|victim\s*was)\s*/, LeftContext(L.name, 20))
+  and  MatchesRegex(/\s*[,.\r\n].*/, RightContext(L.name, 5));  
+  
+--- to identify names in "said *** " or with age "40-years-old"
+create view PersonAsSpeaker1 as
+select L.name as person
+from   OneOrTwoCapPerson L
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  --and  MatchesRegex(/.*\s*(([\s,]\s*said)|[^an]\s*\d{1,2}\s*-?\s*years?\s*-?\s*old)\s+/, LeftContext(L.name, 15))
+  -- Sudarshan regex : 10/13/2011 - backreference on lines 83 and 86		  
+  and  MatchesRegex(/.*\s*([^an]\s*\d{1,2}\s*-?\s*years?\s*-?\s*old)\s+/, LeftContext(L.name, 15))
+  -- Sudarshan regex : 10/13/2011 - changed regex on line 85 to 86 - unicode equivalent + combination mark detection
+  --and  MatchesRegex(/\s+,?\s*\p{Lower}{2}\s*.*/, RightContext(L.name, 10))
+  and  MatchesRegex(/\s+,?\s*(\p{Ll}\p{M}*){2}\s*.*/, RightContext(L.name, 10))
+  -- avoid matching "the 47-year-old Frenchman"
+  --and Not(ContainsDict('nationality.dict', L.name));
+  and Not(ContainsDict('per_nationalities_en.dict', L.name));
+  
+--- to identify names in " ,***, said"
+create view PersonAsSpeaker2 as
+select L.name as person
+from   OneOrTwoCapPerson L
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  MatchesRegex(/.*[,.]\s*/, LeftContext(L.name, 2))
+  -- Sudarshan regex : 10/13/2011 - backreference on line 97
+  and  MatchesRegex(/\s*[,]\s*(said|told|says)\s+.*/, RightContext(L.name, 10));
+
+
+-- to identify names in "***, a 40-years-old ..."
+create view PersonAsSpeaker3 as
+select L.name as person
+from   OneOrTwoCapPerson L
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+--  and  MatchesRegex(/.*[,.]\s*/, LeftContextTok(L.name, 1))
+  and  MatchesRegex(/\s*,\s*an?\s*\d{1,2}\s*-?\s*years?\s*-?\s*old\s+.*/, RightContextTok(L.name, 10));
+
+-- to identify names from weak dictionary
+-- Yunyao: added on 05/04/2010
+--         this rule may not be suitable for informal text
+create view PersonPerson as
+select CombineSpans(P1.name, P2.name) as person
+from PersonDict P1,
+	 PersonDict P2
+where FollowsTok(P1.name, P2.name, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(P1.name, P2.name)));
+
+-- introduce too much noise
+--output view PersonWithNationalityClue;
+
+create view PatternBasedPerson as
+	(select P.person as person from OfficialCandidates1 P)
+union all
+	(select P.person as person from PersonBeforeWhoClause P)
+union all
+	(select P.* from PersonAsSpeaker1 P)
+union all
+	(select P.* from PersonAsSpeaker2 P)
+union all
+	(select P.* from PersonAsSpeaker3 P)
+union all
+	(select P.* from PersonAsSubject1 P)
+--union all
+--	(select P.* from PersonAsSubject2 P)
+union all
+	(select P.* from PersonPerson P)
+union all
+	(select P.* from PersonAsVictims P);
+
+
+--output view OfficialCandidates1;
+--output view PersonBeforeWhoClause;
+--output view  PersonAsSpeaker1;
+--output view  PersonAsSpeaker2;
+--output view  PersonAsSpeaker3;
+--output view  PersonAsSubject1;
+--output view  PersonAsSubject2;
+--output view  PersonPerson;

@@ -1,0 +1,27 @@
+-- Customization for ACE2005
+-- Yunyao: created on 11/06/2009 to capture stand-alone state abbreviations
+create view StateStrongAbbrev1  as
+ extract 
+ 	dictionary
+ 		--'location/stateAbbrevs/stateListStrongAbbrev.dict'
+ 		'location/stateAbbrevs/loc_usa_states_abbrev_case_en.dict'
+    with flags 'Exact'
+ 		on D.text   
+        as match     
+        from Doc D;
+
+create view StateStrongAbbrev2  as
+    extract 
+ 	dictionaries 
+ 		--'location/stateAbbrevs/stateStrongAbbrv.ChicagoAPStyle.dict'
+ 		'location/stateAbbrevs/loc_usa_states_abbrev_chicagoAP_case_en.dict'
+    	on D.text   
+        as match     
+        from Doc D
+        -- Sudarshan regex doubt : 10/12/2011 : backreferences on line 20 
+    having MatchesRegex(/(\p{Lu}\p{M}*(\p{Lo}\p{M}*)+|(\p{Lo}\p{M}*\.?){2,}|(\p{Lu}\p{M}*\.?){2,})\.?/, match);
+    
+create view StateStrongAbbrevAll as
+	(select S.match as match from StateStrongAbbrev1 S)
+	union all
+	(select S.match as match from StateStrongAbbrev2 S);

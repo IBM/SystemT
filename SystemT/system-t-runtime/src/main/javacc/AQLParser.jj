@@ -1,0 +1,3920 @@
+// Parser for AQL files
+
+options { 
+	STATIC = false;	
+//	JDK_VERSION = "5.0";
+	DEBUG_PARSER = false;
+	DEBUG_TOKEN_MANAGER = false;
+	//USER_TOKEN_MANAGER = true; 
+	UNICODE_INPUT = true;
+	COMMON_TOKEN_ACTION = true;
+}
+
+PARSER_BEGIN(AQLParser)
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+package com.ibm.avatar.aql;
+
+import java.io.*;
+import java.util.*;
+import java.util.regex.*; 
+import com.ibm.avatar.api.Constants;
+import com.ibm.avatar.api.exceptions.*;  
+import com.ibm.avatar.aql.catalog.*;
+import com.ibm.avatar.aql.doc.AQLDocComment;
+import com.ibm.avatar.aql.PatternExpressionNode.GroupType;
+import com.ibm.avatar.algebra.util.data.*;
+import com.ibm.avatar.algebra.util.dict.DictParams;
+import com.ibm.avatar.algebra.datamodel.Pair;
+import com.ibm.avatar.algebra.util.file.SearchPath; 
+import com.ibm.avatar.logging.*;
+
+
+/**
+ * Main entry point for the AQL file parser.
+ * 
+ * NOTE: This class is GENERATED from AQLParser.jj!!!
+ */
+@SuppressWarnings("all")
+public class AQLParser extends AQLParserBase {
+	
+	// NOTE: Wherever possible, put fields and methods into the AQLParserBase class.
+	// The AQL parser grammar file is large enough already!
+
+
+	/** Convenience constructor for reading from a string. */
+	public AQLParser(String s)throws IOException, ParseException {
+		this(new StringReader(s));
+		clearFileStack();
+		setFile(null);
+		setProcessIncludedFile(true);
+	}
+	
+	/** Main constructor for parsing a file. */
+	public AQLParser(File f, String encoding)throws IOException, ParseException {
+		this(f, encoding, false);
+	}
+	
+	/** Internal constructor; takes care of clearing the file stack if necessary. */
+	protected AQLParser(File f, String encoding, boolean isInclude) 
+		throws IOException, ParseException
+	{
+		this(
+			new BufferedReader(
+				new InputStreamReader(
+					new FileInputStream(f), encoding
+				)
+			)
+		);
+		
+		// Make sure that this file is in the expected encoding.
+		verifyEncoding(f, encoding);
+		
+		if (false == isInclude) {
+			// Top-level AQL file; make sure the file stack is empty.
+			clearFileStack();
+		}
+		
+		setFile(f);
+        setFileEncoding(encoding);
+		setProcessIncludedFile(true);
+		
+		// Add filename to our local "token" variable.
+		token = new Token();
+	}
+	
+	
+	public AQLParser(File f)throws IOException, ParseException {
+		this(f, DEFAULT_ENCODING);
+	}
+
+	public AQLParser(String aql,String aqlFilename){
+		this(new StringReader(aql));
+		this.aqlFilename = aqlFilename;
+		clearFileStack();
+	}
+	
+
+    /**
+   	 * Return the most recently parsed AQL Doc comment that can be attached to a statement starting at the input token,
+   	 * or null if no such AQL Doc comment exists. This method should be called after parsing the first token of each top-level statement
+   	 * that is allowed to have an AQL Doc comment. Calling this method results in clearing the comments buffer
+   	 * in order to prepare it to store the next batch of AQL Doc comments.
+   	 * 
+   	 * Note: we place this method in AQLParser.jj as opposed to the superclass AQLParserBase
+   	 * because we need access to the generated Token Manager, which is not available in AQLParserBase.
+     */
+    protected AQLDocComment consumeAqlDocComment(Token token){
+		
+      // Set this flag to true to generate information about the AQL doc comments processing in this method
+  	  final boolean debug = false;
+
+      // Get the most recent list of comments from the Token Manager
+      List<AQLDocComment> comments = token_source.getComments();
+
+      // No AQL Doc comment encountered so far. Just return null.
+      if(comments.size() == 0)
+      	return null;
+      	
+      AQLDocComment ret = null;
+
+      // Get the last AQL Doc comment that we encountered
+      AQLDocComment c = comments.get(comments.size() - 1);
+
+      // Verify that this comment is indeed associated with the statement we're currently parsing.
+      // This verification entails checking the following:
+      // (1) There is no valid statement between the end of the comment and the input token;
+      // (2) The comment does not appear in the middle of a statement
+      // (3) There is no parse exception between the end of the comment and the input token.
+      // Note that as soon as we attach a AQL doc comment to a statement -- see (**),
+      // or consume a single regular token for that matter -- see (***),
+      // we immediately clear the comments buffer.
+      // Therefore, it is guaranteed that case (1) can never happen (otherwise we would have already
+      // associated the comment with that other statement).
+      // Also note that we always clear the comments buffer when encountering a semi colon (end of statement).
+      // Therefore, case (2) also cannot happen (we consume the AQL Doc along with the first token of a statement,
+      // and clear any AQL DOc comments encountered between the beginning of a statement and the next semi colon.
+      // Therefore, we only need to verify case (3).
+
+      // Verify case (3): there is no ParseException between the end of the comment and the current statement
+      boolean foundExtraParseException = false; 
+      LinkedList<ParseException> errors = statementList.getParseErrors();
+      if(errors.size() > 0)
+      {
+        // It is sufficient to examine the very last ParseException encountered.
+        // If the last ParseException falls outside the region of interest,
+        // then so are any other ParseExceptions encountered before this last one.
+		ParseException e = errors.get(errors.size() - 1);
+
+		// Check that we have line info for the ParseException, this should always be the case...
+		// If the error is at line 0, then it means we have a ParseException that is not associated with any token information.
+		// We are being conservative and will not associate any AQL Doc comment.
+		if(0 == e.getLine())
+			foundExtraParseException = true;		
+
+		// Exception occurs on a line after the end line of the AQL Doc comment, OR
+		// Exception found on the same line number, but a column after the end column of the AQL Doc comment 
+		if(c.getEndLine() <  e.getLine() ||
+		     ( c.getEndLine() == e.getLine() && c.getEndColumn() <  e.getColumn() ) )
+		     foundExtraParseException = true;	
+      }
+
+	  if( !foundExtraParseException)
+	  {
+	    // Have not found a ParseException, so we have a valid AQL Doc comment to return.
+	    if(debug)
+	    	Log.debug("\nConsumed AQL Doc comment:\n%s\n", c);
+	    // (**) Remove all of the comments to prepare the buffer for the next statement.
+	    token_source.clearComments();
+	    // Return the comment
+      	return c;
+      }
+
+	  // (***) If we get here, we have not found a valid AQL doc comment to attach to the input token.
+	  // But still, we want to clear the comments buffer so existing comments are not considered for
+	  // any of the following statements.
+	  token_source.clearComments();
+      return null;
+    }
+
+	/**
+	*	Sets the tab size of parser's input stream to the given tabSize. Use this API to synchronize tab sizes of the parser and consumer.
+	*/
+    public void setTabSize(int tabSize)
+    {
+        if(null != jj_input_stream)
+        {
+            jj_input_stream.setTabSize(tabSize);
+		}
+    }
+  }
+
+PARSER_END(AQLParser)
+
+//
+// LEXER
+//
+SKIP :
+{
+  " "
+| "\t"
+| "\n"
+| "\r"
+| "\u00a0"  // Lotus Notes' "right shift" character
+}
+
+TOKEN_MGR_DECLS: 
+{
+  /** A list of AQL Doc comments encountered during parsing. */
+  private final List<AQLDocComment> comments = new ArrayList<AQLDocComment> ();
+
+  List<AQLDocComment> getComments ()
+  {
+    return comments;
+  }
+
+  void clearComments ()
+  {
+    comments.clear ();
+  }
+
+  /**
+   * This method is called by the Token Manager for every regular token,
+   * provided that the parser option COMMON_TOKEN_ACTION is set to true.
+   *
+   * Brief token manager tutorial: the AQLParser's token manager parses comments
+   * (single line, multi line and AQL doc) as special tokens.
+   * Consecutive special tokens are chained to each other, that is, each special token
+   * is stored in the "special" field of the next special token, with the last special
+   * token in the series stored in the "special" field of the next regular token.
+   * End token manager tutorial
+   * 
+   * For each regular token, this method traverses backwards the chain of special tokens
+   * and records the first AQL Doc comment encountered in this traversal.
+   * In addition, if the token is a semi colon (end of statement), this method also clears
+   * up any AQL Doc comments stored so far, for the purpose of avoiding the incorrect association
+   * of an AQL DOc comment that appears in the middle of a statement with the next statement,
+   * whenever the next statement does not have its own AQL doc comment.
+   */
+  private void CommonTokenAction(Token token) {
+
+      // Set this flag to true to generate information about the AQL doc comments processing in this method
+  	  final boolean debug = false;
+  	  
+      if(debug)
+        Log.debug("\nIn CommonTokenAction for '%s'", token.image);
+
+      // If we reach the end of a statement, clear up the comments buffer.
+      // It is safe to do so, because any AQL doc comment should appear before
+      // the beginning of this statement for the comment to be valid.
+      // If such a comment existed, it was already attached and the buffer cleared at that point.
+      // So we are now clearing only AQL Doc comments that appear in the middle of a statement.
+      // Note that we are also completely ignoring any comments that appear immediately before the semi colon.
+      if(token.kind == AQLParserConstants.SEMICOLON)
+      {
+        clearComments();
+        return;
+      }
+
+      // If there are no special tokens, do nothing
+      if ( null == token.specialToken )
+      	return;
+
+      // Otherwise, we have at least one special token.
+      // Walk backwards through special tokens starting from the input (regular) token until
+      // we reach the last special token before the input regular token that represents an AQL doc comment.
+      Token tmpToken = token;
+      while (tmpToken.specialToken != null) {
+          Token special = tmpToken.specialToken;
+          if(special.kind == AQL_DOC_COMMENT) {
+              if(debug)
+        		Log.debug("\nCreating AQL Doc comment: \n%s\n", special.image);
+              AQLDocComment aqlDoc = new AQLDocComment(special.beginLine, special.beginColumn, special.endLine, special.endColumn, special.image);         
+              comments.add(aqlDoc);
+              return;
+          } else if(special.kind == SINGLE_LINE_COMMENT) {
+              if(debug)
+                Log.debug("\nCreating single line comment: \n%s\n", special.image);
+              // do nothing
+          } else if(special.kind == MULTI_LINE_COMMENT) {
+              if(debug)
+                Log.debug("\nCreating multi line comment: \n%s\n", special.image);
+              // do nothing
+          }
+
+          // Continue processing the previous special token
+          tmpToken = special;
+      }
+    }
+}
+
+// COMMENTS
+// JavaCC's lexer handles comments (and other ambiguous tokens) differently
+// from normal tokens.
+MORE :
+{
+	"--" : IN_SINGLE_LINE_COMMENT
+}  
+
+<IN_SINGLE_LINE_COMMENT>
+SPECIAL_TOKEN :
+{
+	<SINGLE_LINE_COMMENT : (~["\n","\r"])* ("\n"|"\r"|"\r\n")? > : DEFAULT
+}
+
+<IN_SINGLE_LINE_COMMENT>
+MORE :
+{
+	< ~[] >
+}
+
+
+// Multi-line comments; implementation of technique described in the JavaCC docs at
+// http://www.idevelopment.info/data/Programming/java/JavaCC/The_JavaCC_FAQ.htm#more
+// When a /* is seen in the DEFAULT state, skip it and switch to the IN_MULTI_LINE_COMMENT state
+MORE :
+{
+	< "/**" ~["/"] > { input_stream.backup(1); } : IN_AQL_DOC_COMMENT
+|
+	< "/*" > : IN_MULTI_LINE_COMMENT
+} 
+     
+// When any other character is seen in the IN_AQL_DOC_COMMENT or IN_MULTI_LINE_COMMENT states, skip it.
+< IN_AQL_DOC_COMMENT, IN_MULTI_LINE_COMMENT >
+MORE : { <  ~[] > } 
+
+SPECIAL_TOKEN : /* AQL DOC COMMENTS */
+{
+	<AQL_DOC_COMMENT: "/**" (~["*"])* "*" ("*" | (~["*","/"] (~["*"])* "*"))* "/"> 
+}
+
+SPECIAL_TOKEN : /* MULTI LINE COMMENTS */
+{
+	<MULTI_LINE_COMMENT: "/*" (~["*"])* "*" ("*" | (~["*","/"] (~["*"])* "*"))* "/"> 
+}
+
+
+TOKEN :
+{
+	//////////////////////////////////////////////////////////////////////
+	// KEYWORDS
+	// KEEP IN ALPHABETICAL ORDER
+	<AND		: "and">
+	| <ALL		: "all">
+	| <ALLOW_EMPTY : "allow_empty">
+	| <ALLOW_EMPTY_FILESET 	: "allow empty_fileset">
+	| <ALWAYS	: "always">
+	| <ANNOTATE	: "annotate">
+	| <AS 		: "as">
+	| <ASCENDING  : "ascending">
+	| <ASCII    : "ascii">
+	| <ATTRIBUTE: "attribute">
+	
+	| <BETWEEN	: "between">
+	| <BLOCKS	: "blocks">
+	| <BOTH		: "both">
+	| <BY		: "by">
+	
+	| <CALLED   : "called">
+	| <CASE		: "case">
+	| <CAST		: "cast">
+	| <CCSID    : "ccsid">
+	| <CHARACTER : "character">
+	| <CHARACTERS : "characters">
+	| <COLUMNS : "columns">
+	| <CONSOLIDATE	: "consolidate">
+	| <CONTENT_TYPE : "content_type">
+	| <COUNT	: "count">
+	| <CREATE 	: "create">
+
+	//Keyword for 'default' is 'DEFAULT_AQL' and not 'DEFAULT', since 'DEFAULT' conflicts with one of javacc lexical state 
+	| <DEFAULT_AQL : "default" > 
+    | <DESCENDING    :"descending" >
+	| <DETAG 	: "detag">
+	| <DETECT	: "detect">
+	| <DETERMINISTIC: "deterministic">
+	| <DICTIONARY	: "dictionary">
+	| <DICTIONARIES	: "dictionaries">
+	| <DOCUMENT : "document">
+	
+	| <ELEMENT	: "element">
+	| <ELSE		: "else">
+	| <ENTRIES	: "entries">
+	| <EXACT 	: "exact">
+	| <EXPORT	: "export">
+	| <EXTERNAL : "external">
+	| <EXTERNAL_NAME : "external_name">
+	| <EXTRACT  : "extract">
+	
+	| < FALSE : "false" >	
+	//| <FETCH	: "fetch">
+	| <FILE		: "file">
+	//| <FIRST	: "first">
+	| <FLAGS	: "flags">
+	| <FOLDING	: "folding">
+	| <FROM 	: "from">
+	| <FUNCTION : "function">
+	
+	| <GROUP	: "group">
+	
+	| <HAVING	: "having">
+
+	| <IMPORT	: "import">	
+	| <IN		: "in">
+	| <INCLUDE	: "include">
+	| <INLINE_MATCH	: "inline_match">
+	| <INPUT    : "input">
+	| <INTO		: "into">
+	| <INSENSITIVE : "insensitive">
+	
+	| <JAVA : "java">
+	
+	| <LANGUAGE : "language">
+	| <LEFT		: "left">
+	| <LEMMA_MATCH : "lemma_match">
+	| <LIKE     : "like">
+	| <LIMIT	: "limit">
+	| <LOCATOR	: "locator">
+	
+	//| <MATCHING : "matchingRegex">
+	| <MAPPING	: "mapping">
+	| <MINUS	: "minus">
+	| <MODULE   : "module">
+	
+	//| <NAME     : "name">
+	| <NEVER	: "never">
+	| <NOT      : "not">
+	| <NULL		: "null">
+	
+	| <ON		: "on">
+	//| <ONLY		: "only">
+	| <ORDER	: "order">
+	| <OUTPUT	: "output">
+	
+	| <PART_OF_SPEECH	: "part_of_speech">
+	| <PARTS_OF_SPEECH	: "parts_of_speech">
+	| <PARAMETER: "parameter">
+	| <PATTERN	: "pattern">
+	| <PMML		: "pmml">
+	| <POINT	: "point">
+	| <POINTS	: "points">
+	| <PRIORITY	: "priority">
+	
+	| <REGEX	: "regex">
+	| <REGEXES	: "regexes">
+	| <REQUIRE  : "require">
+	| <REQUIRED : "required" >
+	| <RETAIN	: "retain">
+	| <RETURN	: "return">
+	| <RIGHT	: "right">
+	//| <ROWS		: "rows">
+	
+	| <SELECT 	: "select">
+	| <SEPARATION : "separation">
+	| <SET : "set" >
+	| <SPECIFIC : "specific">
+	| <SPLIT	: "split">
+	
+	| <TABLE	: "table">	
+	| <TAGGER	: "tagger">
+	| <THEN		: "then">
+	| <TOK		: "token">
+	| <TOKS		: "tokens">
+	// For sequence pattern token gap feature - note capitalization
+	| <TOKEN_GAP: "Token">
+	| < TRUE : "true" >	
+	
+	//| <UP		: "up">
+	| <UNICODE  : "unicode">
+	| <UNION	: "union">
+	| <USING	: "using">
+	
+	| <VALUES	: "values">
+	| <VIEW 	: "view">
+	| <VIEWS	: "views">
+	
+	| <WHEN		: "when">
+	| <WHERE	: "where">
+	| <WITH 	: "with">
+	
+
+	//////////////////////////////////////////////////////////////////////
+	// BUILT-IN TYPES (note capitalization!)
+	| <TEXT		: "Text">
+	| <SPAN		: "Span">
+	| <INTEGER_TYPE	: "Integer">
+	| <FLOAT_TYPE	: "Float">
+	| <STRING_TYPE : "String">
+	| <BOOLEAN_TYPE : "Boolean">
+	| <LIST_TYPE : "ScalarList">
+	
+	//////////////////////////////////////////////////////////////////////
+	// BUILT-IN TABLE FUNCTIONS
+	| <DICTIONARY_FN 	: "Dictionary">
+	| <REGEX_FN		: "Regex">
+	//| <CONSOLIDATE_FN	: "Consolidate">
+	| <BLOCK_FN		: "Block">
+	| <BLOCKTOK_FN		: "BlockTok">
+//	| <SENTENCE_FN		: "Sentence">
+//	| <TOKENIZE_FN 	: "Tokenize">
+	| <REGEXTOK_FN     : "RegexTok">
+	| <POSTAG_FN		: "PosTag">
+
+	
+	//////////////////////////////////////////////////////////////////////
+	// OTHER RESERVED WORDS
+	
+	// The "Output" string.  Must come before ATOM; otherwise ATOM would
+	// take the token.
+	//| <OUTPUT : "Output">
+	
+	// The "number" infinity.
+	| <INFINITY : "infinity">
+
+	// Special token definition to catch misspelled operator/predicate 
+	// names.
+	// Make sure that this guy comes after the other tokens, so that it 
+	// does not override them.
+	//| <INVALID_OPNAME : ["a"-"z","A"-"Z"](["a"-"z","A"-"Z","0"-"9","_"])*>
+	
+	//////////////////////////////////////////////////////////////////////
+	// LITERALS
+	
+	// The name of an optree or an existing annotation type.
+	// Note that the lexer has a funny regex syntax.  See:
+	// http://www.cs.utsa.edu/~danlo/teaching/cs4713/lecture/node12.html
+	|	<NICKNAME : ["a"-"z","A"-"Z","_"](["a"-"z","A"-"Z","0"-"9","_"])* >
+	
+	// A number with no decimal point
+	|	<INTEGER : ("-")? (["0"-"9"])+>
+	
+	// A number with decimal point
+	|	<FLOAT : ("-")? (["0"-"9"])+ "." (["0"-"9"])+>
+	
+	// A double-quoted string literal, in a single regex
+	|	<DBLQUOTE_STRING_LITERAL :
+		"\""
+	      (   (~["\"","\\","\n","\r"])
+	        | ("\\"
+	            ( ["n","t","b","r","f","\\","'","\""]
+	            | ["0"-"7"] ( ["0"-"7"] )?
+	            | ["0"-"3"] ["0"-"7"] ["0"-"7"]
+	            )
+	          )
+	      )*
+	      "\""
+	  	> 
+	// SQL-style string literal in single quotes
+	|	<SQL_STRING_LITERAL :
+		"'"
+	      (   (~["'","\\","\n","\r"])
+	        | ("\\"
+	            ( ["n","t","b","r","f","\\","'","\""]
+	            | ["0"-"7"] ( ["0"-"7"] )?
+	            | ["0"-"3"] ["0"-"7"] ["0"-"7"]
+	            // Java-style Unicode escapes (e.g. \u1234)
+	            | "u" ["0"-"3"] ["0"-"7"] ["0"-"7"]
+	            )
+	          )
+	      )*
+	      "'"
+	  	>
+	  
+	
+	
+	// A regular expression in the form /expr/
+	|	<REGEX_LITERAL : 
+		"/"
+	      ( 
+	      	(~["/","\n","\r"]) 
+	        | ("\\" "/")
+	      )*
+	     "/">
+
+	/* SEPARATORS */
+	| < SEMICOLON: ";" >
+	      
+} 
+
+//
+// PARSER
+// 
+
+// The file consists of some subtree expressions, followed by an "Output" line.
+void __inputInternal() :
+{
+	AQLParseTree subtree;
+	AQLParseTreeNode topLevelParseTreeNode = null;
+}
+{
+	// We don't return anything, because all relevant information is being
+	// put into the StatementList.
+		(
+			try
+			{
+			   LOOKAHEAD(3) topLevelParseTreeNode = CreateViewStmt()
+				| LOOKAHEAD(4) topLevelParseTreeNode = CreateDictStmtWithEntriesFromTableOrFile() 
+				| LOOKAHEAD(3) topLevelParseTreeNode = CreateDictStmtWithInlinedEntries()
+				| LOOKAHEAD(3) topLevelParseTreeNode = CreateTableStmt()
+				| LOOKAHEAD(3) topLevelParseTreeNode = CreateExternalViewStmt()
+				| LOOKAHEAD(3) topLevelParseTreeNode = CreateFunctionStmt()
+				| LOOKAHEAD(3) topLevelParseTreeNode = CreateExternalDictionaryStmt()
+				| LOOKAHEAD(3) topLevelParseTreeNode = CreateExternalTableStmt()
+				/* fixes defect# 14453:parser return an incorrect error line# and incorrect error message .
+ 				 * Incorrect error message for create statement like 
+ 				 * "create followed by some token which is not (view|table|function|external view|dictionary)
+ 				 * This condition handles incorrect create statement and throw hardcoded parse
+ 				 * exception.
+ 				 * I will be raising a defect against JAVACC guys to fix this issue, once fixed we can to
+ 				 * remove this
+				*/
+				| LOOKAHEAD({
+								  getToken(1).kind == CREATE &&
+								  getToken(2).kind != VIEW &&
+                                  getToken(2).kind != DICTIONARY &&
+                                  getToken(2).kind != TABLE &&
+                                  getToken(2).kind != FUNCTION &&
+								  getToken(2).kind != EXTERNAL
+								}) 	incorrectCreateStmt()
+				// Following production handle "create < view | dictionary | table | function > non-nickname ..."
+				| LOOKAHEAD({
+								  getToken(1).kind == CREATE &&
+								  (
+                                    getToken(2).kind == VIEW ||
+								  	getToken(2).kind == DICTIONARY ||
+								  	getToken(2).kind == TABLE ||
+								  	getToken(2).kind == FUNCTION
+								  ) &&
+								  getToken(3).kind != AQLParserConstants.NICKNAME
+								}) 	incorrectCreateStmt3()								
+				| LOOKAHEAD({
+                                  getToken(1).kind == CREATE &&
+				  				  getToken(2).kind == EXTERNAL &&
+				  				  getToken(3).kind != VIEW &&
+				  				  getToken(3).kind != DICTIONARY &&
+				  				  getToken(3).kind != TABLE
+				  				})  incorrectCreateStmt2()				   
+
+				| topLevelParseTreeNode = SelectIntoStmt()
+				| topLevelParseTreeNode = DetagDocStmt()
+				| topLevelParseTreeNode = IncludeStmt()
+				| topLevelParseTreeNode = OutputViewStmt()
+				| topLevelParseTreeNode = SetDefaultDictLangStmt()
+				| topLevelParseTreeNode = ModuleStmt()
+				| topLevelParseTreeNode = RequireColumnsStmt()
+				
+				//Import statements
+				| LOOKAHEAD(5) topLevelParseTreeNode = ImportModuleStmt()
+				| LOOKAHEAD(5) topLevelParseTreeNode = ImportViewStmt()
+				| LOOKAHEAD(5) topLevelParseTreeNode = ImportDictStmt()
+				| LOOKAHEAD(5) topLevelParseTreeNode = ImportTableStmt()
+				| LOOKAHEAD(5) topLevelParseTreeNode = ImportFuncStmt()
+				| LOOKAHEAD({
+								  getToken(1).kind == IMPORT &&
+								  getToken(2).kind != VIEW &&
+								  getToken(2).kind != DICTIONARY &&
+								  getToken(2).kind != TABLE &&
+								  getToken(2).kind != FUNCTION 
+								}) 	incorrectImportStmt()
+				| LOOKAHEAD({
+								  getToken(1).kind == IMPORT &&
+								  (
+                                    getToken(4).kind != FROM ||
+								  	getToken(5).kind != MODULE)   
+								}) 	incorrectImportStmt2()
+
+				//Export statements
+				| LOOKAHEAD(2) topLevelParseTreeNode = ExportViewStmt()
+				| LOOKAHEAD(2) topLevelParseTreeNode = ExportDictStmt()
+				| LOOKAHEAD(2) topLevelParseTreeNode = ExportTableStmt()
+				| LOOKAHEAD(2) topLevelParseTreeNode = ExportFuncStmt()
+				| LOOKAHEAD({
+								  getToken(1).kind == EXPORT &&
+								  getToken(2).kind != VIEW &&
+								  getToken(2).kind != DICTIONARY &&
+								  getToken(2).kind != TABLE &&
+								  getToken(2).kind != FUNCTION
+								}) 	incorrectExportStmt()
+
+			}
+			catch (ParseException pe)
+			{
+			  	error_skipto(pe,AQLParserConstants.SEMICOLON);
+			}
+			{
+				if (topLevelParseTreeNode != null)
+				{
+				  // v2.0+ has strict ordering of statements -- module statements, then imports, then regular
+				  // v1.3 has no strict ordering so every statement gets added
+				  if (false == compatibilityMode)
+                  {
+
+					// identify whether this statement is an import statement
+					if (topLevelParseTreeNode instanceof ImportModuleNode) importStatement = true;
+        			else if (topLevelParseTreeNode instanceof AbstractImportNode) importStatement = true;
+        			else importStatement = false;
+
+					// first statement in AQL v2.0+ must be module statement 
+        			if (phase == Phase.MODULE_PHASE)
+        			{
+          				if (false == (topLevelParseTreeNode instanceof ModuleNode))
+          				{
+          				  	// Defect #26474 stated that this error message should be at beginning of statement
+          				  	// Currently setting to line 1, col 1 -- there is no information about the beginning of the statement currently stored
+          				    token.beginLine = 1;
+          				    token.beginColumn = 1;
+            				ParseException pe = makeException("First statement of AQL file must be module declaration", token);
+            				statementList.addParseError(new ExtendedParseException(pe, new File(curFileName())));
+          				}
+          				phase = Phase.IMPORT_PHASE;
+          				
+          			// all statements are accepted in this phase, but a non-import statement changes the phase
+        			} else if (phase == Phase.IMPORT_PHASE)
+        			{
+        			  if (false == importStatement)
+                      {
+                          phase = Phase.NO_IMPORT_PHASE;
+        			  }
+
+        			// all import statements are rejected in this phase
+        			} else if (phase == Phase.NO_IMPORT_PHASE)
+        			{
+                        if (true == importStatement)
+                        {
+                            ParseException pe = makeException("Import statement must be declared after module statement and before all non-import statements.", token);
+            			statementList.addParseError(new ExtendedParseException(pe, new File(curFileName())));
+            		  }
+
+            		// unknown phase -- we should never get here
+        			} else
+                    {
+                        ParseException pe = makeException("Parser reached unknown phase.", token);
+            			statementList.addParseError(new ExtendedParseException(pe, new File(curFileName())));
+            		}
+            	  }	
+
+        		  // we passed all the checks, add this statement to the statement list
+				  statementList.addParseTreeNode(topLevelParseTreeNode);
+				  topLevelParseTreeNode = null;
+				}
+			}
+				
+		)*
+
+		//handles unknown top level statement,later we need to handle this
+		//in grammar
+		{
+		  // Reaching here before reaching EOF implies we encountered unknown top level statement
+		  if( null!= token.next && token.next.kind != AQLParserConstants.EOF )
+		  {
+			int[][] exptokseq = new int[][] { { AQLParserConstants.CREATE},
+					{ AQLParserConstants.SELECT },
+					{ AQLParserConstants.OUTPUT },
+					{ AQLParserConstants.DETAG },
+					{ AQLParserConstants.SET },
+					{ AQLParserConstants.INCLUDE },
+					{ AQLParserConstants.REQUIRE },
+					{ AQLParserConstants.MODULE },
+					{ AQLParserConstants.IMPORT },
+					{ AQLParserConstants.EXPORT },
+					   };
+		    ParseException pe = new ParseException(token, exptokseq, tokenImage); 
+
+		    error_skipto(pe,AQLParserConstants.SEMICOLON);
+
+			// Start parse again
+		    __inputInternal();
+		  }
+		}
+		<EOF> 
+}
+
+//fix defect# 14453
+//method to handle incorrect create statement , which always throws parse error
+void incorrectCreateStmt() :
+{
+ Token createToken; 
+}
+{
+	createToken = <CREATE>
+	{
+			int[][] exptokseq = new int[][] { { AQLParserConstants.VIEW },
+					{ AQLParserConstants.TABLE },
+					{ AQLParserConstants.EXTERNAL },
+					{ AQLParserConstants.FUNCTION },
+					{ AQLParserConstants.DICTIONARY } };
+			throw new ParseException(createToken, exptokseq,tokenImage);
+	}
+}
+
+//fix defect# 14453
+//method to handle incorrect create statement , which always throws parse error
+void incorrectCreateStmt2() :
+{
+  Token lastCorrectToken;
+}
+{
+	<CREATE> lastCorrectToken = <EXTERNAL>  
+	{
+			int[][] exptokseq = new int[][] { { AQLParserConstants.VIEW },
+					{ AQLParserConstants.TABLE },
+					{ AQLParserConstants.DICTIONARY } };
+			throw new ParseException(lastCorrectToken, exptokseq,tokenImage);
+	}
+}
+
+// Method to handle following incorrect create statement.
+// create < view | dictionary | table | function > non-nickname ... 
+void incorrectCreateStmt3() :
+{
+    Token lastCorrectToken;
+}
+{
+    <CREATE> (
+    			lastCorrectToken = < DICTIONARY >
+    			| lastCorrectToken = < TABLE >
+    			| lastCorrectToken = < VIEW >
+    			| lastCorrectToken = < FUNCTION >
+    		)
+  {
+      int[][] exptokseq = new int[][] { { AQLParserConstants.NICKNAME }};
+    		throw new ParseException(lastCorrectToken, exptokseq,tokenImage);
+  }
+}
+
+//method to handle incorrect import statement , which always throw parse error
+void incorrectImportStmt() :
+{
+ Token importToken; 
+}
+{
+	importToken = <IMPORT>
+	{
+			int[][] exptokseq = new int[][] { { AQLParserConstants.VIEW },
+					{ AQLParserConstants.TABLE },
+					{ AQLParserConstants.FUNCTION },
+					{ AQLParserConstants.DICTIONARY } };
+			throw new ParseException(importToken, exptokseq,tokenImage);
+	}
+}
+
+//method to handle incorrect import statement , which always throw parse error
+void incorrectImportStmt2() :
+{
+ Token importToken; 
+}
+{
+	importToken = <IMPORT> (< DICTIONARY > | < TABLE > | < VIEW > | < FUNCTION > ) 
+	{
+			int[][] exptokseq = new int[][] { { AQLParserConstants.FROM, AQLParserConstants.MODULE } };
+			throw new ParseException(importToken, exptokseq, tokenImage);
+	}
+}
+
+//method to handle incorrect export statement , which always throw parse error
+void incorrectExportStmt() :
+{
+ Token exportToken; 
+}
+{
+	exportToken = <EXPORT>
+	{
+			int[][] exptokseq = new int[][] { { AQLParserConstants.VIEW },
+					{ AQLParserConstants.TABLE },
+					{ AQLParserConstants.FUNCTION },
+					{ AQLParserConstants.DICTIONARY } };
+			throw new ParseException(exportToken, exptokseq,tokenImage);
+	}
+}
+
+// "include" statement; parse an external file and add its entries to our 
+// catalog.
+IncludeFileNode IncludeStmt() :
+{
+	StringNode fileNameNode;
+	Token t, endOfStmt;
+	boolean allowEmptyFileSet = false;
+}
+{
+	t = <INCLUDE>  fileNameNode = StringLiteral()
+	(
+	  <ALLOW_EMPTY_FILESET> { allowEmptyFileSet = true; }
+	)?
+	endOfStmt = <SEMICOLON>
+	{
+
+    if (false == compatibilityMode)
+    {
+      ParseException pe = makeException("The include statement is not supported in modular AQL code.  Remove the include statement, or compile in backward compatibility mode.", t);
+      statementList.addParseError(new ExtendedParseException(pe, new File(curFileName())));
+      processIncludedFile = false;
+      allowEmptyFileSet = true;
+    }else
+    {
+        if (null == includePath) {
+        	statementList.addParseError(makeException("Include path not set", t));
+        	processIncludedFile = false;
+    	}
+
+    	if(true == processIncludedFile)
+		{
+		    // Convert the file name or pattern into a list of one or more file names.
+		    // The second argument (TRUE) tells the search path generate an error if
+		    // it finds matches under more than one entry in the path. 
+		    ArrayList<File> toInclude;
+		    try {
+		        toInclude = includePath.resolveMulti(fileNameNode.getStr(), true);
+		    } catch (AmbiguousPathRefException e) {
+			    ParseException pe = makeException(e.getMessage(), t);
+		        statementList.addParseError(new ExtendedParseException(pe, new File(curFileName())));
+		        return new IncludeFileNode(fileNameNode, allowEmptyFileSet, curFileName(), t);
+		    }
+		
+		    // The include expression should match at least one file, unless the include
+		    // statement explictly specified that it's ok not to match anything.
+		    if (false == allowEmptyFileSet && 0 == toInclude.size()) {
+		      ParseException pe = makeException(
+		          String.format(
+		          	"Include expression does not match any files (include path is '%s')",
+		          	includePath) , t);
+		        statementList.addParseError(new ExtendedParseException(pe, new File(curFileName())));
+		    }
+		
+		    // At this point, toInclude should contain a list of the files to include,
+		    // in the (alphabetical) order to include them.
+		    for (File f : toInclude) {
+		      try
+		      {
+		        processInclude(f, fileNameNode);
+		      } catch(ParseException pe)
+		      {
+		        statementList.addParseError(new ExtendedParseException(pe, new File(curFileName())));
+		      }
+		        
+		    }
+		}//end: if processIncludedFile == true
+    }//end: if compatibility mode	  
+
+	IncludeFileNode ret = new IncludeFileNode(fileNameNode, allowEmptyFileSet, curFileName(), t);
+	ret.setEndOfStmtToken(endOfStmt);
+	return ret;
+}
+}
+
+// "module" statement; associate this AQL file with a particular module
+// required in v1.5, not supported in v1.3 -- eyhung
+ModuleNode ModuleStmt() :
+{
+  NickNode moduleName;
+  Token t;
+  Token endOfStmt;
+}
+{
+  t = < MODULE >
+  moduleName = NickLiteral()
+  endOfStmt = < SEMICOLON >
+  {
+    if (compatibilityMode)
+    {
+      ParseException pe = makeException("Module statement only supported in v2.0 and above.", t);
+      statementList.addParseError(new ExtendedParseException(pe, new File(curFileName())));
+      return null;
+    }
+    else
+    {
+      // check if this is not the first statement
+      if (statementList.getParseTreeNodes().size() > 0)
+      {
+        // check if we have already defined a module to identify multiple modules error 
+        if (statementList.getParseTreeNodes().getFirst() instanceof ModuleNode)
+        {
+          ParseException pe = makeException("Multiple modules declared; only one module per file allowed", t);
+          statementList.addParseError(new ExtendedParseException(pe, new File(curFileName())));
+        }
+        else
+        {
+          ParseException pe = makeException("Module declared after first statement of AQL file; must be first statement", t);
+          statementList.addParseError(new ExtendedParseException(pe, new File(curFileName())));
+        }
+      }
+    }
+    ModuleNode ret = new ModuleNode(moduleName, curFileName(), t);
+    
+    super.currentModule = moduleName.getNickname();
+    ret.setModuleName(super.currentModule);
+    ret.setEndOfStmtToken(endOfStmt);
+    return ret;
+  }
+}
+
+// 
+// A "detag document" statement
+// Yunyao Li: added 02/26/2008 to support HTML Detagger
+// Begin
+// update the class to DetagDocNode
+DetagDocNode DetagDocStmt() :
+{
+	NickNode detaggedDocName;
+	ArrayList<DetagDocSpecNode> specs = new ArrayList<DetagDocSpecNode>();
+	DetagDocSpecNode spec;
+	ColNameNode target = null;
+	DetagDocNode ret;
+	boolean outputDetaggedDocs = false;
+	boolean detectContentType = true;
+
+	Token firstTok, endOfStmt;
+	AQLDocComment comment = null;
+}
+{
+	firstTok = <DETAG>
+  	{
+		// This statement can have a AQL doc comment. Make sure to consume it
+		// immediately after consuming the first token of the statement,
+		// to avoid incorrectly consuming AQL Doc comments in the middle of the statement.
+    	comment = consumeAqlDocComment(firstTok);
+ 	}
+ 	target = ColumnName()
+    { 
+        // ColumnName() grammar allows strings not in the form Relation.column.
+        // Filter those out and generate a parse error if it's in the form
+        // Relation.
+        if (false == target.getHaveTabname()) {
+            throw AQLParserBase.makeException(target.getOrigTok(),
+                "Target of detag is '%s', which does not contain a column name. " + 
+                "The target of a detag statement must be in the form " + 
+                "<view>.<column> or <module>.<view>.<column>.",
+                target.toString()
+            );
+        }
+    }
+	(
+		<INTO> { outputDetaggedDocs = true; } 
+		| <AS> { outputDetaggedDocs = false; }
+	)
+	(	
+		detaggedDocName = NickLiteral()
+	)
+	{
+		//ensure that there is no '.' in detag view name
+    	if(elementNameContainsDot("view", detaggedDocName)) { return null; }
+	}
+	// (optional) DETECT CONTENT_TYPE clause
+	(
+		<DETECT> <CONTENT_TYPE> 
+		(
+			<ALWAYS> { detectContentType = true; }
+			| <NEVER> { detectContentType = false; }
+		)	
+	)?
+	// (optional) ANNOTATE clause
+	(
+	<ANNOTATE>
+		(
+			spec = DetagDocSpec() {specs.add(spec);}
+			("," spec = DetagDocSpec() {specs.add(spec);})*
+		)
+	)?
+	endOfStmt = <SEMICOLON>
+	{
+		ret = new DetagDocNode(target, detaggedDocName, specs, outputDetaggedDocs,
+			detectContentType, curFileName(), firstTok);
+
+		ret.setModuleName(currentModule);
+		ret.setEndOfStmtToken(endOfStmt);
+		ret.setComment(comment);
+		return ret;
+	}
+}
+
+DetagDocSpecNode DetagDocSpec() :
+{
+  	Token detagSpecTok;
+	StringNode tag;
+	NickNode tagType;
+	ArrayList<Pair<StringNode,NickNode>> attrsAndLabels
+		= new ArrayList<Pair<StringNode,NickNode>>();
+	StringNode attr;
+	NickNode label;
+}
+{
+	detagSpecTok = <ELEMENT> tag = StringLiteral()
+	<AS> tagType = NickLiteral()
+	{
+		//ensure that there is no '.' in detag view name
+    	if(elementNameContainsDot("view", tagType)) { return null; }
+	}
+	(
+		<WITH> <ATTRIBUTE>
+		attr = StringLiteral()
+		<AS>
+		label = NickLiteral()
+		{ attrsAndLabels.add(new Pair<StringNode,NickNode>(attr, label)); }
+		(
+			<AND> <ATTRIBUTE>
+			attr = StringLiteral()
+			<AS>
+			label = NickLiteral()
+			{ attrsAndLabels.add(new Pair<StringNode,NickNode>(attr, label)); }
+		)*
+	)?
+	{
+	    DetagDocSpecNode ret = new DetagDocSpecNode(tag, tagType, attrsAndLabels, curFileName(), detagSpecTok);
+	    ret.setModuleName(currentModule);
+		return ret;
+	}
+}
+// End
+
+// A "create dictionary dictName [with ..] as ('entry1', 'entry2', ...) ..." statement
+CreateDictNode CreateDictStmtWithInlinedEntries() :
+{
+	Token firstTok;
+	
+	NickNode tmpNick;
+	String dictname;
+	
+	DictParams params;
+	
+	// List containing entries from the declared inlined dictionary 
+	ArrayList<String> entries = new ArrayList<String>();
+	String entry;
+
+	Token endOfStmt;
+
+	AQLDocComment comment = null;
+
+	CreateDictNode ret = null;
+}
+{
+	firstTok = <CREATE>
+  	{
+		// This statement can have a AQL doc comment. Make sure to consume it
+		// immediately after consuming the first token of the statement,
+		// to avoid incorrectly consumming AQL Doc comments in the middle of the statement.
+    	comment = consumeAqlDocComment(firstTok);
+ 	}
+	<DICTIONARY> 
+	tmpNick = NickLiteral() { dictname = tmpNick.getNickname(); }
+	{
+		//ensure that there is no '.' in dictionary name
+    	if(elementNameContainsDot("dictionary", tmpNick)) { return null; }
+	}		
+	// Dictionary params
+	params = CreateDictParams(dictname)
+	
+	// Inline dictionary def
+	(	
+		<AS> 
+		"("
+			entry = StringLiteralNoNode() { entries.add(entry); }
+			( "," entry = StringLiteralNoNode() { entries.add(entry); } )*
+		")" 
+		{ 
+			params.setIsInline(true); 
+		 	ret = new CreateDictNode.Inline(curFileName(), firstTok);
+		 	((CreateDictNode.Inline)ret).setEntries(entries);
+		}
+	)
+	endOfStmt = <SEMICOLON>
+	
+	{ 
+		ret.setDictNameNode(tmpNick);
+		ret.setModuleName(currentModule);	
+		ret.setParams(params);	
+		ret.setEndOfStmtToken(endOfStmt);
+		ret.setComment(comment);
+		return ret;
+	}
+}
+
+// A "create dictionary dictName from [file|Table] ..." statement
+CreateDictNode CreateDictStmtWithEntriesFromTableOrFile() :
+{
+	Token firstTok;
+	
+	NickNode tmpNick;
+	String dictname;
+	
+	DictParams params;
+	
+	// Name of backing table, if dictionary created from a table.
+	NickNode tableName = null;
+	
+	// Name of dictionary file, if dictionary created from a file
+	StringNode fileName = null;
+	
+	Token endOfStmt;
+
+	AQLDocComment comment = null;
+
+	NickNode modulePrefix = null;
+	
+	CreateDictNode ret = null;
+}
+{
+	firstTok = <CREATE>
+  	{
+		// This statement can have a AQL doc comment. Make sure to consume it
+		// immediately after consuming the first token of the statement,
+		// to avoid incorrectly consumming AQL Doc comments in the middle of the statement.
+    	comment = consumeAqlDocComment(firstTok);
+ 	}
+	<DICTIONARY> 
+	tmpNick = NickLiteral() { dictname = tmpNick.getNickname(); }
+	{
+		//ensure that there is no '.' in dictionary name
+    	if(elementNameContainsDot("dictionary", tmpNick)) { return null; }
+	}	
+	(
+		<FROM>
+		(	// Dictionary from table or file
+			<FILE> fileName = StringLiteral() 
+				{ ret = new CreateDictNode.FromFile(curFileName(), firstTok); }
+			| <TABLE>
+				tableName = NickLiteralOptionalModule()  
+				{ ret = new CreateDictNode.FromTable(curFileName(), firstTok); }
+		)
+	)
+	
+	// Dictionary params
+	params = CreateDictParams(dictname)
+	{
+		params.setFileName(null == fileName ? null : fileName.getStr());
+		params.setTabName(null == tableName ? null : tableName.getNickname());
+	}
+	endOfStmt = <SEMICOLON>
+	{
+	  	ret.setDictNameNode(tmpNick);
+		ret.setModuleName(currentModule);	
+		ret.setParams(params);	
+		ret.setEndOfStmtToken(endOfStmt);
+		ret.setComment(comment);
+		return ret;
+	}
+}
+
+// Dictionary parameters for a "create dictionary" statement
+DictParams CreateDictParams(String dictname) :
+{
+	Pair<String,String> param;
+	StringNode langStr;
+	
+	// String representation of the dictionary parameters.
+	StringPairList paramStrs = new StringPairList();
+	paramStrs.add(DictParams.NAME_PARAM, dictname);
+
+	// whether the statement has "case exact" or "lemma_match". the two are exclusive
+	boolean lemmaExist = false;
+	boolean caseExactExist  = false;
+
+	Token currentToken;
+}
+{
+	(
+		currentToken = <WITH>
+		param = CreateDictParam() {
+		  if( param.first.equalsIgnoreCase("case") && param.second.equalsIgnoreCase("exact") )
+		  	caseExactExist = true;
+		  else if( param.first.equalsIgnoreCase("lemma_match") )
+		  	lemmaExist = true;
+		  // Throw an exception when "case exact" and "lemma_match" co-exist
+		  if( caseExactExist && lemmaExist )
+		  	throw new ParseException(String.format("line %d, column %d: 'case exact' and 'lemma_match' are not allowed in the same statement", currentToken.beginLine, currentToken.beginColumn));
+		  paramStrs.add(param);
+		}
+		( currentToken = <AND>
+		  param = CreateDictParam() {
+		    if( param.first.equalsIgnoreCase("case") && param.second.equalsIgnoreCase("exact") )
+		      caseExactExist = true;
+		    else if( param.first.equalsIgnoreCase("lemma_match") )
+		  	  lemmaExist = true;
+		    // Throw an exception when "case exact" and "lemma_match" co-exist
+		    if( caseExactExist && lemmaExist )
+		  	  throw new ParseException(String.format("line %d, column %d: 'case exact' and 'lemma_match' are not allowed in the same statement", currentToken.beginLine, currentToken.beginColumn));
+		    paramStrs.add(param);
+		  } )*
+	)?
+	{
+		return new DictParams(paramStrs);
+	}
+}
+
+// Single element in the AND-delimited list of dictionary parameters.
+Pair<String,String> CreateDictParam() :
+{
+	StringNode langStr;
+	NickNode colName;
+}
+{
+	( // [entries from <column name>)]
+		<ENTRIES> <FROM> colName = NickLiteral()
+		{ return new Pair<String,String>(DictParams.COLUMN_PARAM, 
+			colName.getNickname()); }
+	)
+	|
+	( // [language (as '<language code(s)>' | from <column name>)]
+		<LANGUAGE>
+		(
+			<AS> langStr = StringLiteral()
+			{ return new Pair<String,String>(DictParams.LANG_PARAM, langStr.getStr()); }
+			| <FROM> colName = NickLiteral()
+			{ 
+				throw makeException(
+					"Reading language from column not yet implemented", 
+					colName.getOrigTok());
+			}
+		)
+	)
+	|
+	( // [case  (exact | insensitive | folding | from <column name>)]
+		<CASE> 
+		(
+			<EXACT> { return new Pair<String,String>(DictParams.CASE_PARAM, 
+				DictParams.CaseSensitivityType.exact.toString()); }
+			| <INSENSITIVE> { return new Pair<String,String>(DictParams.CASE_PARAM, 
+				DictParams.CaseSensitivityType.insensitive.toString()); }
+			| <FOLDING> { return new Pair<String,String>(DictParams.CASE_PARAM, 
+				DictParams.CaseSensitivityType.folding.toString()); }
+			|  <FROM> colName = NickLiteral()
+			{ 
+				throw makeException(
+					"Reading case from column not yet implemented", 
+					colName.getOrigTok());
+			}
+		)
+	)
+	|
+	( // [and lemma_match [from <column name>]
+		<LEMMA_MATCH>
+			{ return new Pair<String,String>(DictParams.LEMMA_MATCH, "true"); }
+			| <FROM> colName = NickLiteral()
+			{ 
+				throw makeException(
+					"lemma_match from column name not yet implemented", 
+					colName.getOrigTok());
+			}
+	)
+}
+
+// A "create table" statement -- declare and populate a lookup table
+CreateTableNode CreateTableStmt() :
+{
+	NickNode tabName;
+	NickNode colName;
+	NickNode colType;
+	ArrayList<NickNode> colNames = new ArrayList<NickNode>();
+	ArrayList<NickNode> colTypes = new ArrayList<NickNode>();
+	ArrayList<Object[]> tups = new ArrayList<Object[]>();
+	Object[] tup;
+	
+	Token firstTok, endOfStmt;
+	AQLDocComment comment = null;
+	CreateTableNode ret = null;
+
+	// Name of table file, if table created from a file
+	StringNode fileName = null;
+}
+{
+	firstTok = <CREATE>
+  	{
+		// This statement can have a AQL doc comment. Make sure to consume it
+		// immediately after consuming the first token of the statement,
+		// to avoid incorrectly consuming AQL Doc comments in the middle of the statement.
+    	comment = consumeAqlDocComment(firstTok);
+ 	}
+ 	<TABLE> tabName = NickLiteral()
+ 	{
+        //ensure that there is no '.' in table name
+    	if(elementNameContainsDot("table", tabName)) { return null; }
+ 	}
+	// Schema
+	"("
+		colName = NickLiteral() { colNames.add(colName); }
+		colType = TypeLiteral() { colTypes.add(colType); }
+		( ","
+			colName = NickLiteral() { colNames.add(colName); }
+			colType = TypeLiteral() { colTypes.add(colType); }
+		)*
+	")"
+	(
+	  <AS> <VALUES>
+		// Tuples
+		//"("
+		// One benefit of a recursive-descent parser: You can parse
+		// the tuples differently depending on the schema.
+		tup = TupVals(colTypes) { tups.add(tup); }
+		( "," tup = TupVals(colTypes) { tups.add(tup); } )*
+		{ret = new CreateTableNode.Inline(tabName, colNames, colTypes, tups, curFileName(), firstTok);}
+		|
+	// table from file
+	  <FROM> <FILE> fileName = StringLiteral()
+	  
+		{ret = new CreateTableNode.FromFile(tabName, colNames, colTypes, fileName.getStr(), curFileName(), firstTok);}
+	
+	)
+	endOfStmt = <SEMICOLON>
+	{	
+	  	
+	  	ret.setModuleName(currentModule);
+	  	ret.setEndOfStmtToken(endOfStmt);
+	  	ret.setComment(comment);
+		return ret;
+	}
+}
+
+// An external view 
+CreateExternalViewNode CreateExternalViewStmt() :
+{
+	NickNode viewName;
+	StringNode externalName;
+	NickNode colName;
+	NickNode colType;
+	ArrayList<NickNode> colNames = new ArrayList<NickNode>();
+	ArrayList<NickNode> colTypes = new ArrayList<NickNode>();
+
+	Token firstTok, endOfStmt;
+	AQLDocComment comment = null;
+	CreateExternalViewNode ret = null;
+}
+{
+	firstTok = <CREATE>
+  	{
+		// This statement can have a AQL doc comment. Make sure to consume it
+		// immediately after consuming the first token of the statement,
+		// to avoid incorrectly consuming AQL Doc comments in the middle of the statement.
+    	comment = consumeAqlDocComment(firstTok);
+ 	}
+ 	<EXTERNAL> <VIEW> viewName = NickLiteral()
+ 	{	  	// ensure that there is no '.' in view name
+    	if(elementNameContainsDot("view", viewName)) { return null; }
+    }
+	// Schema
+	"("
+		colName = NickLiteral() { colNames.add(colName); }
+		colType = ExternalViewTypeLiteral() { colTypes.add(colType); }
+		( ","
+			colName = NickLiteral() { colNames.add(colName); }
+			colType = ExternalViewTypeLiteral() { colTypes.add(colType); }
+		)*
+	")"
+	<EXTERNAL_NAME> externalName = StringLiteral()
+	endOfStmt = <SEMICOLON>
+	{
+	  	ret = new CreateExternalViewNode(viewName, externalName, colNames, colTypes, curFileName(), firstTok);
+	  	ret.setModuleName(currentModule);
+	  	ret.setEndOfStmtToken(endOfStmt);
+	  	ret.setComment(comment);
+		return ret;					
+	}
+}
+
+//create external dictionary statement
+CreateDictNode CreateExternalDictionaryStmt() :
+{
+	Token firstTok;
+	
+	NickNode tmpNick;
+	String dictname;
+	
+	DictParams params;
+	StringNode allowEmpty;	
+	Token endOfStmt;	
+	CreateDictNode ret = null;
+	Token allowEmptyTok = null;
+	Token requiredTok = null;
+	BoolNode allowEmptyFlag = null;
+	BoolNode requiredFlag = null;
+	AQLDocComment comment = null;
+}
+{
+	firstTok = <CREATE>
+  	{
+		// This statement can have a AQL doc comment. Make sure to consume it
+		// immediately after consuming the first token of the statement,
+		// to avoid incorrectly consuming AQL Doc comments in the middle of the statement.
+    	comment = consumeAqlDocComment(firstTok);
+ 	} <EXTERNAL > <DICTIONARY>
+  {
+    if (isBackwardCompatibilityMode())
+    {
+      ParseException pe = makeException("create external dictionary statement only supported in v2.0+, ignoring...", firstTok);
+      error_skipto(pe,AQLParserConstants.SEMICOLON);
+      return null;
+    }
+  }
+	tmpNick = NickLiteral() { dictname = tmpNick.getNickname(); }
+	{	//ensure that there is no '.' in dictionary name
+    	if(elementNameContainsDot("dictionary", tmpNick)) { return null; } 
+	}
+	(	    allowEmptyTok = < ALLOW_EMPTY > allowEmptyFlag = BooleanLiteral() |
+        requiredTok = < REQUIRED > requiredFlag = BooleanLiteral()
+	)
+    
+	// Dictionary params
+	params = CreateDictParams(dictname)
+	{
+		params.setFileName(null);
+		params.setTabName(null);
+		params.setIsExternal(true);
+		
+		if (allowEmptyFlag != null) {            params.setAllowEmpty(allowEmptyFlag.getValue());
+		}
+
+		if (requiredFlag != null) {
+            params.setRequired(requiredFlag.getValue());
+		}
+        
+	}	  
+	endOfStmt = <SEMICOLON>
+  {
+    params.setIsInline(true);
+    //we represent external dictionary, as an empty inline dictionary with isExternal flag set to 'true'
+    ret = new CreateDictNode.Inline(curFileName(), tmpNick.getOrigTok());
+
+	ret.setDictNameNode(tmpNick);
+    ret.setModuleName(currentModule);
+    ret.setParams(params);
+    ret.setEndOfStmtToken(endOfStmt);
+    ret.setComment(comment);
+    return ret;
+  }
+}
+
+// A "create external table" statement 
+CreateTableNode CreateExternalTableStmt() :
+{
+  	Token firstTok;
+	NickNode tabName;
+	NickNode colName;
+	NickNode colType;
+	ArrayList<NickNode> colNames = new ArrayList<NickNode>();
+	ArrayList<NickNode> colTypes = new ArrayList<NickNode>();
+	StringNode allowEmpty;
+	
+	Token endOfStmt;
+	CreateTableNode ret = null;
+	Token allowEmptyTok = null;
+	Token requiredTok = null;
+	BoolNode allowEmptyFlag = null;
+	BoolNode requiredFlag = null;
+	AQLDocComment comment = null;
+}
+{
+  firstTok = <CREATE>
+  	{
+		// This statement can have a AQL doc comment. Make sure to consume it
+		// immediately after consuming the first token of the statement,
+		// to avoid incorrectly consumming AQL Doc comments in the middle of the statement.
+    	comment = consumeAqlDocComment(firstTok);
+ 	}  <EXTERNAL > <TABLE>
+  {
+    if (isBackwardCompatibilityMode())
+    {
+      ParseException pe = makeException("create external table statement only supported in v2.0+, ignoring...", firstTok);
+      error_skipto(pe, AQLParserConstants.SEMICOLON);
+      return null;
+    }
+  }
+	tabName = NickLiteral()
+	{    	//ensure that there is no '.' in table name
+    	if(elementNameContainsDot("table", tabName)) { return null; }
+	}
+	// Schema
+	"("
+		colName = NickLiteral() { colNames.add(colName); }
+		colType = TypeLiteral() { colTypes.add(colType); }
+		( ","
+			colName = NickLiteral() { colNames.add(colName); }
+			colType = TypeLiteral() { colTypes.add(colType); }
+		)*
+	")"
+	(
+	    allowEmptyTok = < ALLOW_EMPTY > allowEmptyFlag = BooleanLiteral() |
+        requiredTok = < REQUIRED > requiredFlag = BooleanLiteral()
+	)
+	endOfStmt = <SEMICOLON>
+  {
+    ret = new CreateTableNode.Inline(tabName, colNames, colTypes, null, curFileName(), firstTok);
+    ret.setModuleName(currentModule);
+    ret.setEndOfStmtToken(endOfStmt);
+    ret.setComment(comment);
+    ret.setIsExternal(true);
+
+    if (allowEmptyFlag != null) {
+		ret.setAllowEmpty(allowEmptyFlag.getValue());
+	}
+
+	if (requiredFlag != null) {
+		ret.setRequired(requiredFlag.getValue());
+	}
+    
+    return ret;
+  }
+}
+
+// A "create view" statement
+CreateViewNode CreateViewStmt() :
+{
+	NickNode viewname;
+	CreateViewNode ret;
+	Token firstTok, endOfStmt;
+	ViewBodyNode body = null;
+	AQLDocComment comment = null;
+}
+{  
+  	firstTok = <CREATE>
+  	{
+		// This statement can have a AQL doc comment. Make sure to consume it
+		// immediately after consuming the first token of the statement,
+		// to avoid incorrectly consuming AQL Doc comments in the middle of the statement.
+    	comment = consumeAqlDocComment(firstTok);
+ 	}
+    <VIEW> viewname = NickLiteral()
+    {	  	//ensure that there is no '.' in view name
+    	if(elementNameContainsDot("view", viewname)) { return null; }
+    }
+     
+	<AS> body = ViewBody() endOfStmt = <SEMICOLON>
+	
+	{
+		ret = new CreateViewNode(viewname, body, curFileName(), firstTok);
+		ret.setModuleName(currentModule);
+		ret.setEndOfStmtToken(endOfStmt);
+		ret.setComment(comment);
+		return ret;
+	}
+}
+
+// An "output view" statement
+OutputViewNode OutputViewStmt() :
+{
+    NickNode modulePrefix = null;
+	NickNode viewName, unqualifiedViewName;
+	StringNode altName = null;
+	ViewBodyNode body = null;
+	Token t;
+	OutputViewNode ret;
+
+	Token endOfStmt;	
+}
+{
+	t = <OUTPUT> <VIEW>
+
+	//Check if the output view statement refers to an imported view with its fully qualified name
+	(LOOKAHEAD(3) modulePrefix = NickLiteral() ".")?
+	  viewName = NickLiteral() 
+	  
+	( <AS> altName = StringLiteral() )?
+	
+	  endOfStmt = <SEMICOLON>
+	{
+	  	unqualifiedViewName = viewName;
+		if(modulePrefix != null)
+	    {
+	      viewName = prepareQualifiedNode( modulePrefix.getNickname(), viewName );  
+	    }
+
+	  	ret = new OutputViewNode(viewName, altName, curFileName(), t);
+
+		//set modulename only when the output view is not referring to a view in different module
+		//modulePrefix == null indicates that the view being output belongs to current module
+		// also, do not qualify the Document view, since we want to merge multiple
+		// "output view Document"s from multiple modules into one.
+	  	if (modulePrefix == null) 
+	  	{
+	  	  if (false == viewName.getNickname().equals("Document"))
+          {
+	  	    ret.setModuleName(currentModule);
+	  	  }
+	  	}
+	  	ret.setEndOfStmtToken(endOfStmt);
+
+	  	ret.setModulePrefixNickNode(modulePrefix);
+	  	ret.setUnqualifiedViewNameNickNode(unqualifiedViewName);
+	  	
+		return ret;
+	}
+}
+
+// For 1.5 -- the require document with columns statement
+RequireColumnsNode RequireColumnsStmt() :
+{
+  	Token t;
+	NickNode colName;
+	NickNode colType;
+	ArrayList<NickNode> colNames = new ArrayList<NickNode>();
+	ArrayList<NickNode> colTypes = new ArrayList<NickNode>();
+	
+	Token endOfStmt;
+	RequireColumnsNode ret = null;
+}
+{
+	t = <REQUIRE> <DOCUMENT> <WITH> <COLUMNS>
+	// Schema
+		colName = NickLiteral() { colNames.add(colName); }
+		colType = RequireColumnTypeLiteral() { colTypes.add(colType); }
+		( <AND>
+			colName = NickLiteral() { colNames.add(colName); }
+			colType = RequireColumnTypeLiteral() { colTypes.add(colType); }
+		)*
+
+	endOfStmt = <SEMICOLON>
+	{
+	  	ret = new RequireColumnsNode(colNames, colTypes, curFileName(), t);
+	  	ret.setEndOfStmtToken(endOfStmt);
+		return ret;
+	}
+}
+
+// set default dictionary language ... statement
+SetDefaultDictLangNode SetDefaultDictLangStmt() :
+{
+  Token firstTok, endOfStmt;
+  StringNode defaultLanguageSet;
+  SetDefaultDictLangNode ret;
+}
+{
+  firstTok = < SET > < DEFAULT_AQL > < DICTIONARY > < LANGUAGE > < AS > defaultLanguageSet = StringLiteral()
+  endOfStmt = < SEMICOLON >
+  {
+    if (isBackwardCompatibilityMode())
+    {
+      ParseException pe = makeException("set default dictionary language only supported in v2.0+, ignoring...", firstTok);
+      statementList.addParseError(new ExtendedParseException(pe, new File(curFileName())));
+      return null;
+    }
+    else
+    {
+      ret = new SetDefaultDictLangNode(defaultLanguageSet.getStr(), curFileName(), firstTok);
+      ret.setModuleName(currentModule);
+      ret.setEndOfStmtToken(endOfStmt);
+      return ret; 
+    }
+  }
+}
+
+// Body of a "create view" statement; also occurs in subqueries
+// called from the from clause.
+ViewBodyNode ViewBody() :
+{
+	ViewBodyNode ret;
+}
+{
+	(
+	  // Need to use lookahead because the extract pattern statement starts with a select list,
+	  // and we want to distinguish from the case of ExtractClause(), which starts in the same way
+	    LOOKAHEAD( <EXTRACT> ( SelectListItem() "," )* < PATTERN > ) ret = ExtractPatternClause()
+		| ret = SelectClause() 
+		| ret = ExtractClause()
+		| ret = CompositeViewBody()
+		//| LOOKAHEAD("(" ViewBody() ")" <UNION>) ret = UnionAll()
+		//| LOOKAHEAD("(" ViewBody() ")" <MINUS>) ret = Minus()
+	)
+	{
+
+	  return ret;
+	}
+}
+
+// Constructs like UNION ALL and MINUS confuse the poor parser generator,
+// so we need to do all such constructs in one production of the grammar.
+ViewBodyNode CompositeViewBody() :
+{
+	ArrayList<ViewBodyNode> stmts = new ArrayList<ViewBodyNode>();
+	ViewBodyNode stmt;
+	Token relTok, prevTok = null;
+}
+{
+		"(" stmt = ViewBody() { stmts.add(stmt); } ")"
+		(
+			( relTok = <UNION> <ALL> | relTok = <MINUS> )
+			{ 
+				// Make sure that we don't accept (foo) union all (bar) minus (fab)
+				if (prevTok != null && false == prevTok.image.equals(relTok.image)) {
+					throw makeException(
+						String.format("Used '%s' and '%s' in same view",
+							prevTok.image, relTok.image),
+							relTok);
+				}
+				prevTok = relTok;
+			}
+			"(" stmt = ViewBody() { stmts.add(stmt); } ")"
+		)+
+	{ 
+		// Create the appropriate kind of parse tree node, depending on how the 
+		// clauses were tied together.
+		if ("minus".equals(relTok.image)) {
+
+			if (stmts.size() != 2)
+            {
+                throw makeException(
+				  String.format("Encountered MINUS with %d statements.  MINUS can only have two statements.",
+				  	stmts.size()), relTok);
+			}
+			
+            // minus
+			return new MinusNode(stmts.get(0), stmts.get(1), curFileName(), relTok);
+		} else {
+			// union all
+			return new UnionAllNode(stmts, curFileName(), relTok);
+		}
+	}
+}
+
+// (select ...) union all (select ...) ...
+//UnionAllNode UnionAll() :
+//{
+//	ArrayList<ViewBodyNode> stmts = new ArrayList<ViewBodyNode>();
+//	ViewBodyNode stmt;
+//}
+//{
+//	"(" stmt = ViewBody() { stmts.add(stmt); } ")"
+//	(
+//		<UNION> <ALL> "(" stmt = ViewBody() { stmts.add(stmt); } ")" 
+//	)*
+//	
+//	{ return new UnionAllNode(stmts); }
+//}
+//
+//// (select ...) minus (select ...)
+//MinusNode Minus() :
+//{
+//	ViewBodyNode firstStmt, secondStmt;
+//}
+//{
+//	"(" firstStmt = ViewBody() ")"
+//	<MINUS>
+//	"(" secondStmt = ViewBody() ")"
+//	
+//	{ return new MinusNode(firstStmt, secondStmt); }
+//}
+
+// A "select into" statement.
+// In addition to creating a parse tree node, we add the appropriate entry to the 
+// symbol table.
+CreateViewNode SelectIntoStmt() : 
+{
+	Token firstTok, intoTok, consTok, groupTok, whereTok, orderTok, fromTok;
+	NickNode target;
+	SelectNode body;
+	SelectListNode selectList;
+	FromListNode fromList;
+	WhereClauseNode whereClause = null;
+	CreateViewNode ret;
+	GroupByClauseNode groupByClause = null;
+	OrderByClauseNode orderByClause = null;
+	ConsolidateClauseNode consolidateClause = null;
+	IntNode maxTup = null;
+	Token endOfStmt;
+	AQLDocComment comment = null;
+}
+{
+	firstTok = <SELECT>
+  	{
+		// This statement can have a AQL doc comment. Make sure to consume it
+		// immediately after consuming the first token of the statement,
+		// to avoid incorrectly consumming AQL Doc comments in the middle of the statement.
+    	comment = consumeAqlDocComment(firstTok);
+ 	}
+ 	selectList = SelectList(firstTok)
+	intoTok = <INTO> target = NickLiteral()
+	{
+    	//ensure that there is no '.' in view name
+    	if(elementNameContainsDot("view", target)) { return null; }
+	}
+	fromTok = <FROM> fromList = FromList(fromTok)
+	( whereTok = <WHERE> whereClause = WhereClause(whereTok) )?
+	( consTok = <CONSOLIDATE> <ON> consolidateClause = ConsolidateClause(consTok) )? 
+	( groupTok = <GROUP> <BY> groupByClause = GroupByClause(groupTok) )?
+	( orderTok = <ORDER> <BY> orderByClause = OrderByClause(orderTok) )?
+	( <LIMIT> maxTup = IntLiteral() )?
+	endOfStmt = <SEMICOLON>
+	
+	{ 
+		body = new SelectNode(selectList, fromList, whereClause, groupByClause, 
+			orderByClause, consolidateClause, maxTup, curFileName(), firstTok);
+		ret = new CreateViewNode(target, body, curFileName(), firstTok);
+		ret.setIsOutput(errLoc(intoTok), true, null);
+		ret.setEndOfStmtToken(endOfStmt);
+		ret.setModuleName(currentModule);
+		ret.setComment(comment);
+		return ret;
+	}
+}
+
+ExtractNode ExtractClause() :
+{
+	Token t, consTok, havingTok, fromTok;
+	ExtractListNode extractList;
+	FromListItemNode targetView;
+	HavingClauseNode havingClause = null;
+	ConsolidateClauseNode consolidateClause = null;
+	IntNode maxRows = null;
+}
+{
+	t = <EXTRACT> extractList = ExtractList(t)
+	<FROM> targetView = FromListItem()
+	( havingTok = <HAVING> havingClause = HavingClause(havingTok) )?
+	( consTok = <CONSOLIDATE> <ON> consolidateClause = ConsolidateClause(consTok) )?
+	( <LIMIT> maxRows = IntLiteral() )?
+	{ return new ExtractNode(extractList, targetView,  
+		havingClause, consolidateClause, maxRows, curFileName(), t); }
+}
+
+// Extract sequence pattern clause
+ExtractPatternNode ExtractPatternClause() :
+{
+	Token t, consTok, fromTok, havingTok;
+	ArrayList<SelectListItemNode> items = new ArrayList<SelectListItemNode>();
+	SelectListItemNode item;
+	PatternExpressionNode patternExpr;
+	ReturnClauseNode returnClause;
+	ColNameNode target = null;
+	FromListNode fromList;
+	HavingClauseNode havingClause = null;
+	ConsolidateClauseNode consolidateClause = null;
+	IntNode maxRows = null;
+}
+{
+	t = <EXTRACT>
+	// Start with a bunch of normal select list items.
+	( 
+		LOOKAHEAD(3)
+		item = SelectListItem() ","
+		 { items.add(item); }
+	)*
+
+	<PATTERN> patternExpr = PatternExpression()
+	returnClause = ReturnClause()	
+	( <WITH> <INLINE_MATCH> <ON> target = ColumnName() )?	
+	fromTok = <FROM> fromList = FromList(fromTok)
+	( havingTok = <HAVING> havingClause = HavingClause(havingTok) )?
+	( consTok = <CONSOLIDATE> <ON> consolidateClause = ConsolidateClause(consTok) )?
+	( <LIMIT> maxRows = IntLiteral() )?
+	{ return new ExtractPatternNode(items, patternExpr, returnClause, target, fromList,  
+		havingClause, consolidateClause, maxRows, curFileName(), t); }
+}
+
+
+// A select clause
+SelectNode SelectClause() :
+{
+	Token t, consTok, fromTok, whereTok, groupTok, orderTok;
+	SelectListNode selectList;
+	FromListNode fromList;
+	WhereClauseNode whereClause = null;
+	GroupByClauseNode groupByClause = null;
+	OrderByClauseNode orderByClause = null;
+	ConsolidateClauseNode consolidateClause = null;
+	RValueNode target = null;
+	StringNode type = null;
+	IntNode maxRows = null;
+}
+{
+	t = <SELECT> selectList = SelectList(t)
+	fromTok = <FROM> fromList = FromList(fromTok)
+	( whereTok = <WHERE> whereClause = WhereClause(whereTok) )?
+	( consTok = <CONSOLIDATE> <ON> consolidateClause = ConsolidateClause(consTok) )?
+	( groupTok = <GROUP> <BY> groupByClause = GroupByClause(groupTok) )?
+	( orderTok = <ORDER> <BY> orderByClause = OrderByClause(orderTok) )?
+	( <LIMIT> maxRows = IntLiteral() )?
+	{ return new SelectNode(selectList, fromList, whereClause, groupByClause, 
+		orderByClause, consolidateClause, maxRows, curFileName(), t);
+	}
+}
+
+ConsolidateClauseNode ConsolidateClause(Token origTok) :
+{
+	RValueNode target = null;
+	StringNode type = null;
+	RValueNode priorityTarget = null;
+	StringNode priorityDirection = null;
+}
+{
+	(
+		// Consolidate clause can take either a function call
+		// or a direct reference to a column of the input 
+		// schema. Optionally it will use priorityTarget that is a column name,
+		// and priorityDirection which will either be "ascending" or "descending".
+		LOOKAHEAD(ScalarFunctionCall()) target = ScalarFunctionCall()
+		| target = ColumnName()
+	)
+	(
+	  // Begin: Optional Consolidation Policy
+	  <USING> type = StringLiteral()
+	    
+		(// Begin: Optional With Priority From
+		 // We can only specify this clause with LeftToRight therefore we enforce an explicit <USING > 'ConsolidationPolicy' clause
+		  (
+		  <WITH> <PRIORITY> <FROM>  priorityTarget = RValue()
+		  )
+          // If direction is not provided, the default is "ascending"
+          // Only put this default in place if priorityTarget is specified
+          {priorityDirection = new StringNode("ascending");}
+		  (
+		    (//Begin: Optional (ascending | descending)
+		    <ASCENDING> {priorityDirection = new StringNode("ascending");}
+		    |
+		    <DESCENDING> {priorityDirection = new StringNode("descending");}
+		    )? // End: Optional (ascending | descending)
+		  )
+		)? // End: Optional with priority from
+	 )?// End: Optional Consolidation Policy
+	{ return new ConsolidateClauseNode(target, type, priorityTarget, priorityDirection, curFileName(), origTok); }
+}
+
+
+// Calls to user defined table functions.
+// This part of the grammar needs to be a separate production due to a
+// conflict with the other productions that can occur in a FROM list.
+TableFnCallNode UserDefinedTableFnCall(NickNode modulePrefix) :
+{
+	TableFnCallNode ret;
+
+    NickNode funcName;
+    NickNode locatorNick;
+    RValueNode arg;
+    ArrayList<RValueNode> args = new ArrayList<RValueNode>();
+}
+{
+    funcName = NickLiteral()
+    "("
+        (
+            // We allow constants, scalar function calls, and table locators
+            // here.
+            // The only kind of RValue we don't allow is a column reference.
+            ( arg = ConstantLiteral() 
+                | LOOKAHEAD(ScalarFunctionCall()) arg = ScalarFunctionCall()
+                | locatorNick = NickLiteralOptionalModule() 
+                    { arg = new TableLocatorNode(locatorNick); } )
+            { args.add(arg); }
+            (
+                "," ( arg = ConstantLiteral() 
+                    | LOOKAHEAD(ScalarFunctionCall()) arg = ScalarFunctionCall()
+                    | locatorNick = NickLiteralOptionalModule() 
+                        { arg = new TableLocatorNode(locatorNick); } )
+                { args.add(arg); }
+            )*
+        ) ? // Question mark to allow empty args list
+    ")"
+    { 
+        if(modulePrefix != null)
+        {
+            NickNode newFuncName = 
+                prepareQualifiedNode(modulePrefix.getNickname(), funcName);
+            //System.err.printf("Renamed %s --> %s\n", funcName, newFuncName);
+            funcName = newFuncName;
+        }
+ 
+        return new TableUDFCallNode(funcName, args); 
+    }
+}
+
+
+
+// Former table functions that are now implemented as extracts
+// The parser performs a query rewrite here for backwards compatibility.
+// At some point, support for these functions should be removed from the
+// language.
+FromListItemNode RewrittenTableFnCall() :
+{
+	FromListItemNode ret;
+}
+{
+	(
+		ret = Dictionary()
+		| ret = RegexTok()
+		| ret = Regex()
+		| ret = Block()
+		| ret = BlockTok()
+	)
+	{ return ret; }
+}
+
+// The built-in "Dictionary()" table function (now deprecated)
+// This production of the parser rewrites the table function into 
+// an "extract dictionary" statement.
+FromListItemNode Dictionary() :
+{
+	Token t;
+	StringNode filename;
+	ColNameNode target;
+	// Regular Expression Matching Specification flags
+	StringNode flag = new StringNode("IgnoreCase");
+}
+{
+	t = <DICTIONARY_FN> "(" 
+		filename = StringLiteral() "," 
+		// Yunyao: added 10/07/2007 to support Java RegEx engine flags
+		// Begin	
+		// (Optional) regular expression match specification
+		(flag = StringLiteral() ",")?
+		// end
+		target = ColumnName() ")"
+	{
+		//ret = new DictFnNode(filename, flag, target);
+		//ret.setOrigTok(t);
+		//return ret; 
+		
+		// Convert the old table function syntax into an extract statement.
+		ArrayList<StringNode> dicts = new ArrayList<StringNode>();
+		dicts.add(filename);
+		NickNode outputCol = new NickNode("match", curFileName(), null);
+		DictExNode extraction = new DictExNode(dicts, flag, target, outputCol, curFileName(), t);
+		extraction.setModuleName(currentModule);
+		return wrapExtractFn(extraction, t);
+	}
+}
+
+// The deprecated "RegexTok()" table function
+FromListItemNode RegexTok() :
+{
+	Token t;
+	// Regular Expression Matching Specification flags
+	StringNode flagsStr = new StringNode(
+		com.ibm.systemt.util.regex.FlagsString.DEFAULT_FLAGS);
+	IntNode maxTok;
+	RegexNode regex;
+	ColNameNode target;
+}
+{
+	t = <REGEXTOK_FN> 
+	"(" regex = RegexLiteral()
+	"," 
+	// Yunyao: added 10/07/2007 to support Java RegEx engine flags
+	// Begin
+	// (Optional) regular expression match specification
+	(flagsStr = StringLiteral() ",")? 
+	// end
+	maxTok = IntLiteral() ","
+	target = ColumnName()
+	")"	
+	{ 
+		// Old code:
+		//ret = new RegexTokFnNode(regex, flag, maxTok, target);
+		//ret.setOrigTok(t);
+		//return ret; 
+			
+		// Convert the old table function syntax into an extract statement.
+		ArrayList<RegexNode> regexes = new ArrayList<RegexNode>();
+		regexes.add(regex);
+		
+		IntNode minTok = IntNode.makeConst(1);
+		
+		// The output column of the table function is always called "match"
+		// and always matches group 0.
+		ReturnClauseNode returnClause = new ReturnClauseNode(curFileName(), t);
+		returnClause.addEntry(0, new NickNode("match"));
+		
+		RegexExNode extraction = new RegexExNode(regexes, flagsStr, 
+			minTok, maxTok, target, returnClause, curFileName(), t); 
+			
+		return wrapExtractFn(extraction, t);
+	}
+}
+
+
+
+// The deprecated "Regex()" table function
+// The parser now rewrites this table function into an "extract regex"
+// statement
+FromListItemNode Regex() :
+{
+	Token t;
+	// Regular Expression Matching Specification flags
+	StringNode flag = new StringNode(com.ibm.systemt.util.regex.FlagsString.DEFAULT_FLAGS);
+	RegexNode regex;
+	ColNameNode target;
+}
+{
+	t = <REGEX_FN> 
+	"(" regex = RegexLiteral()
+	"," 
+	// Yunyao: added 10/07/2007 to support Java RegEx engine flags
+	// Begin
+	// (Optional) regular expression match specification
+	(flag = StringLiteral() ",")? 
+	// end
+	target = ColumnName()
+	")"	
+	{ 
+		// Old code:
+		//ret = new RegexFnNode(regex, flag, target);
+		//ret.setOrigTok(t);
+		//return ret;
+			
+		// Convert the old table function syntax into an extract statement.
+		ArrayList<RegexNode> regexes = new ArrayList<RegexNode>();
+		regexes.add(regex);
+				
+		// The output column of the table function is always called "match"
+		// and always matches group 0.
+		ReturnClauseNode returnClause = new ReturnClauseNode(curFileName(), t);
+		returnClause.addEntry(0, new NickNode("match"));
+		
+		RegexExNode extraction = new RegexExNode(regexes, flag, 
+			null, null, target, returnClause, curFileName(), t); 
+			
+		return wrapExtractFn(extraction, t);
+	}
+}
+
+
+// The built-in "Block" table function (now deprecated)
+// The parser now rewrites this statement into an "extract blocks" statement.
+FromListItemNode Block() :
+{
+	Token t;
+	IntNode maxCharsBetween, minSize, maxSize = IntNode.makeConst(1000);
+	ColNameNode target;
+}
+{
+	t = <BLOCK_FN> "(" 
+		maxCharsBetween = IntLiteral() "," 
+		minSize = IntLiteral() ","
+		// maxSize parameter is optional for historical reasons; 
+		// default value is above.
+		( maxSize = IntLiteral() "," )?
+		target = ColumnName() ")"
+	{
+        // OLD CODE:
+		//ret = new BlockFnNode(maxCharsBetween, minSize, maxSize, target);
+		//ret.setOrigTok(t);
+		//return ret;
+
+        // Rewrite to an "extract blocks" statement
+        IntNode minSep = IntNode.makeConst(0); 
+        NickNode outputCol = new NickNode("block");
+        BlockExNode stmt = 
+            new BlockExNode(minSize, maxSize, minSep, maxCharsBetween, false,
+                            target, outputCol, curFileName(), t); 
+        return wrapExtractFn(stmt, t);
+	}
+}
+
+// The built-in "BlockTok" table function (now deprecated)
+// The parser now rewrites this statement into an "extract blocks" statement.
+FromListItemNode BlockTok() :
+{
+	Token t;
+	IntNode maxToksBetween, minSize, maxSize;
+	ColNameNode target;
+}
+{
+	t = <BLOCKTOK_FN> "(" 
+		maxToksBetween = IntLiteral() ","
+		minSize = IntLiteral() ","
+		maxSize = IntLiteral() ","
+			target = ColumnName() ")"
+	{
+        // OLD CODE:
+		//ret = new BlockTokFnNode(maxToksBetween, minSize, maxSize, target);
+		//ret.setOrigTok(t);
+		//return ret;
+        
+        // Rewrite to an "extract blocks" statement
+        IntNode minSep = IntNode.makeConst(0); 
+        NickNode outputCol = new NickNode("block");
+        BlockExNode stmt = 
+            new BlockExNode(minSize, maxSize, minSep, maxToksBetween, true,
+                            target, outputCol, curFileName(), t); 
+        return wrapExtractFn(stmt, t);
+	}
+}
+
+// The list of columns produced in an extract clause; the last of these must
+// be the extraction type.
+ExtractListNode ExtractList(Token t) :
+{
+	ExtractListNode ret;
+	ArrayList<SelectListItemNode> items = new ArrayList<SelectListItemNode>();
+	ExtractionNode ext;
+	SelectListItemNode item;
+}
+{
+	// Start with a bunch of normal select list items.
+	( 
+		LOOKAHEAD(3)
+		item = SelectListItem() ","
+		 { items.add(item); }
+	)*
+	// Last item in the list must be the extraction
+	ext = Extraction()
+	{ return new ExtractListNode(items, ext, curFileName(), t); }
+}
+
+// Extraction specification inside an extract statement.
+ExtractionNode Extraction() : 
+{
+	ExtractionNode ret;
+} 
+{
+	(
+		ret = RegexExtraction()
+		| ret = DictExtraction()
+		| ret = SplitExtraction()
+		| ret = BlockExtraction()
+		| ret = POSExtraction()
+	)
+	{ return ret; }
+}
+
+RegexExNode RegexExtraction() :
+{
+  	Token t;
+	ArrayList<RegexNode> regexes = new ArrayList<RegexNode>();
+	RegexNode regex;
+	ColNameNode target;
+
+	StringNode flagsStr = new StringNode(
+		com.ibm.systemt.util.regex.FlagsString.DEFAULT_FLAGS);
+	IntNode minTok = null, maxTok = null;
+	ReturnClauseNode returnClause;
+} 
+{
+	// Regular expression evaluation
+	(t = <REGEX> | t = <REGEXES>) regex = RegexLiteral() { regexes.add(regex); }
+	( <AND> regex = RegexLiteral() { regexes.add(regex); } )*
+	( <WITH> <FLAGS> flagsStr = StringLiteral() )?
+	<ON>
+		(
+			(<BETWEEN> minTok = IntLiteral() <AND>)?
+			maxTok = IntLiteral() (<TOK> | <TOKS>) <IN>
+		)?
+	target = ColumnName()
+	// Determine what capturing groups to return with what names
+	returnClause = ReturnClause()
+	{ 
+		if (null == minTok) {
+			minTok = maxTok;
+		}
+		return new RegexExNode(regexes, flagsStr, minTok, maxTok, 
+			target, returnClause, curFileName(), t); 
+	}
+}
+
+ReturnClauseNode ReturnClause() :
+{
+    Token t;
+	NickNode outputCol;
+	IntNode group;
+	ReturnClauseNode ret;
+}
+{
+	( t = <AS> outputCol = NickLiteral()
+		{ 	// Basic syntax only specifies group 0 (entire match)
+		    ret = new ReturnClauseNode (curFileName(), t);
+			ret.addEntry(0, outputCol);
+		}
+	| t = <RETURN>
+		<GROUP> group = NonNegativeIntLiteral() <AS> outputCol = NickLiteral()
+		{
+		  ret = new ReturnClauseNode (curFileName(), t);
+		  ret.addEntry(group.getValue(), outputCol); }
+		(
+			<AND> <GROUP> group = NonNegativeIntLiteral() <AS> outputCol = NickLiteral()
+			{ ret.addEntry(group.getValue(), outputCol); }
+		)*
+	)
+	{ return ret; }
+}
+
+// Extraction spec for one or more dictionaries
+DictExNode DictExtraction() :
+{
+    Token t;
+	ArrayList<StringNode> dicts = new ArrayList<StringNode>();
+	StringNode dict;
+	ColNameNode target;
+	NickNode outputCol;
+	StringNode flagsStr = null;
+} 
+{
+	(t = <DICTIONARY> | t = <DICTIONARIES>)  dict = DictName() { dicts.add(dict); }
+	( <AND> dict = DictName() { dicts.add(dict); } )*
+	( <WITH> <FLAGS> flagsStr = StringLiteral() )?
+	<ON> target = ColumnName()
+	<AS> outputCol = NickLiteral()
+	{ 
+		DictExNode ret = new DictExNode(dicts, flagsStr, target, outputCol, curFileName(), t);
+		ret.setModuleName(currentModule);
+		return ret; 
+	}
+}
+
+// Name of a dictionary; can be either a string or a nickname, but both
+// are converted to StringNodes for parsing purposes.
+StringNode DictName() :
+{
+	StringNode nameStr;
+	NickNode nameNick;
+}
+{
+	(
+		nameStr = StringLiteral() { return nameStr; }
+		| nameNick = NickLiteralOptionalModule() 
+			{
+				// Convert NickNode to StringNode.	
+				return new StringNode(nameNick.getNickname(), curFileName(), nameNick.getOrigTok()); 
+			}
+	)
+}
+
+// Extraction spec for splitting a larger span into smaller spans
+SplitExNode SplitExtraction() :
+{
+    Token t;
+	ColNameNode target;
+	ColNameNode splitCol;
+	NickNode outputCol;
+	int splitFlags = 0x0;
+} 
+{
+	(t = <SPLIT> <USING>) splitCol = ColumnName()
+	(
+		<RETAIN>
+		(
+			<LEFT>	
+			{ splitFlags = com.ibm.avatar.algebra.extract.Split.RETAIN_LEFT; } 
+			| <RIGHT>
+			{ splitFlags = com.ibm.avatar.algebra.extract.Split.RETAIN_RIGHT; }
+			| <BOTH>
+			{ splitFlags = com.ibm.avatar.algebra.extract.Split.RETAIN_BOTH; }
+		)
+		<SPLIT> (<POINT> | <POINTS>) 
+	)?
+	<ON> target = ColumnName()
+	<AS> outputCol = NickLiteral()
+	{ 
+		return new SplitExNode(splitCol, splitFlags, target, outputCol, curFileName(), t); 
+	}
+}
+
+// Extraction spec for finding blocks of spans
+BlockExNode BlockExtraction() :
+{
+    Token t;
+	IntNode minSize, maxSize;
+	IntNode minSep, maxSep;
+	boolean sepIsTokens;
+	ColNameNode target;
+	NickNode outputCol;
+} 
+{
+	t = <BLOCKS>
+	<WITH> <COUNT> 
+	( 
+		minSize = IntLiteral() { maxSize = minSize; } |
+		<BETWEEN> minSize = IntLiteral() <AND> maxSize = IntLiteral() 
+	)
+	<AND> <SEPARATION>
+	( 
+		minSep = IntLiteral() { maxSep = minSep; } |
+		<BETWEEN> minSep = IntLiteral() <AND> maxSep = IntLiteral() 
+	)
+	(
+		(<TOK> | <TOKS>) { sepIsTokens = true; }
+		|  
+		(<CHARACTER> | <CHARACTERS>) { sepIsTokens = false; }
+	)
+	<ON> target = ColumnName()
+	<AS> outputCol = NickLiteral()
+	{ 
+		return new BlockExNode(minSize, maxSize, minSep, maxSep, sepIsTokens,
+				target, outputCol, curFileName(), t); 
+	}
+}
+
+// Extraction spec for one or more parts of speech
+POSExNode POSExtraction() :
+{
+    Token t;
+	ArrayList<StringNode> posStrs = new ArrayList<StringNode>();
+	ArrayList<StringNode> flagStrs = new ArrayList<StringNode>();
+	StringNode posStr = null;
+	StringNode flagStr= null;
+	StringNode langCodeStr = null;
+	NickNode mappingTabName = null;
+	
+	ColNameNode target;
+	NickNode outputCol;
+	StringNode flagsStr = null;
+} 
+{
+	(t = <PART_OF_SPEECH> | t = <PARTS_OF_SPEECH>) 
+	posStr = StringLiteral() 
+	( LOOKAHEAD(2) <WITH> <FLAGS> flagStr = StringLiteral() )?
+	{ posStrs.add(posStr); flagStrs.add(flagStr); }
+	( LOOKAHEAD(2)
+		{ flagStr = null; }
+		<AND> posStr = StringLiteral() 
+		( LOOKAHEAD(2) <WITH> <FLAGS> flagStr = StringLiteral() )?
+		{ posStrs.add(posStr); flagStrs.add(flagStr); }
+	)*
+	( <WITH> )?
+	( <LANGUAGE> langCodeStr = StringLiteral() )?
+	( <AND> )?
+	( <MAPPING> <FROM> mappingTabName = NickLiteral() )?
+	<ON> target = ColumnName()
+	<AS> outputCol = NickLiteral()
+	{ 
+		return new POSExNode(posStrs, flagStrs, langCodeStr, mappingTabName,
+			target, outputCol, curFileName(), t); 
+	}
+}
+
+PatternExpressionNode PatternExpression() :
+{
+	ArrayList<PatternExpressionNode> children = new ArrayList<PatternExpressionNode>();
+	PatternExpressionNode child;
+}
+{
+	child = PatternSequence() {children.add(child);}
+	
+	( 
+		"|" child = PatternSequence() {children.add(child);} 
+	)*
+	
+	{
+	  	if(children.size() == 1)
+			return child;
+		else
+			return new PatternAlternationNode(children);	
+	}
+}
+
+PatternExpressionNode PatternSequence() :
+{
+	ArrayList<PatternExpressionNode> children = new ArrayList<PatternExpressionNode>();
+	PatternExpressionNode child;
+	PatternAtomTokenGapNode tokenGap;
+}
+{
+	child = PatternOptional() {children.add(child);}
+	
+	(
+	    // Allow token gaps only in the middle portion of the sequence
+	    // A token gap must be both preceded and followed by a non token gap element
+	    ( LOOKAHEAD("<" <TOKEN_GAP> ">") tokenGap = PatternTokenGap() {children.add(tokenGap);} ) ?
+	    
+		child = PatternOptional() {children.add(child);}
+	)*
+	
+	{
+		if(children.size() == 1)
+			return child;
+		else
+			return new PatternSequenceNode(children);	
+	}
+}
+
+PatternAtomTokenGapNode PatternTokenGap() :
+{
+    Token t;
+	PatternAtomTokenGapNode tokenGap;
+	IntNode minOcc, maxOcc;
+}
+{
+	t = "<" <TOKEN_GAP> ">"
+	{
+	  tokenGap = new PatternAtomTokenGapNode(curFileName(), t);
+	  tokenGap.setMinOccurrences(new IntNode(1, curFileName(), null));
+	  tokenGap.setMaxOccurrences(new IntNode(1, curFileName(), null));
+	}
+	(
+		"?" { tokenGap.setMinOccurrences(new IntNode(0, curFileName(), null)); }
+		|
+		(
+		  "{" minOcc = IntLiteral() { tokenGap.setMinOccurrences(minOcc); }
+		    "," 
+		    maxOcc = IntLiteral() { tokenGap.setMaxOccurrences(maxOcc); }
+		 "}" 
+		)
+	)?
+
+	{ return tokenGap; }
+}
+
+PatternExpressionNode PatternOptional() :
+{
+	PatternExpressionNode child;
+	PatternOptionalNode optional;
+	boolean optionalFlag = false;
+}
+{
+	child = PatternRepeat() { optional = new PatternOptionalNode(child); }
+	( 
+		"?" { optionalFlag = true; }
+	) ?
+	
+	{
+	    if( !optionalFlag )
+			return child;
+		else
+			return optional;
+	}
+}
+
+
+PatternExpressionNode PatternRepeat() :
+{
+	PatternExpressionNode child;
+	PatternRepeatNode repeat;
+	IntNode defaultOcc = new IntNode(1, curFileName(), null);
+	IntNode minOcc = defaultOcc, maxOcc = defaultOcc;
+}
+{
+	child = PatternAtom() { repeat = new PatternRepeatNode(child, defaultOcc, defaultOcc); }
+	( 
+		"{" minOcc = IntLiteral() { repeat.setMinOccurrences(minOcc); }
+		    "," 
+		    maxOcc = IntLiteral() { repeat.setMaxOccurrences(maxOcc); }
+		 "}" 
+	) ?
+	
+	{
+		if(minOcc.getValue() == 1 && maxOcc.getValue() == 1)
+			return child;
+		else
+			return repeat;
+	}
+}
+
+PatternExpressionNode PatternAtom() :
+{
+	StringNode stringValue;
+	RegexNode regexValue;
+	ColNameNode colValue;
+	PatternExpressionNode expression;
+	PatternAtomDictNode dictAtom;
+	Pair<String,String> param;
+	StringPairList paramStrs = new StringPairList();
+}
+{
+  (
+    
+
+  	    LOOKAHEAD("<" ColumnName() ">")
+  	    	"<" colValue = ColumnName() ">"
+			{ return new PatternAtomColumnNode(colValue); }
+  	 	|
+  	 	( 
+  	    	"<"
+				// Dictionary atom with parameters			
+				stringValue = StringLiteral() { dictAtom = new PatternAtomDictNode(stringValue); }
+				"[" <WITH>
+					param = CreateDictParam() { paramStrs.add(param); }
+					( <AND> param = CreateDictParam() { paramStrs.add(param); } )*
+				"]"				
+			">"
+			{
+			  dictAtom.setParams(paramStrs);
+			  dictAtom.setModuleName(currentModule);
+			  return dictAtom;
+			}
+		)		
+		|
+		(
+		    // Dictionary atom without parameters
+			stringValue = StringLiteral() {
+			  dictAtom = new PatternAtomDictNode(stringValue); 
+			  dictAtom.setModuleName(currentModule);
+			  return dictAtom;
+			  }
+			|
+			// Regex atom
+			regexValue = PureRegexLiteral() { return new PatternAtomRegexNode(regexValue); }
+			|
+			// Group atom
+			
+			  "(" expression = PatternExpression() ")" { return new PatternGroupNode(expression); }
+		)
+)
+
+	
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+// The list of columns produced in a select clause
+SelectListNode SelectList(Token origTok) :
+{
+	SelectListNode ret;
+	ArrayList<SelectListItemNode> items = new ArrayList<SelectListItemNode>();
+	SelectListItemNode item;
+}
+{
+	(
+		"*" { ret = new SelectListNode(curFileName(), origTok); }
+		| 
+		(
+			item = SelectListItem() { items.add(item); }
+			( "," item = SelectListItem() { items.add(item); } )*
+			{ ret = new SelectListNode(items, curFileName(), origTok); }
+		)
+	)
+	{ return ret; }
+}
+
+// Anything that can appear as an item in a select list.
+// Also used for other parts of the grammar like predicate arguments.
+SelectListItemNode SelectListItem() :
+{
+	RValueNode value = null;
+	NickNode name = null, func;
+	SelectListItemNode ret = null;
+	NickNode viewName;
+	Token t;
+}
+{
+	(
+			LOOKAHEAD(NickLiteral() "." "*")
+			// "A.*" syntax -- add all columns of an input
+			viewName = NickLiteral() t = "." "*"
+			{ ret = new SelectListItemNode(viewName, null);
+			  ret.setIsDotStar(true);
+			  return ret; }
+			|
+			(
+				(
+					// SPECIAL CASE: Count(*)
+					LOOKAHEAD(NickLiteral() "(" "*" ")")
+					func =  NickLiteral() "(" "*" ")"
+					{ value = new ScalarFnCallNode(func, true); }
+					|
+					// Standard "<rvalue>" syntax
+					value = RValue()
+				)
+			    // optional alias "as <name>"
+				( <AS> name = NickLiteral() )?
+			)
+			{ return new SelectListItemNode(value, name); }
+			
+	)
+}
+
+// Anything that could appear on the right hand side of an assignment statement
+RValueNode RValue() : 
+{
+	RValueNode value = null;
+}
+{
+	( 
+		// function(arg1, arg2, ..., argn)
+		// Lookahead is necessary because of conflict with NickLiteral()
+		LOOKAHEAD(ScalarFunctionCall()) value = ScalarFunctionCall()
+		// table.column
+		// Lookahead is necessary because of conflict with NickLiteral()
+		| LOOKAHEAD(ColumnName()) value = ColumnName() 
+		| value = FloatLiteral()
+		| value = IntLiteral()
+		| value = BooleanLiteral()
+		| value = StringLiteral()
+		| value = PureRegexLiteral()
+		| <NULL>
+		 { 
+		 	// Transform the keyword "null" into an internal scalar function
+		 	value = new ScalarFnCallNode(new NickNode("NullConst"), 
+		 				new ArrayList<RValueNode>()); 
+		 }
+//		| value = NickLiteral()
+	)
+	{ return value; }
+}
+
+// A function call:
+// function(arg1, arg2, ..., argn)
+ScalarFnCallNode ScalarFunctionCall() :
+{
+	NickNode func;
+	RValueNode arg;
+	ArrayList<RValueNode> args = new ArrayList<RValueNode>();
+	NickNode qualifiedFuncName;
+	NickNode modulePrefix = null;
+        ScalarFnCallNode ret = null; 
+}
+{
+    (
+	 (LOOKAHEAD(3) modulePrefix = NickLiteral() ".")?
+	 func = NickLiteral()
+	 "(" 
+	 (
+	 	arg = RValue() { args.add(arg); }
+			( "," arg = RValue() { args.add(arg); } ) *
+	  ) ?
+	  ")"
+	{ 
+		if(modulePrefix == null)
+	    {
+	      qualifiedFuncName = func;
+	    }else
+	    {
+	      qualifiedFuncName = prepareQualifiedNode(modulePrefix.getNickname(), func);
+	    }
+		
+		return new ScalarFnCallNode(qualifiedFuncName, args); 
+	}
+    )
+        // case and cast expressions are really scalar functions.
+    |   ret = CaseExpression() { return ret; } 
+    |   ret = CastExpression() { return ret; }
+}
+
+ScalarFnCallNode CaseExpression() :
+{
+	Token t;
+	PredicateNode pred;
+	RValueNode value;
+	ArrayList<RValueNode> args = new ArrayList<RValueNode>();
+}
+{
+	t = <CASE> 
+	( LOOKAHEAD(3)
+		<WHEN>
+			pred = Predicate() { args.add(pred.getFunc()); }
+		<THEN> 
+			value = RValue() { args.add(value); }
+	)+
+	( LOOKAHEAD(3)
+	    <ELSE>
+	  	    value = RValue() { args.add(value); }
+	)?
+	{ return new ScalarFnCallNode(new NickNode("Case"), args);}
+}
+
+ScalarFnCallNode CastExpression() :
+{
+	Token t;
+	NickNode func;
+	RValueNode value, type;
+	StringNode castType;
+	ArrayList<RValueNode> args = new ArrayList<RValueNode>();
+}
+{
+	//func = NickLiteral()
+	t = <CAST> //{func = new NickNode(t, t.image, catalog);} 
+	"("
+		<NULL> {value = new ScalarFnCallNode(new NickNode("NullConst"), 
+		 				new ArrayList<RValueNode>()); 
+		 		args.add(value); }
+		<AS> 
+		castType = CastTypeLiteral() 
+				{ args.add(castType); }
+	")"
+	{ return new ScalarFnCallNode(new NickNode("Cast"), args);}
+}
+
+// A qualified column name
+ColNameNode ColumnName() : 
+{
+	NickNode tabPart1 = null, col;
+	NickNode tabPart2 = null;
+	NickNode mergedTab = null;
+}
+{
+  	// With support for modular AQLs, a view/table can be referred thru there fully qualified name.
+  	// That is, the views imported thru 'import module XXX' statement will be referred
+  	// in SelectList as XXX.V1.field1; it is also allowed to refer view belonging to current module
+  	// thru there fully qualified names.
+  	// So View/Table references can have two parts now: (1) modulePrefix (2) view/table name
+   	( LOOKAHEAD(3) tabPart2 = NickLiteral() ".")?
+	( LOOKAHEAD(3) tabPart1 = NickLiteral() ".")?
+	col = NickLiteral()
+	{
+	  // merge both the parts to prepare final view/table name
+	  if (null != tabPart2 && null != tabPart1)
+	  {
+	  	mergedTab = prepareQualifiedNode( tabPart2.getNickname(), tabPart1);
+	  } // otherwise use the first part as view name
+	  else if ( null != tabPart2 && null == tabPart1)
+	  {
+	    mergedTab = tabPart2;
+	  }
+	  
+	  return new ColNameNode(mergedTab, col);
+	}
+}
+
+
+
+// List of source relations in a select clause
+FromListNode FromList(Token t) :
+{
+	ArrayList<FromListItemNode> items = new ArrayList<FromListItemNode>();
+	FromListItemNode item;
+}
+{
+	item = FromListItem() { items.add(item); }
+	( "," item = FromListItem() { items.add(item); } )*
+	
+	{ return new FromListNode(items, curFileName(), t); }
+}
+
+FromListItemNode FromListItem() :
+{
+    NickNode qualifiedViewRefName;
+    NickNode modulePrefix = null;
+	FromListItemNode ret;
+	NickNode view;
+	TableFnCallNode tabfunc;
+	ViewBodyNode subquery;
+	NickNode alias;
+	Token t;
+}
+{
+	(
+		(
+			(
+                // JavaCC has trouble with this part of the grammar; hence the
+                // aggressive use of lookahead.  Be careful modifying this part
+                // of the grammar.
+				(LOOKAHEAD( NickLiteral() "." ) modulePrefix = NickLiteral() ".")?
+                (
+                    LOOKAHEAD(NickLiteral() "(" ) 
+                        tabfunc = UserDefinedTableFnCall(modulePrefix) 
+                        { ret = new FromListItemTableFuncNode(tabfunc); }
+                    | view = NickLiteral()
+                    {
+                        if(modulePrefix == null)
+                        {
+                            qualifiedViewRefName = view;
+                        }else
+                        {
+                            qualifiedViewRefName = prepareQualifiedNode(modulePrefix.getNickname(), view);
+                        }
+                        ret = new FromListItemViewRefNode(qualifiedViewRefName);
+                    }
+                    | ret = RewrittenTableFnCall()
+                )
+			)
+			//an alias is optional for table function and view reference nodes
+			(alias = NickLiteral()  { ret.setAlias(alias); } )?
+		)
+	|
+		(
+			t = "(" subquery = ViewBody() ")" {
+					// Flatten non-correlated subqueries into anonymous views.
+					// NickNode viewName = new NickNode(makeSubqueryName(), catalog);
+					// CreateViewNode cvn = new CreateViewNode(viewName, subquery);
+					// catalog.addView(cvn);
+								
+					// ret = new FromListItemViewRefNode(viewName);
+					
+					ret = new FromListItemSubqueryNode(subquery, curFileName(), t);
+			}
+			//an alias is required for subquery nodes
+			alias = NickLiteral()  { ret.setAlias(alias); }
+		)
+	)
+	{
+	  ret.setModuleName(currentModule);
+	  return ret;
+	}
+}
+
+// Predicate expression that forms a where clause.
+// Currently restricted to be a conjunction.
+WhereClauseNode WhereClause(Token origTok) :
+{
+	WhereClauseNode ret = new WhereClauseNode(curFileName(), origTok);
+	PredicateNode pred;
+}
+{ 
+	pred = Predicate() { ret.addPred(pred); }
+	( <AND> pred = Predicate() { ret.addPred(pred); } )*
+	
+	{ return ret; }
+}
+
+// Predicate expression that forms a having clause.
+// Currently restricted to be a conjunction.
+HavingClauseNode HavingClause(Token origTok) :
+{
+	HavingClauseNode ret = new HavingClauseNode(curFileName(), origTok);
+	PredicateNode pred;
+}
+{ 
+	pred = Predicate() { ret.addPred(pred); }
+	( <AND> pred = Predicate() { ret.addPred(pred); } )*
+	
+	{ return ret; }
+}
+
+// An atomic predicate
+PredicateNode Predicate() :
+{
+    Token t = null;
+	PredicateNode ret = null;
+	ScalarFnCallNode func;
+}
+{
+	(
+		LOOKAHEAD(2)
+		// X = Y
+		t = <NICKNAME> "=" <NICKNAME>
+		// Function returning boolean
+		| func = ScalarFunctionCall() {
+		  if (func != null)
+		  {
+		  	t = func.getOrigTok();
+			ret = new PredicateNode(func, curFileName(), t);
+		  }
+		}
+		
+	)
+	{ return ret; }
+	
+}
+
+
+// the group by clause
+GroupByClauseNode GroupByClause(Token origTok) :
+{
+	GroupByClauseNode ret = new GroupByClauseNode(curFileName(), origTok);
+	RValueNode value;
+}
+{ 
+	value = RValue() { ret.addValue(value); }
+	( "," value = RValue() { ret.addValue(value); } )*
+	
+	{ return ret; }
+}
+
+
+
+// the order by clause
+OrderByClauseNode OrderByClause(Token origTok) :
+{
+	OrderByClauseNode ret = new OrderByClauseNode(curFileName(), origTok);
+	RValueNode value;
+}
+{ 
+	value = RValue() { ret.addValue(value); }
+	( "," value = RValue() { ret.addValue(value); } )*
+	
+	{ return ret; }
+}
+
+
+// A "create function" statement
+CreateFunctionNode CreateFunctionStmt() :
+{
+	NickNode tmpNick;
+	NickNode colNameNode;
+	TypeNode colTypeNode;
+	TypeNode retType;
+	NickNode functionName;
+	String specificName = null;
+	String externalName = null;
+	FuncLanguage language = null;
+	ArrayList<Pair<NickNode,TypeNode>> colNamesAndTypes = 
+            new ArrayList<Pair<NickNode, TypeNode>>();
+	CreateFunctionNode ret; 
+	//boolean ccsidAscii = true;
+	boolean deterministic = true;
+
+        // Default to FALSE so that a table function declaration with no
+        // CALLED ON NULL INPUT clause is allowed
+	boolean returnsNullOnNullInp = false;
+	IntNode tmpInt;
+	String retSpanLike=null;
+	AQLDocComment comment = null;
+	Token firstTok, endOfStmt;
+}
+{
+	firstTok = <CREATE>
+  	{
+		// This statement can have a AQL doc comment. Make sure to consume it
+		// immediately after consuming the first token of the statement,
+		// to avoid incorrectly consuming AQL Doc comments in the middle of the statement.
+    	comment = consumeAqlDocComment(firstTok);
+ 	}
+ 	<FUNCTION>
+	functionName = NickLiteral()
+	{		//ensure that there is no '.' in function name
+    	if(elementNameContainsDot("function", functionName)) { return null; }
+	}   
+	"("
+		colNameNode = NickLiteral() 	
+        (
+             colTypeNode = TableArgType() <AS> <LOCATOR> 
+                { colTypeNode.setLocator(true); }
+            | colTypeNode = UDFParamTypeLiteral() 
+        )
+        { colNamesAndTypes.add(new Pair<NickNode, TypeNode>(colNameNode, colTypeNode)); }
+		( ","
+			colNameNode = NickLiteral() 
+            (
+                 colTypeNode = TableArgType() <AS> <LOCATOR>
+                    { colTypeNode.setLocator(true); }
+                | colTypeNode = UDFParamTypeLiteral() 
+            )
+            { colNamesAndTypes.add(new Pair<NickNode, TypeNode>(colNameNode,colTypeNode)); }
+		)*
+	")"
+	<RETURN> 
+        (
+                retType = UDFParamTypeLiteral()
+                (<LIKE> tmpNick = NickLiteral() { retSpanLike = tmpNick.getNickname();})? 
+                { /* The error checks that used to be here have been moved to
+                    CreateFunctionNode.java */ }
+            | 
+                retType = TableArgType()
+        )        	<EXTERNAL_NAME> externalName = StringLiteralNoNode()
+  	<LANGUAGE> (
+    	<JAVA> {language = FuncLanguage.Java;}
+   		| <PMML> {language = FuncLanguage.PMML;}
+	)
+	
+	// The remaining parameters are optional.  The grammar currently requires them to appear
+	// in the "correct" order if they are specified.
+	
+	// We don't currently use the PARAMETER clause from DB2 SQL, though support is in the 
+	// parse tree node.  This clause controls conversion between different character encodings
+	// for languages like C that support multiple encodings for string variables.
+	//(<PARAMETER> <CCSID> (<ASCII> {ccsidAscii = true;} | <UNICODE> {ccsidAscii = false;}))?
+	(<NOT> <DETERMINISTIC> {deterministic = false;}| <DETERMINISTIC>)?
+	((<RETURN> <NULL> <ON> <NULL> <INPUT> {returnsNullOnNullInp = true;}) | 
+	      (<CALLED> <ON> <NULL> <INPUT> {returnsNullOnNullInp = false;}))?
+	endOfStmt = <SEMICOLON>
+	
+	{ 
+	    ret = new CreateFunctionNode(functionName, externalName, language, retType, 
+	    	retSpanLike, deterministic, returnsNullOnNullInp, colNamesAndTypes, 
+	    	curFileName(), firstTok);	    ret.setModuleName(currentModule);	    ret.setEndOfStmtToken(endOfStmt);	    ret.setComment(comment);	    return ret;
+	}
+}
+
+// A table(...) argument or return type in a CREATE FUNCTION STMT
+TypeNode TableArgType() :
+{
+    Token tableTok;
+    NickNode colName;
+    TypeNode colType;
+	ArrayList<Pair<NickNode,TypeNode>> colNamesAndTypes = 
+            new ArrayList<Pair<NickNode, TypeNode>>();
+}
+{
+    tableTok = <TABLE> "("
+        // First column (mandatory)
+        colName = NickLiteral() 
+                    colType = UDFParamTypeLiteral() {
+                        colNamesAndTypes.add(new
+                            Pair<NickNode,TypeNode>(colName, colType)); 
+        }
+
+        // Remaining columns (optional)
+        ( ","
+            colName = NickLiteral() 
+            colType = UDFParamTypeLiteral() { 
+                            colNamesAndTypes.add(new
+                                Pair<NickNode,TypeNode>(colName, colType)); 
+            }
+        )*
+    ")"
+    { return new TypeNode(colNamesAndTypes, curFileName(), tableTok); }
+}
+
+// An "import module" statement
+ImportModuleNode ImportModuleStmt() :
+{
+	NickNode refModuleName;
+
+	Token t;
+	Token endOfStmt;
+	
+	ImportModuleNode ret;	
+}
+{
+	t = <IMPORT> <MODULE> refModuleName = NickLiteral() endOfStmt = <SEMICOLON>
+	
+	{ 
+	    if (compatibilityMode)
+	    {
+	      ParseException pe = makeException("'import module' statement is supported only in v2.0 and above.", t);
+	      statementList.addParseError(new ExtendedParseException(pe, new File(curFileName())));
+	      return null;
+	    }
+		ret = new ImportModuleNode(refModuleName, curFileName(), t);
+		ret.setEndOfStmtToken(endOfStmt);
+		ret.setModuleName(currentModule);
+		return ret;
+	}
+}
+
+// An "import view" statement
+ImportViewNode ImportViewStmt() :
+{
+	NickNode viewName;
+	NickNode fromModule;
+	NickNode alias = null;
+		
+	Token t;
+	Token endOfStmt;
+
+	ImportViewNode ret;	
+}
+{
+	t = <IMPORT> <VIEW> viewName = NickLiteral() 
+	<FROM> <MODULE> fromModule = NickLiteral() 
+	(<AS> alias = NickLiteral())?
+	{
+    	//ensure that there is no '.' in view alias
+    	if(elementNameContainsDot("view", alias)) { return null; }
+	}
+	endOfStmt = <SEMICOLON>
+	{ 
+	    if (compatibilityMode)
+	    {
+	      ParseException pe = makeException("'import view' statement is supported only in v2.0 and above.", t);
+	      statementList.addParseError(new ExtendedParseException(pe, new File(curFileName())));
+	      return null;
+	    }
+		ret = new ImportViewNode(viewName, fromModule, curFileName(), t);
+		ret.setAlias(alias);
+		ret.setEndOfStmtToken(endOfStmt);
+		ret.setModuleName(currentModule);
+		return ret;
+	}
+}
+
+// An "import dictionary" statement
+ImportDictNode ImportDictStmt() :
+{
+	NickNode dictName;
+	NickNode fromModule;
+	NickNode alias = null;
+		
+	Token t;
+	Token endOfStmt;
+
+	ImportDictNode ret;	
+}
+{
+	t = <IMPORT> <DICTIONARY> dictName = NickLiteral() 
+	<FROM> <MODULE> fromModule = NickLiteral() 
+	(<AS> alias = NickLiteral())?
+	{
+    	//ensure that there is no '.' in dictionary alias
+    	if(elementNameContainsDot("dictionary", alias)) { return null; }
+	}
+	endOfStmt = <SEMICOLON>
+
+	{ 
+	    if (compatibilityMode)
+	    {
+	      ParseException pe = makeException("'import dictionary' statement is supported only in v2.0 and above.", t);
+	      statementList.addParseError(new ExtendedParseException(pe, new File(curFileName())));
+	      return null;
+	    }
+		ret = new ImportDictNode(dictName, fromModule, curFileName(), t);
+		ret.setAlias(alias);
+		ret.setEndOfStmtToken(endOfStmt);
+		ret.setModuleName(currentModule);
+		return ret;
+	}
+}
+
+// An "import table" statement
+ImportTableNode ImportTableStmt() :
+{
+	NickNode tableName;
+	NickNode fromModule;
+	NickNode alias = null;
+
+	Token t;
+	Token endOfStmt;
+	
+	ImportTableNode ret;
+}
+{
+	t = <IMPORT> <TABLE> tableName = NickLiteral() 
+	<FROM> <MODULE> fromModule = NickLiteral() 
+	(<AS> alias = NickLiteral())?
+	{
+    	//ensure that there is no '.' in table alias
+    	if(elementNameContainsDot("table", alias)) { return null; }
+	}
+	endOfStmt = <SEMICOLON>
+	{ 
+	    if (compatibilityMode)
+	    {
+	      ParseException pe = makeException("'import table' statement is supported only in v2.0 and above.", t);
+	      statementList.addParseError(new ExtendedParseException(pe, new File(curFileName())));
+	      return null;
+	    }
+		ret = new ImportTableNode(tableName, fromModule, curFileName(), t);
+		ret.setAlias(alias);
+		ret.setEndOfStmtToken(endOfStmt);
+		ret.setModuleName(currentModule);
+		return ret;
+	}
+}
+
+// An "import function" statement
+ImportFuncNode ImportFuncStmt() :
+{
+	NickNode funcName;
+	NickNode fromModule;
+	NickNode alias = null;
+	
+	Token t;
+	Token endOfStmt;
+
+	ImportFuncNode ret;
+}
+{
+	t = <IMPORT> <FUNCTION> funcName = NickLiteral() 
+	<FROM> <MODULE> fromModule = NickLiteral() 
+	(<AS> alias = NickLiteral())?
+	{
+    	//ensure that there is no '.' in function alias
+    	if(elementNameContainsDot("function", alias)) { return null; }
+	}
+	endOfStmt = <SEMICOLON>
+	{ 
+	    if (compatibilityMode)
+	    {
+	      ParseException pe = makeException("'import function' statement is supported only in v2.0 and above.", t);
+	      statementList.addParseError(new ExtendedParseException(pe, new File(curFileName())));
+	      return null;
+	    }
+		ret = new ImportFuncNode(funcName, fromModule, curFileName(), t);
+		ret.setAlias(alias);
+		ret.setEndOfStmtToken(endOfStmt);
+		ret.setModuleName(currentModule);
+		return ret;
+	}
+}
+
+// An "export view" statement
+ExportViewNode ExportViewStmt() :
+{
+	NickNode viewName;
+	NickNode modulePrefix = null;
+	NickNode unqualifiedViewName = null;
+	Token t;
+	Token endOfStmt;
+
+	ExportViewNode ret;
+}
+{
+	t = <EXPORT> <VIEW>
+	//Check if the export view statement refers to view with its fully qualified name
+	(LOOKAHEAD(3) modulePrefix = NickLiteral() ".")?
+	viewName = NickLiteral() endOfStmt = <SEMICOLON>
+	{ 
+	    if (compatibilityMode)
+	    {
+	      ParseException pe = makeException("'export view' statement is supported only in v2.0 and above.", t);
+	      statementList.addParseError(new ExtendedParseException(pe, new File(curFileName())));
+	      return null;
+	    }
+
+		//safe copy of unqualified dict name before qualifying it with modulePrefix
+		unqualifiedViewName = viewName;
+		
+	    if (null != modulePrefix)
+	    {
+	      viewName = prepareQualifiedNode( modulePrefix.getNickname(), viewName);
+	    }
+	    
+		ret = new ExportViewNode(viewName, curFileName(), t);
+		ret.setEndOfStmtToken(endOfStmt);
+		ret.setModuleName(currentModule);
+
+		ret.setUnqualifiedElemNameNickNode(unqualifiedViewName);
+		ret.setModulePrefixNickNode(modulePrefix);
+		
+		return ret;
+	}
+}
+
+// An "export dictionary" statement
+ExportDictNode ExportDictStmt() :
+{
+	NickNode dictName;
+	NickNode modulePrefix = null;
+	NickNode unqualifiedDictName = null;
+	Token t;
+	Token endOfStmt;
+
+	ExportDictNode ret;
+}
+{
+
+	t = <EXPORT> <DICTIONARY>
+	//Check if the export dictionary statement refers to dictionary with its fully qualified name
+	(LOOKAHEAD(3) modulePrefix = NickLiteral() ".")?
+	dictName = NickLiteral() endOfStmt = <SEMICOLON>
+	{
+	    if (compatibilityMode)
+	    {
+	      ParseException pe = makeException("'export dictionary' statement is supported only in v2.0 and above.", t);
+	      statementList.addParseError(new ExtendedParseException(pe, new File(curFileName())));
+	      return null;
+	    }
+
+		//safe copy of unqualified dict name before qualifying it with modulePrefix
+		unqualifiedDictName = dictName;
+		
+	    if (null != modulePrefix)
+	    {
+	      dictName = prepareQualifiedNode( modulePrefix.getNickname(), dictName);
+	    }
+	    
+		ret = new ExportDictNode(dictName, curFileName(), t);
+		ret.setEndOfStmtToken(endOfStmt);
+		ret.setModuleName(currentModule);
+
+		ret.setUnqualifiedElemNameNickNode(unqualifiedDictName);
+		ret.setModulePrefixNickNode(modulePrefix);
+		
+		return ret;
+	}
+}
+
+// An "export table" statement
+ExportTableNode ExportTableStmt() :
+{
+	NickNode tableName;
+	NickNode modulePrefix = null;
+	NickNode unqualifiedTableName = null;
+	
+	Token t;
+	Token endOfStmt;
+
+	ExportTableNode ret;
+}
+{
+	t = <EXPORT> <TABLE>
+	//Check if the export table statement refers to table with its fully qualified name
+	(LOOKAHEAD(3) modulePrefix = NickLiteral() ".")?
+	tableName = NickLiteral() endOfStmt = <SEMICOLON>
+
+	{
+	  	if (compatibilityMode)
+	    {
+	      ParseException pe = makeException("'export table' statement is supported only in v2.0 and above.", t);
+	      statementList.addParseError(new ExtendedParseException(pe, new File(curFileName())));
+	      return null;
+	    } 
+
+		//safe copy of unqualified table name before qualifying it with modulePrefix
+		unqualifiedTableName = tableName;
+		
+	    if (null != modulePrefix)
+	    {
+	      tableName = prepareQualifiedNode( modulePrefix.getNickname(), tableName );
+	    }
+
+		ret = new ExportTableNode(tableName, curFileName(), t);
+		ret.setEndOfStmtToken(endOfStmt);
+		ret.setModuleName(currentModule);
+
+		ret.setUnqualifiedElemNameNickNode(unqualifiedTableName);
+		ret.setModulePrefixNickNode(modulePrefix);
+		
+		return ret;
+	}
+}
+
+// An "export function" statement
+ExportFuncNode ExportFuncStmt() :
+{
+	NickNode funcName;
+	NickNode modulePrefix = null;
+	NickNode unqualifiedFuncName = null;
+	Token t;
+	Token endOfStmt;
+
+	ExportFuncNode ret;
+}
+{
+	t = <EXPORT> <FUNCTION>
+	//Check if the export table statement refers to table with its fully qualified name
+	(LOOKAHEAD(3) modulePrefix = NickLiteral() ".")?
+	 funcName = NickLiteral() endOfStmt = <SEMICOLON>
+	{ 
+	    if (compatibilityMode)
+	    {
+	      ParseException pe = makeException("'export function' statement is supported only in v2.0 and above.", t);
+	      statementList.addParseError(new ExtendedParseException(pe, new File(curFileName())));
+	      return null;
+	    }
+
+		//safe copy of unqualified function name before qualifying it with modulePrefix
+		unqualifiedFuncName = funcName;
+		
+	    if (null != modulePrefix)
+	    {
+	      funcName = prepareQualifiedNode( modulePrefix.getNickname(), funcName);
+	    }
+	    
+		ret = new ExportFuncNode(funcName, curFileName(), t);
+		ret.setEndOfStmtToken(endOfStmt);
+		ret.setModuleName(currentModule);
+
+		ret.setUnqualifiedElemNameNickNode(unqualifiedFuncName);
+		ret.setModulePrefixNickNode(modulePrefix);
+		
+		return ret;
+	}
+}
+
+
+
+//////////////////////////////////////////////////////////////////////////////
+// AUXILIARY PARTS OF THE GRAMMAR
+
+// One tuple in a VALUES list, enclosed in parens.
+// Argument is the expected types of the columns.
+Object[] TupVals(ArrayList<NickNode> colTypes) :
+{
+  Object [ ] ret = new Object [ colTypes.size() ];
+  int fieldIx = 0;
+  Object fieldVal;
+  Token errTok;
+}
+{
+  errTok = "("
+  {
+	  if (colTypes.size() == 0)
+	  {
+      	throw makeException(
+      		String.format("Table has no expected types; should never see this."),
+      		errTok);
+	  }
+  }
+  // One benefit of a recursive-descent parser: You can parse
+  // the tuples differently depending on the schema.
+  ret [ fieldIx ] = FieldVal(colTypes, fieldIx)
+  {
+    fieldIx++;
+  }
+  // validate that we are not trying to parse a tuple with too many elements
+  (
+    errTok = ","
+    {
+	  if (fieldIx >= colTypes.size())
+	  {
+        String[] colTypeNames = new String[colTypes.size()];
+        for (int i = 0; i < colTypes.size(); i++)
+        {
+ 	   		colTypeNames[i] = colTypes.get(i).getNickname();
+        }
+        
+      	throw makeException(
+      		String.format("Tuple has at least %d elements but only %d element(s) expected (types: %s).", fieldIx + 1, colTypes.size(), Arrays.toString(colTypeNames)),
+      		errTok);
+	  }
+    }
+    ret [ fieldIx ] = FieldVal(colTypes, fieldIx)
+    {
+      fieldIx++;
+    }
+  )*
+  ")"
+  {
+    return ret;
+  }
+}
+
+
+// Single field value in a VALUES clause; performs schema checking.
+Object FieldVal(ArrayList<NickNode> colTypes, int fieldIx) :
+{
+	StringNode strnode = null;
+	IntNode intnode = null;
+	FloatNode floatnode = null;
+	BoolNode boolnode = null;
+	Object fieldVal;
+	String colTypeName = colTypes.get(fieldIx).getNickname();
+}
+{
+	(
+		strnode = StringLiteral()
+		{
+			fieldVal = strnode.getStr();
+		}
+		| floatnode = FloatLiteral()
+		{
+			fieldVal = floatnode.getValue();
+		}
+		| intnode = IntLiteral()
+		{
+			fieldVal = intnode.getValue();
+		}
+		| boolnode = BooleanLiteral()
+		{
+			fieldVal = boolnode.getValue();
+		}
+	) 
+	{ 
+		
+		return fieldVal;
+	}
+}
+
+
+// Pull the quotes off string literals.
+StringNode StringLiteral() :
+{
+	Token t;
+}
+{
+		//t = <STRING_LITERAL>
+		//{ return new StringNode(t, dequoteStr('"', t), catalog); }
+		//|
+		 t = <SQL_STRING_LITERAL>
+		{ 
+			// Remove quotes, then remove any escapes internally, including escaoed unicode chars
+			//String str = dequoteStr('\'', t);
+			String str = dequoteAndDeescapeUnicodeStr('\'', t);			
+			return new StringNode(str, curFileName(), t); 
+		}
+	    
+}
+
+// Read a string literal without creating a StringNode object.
+String StringLiteralNoNode() :
+{
+	Token t;
+}
+{
+		//t = <STRING_LITERAL>
+		//{ return new StringNode(t, dequoteStr('"', t), catalog); }
+		//|
+		 t = <SQL_STRING_LITERAL>
+		{ 
+			// Remove quotes, then remove any escapes internally.
+			//String str = dequoteStr('\'', t);
+			String str = dequoteAndDeescapeUnicodeStr('\'', t);
+			return str;
+		}
+	    
+}
+
+// Pull the forward slashes or quotes off regular expression literals.
+RegexNode RegexLiteral() :
+{
+	Token t;
+	String dequotedRegex;
+	int numberOfGroups;
+}
+{
+
+    (
+      
+		t = <REGEX_LITERAL>
+	    { dequotedRegex = dequoteStr('/', t); }
+
+	    | t = <SQL_STRING_LITERAL>
+	    // Fix for bug #14840: AQL parser does not deescape backslashes in SQL-like regular expressions
+	    { dequotedRegex = dequoteAndDeescapeStr('\'', t);}
+	    // End fix for bug #14840 
+
+	)
+	{
+	  	//Fix for bug #14832: Throw ParseException for syntactically invalid regex expressions.
+	  	//Fix for bug #57504: Record number of regex groups within each RegexLiteral() for return clause validation in regex extraction
+		try{
+		    	numberOfGroups = Pattern.compile(dequotedRegex).matcher("").groupCount();
+		}
+		catch(PatternSyntaxException e)
+		{
+			ParseException pe = new ParseException(
+				String.format("Regular expression syntax validation failed with error: \n%s",
+				  e.getMessage()));
+
+			// Set current token info, so the parser wraps the message
+			// in an ExtendedParseException containing AQL file information.	  
+			pe.currentToken = t;
+			throw pe;
+		 }
+		 //End fix for bug #14832, #57504 [adding numberOfGroups]
+	     return new RegexNode(dequotedRegex, numberOfGroups, curFileName(), t);
+	 }
+}
+
+// Unlike RegexLiteral, this version does not accept quoted strings.
+// This format is useful in situations (e.g. scalar functions) where
+// one needs to distinguish between regular expressions and strings.
+RegexNode PureRegexLiteral() :
+{
+	Token t;
+	String dequotedRegex;
+	int numberOfGroups;
+}
+{
+		t = <REGEX_LITERAL>
+	    {
+	    	dequotedRegex = dequoteStr('/', t);
+			//Fix for bug #14832: Throw ParseException for syntactically invalid regex expressions.	
+	      	try{
+		    	numberOfGroups = Pattern.compile(dequotedRegex).matcher("").groupCount();
+		   	}
+		   	catch(PatternSyntaxException e)
+		   	{
+				ParseException pe = new ParseException(
+					String.format("Regular expression syntax validation failed with error:\n%s",
+					  e.getMessage()));
+				// Set current token info, so the parser wraps the message
+				// in an ExtendedParseException containing AQL file information.	  
+				pe.currentToken = t;
+				throw pe;
+		   	}
+		   	// End fix for bug #14832
+	    	return new RegexNode(dequotedRegex, numberOfGroups, curFileName(), t);
+	    }
+}
+
+// Defect 57504 - fix for part (a); fix for part (b) within RegexExNode.java
+// Define non-negative integers for use within ReturnClauseNode
+IntNode NonNegativeIntLiteral() :
+{
+	Token t;
+}
+{
+	t = <INTEGER>
+	{
+	  int integer = Integer.valueOf(t.image);
+
+	  if (integer > -1)	  	return new IntNode(integer, curFileName(), t);
+
+	  else
+	  {
+		// Group ID must be non-negative	    
+	    ParseException pe = new ParseException("Group ID cannot be a negative number. It can only be 0 or a positive number.");
+		pe.currentToken = t;
+		throw pe;	  }
+	  	
+	}
+}
+
+// Decode integers.
+IntNode IntLiteral() :
+{
+	Token t;
+}
+{
+	t = <INTEGER>
+	{ return new IntNode(Integer.valueOf(t.image), curFileName(), t); }
+}
+
+// Decode floats.
+FloatNode FloatLiteral() :
+{
+	Token t;
+}
+{
+	t = <FLOAT>
+	{ return new FloatNode(Float.valueOf(t.image), curFileName(), t); }
+}
+
+// A nickname literal with an optional module prefix 
+NickNode NickLiteralOptionalModule() : 
+{
+    NickNode modulePrefix = null;
+    NickNode nameNick;
+}
+{
+    (LOOKAHEAD(3) modulePrefix = NickLiteral() ".")? nameNick = NickLiteral()
+    {
+        if (null != modulePrefix)
+        {
+          nameNick = prepareQualifiedNode( modulePrefix.getNickname(), nameNick);
+        }
+
+        return nameNick;
+    }
+}
+
+NickNode NickLiteral() :
+{
+	Token t;
+}
+{
+	(
+		t = <NICKNAME>
+		// SPECIAL CASE: Allow tables called "Sentence"
+		//| t = <SENTENCE>
+		| t = <DBLQUOTE_STRING_LITERAL>
+		{ 
+			// Remove double quotes
+			t.image = dequoteStr('"', t);
+			// De-escape any remaining double quotes
+			t.image = t.image.replace("\\\"", "\"");
+		}
+	)
+	{ return new NickNode(t.image, curFileName(), t); }
+}
+
+// One of the built-in types
+NickNode TypeLiteral() :
+{
+	Token t;
+}
+{
+	(
+		t = <TEXT>
+		| t = <INTEGER_TYPE>
+		| t = <FLOAT_TYPE>
+		| t = <BOOLEAN_TYPE>
+	)
+	{ return new NickNode(t.image, curFileName(), t); }
+}
+
+// Scalar types that can appear in the arguments or return types of UDFs. 
+TypeNode UDFParamTypeLiteral() :
+{
+	Token t;
+	boolean isSpan = false;
+	boolean isScalarList = false;
+}
+{
+	(
+		t = <TEXT> { isSpan = true; }
+		| t = <SPAN> { isSpan = true; }
+		| t = <INTEGER_TYPE>
+		| t = <FLOAT_TYPE>
+		| t = <STRING_TYPE>
+		| t = <BOOLEAN_TYPE>
+		| t = <LIST_TYPE >	{ isScalarList = true; }				
+	)
+	{ return new TypeNode(t.image, isSpan, isScalarList, curFileName(), t); }
+}
+
+
+// types supported by require doc cols. This can be merged with TypeLiteral() once they use the same set of types
+NickNode RequireColumnTypeLiteral() :
+{
+	Token t;
+	boolean isSpan = false;
+	boolean isScalarList = false;
+}
+{
+	(
+		t = <TEXT> 
+		| t = <INTEGER_TYPE>
+		| t = <FLOAT_TYPE>
+		| t = <BOOLEAN_TYPE>
+	)
+	{ return new NickNode(t.image, curFileName(), t); }
+}
+
+// Types supported by cast expressions
+StringNode CastTypeLiteral() :
+{
+	Token t;
+}
+{
+	(
+		//t = <TEXT> 
+		t = <SPAN> 
+		| t = <INTEGER_TYPE>
+		| t = <FLOAT_TYPE>
+		| t = <STRING_TYPE>
+		| t = <BOOLEAN_TYPE>
+		| t = <LIST_TYPE>
+	)
+	{ return new StringNode(t.image); }
+}
+
+// Types for create external view statements
+NickNode ExternalViewTypeLiteral() :
+{
+	Token t;
+}
+{
+	(
+		t = <TEXT>
+		| t = <SPAN>
+		| t = <INTEGER_TYPE>
+		| t = <FLOAT_TYPE>
+	)
+	{ return new NickNode(t.image, curFileName(), t); }
+}
+
+BoolNode BooleanLiteral():
+{
+  Token t;
+}
+{
+  (
+    t = < TRUE > | t = < FALSE >
+  )
+  {
+	 return new BoolNode(Boolean.parseBoolean (t.image), curFileName(), t);
+  }  
+}
+
+
+// A constant literal of any built-in scalar type
+ConstValueNode ConstantLiteral() : 
+{
+    ConstValueNode ret;
+}
+{
+    (
+        ret = BooleanLiteral()
+        | ret = FloatLiteral()
+        | ret = IntLiteral()
+        | ret = StringLiteral()
+    )
+    { return ret; }
+}
+

@@ -1,0 +1,63 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- fetchDocTest.aql
+--
+-- Test cases for queries that look for documents containing certain
+-- identifiers.
+
+
+-- Test 1:
+-- Find all documents that contain at least one element from three different
+-- dictionaries, also outputting the intermediate steps (e.g. one dictionary,
+-- two dictionaries...)
+create dictionary Dict1 as (
+	'big', 'large', 'huge', 'gargantuan'
+);
+
+create dictionary Dict2 as (
+	'happy', 'blissful', 'glad', 'elated'
+);
+
+create dictionary Dict3 as (
+	'family'
+);
+
+-- Find all documents containing words from Dict1
+create view Set1 as
+select D.text as text
+from Document D
+where ContainsDict('Dict1', D.text);
+
+-- Find all docs containing at least one of Dict1 and Dict2
+create view Set1_2 as
+select S.text as text
+from Set1 S
+where ContainsDict('Dict2', S.text);
+
+-- Find all docs containing at least one of Dict1, Dict2, Dict3
+create view Set1_2_3 as
+select S.text as text
+from Set1_2 S
+where ContainsDict('Dict3', S.text);
+
+-- Alternate version that does all 3 steps in a single statement.
+create view Set1_2_3_Alt as
+select D.text as text
+from Document D
+where ContainsDict('Dict1', D.text)
+  and ContainsDict('Dict2', D.text)
+  and ContainsDict('Dict3', D.text);
+
+-- Retrieve the actual words that matched.
+create view Words1_2_3 as
+extract 
+	dictionaries 'Dict1' and 'Dict2' and 'Dict3'
+	on S.text as word
+from Set1_2_3 S;
+
+output view Set1;
+output view Set1_2;
+output view Set1_2_3;
+output view Set1_2_3_Alt;
+output view Words1_2_3;

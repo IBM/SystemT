@@ -1,0 +1,25 @@
+module module1;
+
+
+create view First as
+  select  Op.match as match,
+          AutoID() as __auto__id
+  from  __Base__module1__First__Temp Op;
+
+output view First;
+
+
+
+create view __Base__module1__First__Temp as
+  (extract pattern   /[A-Z][a-z]+/
+    return group 0 as match
+    from  Document D)
+  union all
+  (extract regex /[A-Z][a-z]+(-[A-Z][a-z]+)?/
+      with flags 'DOTALL'
+      on D.text
+      return group 0 as match
+    from Document D);
+
+output view __Base__module1__First__Temp;
+

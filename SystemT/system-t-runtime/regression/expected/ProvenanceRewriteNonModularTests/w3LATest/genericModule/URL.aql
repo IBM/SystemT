@@ -1,0 +1,2154 @@
+module genericModule;
+
+
+create function GenerateURI(
+  str String)
+return Text like str
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!GenerateURI'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create function GetOutputUrl(
+  str String)
+return Text like str
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!GetOutputUrl'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create function GetHost1(
+  s1 String  ,s2 String)
+return Text like s1
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!GetHost1'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create function GetNSF(
+  before String  ,after String  ,group1match String)
+return Text
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!GetNSF'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create function NormalizeQuery(
+  query Text)
+return Text
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!NormalizeQuery'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create function GetNormalizedString(
+  scheme String  ,host1 String  ,port String  ,index String  ,query String)
+return Text like scheme
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!GetNormalizedString'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create function GetMoreNormalizedString(
+  scheme String  ,host2 String  ,port String  ,ESP2 String  ,query String)
+return Text like scheme
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!GetMoreNormalizedString'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create function GetDedup(
+  scheme String  ,host2 String  ,ESP2 String  ,query Span  ,esp2 String)
+return Text like scheme
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!GetDedup'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create view MainUrls as
+  (select  Op.page as page,
+            Op.anchortext as anchortext,
+            Op.anchorurl as anchorurl,
+            Op.urlid as urlid,
+            Op.url as url,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__418__TempOp__0 Op)
+  union all
+  (select  Op.page as page,
+            Op.anchortext as anchortext,
+            Op.anchorurl as anchorurl,
+            Op.urlid as urlid,
+            Op.url as url,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__418__TempOp__1 Op);
+
+output view MainUrls;
+
+create view PageMainUrls as
+  select  U.page as page,
+          U.anchortext as anchortext,
+          U.anchorurl as anchorurl,
+          U.urlid as urlid,
+          U.url as url,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as MainUrls_____sep_____U____id
+  from  MainUrls U
+  where Equals(U.page, 1);
+
+output view PageMainUrls;
+
+create view AllURLs as
+  select  MU.url as url,
+          GetURL(GetText(MU.url), 1) as proto,
+          GetURL(GetText(MU.url), 2) as host,
+          GetPort(GetText(MU.url)) as port,
+          GetURL(GetText(MU.url), 3) as actualPath,
+          GetURL(GetText(MU.url), 4) as query,
+          GetURL(GetText(MU.url), 5) as fragment,
+          MU.page as page,
+          MU.anchortext as anchortext,
+          MU.urlid as urlid,
+          MU.anchorurl as anchorurl,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          MU.__auto__id as MainUrls_____sep_____MU____id
+  from  MainUrls MU;
+
+output view AllURLs;
+
+create dictionary "Discard_Schemes"
+with case insensitive
+as (
+  'mailto',
+  'javascript'
+);
+
+
+create view URICheck as
+  select  GenerateURI(GetText(U.url)) as Uri,
+          U.urlid as urlid,
+          U.page as page,
+          U.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as AllURLs_____sep_____U____id
+  from  AllURLs U
+  where NotNull(U.url);
+
+output view URICheck;
+
+create view URLDiscardSchemes as
+  select  GetOutputUrl(GetText(U.Uri)) as _url_2,
+          '' as host,
+          '' as port,
+          '' as actualPath,
+          '' as query,
+          URL.proto as proto,
+          URL.fragment as fragment,
+          U.urlid as urlid,
+          U.page as page,
+          U.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URICheck_____sep_____U____id,
+          URL.__auto__id as AllURLs_____sep_____URL____id
+  from  URICheck U,
+        AllURLs URL
+  where MatchesDict('Discard_Schemes', URL.proto)
+     and Equals(U.urlid, URL.urlid);
+
+output view URLDiscardSchemes;
+
+create view URL as
+  select  Op.proto as proto,
+          Op.host as host,
+          Op.port as port,
+          Op.actualPath as actualPath,
+          Op.query as query,
+          Op.fragment as fragment,
+          Op.url as url,
+          Op.urlid as urlid,
+          Op.page as page,
+          Op.anchortext as anchortext,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__419__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__419__TempOp__1 Op,
+        __Minus__419__Temp __t
+  where Equals(Op.proto, __t.proto)
+     and Equals(Op.host, __t.host)
+     and Equals(Op.port, __t.port)
+     and Equals(Op.actualPath, __t.actualPath)
+     and Equals(Op.query, __t.query)
+     and Equals(Op.fragment, __t.fragment)
+     and Equals(Op.url, __t.url)
+     and Equals(Op.urlid, __t.urlid)
+     and Equals(Op.page, __t.page)
+     and Equals(Op.anchortext, __t.anchortext);
+
+output view URL;
+
+create view PageURL as
+  select  U.proto as proto,
+          U.host as host,
+          U.port as port,
+          U.actualPath as actualPath,
+          U.query as query,
+          U.fragment as fragment,
+          U.url as url,
+          U.urlid as urlid,
+          U.page as page,
+          U.anchortext as anchortext,
+          GetURL(GetText(U.url), 0) as normUrl,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URL_____sep_____U____id
+  from  URL U
+  where Equals(U.page, 1);
+
+output view PageURL;
+
+create view HostPatternRegex1 as
+  select  HPR.prefix as prefix,
+          HPR.hostname as hostname,
+          HPR.urlid as urlid,
+          HPR.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          HPR.__auto__id as __Subquery__420__Temp_____sep_____HPR____id
+  from  __Subquery__420__Temp HPR;
+
+output view HostPatternRegex1;
+
+create view HostPatternRegex2 as
+  select  U.host as _host_1,
+          U.host as _host_2,
+          U.urlid as urlid,
+          U.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URL_____sep_____U____id
+  from  URL U
+  where Not(MatchesRegex(/\A(?:(w3|www)(-.+)?\.)((?:\w+\.)*ibm\.com)\Z/, U.host));
+
+output view HostPatternRegex2;
+
+create view CheckhostnamenotNull as
+  select  HPR.hostname as host2,
+          HPR.urlid as urlid,
+          HPR.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          HPR.__auto__id as HostPatternRegex1_____sep_____HPR____id
+  from  HostPatternRegex1 HPR
+  where NotNull(HPR.hostname);
+
+output view CheckhostnamenotNull;
+
+create view CheckhostnameNull as
+  select  '' as _host_2,
+          HPR.urlid as urlid,
+          HPR.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          HPR.__auto__id as HostPatternRegex1_____sep_____HPR____id
+  from  HostPatternRegex1 HPR
+  where Not(NotNull(HPR.hostname));
+
+output view CheckhostnameNull;
+
+create view hostnameFinal as
+  (select  Op._host_2 as _host_2,
+            Op.urlid as urlid,
+            Op.page as page,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__421__TempOp__0 Op)
+  union all
+  (select  Op._host_2 as _host_2,
+            Op.urlid as urlid,
+            Op.page as page,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__421__TempOp__1 Op);
+
+output view hostnameFinal;
+
+create view CreateHost1 as
+  select  GetHost1(GetText(HPR.prefix), GetText(H2._host_2)) as host1,
+          H2.urlid as urlid,
+          H2.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          HPR.__auto__id as HostPatternRegex1_____sep_____HPR____id,
+          H2.__auto__id as hostnameFinal_____sep_____H2____id
+  from  HostPatternRegex1 HPR,
+        hostnameFinal H2
+  where NotNull(HPR.prefix)
+     and Equals(HPR.urlid, H2.urlid);
+
+output view CreateHost1;
+
+create view CheckprefixNull as
+  select  H2.host2 as host2,
+          H2.urlid as urlid,
+          H2.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          HPR.__auto__id as HostPatternRegex1_____sep_____HPR____id,
+          H2.__auto__id as CheckhostnamenotNull_____sep_____H2____id
+  from  HostPatternRegex1 HPR,
+        CheckhostnamenotNull H2
+  where Not(NotNull(HPR.prefix))
+     and Equals(HPR.urlid, H2.urlid);
+
+output view CheckprefixNull;
+
+create view Host2Final as
+  (select  Op._host1_1 as _host1_1,
+            Op.urlid as urlid,
+            Op.page as page,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__422__TempOp__0 Op)
+  union all
+  (select  Op._host1_1 as _host1_1,
+            Op.urlid as urlid,
+            Op.page as page,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__422__TempOp__1 Op);
+
+output view Host2Final;
+
+create view createHostFinal as
+  (select  Op._host_1 as _host_1,
+            Op.url as url,
+            Op.urlid as urlid,
+            Op.page as page,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__423__TempOp__0 Op)
+  union all
+  (select  Op._host_1 as _host_1,
+            Op.url as url,
+            Op.urlid as urlid,
+            Op.page as page,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__423__TempOp__1 Op);
+
+output view createHostFinal;
+
+create view createHostFinal2 as
+  (select  Op.url as url,
+            Op._host_2 as _host_2,
+            Op.urlid as urlid,
+            Op.page as page,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__424__TempOp__0 Op)
+  union all
+  (select  Op.url as url,
+            Op._host_2 as _host_2,
+            Op.urlid as urlid,
+            Op.page as page,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__424__TempOp__1 Op);
+
+output view createHostFinal2;
+
+create view EndingSlashMatch as
+  select  U.actualPath as path,
+          U.fragment as fragment,
+          U.match as match,
+          U.urlid as urlid,
+          U.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as __Subquery__425__Temp_____sep_____U____id
+  from  __Subquery__425__Temp U;
+
+output view EndingSlashMatch;
+
+create view EndingSlashPattern as
+  select  SP.path as path,
+          SpanBetween(LeftContext(SP.path, 0), SP.match) as B,
+          SP.urlid as urlid,
+          SP.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          SP.__auto__id as EndingSlashMatch_____sep_____SP____id
+  from  EndingSlashMatch SP
+  where Not(Equals(GetText(SP.fragment), ''));
+
+output view EndingSlashPattern;
+
+create view NotEndingwithSlash as
+  select  Op.path1 as path1,
+          Op.urlid as urlid,
+          Op.page as page,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__426__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__426__TempOp__1 Op,
+        __Minus__426__Temp __t
+  where Equals(Op.path1, __t.path1)
+     and Equals(Op.urlid, __t.urlid)
+     and Equals(Op.page, __t.page);
+
+output view NotEndingwithSlash;
+
+create view EndSlashFinal as
+  (select  Op.path1 as path1,
+            Op.urlid as urlid,
+            Op.page as page,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__427__TempOp__0 Op)
+  union all
+  (select  Op.path1 as path1,
+            Op.urlid as urlid,
+            Op.page as page,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__427__TempOp__1 Op);
+
+output view EndSlashFinal;
+
+create view IndexPageMatch as
+  select  U.match as match,
+          U.path1 as path1,
+          U.urlid as urlid,
+          U.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as __Subquery__428__Temp_____sep_____U____id
+  from  __Subquery__428__Temp U;
+
+output view IndexPageMatch;
+
+create view IndexPagePattern as
+  select  IP.path1 as originalPath,
+          CombineSpans(SpanBetween(LeftContext(IP.path1, 0), IP.match), RightContextTok(SpanBetween(LeftContext(IP.path1, 0), IP.match), 1)) as path1,
+          IP.urlid as urlid,
+          IP.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          IP.__auto__id as IndexPageMatch_____sep_____IP____id
+  from  IndexPageMatch IP;
+
+output view IndexPagePattern;
+
+create view NotMatchingIndexPagePattern as
+  select  Op.path1 as path1,
+          Op.urlid as urlid,
+          Op.page as page,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__429__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__429__TempOp__1 Op,
+        __Minus__429__Temp __t
+  where Equals(Op.path1, __t.path1)
+     and Equals(Op.urlid, __t.urlid)
+     and Equals(Op.page, __t.page);
+
+output view NotMatchingIndexPagePattern;
+
+create view IndexFinal as
+  (select  Op.path1 as path1,
+            Op.url as url,
+            Op.urlid as urlid,
+            Op.page as page,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__430__TempOp__0 Op)
+  union all
+  (select  Op.path1 as path1,
+            Op.url as url,
+            Op.urlid as urlid,
+            Op.page as page,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__430__TempOp__1 Op);
+
+output view IndexFinal;
+
+create view JCTPatternMatch as
+  select  J.path1 as path1,
+          J.match as match,
+          J.urlid as urlid,
+          J.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          J.__auto__id as __Subquery__431__Temp_____sep_____J____id
+  from  __Subquery__431__Temp J;
+
+output view JCTPatternMatch;
+
+create view JCTMatchRemoved as
+  select  JCTM.path1 as path1,
+          SpanBetween(JCTM.match, RightContext(JCTM.path1, 0)) as path2slash,
+          JCTM.urlid as urlid,
+          JCTM.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          JCTM.__auto__id as JCTPatternMatch_____sep_____JCTM____id
+  from  JCTPatternMatch JCTM;
+
+output view JCTMatchRemoved;
+
+create view JCT as
+  select  CombineSpans(LeftContextTok(JC.path2slash, 1), JC.path2slash) as path2slash,
+          JC.urlid as urlid,
+          JC.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          JC.__auto__id as JCTMatchRemoved_____sep_____JC____id
+  from  JCTMatchRemoved JC;
+
+output view JCT;
+
+create view NotMatchingJctPattern as
+  select  Op.path1 as path1,
+          Op.urlid as urlid,
+          Op.page as page,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__432__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__432__TempOp__1 Op,
+        __Minus__432__Temp __t
+  where Equals(Op.path1, __t.path1)
+     and Equals(Op.urlid, __t.urlid)
+     and Equals(Op.page, __t.page);
+
+output view NotMatchingJctPattern;
+
+create view JCTFinal as
+  (select  Op.path1 as path1,
+            Op.urlid as urlid,
+            Op.page as page,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__433__TempOp__0 Op)
+  union all
+  (select  Op.path1 as path1,
+            Op.urlid as urlid,
+            Op.page as page,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__433__TempOp__1 Op);
+
+output view JCTFinal;
+
+create view JCTTolower as
+  select  toLowerCase(JC.path1) as path2slash,
+          JC.urlid as urlid,
+          JC.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          JC.__auto__id as JCTFinal_____sep_____JC____id
+  from  JCTFinal JC;
+
+output view JCTTolower;
+
+create view EndingSlash as
+  select  U.path2slash as path2slash,
+          U.match as match,
+          U.urlid as urlid,
+          U.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as __Subquery__434__Temp_____sep_____U____id
+  from  __Subquery__434__Temp U;
+
+output view EndingSlash;
+
+create view EndingSlashPatternafterJCT as
+  select  SP.path2slash as path2slash,
+          SpanBetween(LeftContext(SP.path2slash, 0), SP.match) as path2,
+          SP.urlid as urlid,
+          SP.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          SP.__auto__id as EndingSlash_____sep_____SP____id
+  from  EndingSlash SP;
+
+output view EndingSlashPatternafterJCT;
+
+create view NoEndingwithSlash as
+  select  Op.path1 as path1,
+          Op.urlid as urlid,
+          Op.page as page,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__435__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__435__TempOp__1 Op,
+        __Minus__435__Temp __t
+  where Equals(Op.path1, __t.path1)
+     and Equals(Op.urlid, __t.urlid)
+     and Equals(Op.page, __t.page);
+
+output view NoEndingwithSlash;
+
+create view EndingSlashPatternFinal as
+  (select  Op.url as url,
+            Op.path2 as path2,
+            Op.urlid as urlid,
+            Op.page as page,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__436__TempOp__0 Op)
+  union all
+  (select  Op.url as url,
+            Op.path2 as path2,
+            Op.urlid as urlid,
+            Op.page as page,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__436__TempOp__1 Op);
+
+output view EndingSlashPatternFinal;
+
+create view NSFmatch as
+  select  U.path as path,
+          U.group1match as group1match,
+          SpanBetween(LeftContext(U.path, 0), U.fullmatch) as before,
+          SpanBetween(U.fullmatch, RightContext(U.path, 0)) as after,
+          U.urlid as urlid,
+          U.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as __Subquery__437__Temp_____sep_____U____id
+  from  __Subquery__437__Temp U;
+
+output view NSFmatch;
+
+create view CreateNSF as
+  select  GetNSF(GetText(NSFM.before), GetText(NSFM.after), GetText(NSFM.group1match)) as path3,
+          NSFM.urlid as urlid,
+          NSFM.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          NSFM.__auto__id as NSFmatch_____sep_____NSFM____id
+  from  NSFmatch NSFM;
+
+output view CreateNSF;
+
+create view NSFMinus as
+  select  Op.path2 as path2,
+          Op.urlid as urlid,
+          Op.page as page,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__438__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__438__TempOp__1 Op,
+        __Minus__438__Temp __t
+  where Equals(Op.path2, __t.path2)
+     and Equals(Op.urlid, __t.urlid)
+     and Equals(Op.page, __t.page);
+
+output view NSFMinus;
+
+create view NSFFinal as
+  (select  Op.path3 as path3,
+            Op.url as url,
+            Op.urlid as urlid,
+            Op.page as page,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__439__TempOp__0 Op)
+  union all
+  (select  Op.path3 as path3,
+            Op.url as url,
+            Op.urlid as urlid,
+            Op.page as page,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__439__TempOp__1 Op);
+
+output view NSFFinal;
+
+create dictionary "PortNumbers"
+with case insensitive
+as (
+  '443',
+  '80'
+);
+
+
+create view PortUnavailable as
+  select  '-1' as port,
+          U.url as url,
+          U.urlid as urlid,
+          U.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URL_____sep_____U____id
+  from  URL U
+  where Not(NotNull(U.port));
+
+output view PortUnavailable;
+
+create view PortsMatching as
+  select  '-1' as port,
+          U.url as url,
+          U.urlid as urlid,
+          U.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URL_____sep_____U____id
+  from  URL U
+  where NotNull(U.port)
+     and MatchesDict('PortNumbers', U.port);
+
+output view PortsMatching;
+
+create view PortsNotmatching as
+  select  U.port as port,
+          U.url as url,
+          U.urlid as urlid,
+          U.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URL_____sep_____U____id
+  from  URL U
+  where Not(MatchesDict('PortNumbers', U.port))
+     and NotNull(U.port);
+
+output view PortsNotmatching;
+
+create view PortFinal as
+  (select  Op.port as port,
+            Op.url as url,
+            Op.urlid as urlid,
+            Op.page as page,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__440__TempOp__0 Op)
+  union all
+  (select  Op.port as port,
+            Op.url as url,
+            Op.urlid as urlid,
+            Op.page as page,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__440__TempOp__1 Op)
+  union all
+  (select  Op.port as port,
+            Op.url as url,
+            Op.urlid as urlid,
+            Op.page as page,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__440__TempOp__2 Op);
+
+output view PortFinal;
+
+create view NormalizedQueryNonEmpty as
+  select  U.url as url,
+          U.urlid as urlid,
+          U.page as page,
+          NormalizeQuery(U.query) as retainstr,
+          U.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URL_____sep_____U____id
+  from  URL U;
+
+output view NormalizedQueryNonEmpty;
+
+create view NormalizedQueryEmpty as
+  select  Op.url as url,
+          Op.urlid as urlid,
+          Op.page as page,
+          Op.anchortext as anchortext,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__441__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__441__TempOp__1 Op,
+        __Minus__441__Temp __t
+  where Equals(Op.url, __t.url)
+     and Equals(Op.urlid, __t.urlid)
+     and Equals(Op.page, __t.page)
+     and Equals(Op.anchortext, __t.anchortext);
+
+output view NormalizedQueryEmpty;
+
+create view NormalizedQuery as
+  (select  Op.url as url,
+            Op.urlid as urlid,
+            Op.page as page,
+            Op.retainstr as retainstr,
+            Op.anchortext as anchortext,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__442__TempOp__0 Op)
+  union all
+  (select  Op.url as url,
+            Op.urlid as urlid,
+            Op.page as page,
+            Op.retainstr as retainstr,
+            Op.anchortext as anchortext,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__442__TempOp__1 Op);
+
+output view NormalizedQuery;
+
+create view HostPortCombined as
+  select  CHF._host_1 as host,
+          P.port as port,
+          P.url as url,
+          P.urlid as urlid,
+          P.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CHF.__auto__id as createHostFinal_____sep_____CHF____id,
+          P.__auto__id as PortFinal_____sep_____P____id
+  from  createHostFinal CHF,
+        PortFinal P
+  where Equals(CHF.urlid, P.urlid);
+
+output view HostPortCombined;
+
+create view QueryPathCombined as
+  select  IF.path1 as path,
+          RQ.retainstr as query,
+          RQ.url as url,
+          RQ.urlid as urlid,
+          RQ.page as page,
+          RQ.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          IF.__auto__id as IndexFinal_____sep_____IF____id,
+          RQ.__auto__id as NormalizedQuery_____sep_____RQ____id
+  from  IndexFinal IF,
+        NormalizedQuery RQ
+  where Equals(IF.urlid, RQ.urlid);
+
+output view QueryPathCombined;
+
+create view URLforNormalization as
+  select  HP.host as host,
+          HP.port as port,
+          QP.path as path,
+          QP.query as query,
+          QP.url as url,
+          QP.urlid as urlid,
+          QP.page as page,
+          QP.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          HP.__auto__id as HostPortCombined_____sep_____HP____id,
+          QP.__auto__id as QueryPathCombined_____sep_____QP____id
+  from  HostPortCombined HP,
+        QueryPathCombined QP
+  where Equals(HP.urlid, QP.urlid);
+
+output view URLforNormalization;
+
+create view HostPortCombinedMoreNorm as
+  select  CHF2._host_2 as host,
+          P.port as port,
+          P.url as url,
+          P.urlid as urlid,
+          P.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CHF2.__auto__id as createHostFinal2_____sep_____CHF2____id,
+          P.__auto__id as PortFinal_____sep_____P____id
+  from  createHostFinal2 CHF2,
+        PortFinal P
+  where Overlaps(CHF2.url, P.url)
+     and Equals(CHF2.urlid, P.urlid);
+
+output view HostPortCombinedMoreNorm;
+
+create view QueryPathCombinedMoreNorm as
+  select  toLowerCase(ESP2.path2) as path,
+          RQ.retainstr as query,
+          RQ.url as url,
+          RQ.urlid as urlid,
+          RQ.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          ESP2.__auto__id as EndingSlashPatternFinal_____sep_____ESP2____id,
+          RQ.__auto__id as NormalizedQuery_____sep_____RQ____id
+  from  EndingSlashPatternFinal ESP2,
+        NormalizedQuery RQ
+  where Overlaps(ESP2.url, RQ.url)
+     and Equals(ESP2.urlid, RQ.urlid);
+
+output view QueryPathCombinedMoreNorm;
+
+create view URLforMoreNormalized as
+  select  HP.host as host,
+          HP.port as port,
+          QP.path as path,
+          QP.query as query,
+          QP.url as url,
+          HP.urlid as urlid,
+          HP.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          HP.__auto__id as HostPortCombinedMoreNorm_____sep_____HP____id,
+          QP.__auto__id as QueryPathCombinedMoreNorm_____sep_____QP____id
+  from  HostPortCombinedMoreNorm HP,
+        QueryPathCombinedMoreNorm QP
+  where Equals(HP.urlid, QP.urlid);
+
+output view URLforMoreNormalized;
+
+create view HostPathCombinedDedup as
+  select  CH2._host_2 as host,
+          NSF.path3 as path,
+          CH2.url as url,
+          NSF.urlid as urlid,
+          NSF.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CH2.__auto__id as createHostFinal2_____sep_____CH2____id,
+          NSF.__auto__id as NSFFinal_____sep_____NSF____id
+  from  createHostFinal2 CH2,
+        NSFFinal NSF
+  where Overlaps(CH2.url, NSF.url)
+     and Equals(CH2.urlid, NSF.urlid);
+
+output view HostPathCombinedDedup;
+
+create view NormalizedQuery1 as
+  select  N.url as url,
+          N.urlid as urlid,
+          N.page as page,
+          N.retainstr as retainstr,
+          N.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          N.__auto__id as NormalizedQuery_____sep_____N____id
+  from  NormalizedQuery N;
+
+output view NormalizedQuery1;
+
+create view EndingSlashPatternFinal1 as
+  select  N.url as url,
+          N.path2 as path2,
+          N.urlid as urlid,
+          N.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          N.__auto__id as EndingSlashPatternFinal_____sep_____N____id
+  from  EndingSlashPatternFinal N;
+
+output view EndingSlashPatternFinal1;
+
+create view QueryEndingSlashCombinedDedup as
+  select  RQS.url as url1,
+          ESP2.url as url2,
+          RQS.retainstr as query,
+          ESP2.path2 as pathfornsf,
+          ESP2.urlid as urlid,
+          ESP2.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          RQS.__auto__id as NormalizedQuery1_____sep_____RQS____id,
+          ESP2.__auto__id as EndingSlashPatternFinal1_____sep_____ESP2____id
+  from  NormalizedQuery1 RQS,
+        EndingSlashPatternFinal1 ESP2
+  where Overlaps(RQS.url, ESP2.url)
+     and Equals(RQS.urlid, ESP2.urlid);
+
+output view QueryEndingSlashCombinedDedup;
+
+create view QueryEndingSlashCombinedDedup1 as
+  select  D.query as query,
+          D.pathfornsf as pathfornsf,
+          D.urlid as urlid,
+          D.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as QueryEndingSlashCombinedDedup_____sep_____D____id
+  from  QueryEndingSlashCombinedDedup D
+  where Overlaps(D.url1, D.url2);
+
+output view QueryEndingSlashCombinedDedup1;
+
+create view URLDedup as
+  select  HPC.host as host,
+          HPC.path as path,
+          QES.query as query,
+          QES.pathfornsf as pathfornsf,
+          HPC.url as url,
+          HPC.urlid as urlid,
+          HPC.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          HPC.__auto__id as HostPathCombinedDedup_____sep_____HPC____id,
+          QES.__auto__id as QueryEndingSlashCombinedDedup1_____sep_____QES____id
+  from  HostPathCombinedDedup HPC,
+        QueryEndingSlashCombinedDedup1 QES
+  where Equals(HPC.urlid, QES.urlid);
+
+output view URLDedup;
+
+create view NormalizationMoreNormalizedCombined as
+  select  N.host as host,
+          N.port as port,
+          N.path as path,
+          N.query as query,
+          MN.host as hostMN,
+          MN.port as portMN,
+          MN.path as pathmn,
+          MN.query as querymn,
+          N.urlid as urlid,
+          N.page as page,
+          N.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          N.__auto__id as URLforNormalization_____sep_____N____id,
+          MN.__auto__id as URLforMoreNormalized_____sep_____MN____id
+  from  URLforNormalization N,
+        URLforMoreNormalized MN
+  where Equals(N.urlid, MN.urlid);
+
+output view NormalizationMoreNormalizedCombined;
+
+create view URLFinal as
+  select  NM.host as host,
+          NM.port as port,
+          NM.path as path,
+          NM.query as query,
+          NM.hostMN as hostmn,
+          NM.portMN as portmn,
+          NM.pathmn as pathmn,
+          NM.querymn as querymn,
+          D.host as hostdedup,
+          D.path as pathdedup,
+          D.query as querydedup,
+          D.pathfornsf as pathfornsf,
+          D.url as url,
+          D.urlid as urlid,
+          D.page as page,
+          NM.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          NM.__auto__id as NormalizationMoreNormalizedCombined_____sep_____NM____id,
+          D.__auto__id as URLDedup_____sep_____D____id
+  from  NormalizationMoreNormalizedCombined NM,
+        URLDedup D
+  where Equals(NM.urlid, D.urlid);
+
+output view URLFinal;
+
+create view NormMoreNormDedupForAllURLs as
+  select  GetNormalizedString(GetText(U.proto), GetText(UF.host), GetText(UF.port), GetText(UF.path), GetText(UF.query)) as normalizedURL,
+          GetMoreNormalizedString(GetText(U.proto), GetText(UF.hostmn), GetText(UF.portmn), GetText(UF.pathmn), GetText(UF.querymn)) as moreNormalizedURL,
+          GetDedup(GetText(U.proto), GetText(UF.hostdedup), GetText(UF.pathdedup), UF.querydedup, GetText(UF.pathfornsf)) as dedupString,
+          GetText(U.proto) as proto,
+          GetText(UF.host) as host,
+          GetText(UF.port) as port,
+          GetText(UF.path) as path,
+          GetText(UF.query) as query,
+          U.urlid as urlid,
+          U.page as page,
+          UF.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          UF.__auto__id as URLFinal_____sep_____UF____id,
+          U.__auto__id as URL_____sep_____U____id
+  from  URLFinal UF,
+        URL U
+  where Equals(UF.urlid, U.urlid);
+
+output view NormMoreNormDedupForAllURLs;
+
+create view NormMoreNormDedup as
+  select  U.normalizedURL as normalizedURL,
+          U.moreNormalizedURL as moreNormalizedURL,
+          U.dedupString as dedupString,
+          U.proto as proto,
+          U.host as host,
+          U.port as port,
+          U.path as path,
+          U.query as query,
+          U.urlid as urlid,
+          U.page as page,
+          U.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as NormMoreNormDedupForAllURLs_____sep_____U____id
+  from  NormMoreNormDedupForAllURLs U
+  where Equals(U.page, 1);
+
+output view NormMoreNormDedup;
+
+create view NormMoreNormDedupForLinkURLs as
+  select  Op.normalizedURL as normalizedURL,
+          Op.moreNormalizedURL as moreNormalizedURL,
+          Op.dedupString as dedupString,
+          Op.proto as proto,
+          Op.host as host,
+          Op.port as port,
+          Op.path as path,
+          Op.query as query,
+          Op.urlid as urlid,
+          Op.page as page,
+          Op.anchortext as anchortext,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__443__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__443__TempOp__1 Op,
+        __Minus__443__Temp __t
+  where Equals(Op.normalizedURL, __t.normalizedURL)
+     and Equals(Op.moreNormalizedURL, __t.moreNormalizedURL)
+     and Equals(Op.dedupString, __t.dedupString)
+     and Equals(Op.proto, __t.proto)
+     and Equals(Op.host, __t.host)
+     and Equals(Op.port, __t.port)
+     and Equals(Op.path, __t.path)
+     and Equals(Op.query, __t.query)
+     and Equals(Op.urlid, __t.urlid)
+     and Equals(Op.page, __t.page)
+     and Equals(Op.anchortext, __t.anchortext);
+
+output view NormMoreNormDedupForLinkURLs;
+
+create view UrlPathHash as
+  select  HashCode(GetText(DP.path3)) as urlPathHash,
+          DP.path3 as deduppath,
+          D.dedupString as dedupString,
+          DP.urlid as urlid,
+          DP.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          DP.__auto__id as NSFFinal_____sep_____DP____id,
+          D.__auto__id as NormMoreNormDedup_____sep_____D____id
+  from  NSFFinal DP,
+        NormMoreNormDedup D
+  where Equals(DP.page, 1)
+     and Equals(DP.urlid, D.urlid);
+
+output view UrlPathHash;
+
+create view NSFQueryHash as
+  select  D.retainstr as query,
+          0 as urlQueryHash,
+          D.urlid as urlid,
+          D.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          N.__auto__id as NSFmatch_____sep_____N____id,
+          D.__auto__id as NormalizedQuery1_____sep_____D____id
+  from  NSFmatch N,
+        NormalizedQuery1 D
+  where Equals(N.urlid, D.urlid)
+     and Equals(D.page, 1);
+
+output view NSFQueryHash;
+
+create view NonNSFQueryHash as
+  select  Op.query as query,
+          Op.urlid as urlid,
+          Op.page as page,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__444__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__444__TempOp__1 Op,
+        __Minus__444__Temp __t
+  where Equals(Op.query, __t.query)
+     and Equals(Op.urlid, __t.urlid)
+     and Equals(Op.page, __t.page);
+
+output view NonNSFQueryHash;
+
+create view UrlQueryHash as
+  (select  Op.urlQueryHash as urlQueryHash,
+            Op.query as query,
+            Op.urlid as urlid,
+            Op.page as page,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__445__TempOp__0 Op)
+  union all
+  (select  Op.urlQueryHash as urlQueryHash,
+            Op.query as query,
+            Op.urlid as urlid,
+            Op.page as page,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__445__TempOp__1 Op);
+
+output view UrlQueryHash;
+
+create view UrlPathQueryHashCombined as
+  select  PH.urlPathHash as urlPathHash,
+          PH.deduppath as path,
+          QH.urlQueryHash as urlQueryHash,
+          QH.query as query,
+          PH.dedupString as dedupString,
+          QH.urlid as urlid,
+          QH.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          PH.__auto__id as UrlPathHash_____sep_____PH____id,
+          QH.__auto__id as UrlQueryHash_____sep_____QH____id
+  from  UrlPathHash PH,
+        UrlQueryHash QH
+  where Equals(QH.urlid, PH.urlid);
+
+output view UrlPathQueryHashCombined;
+
+
+
+create view __Minus__419__Temp as
+  select  __t.proto as proto,
+          __t.host as host,
+          __t.port as port,
+          __t.actualPath as actualPath,
+          __t.query as query,
+          __t.fragment as fragment,
+          __t.url as url,
+          __t.urlid as urlid,
+          __t.page as page,
+          __t.anchortext as anchortext
+  from  
+    ((select  Op.proto as proto,
+              Op.host as host,
+              Op.port as port,
+              Op.actualPath as actualPath,
+              Op.query as query,
+              Op.fragment as fragment,
+              Op.url as url,
+              Op.urlid as urlid,
+              Op.page as page,
+              Op.anchortext as anchortext
+      from  __Minus__419__TempOp__1 Op)
+    minus
+    (select  Op.proto as proto,
+              Op.host as host,
+              Op.port as port,
+              Op.actualPath as actualPath,
+              Op.query as query,
+              Op.fragment as fragment,
+              Op.url as url,
+              Op.urlid as urlid,
+              Op.page as page,
+              Op.anchortext as anchortext
+      from  __Minus__419__TempOp__2 Op)
+    ) __t
+  group by __t.proto, __t.host, __t.port, __t.actualPath, __t.query, __t.fragment, __t.url, __t.urlid, __t.page, __t.anchortext;
+
+output view __Minus__419__Temp;
+
+create view __Minus__419__TempOp__1 as
+  select  AU.proto as proto,
+          AU.host as host,
+          AU.port as port,
+          AU.actualPath as actualPath,
+          AU.query as query,
+          AU.fragment as fragment,
+          AU.url as url,
+          AU.urlid as urlid,
+          AU.page as page,
+          AU.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          AU.__auto__id as AllURLs_____sep_____AU____id
+  from  AllURLs AU;
+
+output view __Minus__419__TempOp__1;
+
+create view __Minus__419__TempOp__2 as
+  select  GetText(UD.proto) as proto,
+          GetText(UD.host) as host,
+          UD.port as port,
+          GetText(UD.actualPath) as actualPath,
+          GetText(UD.query) as query,
+          UD.fragment as fragment,
+          GetText(UD._url_2) as url,
+          UD.urlid as urlid,
+          UD.page as page,
+          UD.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          UD.__auto__id as URLDiscardSchemes_____sep_____UD____id
+  from  URLDiscardSchemes UD;
+
+output view __Minus__419__TempOp__2;
+
+create view __Minus__426__Temp as
+  select  __t.path1 as path1,
+          __t.urlid as urlid,
+          __t.page as page
+  from  
+    ((select  Op.path1 as path1,
+              Op.urlid as urlid,
+              Op.page as page
+      from  __Minus__426__TempOp__1 Op)
+    minus
+    (select  Op.path1 as path1,
+              Op.urlid as urlid,
+              Op.page as page
+      from  __Minus__426__TempOp__2 Op)
+    ) __t
+  group by __t.path1, __t.urlid, __t.page;
+
+output view __Minus__426__Temp;
+
+create view __Minus__426__TempOp__1 as
+  select  U.actualPath as path1,
+          U.urlid as urlid,
+          U.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URL_____sep_____U____id
+  from  URL U;
+
+output view __Minus__426__TempOp__1;
+
+create view __Minus__426__TempOp__2 as
+  select  ESP1.path as path1,
+          ESP1.urlid as urlid,
+          ESP1.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          ESP1.__auto__id as EndingSlashPattern_____sep_____ESP1____id
+  from  EndingSlashPattern ESP1;
+
+output view __Minus__426__TempOp__2;
+
+create view __Minus__429__Temp as
+  select  __t.path1 as path1,
+          __t.urlid as urlid,
+          __t.page as page
+  from  
+    ((select  Op.path1 as path1,
+              Op.urlid as urlid,
+              Op.page as page
+      from  __Minus__429__TempOp__1 Op)
+    minus
+    (select  Op.path1 as path1,
+              Op.urlid as urlid,
+              Op.page as page
+      from  __Minus__429__TempOp__2 Op)
+    ) __t
+  group by __t.path1, __t.urlid, __t.page;
+
+output view __Minus__429__Temp;
+
+create view __Minus__429__TempOp__1 as
+  select  ESF.path1 as path1,
+          ESF.urlid as urlid,
+          ESF.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          ESF.__auto__id as EndSlashFinal_____sep_____ESF____id
+  from  EndSlashFinal ESF;
+
+output view __Minus__429__TempOp__1;
+
+create view __Minus__429__TempOp__2 as
+  select  IPP.originalPath as path1,
+          IPP.urlid as urlid,
+          IPP.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          IPP.__auto__id as IndexPagePattern_____sep_____IPP____id
+  from  IndexPagePattern IPP;
+
+output view __Minus__429__TempOp__2;
+
+create view __Minus__432__Temp as
+  select  __t.path1 as path1,
+          __t.urlid as urlid,
+          __t.page as page
+  from  
+    ((select  Op.path1 as path1,
+              Op.urlid as urlid,
+              Op.page as page
+      from  __Minus__432__TempOp__1 Op)
+    minus
+    (select  Op.path1 as path1,
+              Op.urlid as urlid,
+              Op.page as page
+      from  __Minus__432__TempOp__2 Op)
+    ) __t
+  group by __t.path1, __t.urlid, __t.page;
+
+output view __Minus__432__Temp;
+
+create view __Minus__432__TempOp__1 as
+  select  IF.path1 as path1,
+          IF.urlid as urlid,
+          IF.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          IF.__auto__id as IndexFinal_____sep_____IF____id
+  from  IndexFinal IF;
+
+output view __Minus__432__TempOp__1;
+
+create view __Minus__432__TempOp__2 as
+  select  JCT.path1 as path1,
+          JCT.urlid as urlid,
+          JCT.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          JCT.__auto__id as JCTPatternMatch_____sep_____JCT____id
+  from  JCTPatternMatch JCT;
+
+output view __Minus__432__TempOp__2;
+
+create view __Minus__435__Temp as
+  select  __t.path1 as path1,
+          __t.urlid as urlid,
+          __t.page as page
+  from  
+    ((select  Op.path1 as path1,
+              Op.urlid as urlid,
+              Op.page as page
+      from  __Minus__435__TempOp__1 Op)
+    minus
+    (select  Op.path1 as path1,
+              Op.urlid as urlid,
+              Op.page as page
+      from  __Minus__435__TempOp__2 Op)
+    ) __t
+  group by __t.path1, __t.urlid, __t.page;
+
+output view __Minus__435__Temp;
+
+create view __Minus__435__TempOp__1 as
+  select  JCTF.path2slash as path1,
+          JCTF.urlid as urlid,
+          JCTF.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          JCTF.__auto__id as JCTTolower_____sep_____JCTF____id
+  from  JCTTolower JCTF;
+
+output view __Minus__435__TempOp__1;
+
+create view __Minus__435__TempOp__2 as
+  select  ESP2.path2slash as path1,
+          ESP2.urlid as urlid,
+          ESP2.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          ESP2.__auto__id as EndingSlashPatternafterJCT_____sep_____ESP2____id
+  from  EndingSlashPatternafterJCT ESP2;
+
+output view __Minus__435__TempOp__2;
+
+create view __Minus__438__Temp as
+  select  __t.path2 as path2,
+          __t.urlid as urlid,
+          __t.page as page
+  from  
+    ((select  Op.path2 as path2,
+              Op.urlid as urlid,
+              Op.page as page
+      from  __Minus__438__TempOp__1 Op)
+    minus
+    (select  Op.path2 as path2,
+              Op.urlid as urlid,
+              Op.page as page
+      from  __Minus__438__TempOp__2 Op)
+    ) __t
+  group by __t.path2, __t.urlid, __t.page;
+
+output view __Minus__438__Temp;
+
+create view __Minus__438__TempOp__1 as
+  select  ESP2.path2 as path2,
+          ESP2.urlid as urlid,
+          ESP2.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          ESP2.__auto__id as EndingSlashPatternFinal_____sep_____ESP2____id
+  from  EndingSlashPatternFinal ESP2;
+
+output view __Minus__438__TempOp__1;
+
+create view __Minus__438__TempOp__2 as
+  select  NSF.path as path2,
+          NSF.urlid as urlid,
+          NSF.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          NSF.__auto__id as NSFmatch_____sep_____NSF____id
+  from  NSFmatch NSF;
+
+output view __Minus__438__TempOp__2;
+
+create view __Minus__441__Temp as
+  select  __t.url as url,
+          __t.urlid as urlid,
+          __t.page as page,
+          __t.anchortext as anchortext
+  from  
+    ((select  Op.url as url,
+              Op.urlid as urlid,
+              Op.page as page,
+              Op.anchortext as anchortext
+      from  __Minus__441__TempOp__1 Op)
+    minus
+    (select  Op.url as url,
+              Op.urlid as urlid,
+              Op.page as page,
+              Op.anchortext as anchortext
+      from  __Minus__441__TempOp__2 Op)
+    ) __t
+  group by __t.url, __t.urlid, __t.page, __t.anchortext;
+
+output view __Minus__441__Temp;
+
+create view __Minus__441__TempOp__1 as
+  select  U.url as url,
+          U.urlid as urlid,
+          U.page as page,
+          U.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URL_____sep_____U____id
+  from  URL U;
+
+output view __Minus__441__TempOp__1;
+
+create view __Minus__441__TempOp__2 as
+  select  U.url as url,
+          U.urlid as urlid,
+          U.page as page,
+          U.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as NormalizedQueryNonEmpty_____sep_____U____id
+  from  NormalizedQueryNonEmpty U;
+
+output view __Minus__441__TempOp__2;
+
+create view __Minus__443__Temp as
+  select  __t.normalizedURL as normalizedURL,
+          __t.moreNormalizedURL as moreNormalizedURL,
+          __t.dedupString as dedupString,
+          __t.proto as proto,
+          __t.host as host,
+          __t.port as port,
+          __t.path as path,
+          __t.query as query,
+          __t.urlid as urlid,
+          __t.page as page,
+          __t.anchortext as anchortext
+  from  
+    ((select  Op.normalizedURL as normalizedURL,
+              Op.moreNormalizedURL as moreNormalizedURL,
+              Op.dedupString as dedupString,
+              Op.proto as proto,
+              Op.host as host,
+              Op.port as port,
+              Op.path as path,
+              Op.query as query,
+              Op.urlid as urlid,
+              Op.page as page,
+              Op.anchortext as anchortext
+      from  __Minus__443__TempOp__1 Op)
+    minus
+    (select  Op.normalizedURL as normalizedURL,
+              Op.moreNormalizedURL as moreNormalizedURL,
+              Op.dedupString as dedupString,
+              Op.proto as proto,
+              Op.host as host,
+              Op.port as port,
+              Op.path as path,
+              Op.query as query,
+              Op.urlid as urlid,
+              Op.page as page,
+              Op.anchortext as anchortext
+      from  __Minus__443__TempOp__2 Op)
+    ) __t
+  group by __t.normalizedURL, __t.moreNormalizedURL, __t.dedupString, __t.proto, __t.host, __t.port, __t.path, __t.query, __t.urlid, __t.page, __t.anchortext;
+
+output view __Minus__443__Temp;
+
+create view __Minus__443__TempOp__1 as
+  select  U.normalizedURL as normalizedURL,
+          U.moreNormalizedURL as moreNormalizedURL,
+          U.dedupString as dedupString,
+          U.proto as proto,
+          U.host as host,
+          U.port as port,
+          U.path as path,
+          U.query as query,
+          U.urlid as urlid,
+          U.page as page,
+          U.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as NormMoreNormDedupForAllURLs_____sep_____U____id
+  from  NormMoreNormDedupForAllURLs U;
+
+output view __Minus__443__TempOp__1;
+
+create view __Minus__443__TempOp__2 as
+  select  U.normalizedURL as normalizedURL,
+          U.moreNormalizedURL as moreNormalizedURL,
+          U.dedupString as dedupString,
+          U.proto as proto,
+          U.host as host,
+          U.port as port,
+          U.path as path,
+          U.query as query,
+          U.urlid as urlid,
+          U.page as page,
+          U.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as NormMoreNormDedup_____sep_____U____id
+  from  NormMoreNormDedup U;
+
+output view __Minus__443__TempOp__2;
+
+create view __Minus__444__Temp as
+  select  __t.query as query,
+          __t.urlid as urlid,
+          __t.page as page
+  from  
+    ((select  Op.query as query,
+              Op.urlid as urlid,
+              Op.page as page
+      from  __Minus__444__TempOp__1 Op)
+    minus
+    (select  Op.query as query,
+              Op.urlid as urlid,
+              Op.page as page
+      from  __Minus__444__TempOp__2 Op)
+    ) __t
+  group by __t.query, __t.urlid, __t.page;
+
+output view __Minus__444__Temp;
+
+create view __Minus__444__TempOp__1 as
+  select  D.retainstr as query,
+          D.urlid as urlid,
+          D.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as NormalizedQuery1_____sep_____D____id
+  from  NormalizedQuery1 D
+  where Equals(D.page, 1);
+
+output view __Minus__444__TempOp__1;
+
+create view __Minus__444__TempOp__2 as
+  select  D.query as query,
+          D.urlid as urlid,
+          D.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as NSFQueryHash_____sep_____D____id
+  from  NSFQueryHash D;
+
+output view __Minus__444__TempOp__2;
+
+create view __Subquery__420__Temp as
+  extract U.urlid as urlid,
+    U.page as page,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    U.__auto__id as URL_____sep_____U____id,
+    regex /\A(?:(w3|www)(-.+)?\.)((?:\w+\.)*ibm\.com)\Z/
+    with flags 'DOTALL'
+    on U.host
+    return group 1 as prefix
+       and group 3 as hostname
+  from URL U;
+
+output view __Subquery__420__Temp;
+
+create view __Subquery__425__Temp as
+  extract U.urlid as urlid,
+    U.page as page,
+    U.fragment as fragment,
+    U.actualPath as actualPath,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    U.__auto__id as URL_____sep_____U____id,
+    regex /\/$/
+    with flags 'DOTALL'
+    on U.actualPath
+    return group 0 as match
+  from URL U;
+
+output view __Subquery__425__Temp;
+
+create view __Subquery__428__Temp as
+  extract ESF.urlid as urlid,
+    ESF.page as page,
+    ESF.path1 as path1,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    ESF.__auto__id as EndSlashFinal_____sep_____ESF____id,
+    regex /\/(?:(?:index|home|top|homepage)?\.\w+)?\Z/
+    with flags 'DOTALL'
+    on ESF.path1
+    return group 0 as match
+  from EndSlashFinal ESF;
+
+output view __Subquery__428__Temp;
+
+create view __Subquery__431__Temp as
+  extract IF.urlid as urlid,
+    IF.page as page,
+    IF.path1 as path1,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    IF.__auto__id as IndexFinal_____sep_____IF____id,
+    regex /\/jct\d+[a-z]+\//
+    with flags 'DOTALL'
+    on IF.path1
+    return group 0 as match
+  from IndexFinal IF;
+
+output view __Subquery__431__Temp;
+
+create view __Subquery__434__Temp as
+  extract JCTF.urlid as urlid,
+    JCTF.page as page,
+    JCTF.path2slash as path2slash,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    JCTF.__auto__id as JCTTolower_____sep_____JCTF____id,
+    regex /\/$/
+    with flags 'DOTALL'
+    on JCTF.path2slash
+    return group 0 as match
+  from JCTTolower JCTF;
+
+output view __Subquery__434__Temp;
+
+create view __Subquery__437__Temp as
+  extract ESP2.urlid as urlid,
+    ESP2.page as page,
+    ESP2.path2 as path,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    ESP2.__auto__id as EndingSlashPatternFinal_____sep_____ESP2____id,
+    regex /\.nsf\/(?:0|[\dA-Fa-f]{32})\/([\dA-Fa-f]{32})/
+    with flags 'DOTALL'
+    on ESP2.path2
+    return group 0 as fullmatch
+       and group 1 as group1match
+  from EndingSlashPatternFinal ESP2;
+
+output view __Subquery__437__Temp;
+
+create view __Union__418__TempOp__0 as
+  select  2 as page,
+          L.anchortext as anchortext,
+          L.anchorurl as anchorurl,
+          AutoID() as urlid,
+          L.resolvurl as url,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as ResolveRelativeURL_____sep_____L____id
+  from  ResolveRelativeURL L
+  where NotNull(L.resolvurl)
+     and Not(Equals(GetText(L.resolvurl), ''))
+  limit 200;
+
+output view __Union__418__TempOp__0;
+
+create view __Union__418__TempOp__1 as
+  select  1 as page,
+          'dummy' as anchortext,
+          'dummy' as anchorurl,
+          AutoID() as urlid,
+          D.label as url,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as Document_____sep_____D____id
+  from  Document D
+  where NotNull(D.label)
+     and Not(Equals(GetText(D.label), ''));
+
+output view __Union__418__TempOp__1;
+
+create view __Union__421__TempOp__0 as
+  select  H2.host2 as _host_2,
+          H2.urlid as urlid,
+          H2.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          H2.__auto__id as CheckhostnamenotNull_____sep_____H2____id
+  from  CheckhostnamenotNull H2;
+
+output view __Union__421__TempOp__0;
+
+create view __Union__421__TempOp__1 as
+  select  CH._host_2 as _host_2,
+          CH.urlid as urlid,
+          CH.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CH.__auto__id as CheckhostnameNull_____sep_____CH____id
+  from  CheckhostnameNull CH;
+
+output view __Union__421__TempOp__1;
+
+create view __Union__422__TempOp__0 as
+  select  H1.host1 as _host1_1,
+          H1.urlid as urlid,
+          H1.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          H1.__auto__id as CreateHost1_____sep_____H1____id
+  from  CreateHost1 H1;
+
+output view __Union__422__TempOp__0;
+
+create view __Union__422__TempOp__1 as
+  select  GetText(CP.host2) as _host1_1,
+          CP.urlid as urlid,
+          CP.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CP.__auto__id as CheckprefixNull_____sep_____CP____id
+  from  CheckprefixNull CP;
+
+output view __Union__422__TempOp__1;
+
+create view __Union__423__TempOp__0 as
+  select  GetText(HPR2._host_1) as _host_1,
+          U.url as url,
+          HPR2.urlid as urlid,
+          HPR2.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          HPR2.__auto__id as HostPatternRegex2_____sep_____HPR2____id,
+          U.__auto__id as URL_____sep_____U____id
+  from  HostPatternRegex2 HPR2,
+        URL U
+  where Equals(HPR2.urlid, U.urlid);
+
+output view __Union__423__TempOp__0;
+
+create view __Union__423__TempOp__1 as
+  select  CH._host1_1 as _host_1,
+          U.url as url,
+          CH.urlid as urlid,
+          CH.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CH.__auto__id as Host2Final_____sep_____CH____id,
+          U.__auto__id as URL_____sep_____U____id
+  from  Host2Final CH,
+        URL U
+  where Equals(CH.urlid, U.urlid);
+
+output view __Union__423__TempOp__1;
+
+create view __Union__424__TempOp__0 as
+  select  U.url as url,
+          HNF._host_2 as _host_2,
+          HNF.urlid as urlid,
+          HNF.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          HNF.__auto__id as hostnameFinal_____sep_____HNF____id,
+          U.__auto__id as URL_____sep_____U____id
+  from  hostnameFinal HNF,
+        URL U
+  where Equals(HNF.urlid, U.urlid);
+
+output view __Union__424__TempOp__0;
+
+create view __Union__424__TempOp__1 as
+  select  U.url as url,
+          HPR2._host_1 as _host_2,
+          HPR2.urlid as urlid,
+          HPR2.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          HPR2.__auto__id as HostPatternRegex2_____sep_____HPR2____id,
+          U.__auto__id as URL_____sep_____U____id
+  from  HostPatternRegex2 HPR2,
+        URL U
+  where Equals(HPR2.urlid, U.urlid);
+
+output view __Union__424__TempOp__1;
+
+create view __Union__427__TempOp__0 as
+  select  ES.path1 as path1,
+          ES.urlid as urlid,
+          ES.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          ES.__auto__id as NotEndingwithSlash_____sep_____ES____id
+  from  NotEndingwithSlash ES;
+
+output view __Union__427__TempOp__0;
+
+create view __Union__427__TempOp__1 as
+  select  ESP1.B as path1,
+          ESP1.urlid as urlid,
+          ESP1.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          ESP1.__auto__id as EndingSlashPattern_____sep_____ESP1____id
+  from  EndingSlashPattern ESP1;
+
+output view __Union__427__TempOp__1;
+
+create view __Union__430__TempOp__0 as
+  select  I.path1 as path1,
+          U.url as url,
+          U.urlid as urlid,
+          U.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          I.__auto__id as NotMatchingIndexPagePattern_____sep_____I____id,
+          U.__auto__id as URL_____sep_____U____id
+  from  NotMatchingIndexPagePattern I,
+        URL U
+  where Equals(I.urlid, U.urlid);
+
+output view __Union__430__TempOp__0;
+
+create view __Union__430__TempOp__1 as
+  select  IPP.path1 as path1,
+          U.url as url,
+          U.urlid as urlid,
+          U.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          IPP.__auto__id as IndexPagePattern_____sep_____IPP____id,
+          U.__auto__id as URL_____sep_____U____id
+  from  IndexPagePattern IPP,
+        URL U
+  where Equals(IPP.urlid, U.urlid);
+
+output view __Union__430__TempOp__1;
+
+create view __Union__433__TempOp__0 as
+  select  JCTM.path1 as path1,
+          JCTM.urlid as urlid,
+          JCTM.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          JCTM.__auto__id as NotMatchingJctPattern_____sep_____JCTM____id
+  from  NotMatchingJctPattern JCTM;
+
+output view __Union__433__TempOp__0;
+
+create view __Union__433__TempOp__1 as
+  select  JCT.path2slash as path1,
+          JCT.urlid as urlid,
+          JCT.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          JCT.__auto__id as JCT_____sep_____JCT____id
+  from  JCT JCT;
+
+output view __Union__433__TempOp__1;
+
+create view __Union__436__TempOp__0 as
+  select  U.url as url,
+          SP2.path1 as path2,
+          U.urlid as urlid,
+          U.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          SP2.__auto__id as NoEndingwithSlash_____sep_____SP2____id,
+          U.__auto__id as URL_____sep_____U____id
+  from  NoEndingwithSlash SP2,
+        URL U
+  where Equals(SP2.urlid, U.urlid);
+
+output view __Union__436__TempOp__0;
+
+create view __Union__436__TempOp__1 as
+  select  U.url as url,
+          ESP2.path2 as path2,
+          U.urlid as urlid,
+          U.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          ESP2.__auto__id as EndingSlashPatternafterJCT_____sep_____ESP2____id,
+          U.__auto__id as URL_____sep_____U____id
+  from  EndingSlashPatternafterJCT ESP2,
+        URL U
+  where Equals(ESP2.urlid, U.urlid);
+
+output view __Union__436__TempOp__1;
+
+create view __Union__439__TempOp__0 as
+  select  NSFM.path2 as path3,
+          U.url as url,
+          U.urlid as urlid,
+          U.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          NSFM.__auto__id as NSFMinus_____sep_____NSFM____id,
+          U.__auto__id as URL_____sep_____U____id
+  from  NSFMinus NSFM,
+        URL U
+  where Equals(NSFM.urlid, U.urlid);
+
+output view __Union__439__TempOp__0;
+
+create view __Union__439__TempOp__1 as
+  select  CNSF.path3 as path3,
+          U.url as url,
+          U.urlid as urlid,
+          U.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CNSF.__auto__id as CreateNSF_____sep_____CNSF____id,
+          U.__auto__id as URL_____sep_____U____id
+  from  CreateNSF CNSF,
+        URL U
+  where Equals(CNSF.urlid, U.urlid);
+
+output view __Union__439__TempOp__1;
+
+create view __Union__440__TempOp__0 as
+  select  PM.port as port,
+          PM.url as url,
+          PM.urlid as urlid,
+          PM.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          PM.__auto__id as PortsMatching_____sep_____PM____id
+  from  PortsMatching PM;
+
+output view __Union__440__TempOp__0;
+
+create view __Union__440__TempOp__1 as
+  select  PNM.port as port,
+          PNM.url as url,
+          PNM.urlid as urlid,
+          PNM.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          PNM.__auto__id as PortsNotmatching_____sep_____PNM____id
+  from  PortsNotmatching PNM;
+
+output view __Union__440__TempOp__1;
+
+create view __Union__440__TempOp__2 as
+  select  PU.port as port,
+          PU.url as url,
+          PU.urlid as urlid,
+          PU.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          PU.__auto__id as PortUnavailable_____sep_____PU____id
+  from  PortUnavailable PU;
+
+output view __Union__440__TempOp__2;
+
+create view __Union__442__TempOp__0 as
+  select  U.url as url,
+          U.urlid as urlid,
+          U.page as page,
+          U.retainstr as retainstr,
+          U.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as NormalizedQueryNonEmpty_____sep_____U____id
+  from  NormalizedQueryNonEmpty U;
+
+output view __Union__442__TempOp__0;
+
+create view __Union__442__TempOp__1 as
+  select  U.url as url,
+          U.urlid as urlid,
+          U.page as page,
+          '' as retainstr,
+          U.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as NormalizedQueryEmpty_____sep_____U____id
+  from  NormalizedQueryEmpty U;
+
+output view __Union__442__TempOp__1;
+
+create view __Union__445__TempOp__0 as
+  select  HashCode(GetString(D.query)) as urlQueryHash,
+          D.query as query,
+          D.urlid as urlid,
+          D.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as NonNSFQueryHash_____sep_____D____id
+  from  NonNSFQueryHash D;
+
+output view __Union__445__TempOp__0;
+
+create view __Union__445__TempOp__1 as
+  select  D.urlQueryHash as urlQueryHash,
+          D.query as query,
+          D.urlid as urlid,
+          D.page as page,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as NSFQueryHash_____sep_____D____id
+  from  NSFQueryHash D;
+
+output view __Union__445__TempOp__1;
+

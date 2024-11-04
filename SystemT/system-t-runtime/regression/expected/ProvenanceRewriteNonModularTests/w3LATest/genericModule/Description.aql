@@ -1,0 +1,58 @@
+module genericModule;
+
+
+create view DetaggedContentDescription as
+  select  Op.content as content,
+          AutoID() as __auto__id
+  from  __Base__DetaggedContentDescription__Temp Op;
+
+output view DetaggedContentDescription;
+
+create view Description as
+  (select  Op.content as content,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__9__TempOp__0 Op)
+  union all
+  (select  Op.content as content,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__9__TempOp__1 Op);
+
+output view Description;
+
+create view __Base__DetaggedContentDescription__Temp as
+  select  GetString(D.content) as content
+  from  DetaggedContent D,
+
+        (select  Case(GreaterThan(M.cnt, 0), 1, 0) as xsists
+        from  
+          (select  Count(*) as cnt
+          from  MetaDescription MetaDescription
+          ) M
+        ) M
+  where Equals(M.xsists, 0)
+     and NotNull(D.content);
+
+output view __Base__DetaggedContentDescription__Temp;
+
+create view __Union__9__TempOp__0 as
+  select  GetString(D.content) as content,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as DetaggedContentDescription_____sep_____D____id
+  from  DetaggedContentDescription D;
+
+output view __Union__9__TempOp__0;
+
+create view __Union__9__TempOp__1 as
+  select  GetString(D.content) as content,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as MetaDescription_____sep_____D____id
+  from  MetaDescription D;
+
+output view __Union__9__TempOp__1;
+

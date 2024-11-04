@@ -1,0 +1,13 @@
+create view SentenceBoundary as
+select S.boundary as boundary
+from
+(
+	select R.match as boundary
+	from Regex(/(([\.\?!]+\s)|(\n\s*\n))/, Document.text) R
+	where
+		-- Filter the candidate boundaries.
+		Not(ContainsDict('abbreviation.dict', 
+			CombineSpans(LeftContextTok(R.match, 1), R.match)))
+)S;
+
+output view SentenceBoundary;

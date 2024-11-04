@@ -1,0 +1,28 @@
+/*
+Test to verify that compiler restricts, the output alias name that conflicts with any of the exported view name.
+This restriction is introduced to fix defect# 26281 - refer comment#6 in RTC.
+*/
+module module1;
+
+create view viewA as
+select 'viewA' as field
+from Document D;
+
+create view viewB as
+select 'viewB' as field
+from Document D;
+
+export view viewA;
+
+-- Alias name conflicting with export of viewA
+output view viewB as 'module1.viewA';
+
+create view viewC as
+select 'viewB' as field
+from Document D;
+
+create external view testExtView(match Span) 
+external_name 'testExtViewExtName';
+
+-- Alias name conflicting with external_name of external view testExtView
+output view viewC as 'testExtViewExtName';

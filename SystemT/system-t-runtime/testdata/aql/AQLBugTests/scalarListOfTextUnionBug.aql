@@ -1,0 +1,35 @@
+------------------------------------------------------------
+-- scalarListOfTextUnionBug.aql
+
+-- Test case for defect# 17285 : ScalarList of Text types are 
+-- not union compatible unless nested Text types are identical
+------------------------------------------------------------
+require document with columns text Text;
+
+create view OriginData1 as
+select 'a' as data
+from Document D;
+
+create view OriginData2 as
+select 'b' as data
+from Document D;
+
+
+create view Data1 as
+select List(O.data) as data
+from OriginData1 O;
+
+create view Data2 as
+select List(O.data) as data
+from OriginData2 O;
+
+
+create view Data3 as
+(select * from Data1)
+union all
+(select * from Data2);
+
+
+output view Data1;
+output view Data2;
+output view Data3;

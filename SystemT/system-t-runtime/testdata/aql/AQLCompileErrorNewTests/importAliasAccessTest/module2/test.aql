@@ -1,0 +1,53 @@
+-- Test case: AQL elements imported using alias must be accessible only through alias and not through their fully qualified names
+module module2;
+
+import view DocCopy from module module1 as DocCopyAlias;
+import dictionary SalutationDict from module module1 as SalutationDictAlias;
+import dictionary FirstNamesDict from module module1 as FirstNamesDictAlias;
+import function myToUpperCase from module module1 as myToUpperCaseAlias;
+import table NameToLocation from module module1 as NameToLocationAlias;
+
+
+-------------------------------------------------------------------------------------------------------------
+-- Access view using fully qualified name (instead of using alias) and expect an error
+output view module1.DocCopy;
+-------------------------------------------------------------------------------------------------------------
+
+-- Access SalutationDict using fully qualified name (instead of using alias) and expect an error
+create view SalutationDictMatches as
+extract dictionary 'module1.SalutationDict'
+on D.text as match
+from Document D;
+
+output view SalutationDictMatches;
+-------------------------------------------------------------------------------------------------------------
+
+-- Access FirstNamesDict using fully qualified name (instead of using alias) and expect an error
+create view FirstNamesDictMatches as
+extract dictionary 'module1.FirstNamesDict'
+on D.text as match
+from Document D;
+
+output view FirstNamesDictMatches;
+-------------------------------------------------------------------------------------------------------------
+
+-- Access NameToLocation table using fully qualified name (instead of using alias) and expect an error
+create view NameToLocationMatches as
+select NTL.name, NTL.location
+from module1.NameToLocation NTL;
+
+output view NameToLocationMatches;
+-------------------------------------------------------------------------------------------------------------
+
+-- Access function using fully qualified name (instead of using alias) and expect an error
+create view FunctionCall as
+select module1.myToUpperCase(ToString(D.text)) as match from Document D;
+
+output view FunctionCall;
+-------------------------------------------------------------------------------------------------------------
+
+-- Use illegal view name in select list
+create view DocCopyDerived as
+select module1.DocCopy.text from module1.DocCopy;
+
+output view DocCopyDerived;

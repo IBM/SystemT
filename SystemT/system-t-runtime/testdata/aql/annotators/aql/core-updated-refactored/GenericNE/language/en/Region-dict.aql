@@ -1,0 +1,24 @@
+create view DirectionCandidate as
+select D.match as match
+--from   Dictionary('direction.dict', 'Exact', Doc.text) D;
+from (extract dictionary 'loc_directn_case_en.dict' with flags 'Exact' on D.text as match from Doc D) D;
+
+create view Direction as
+select D.match as match
+from   DirectionCandidate D
+consolidate on D.match;
+----------------------------------
+-- major international regions
+----------------------------------
+
+create view InternationalRegionCandidate as
+extract
+    dictionaries
+        --'location/regions/internationalRegions.dict'
+        'location/regions/loc_world_regions_en.dict' 
+    --and 'location/regions/regions-of-conflict.dict'
+    and 'location/regions/loc_regions_conflict_en.dict'
+        on D.text   
+        as match     
+        from Doc D
+        having MatchesRegex(/\p{Lu}\p{M}*.+/, match);

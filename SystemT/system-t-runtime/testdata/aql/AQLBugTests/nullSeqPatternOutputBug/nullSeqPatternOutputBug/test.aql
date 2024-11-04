@@ -1,0 +1,27 @@
+module nullSeqPatternOutputBug; 
+
+create dictionary HardwareIndicator as ('Network');
+create dictionary Organization as ('European Union Agency');
+
+
+detag Document.text as DetaggedDoc;
+
+create view DetaggedHardwareIndicator as
+extract pattern <D.match>
+	return group 0 as match
+	from Dictionary('HardwareIndicator', DetaggedDoc.text) D;
+
+create view Organization as
+extract pattern <D.match>
+	return group 0 as match
+	from Dictionary('Organization', Document.text) D;
+
+
+create view GenericHardware as
+extract pattern (<O.match>)<Token>{0,1}<H.match>
+	return group 0 as match
+	   and group 1 as canon
+	from DetaggedHardwareIndicator H,
+	     Organization O;
+
+output view GenericHardware;

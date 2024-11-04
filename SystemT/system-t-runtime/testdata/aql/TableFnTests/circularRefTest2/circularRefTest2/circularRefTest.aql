@@ -1,0 +1,45 @@
+module circularRefTest2;
+
+require document with columns text Text;
+
+-- Test to ensure that the AQL compiler disallows circular references 
+-- among views that reference each other via record locators.
+
+-- Declare a simple scalar function that turns two tables into a big string
+create function MyScalarFunc( 
+    firstArg table( spanVal Span ) as locator,
+    secondArg table( spanVal Span, strVal Text ) as locator
+)
+return String
+external_name 
+    '../../../../udfjars/tableFnTestsUDFs.jar:com.ibm.test.udfs.TableConsumingScalarFunc!eval'
+language java
+deterministic
+called on null input;
+
+
+-- Declare a view to serve as the second input to MyScalarFunc
+create view SecondInputView as
+select S.match as spanCol, 'Dummy string' as textCol
+from 
+    (extract regex /[A-Z][a-z]+/ on 1 token in D.text as match
+    from Document D) S;
+
+
+-- Declare two views that depend on each other.
+/*create view FirstFuncView as
+select MyScalarFunc(SecondFuncView, SecondInputView) as func
+from Document D;*/
+
+create view SecondFuncView as
+select MyScalarFunc(ThirdFuncView, SecondInputView) as func
+from Document D;
+
+create view ThirdFuncView as
+select MyScalarFunc(SecondFuncView, SecondInputView) as func
+from Document D;
+
+output view SecondFuncView;
+
+output view ThirdFuncView;
+

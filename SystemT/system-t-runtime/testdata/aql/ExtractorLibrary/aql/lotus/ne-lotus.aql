@@ -1,0 +1,164 @@
+---------------------------------------
+-- Document Preprocessing
+---------------------------------------
+create view Doc as
+select D.text as text
+from DocScan D;
+
+----------------------------------------
+-- Basic Named Entity Annotators
+----------------------------------------
+
+--------------------------------------------------------------------------------
+-- First, include the client side version of certain dictionaries and views
+-- to keep the memory footprint low
+include 'core/GenericNE/clientSideSpecific/AdditionalDictsForAddress.aql';
+include 'core/GenericNE/clientSideSpecific/AdditionalDictsForOrganization.aql';
+--------------------------------------------------------------------------------
+
+include 'core/GenericNE/DictsForAddress.aql';
+include 'core/GenericNE/Sentence.aql';
+include 'core/GenericNE/MacrosForTimeDates.aql';
+include 'core/GenericNE/Date.aql';
+include 'core/GenericNE/Time.aql';
+include 'core/GenericNE/PhoneNumber.aql';
+include 'core/GenericNE/Address.aql';
+include 'core/GenericNE/CityStateCountry.aql';
+include 'core/GenericNE/StockExchangeAndTicker.aql';
+include 'core/GenericNE/URL.aql';
+include 'core/GenericNE/EmailAddress.aql';
+include 'core/GenericNE/NotesEmailAddress.aql';
+include 'core/GenericNE/Organization.aql';
+include 'core/GenericNE/Organization-FilterSingleNewLineTab.aql';
+include 'core/GenericNE/Organization-Sentence.aql';
+include 'core/GenericNE/Person.aql';
+include 'core/GenericNE/Person-FilterSingleNewLineTab.aql';
+include 'core/GenericNE/Person-Filter.aql';
+
+include 'core/GenericNE/Address-consolidation.aql';
+-- Laura 05/05/2009: added the Lotus version of this view because
+-- the lotus drop does not output Organization within NotesEmail 
+include 'lotus/specific/OrgWithinNotesEmail.aql';
+include 'core/GenericNE/Organization-FilterUrlInternetNotesEmailAddress.aql';
+include 'core/GenericNE/Organization-consolidation.aql';
+include 'core/GenericNE/Person-consolidation.aql';
+-- Laura 09/22/2009: extracted these rules in a separate file
+include 'lotus/specific/NotesEmailClassification.aql';
+
+
+---------------------------------------------
+-- Consolidation:
+-- For now, we just remove annotations that are completely
+-- contained within other annotations.
+
+
+
+	
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Output section <<<<<<<<<<<<<<<<
+-- ===========================================================================		
+
+-- 1. Person
+
+/*
+select P.person as person
+into PersonSingleToken
+from PersonStrongSingleTokenNonOverlaps P
+where Not(MatchesRegex(/.{1,2}/,P.person));
+*/
+	
+-- Laura 04/30/2009: start change
+
+-- The core Person annotator returns both single- and multiple-token matches
+-- Output only multi-token persons here
+select P.person as "person.name", P.person as person
+into Person
+from PersonFinalAllWithoutDots P
+where Equals(GetText(P.type), 'MULTITOKEN');
+
+
+-- 2. PersonSingleToken
+-- Output only single-token persons
+select P.person as "person.name", P.person as person
+into PersonSingleToken
+from PersonFinalAllWithoutDots P
+where Equals(GetText(P.type), 'SINGLETOKEN');	
+
+-- Laura 04/30/2009:end change
+
+
+
+-- 3. Organization
+
+select O.org as org
+into Organization
+--from Consolidate('OverlapOrdered',FinalOrgConsolidatedWithoutDots.org) O;
+from FinalOrgConsolidatedWithoutDots O
+consolidate on O.org
+using 'LeftToRight';
+
+
+-- 4. Address
+
+-- Laura 08/13/09: extract short zipcode as first 5 digits of long zipcodes (e.g., 95123-1212) per Brian's request
+/*
+select A.address as "address.street", A.city as "address.city", A.stateorprovince as "address.state", A.zip as "address.zip", A.reference as address
+into AddressOld
+from AddressFinal A;
+*/
+
+create view AddressWithShortZip as
+extract A.address as address, A.city as city, A.stateorprovince as stateorprovince, A.zip as zip, A.reference as reference,
+	regex /\A(\d{5})\-\d{4}/ on A.zip 
+		return group 1 as shortzip
+from AddressFinal A;
+
+create view AddressNoShortZip as
+select A.address as address, A.city as city, A.stateorprovince as stateorprovince, A.zip as zip, A.reference as reference, A.zip as shortzip
+from AddressFinal A
+where Not(MatchesRegex(/\A\d{5}\-\d{4}/,A.zip));
+
+select A.address as "address.street", A.city as "address.city", A.stateorprovince as "address.state", A.zip as "address.zip", A.shortzip as "address.shortzip", A.reference as address
+into Address
+from 
+(
+	(select A.address as address, A.city as city, A.stateorprovince as stateorprovince, A.zip as zip, A.shortzip as shortzip, A.reference as reference from AddressWithShortZip A)
+	union all 
+	(select A.address as address, A.city as city, A.stateorprovince as stateorprovince, A.zip as zip, A.shortzip as shortzip, A.reference as reference from AddressNoShortZip A)
+)
+A;
+
+
+-- 5. PhoneNumber
+
+select P.num as num
+into PhoneNumber
+from PhoneNumOnly P
+-- disallow multiple new line
+where Not(ContainsRegex(/[\n\r]{2,}/, P.num));
+
+
+-- 6. InternetEmail  
+
+select E.email as "email.internet", E.email as "person.email", E.email as "email"
+into InternetEmail
+from InternetEmailFinal E;
+ 
+
+-- 7. NotesEmail  
+
+select E.email as "email.notes", E.name as "person.name", E.email as "person.email", E.email as "email"
+into NotesEmail
+from AllNotesEmail E	
+consolidate on E.email;
+  
+
+-- 8. URL  
+
+select C.annot as url
+into URL
+from URLAll C
+consolidate on C.annot;
+
+
+ 

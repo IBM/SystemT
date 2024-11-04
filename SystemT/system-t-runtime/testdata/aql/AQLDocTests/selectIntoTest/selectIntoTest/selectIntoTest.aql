@@ -1,0 +1,101 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test cases for associating AQL Doc comments with the right select into 
+-- statement when there are no ParseExceptions.
+--
+-------------------------------------------------------------------------------
+
+module selectIntoTest;
+
+/* A comment spanning a single line. Will be ignored.*/
+
+/*
+A comment spanning
+multiple lines.
+Will be ignored.
+*/
+
+
+/** An AQL Doc comment for Test1 on a single line. Should be attached to Test1.*/
+select D.text as text
+into Test1
+from Document D;
+
+
+/** An AQL Doc comment for Test2 
+on two lines. Should be parsed and attaced to Test2.*/
+select D.text as text
+into Test2
+from Document D;
+
+
+/** 
+ * An AQL Doc comment for Test3 
+ * on multiple lines. 
+ * Should be parsed and attached to Test3.
+ */
+select D.text as text
+into Test3
+from Document D;
+
+
+/** 
+ * Some AQL Doc comment. Should be parsed but not attached to the next view.
+ * Instead, the next view will be paired with the following AQL doc comment. 
+ */
+/** 
+ * An AQL Doc comment for Test4. Should be parsed and attached to Test4.
+ */
+select D.text as text
+into Test4
+from Document D;
+
+
+/** 
+ * An AQL Doc comment for Test5. Should be parsed and attached to Test5. 
+ * The next multiline comment and single line comments will be ignored.
+ */
+/* 
+ * A multiline comment. Should be ignored.
+ */
+-- A single line comment. Should be ignored.
+select D.text as text
+into Test5
+from Document D;
+
+
+/** 
+ * An AQL Doc comment for Test6. Should be parsed and attached to Test6. 
+ * The next single line comment will be ignored.
+ */
+-- A single line comment. Should be ignored.
+select D.text as text
+into Test6
+from Document D;
+
+/** 
+ * An AQL Doc comment for Test7. Should be parsed and attached to Test7. 
+ * The next multiline comment will be ignored.
+ */
+/* 
+ * A multiline comment. Should be ignored.
+ */
+select D.text as text
+into Test7
+from Document D;
+
+
+-- A view without an AQL Doc Comment
+select D.text as text
+into Test8
+from Document D;
+
+export view Test1;
+export view Test2;
+export view Test3;
+export view Test4;
+export view Test5;
+export view Test6;
+export view Test7;
+export view Test8;
+

@@ -1,0 +1,54 @@
+module genericModule;
+
+
+create table LookupTable
+  (str Text, label Integer) as
+  values
+    ('Ã\u0205LAND ISLANDS', 0),
+    ('Bookmarks', 1),
+    ('B\'ookmarks', 2);
+
+create dictionary "LookupDict" from table "LookupTable"
+with entries from str
+and case insensitive;
+
+create view ExtractLookup as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'LookupDict'
+    on D.text as match
+  from Document D;
+
+output view ExtractLookup;
+
+create view SelectLookup as
+  select  LookupTable.str as str,
+          LookupTable.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as LookupTable_____sep_____LookupTable____id
+  from  LookupTable LookupTable;
+
+output view SelectLookup;
+
+
+
+
+
+create table FirstSegMappingTable
+  (str Text, label Text) as
+  values
+    ('Community Source', 'sites_communitysource');
+
+create view Test as
+  select  F.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as FirstSegMappingTable_____sep_____F____id
+  from  FirstSegMappingTable F;
+
+output view Test;
+
+
+

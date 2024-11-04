@@ -1,0 +1,37 @@
+module Date;
+
+
+create view Dates as
+  select  __t2.match as match,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__98__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__98__Temp__1 __t1,
+        __Consolidate__98__Temp__2 __t2
+  where Or(GreaterThan(GetBegin(__t1.__consolidate__target), GetBegin(__t2.__consolidate__target)), Equals(GetBegin(__t1.__consolidate__target), GetBegin(__t2.__consolidate__target)))
+     and Overlaps(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.match;
+
+output view Dates;
+
+export view Date.Dates;
+
+
+create view __Consolidate__98__Temp__1 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as DateAll_____sep_____R____id,
+          R.match as __consolidate__target
+  from  DateAll R;
+
+output view __Consolidate__98__Temp__1;
+
+create view __Consolidate__98__Temp__2 as
+  select  __t1.match as match,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__98__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'LeftToRight';
+
+output view __Consolidate__98__Temp__2;
+

@@ -1,0 +1,41 @@
+module dictSimple;
+
+create dictionary SalutationDict as  
+(
+  'rev.', 'col.', 'reverend', 'prof.', 'professor',
+  'lady', 'miss.', 'mrs.', 'mrs', 'mr.', 'pt.', 'ms.',
+  'messrs.', 'dr.', 'master.', 'marquis', 'monsieur',
+  'ds', 'di','herr', 'Fraeulein', 'Doktor', 'Herr Doktor',
+  'Frau Doktor','Herr Professor', 'Frau professor', 'Baron', 'graf'
+);
+
+-- Find dictionary matches for all title initials
+create view Salutation as
+extract dictionary SalutationDict
+on D.text as salutation
+from Document D;
+
+
+create dictionary LastName 
+from file 'dict/strictLast.dict';
+
+-- Find dictionary matches for all last names
+create view LastName as
+extract dictionary LastName
+on D.text as last
+from Document D
+having MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, last);
+
+
+-- Find dictionary matches for all first names
+-- Mostly US first names
+create view FirstName as
+extract dictionary 'dict/strictFirst.dict'
+on D.text as first
+from Document D
+having MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, first);
+
+
+output view Salutation;
+output view LastName;
+output view FirstName;

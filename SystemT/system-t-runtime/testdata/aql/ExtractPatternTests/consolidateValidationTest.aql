@@ -1,0 +1,60 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test cases for extension to sequence patterns to pass through attributes
+-- Verifies that extra items in select list are validated wrt FROM clause
+--
+-------------------------------------------------------------------------------
+
+create view CapsWord as
+extract 'CapsWord' as type,
+	regex /[A-Z].*/ on 1 token in D.text as match
+from Document D;
+
+create view LowWord as
+extract 'LowWord' as type,
+	regex /[a-z]*/ on 1 token in D.text as match
+from Document D;
+
+
+-- Wrong attribute name in consolidate clause. Will generate an exception "Invalid consolidation target attribute 'match1'"
+create view ColRefAtom4 as
+extract C.match as match,
+	    pattern <C.match> as ret
+from CapsWord C
+consolidate on match1;
+
+output view ColRefAtom4;
+
+
+-- Invalid consolidation type - will generate an exception
+create view ColRefAtom11 as
+extract C.match as match,
+	    pattern <C.match> as ret
+from CapsWord C
+consolidate on ret using 'Undefined';
+
+output view ColRefAtom11;
+
+
+-- Correct attribute name in consolidate clause. Should not generate an exception
+create view ColRefAtom12 as
+extract C.match as match,
+	    pattern <C.match> as ret
+from CapsWord C
+consolidate on match;
+
+output view ColRefAtom12;
+
+-- Invalid use of priority with policy other than LeftToRight and invalid function name in consolidation priority target - will generate two exceptions
+create view ColRefAtom13 as
+extract C.match as match,
+	    pattern <C.match> as ret
+from CapsWord C
+consolidate on ret using 'ContainedWithin' with priority from GetStr(ret);
+
+output view ColRefAtom13;
+
+
+
+
+

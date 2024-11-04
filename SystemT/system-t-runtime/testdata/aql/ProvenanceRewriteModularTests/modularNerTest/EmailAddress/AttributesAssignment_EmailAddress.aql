@@ -1,0 +1,23 @@
+module EmailAddress;
+
+
+create view EmailAddressWithAttr as
+  extract 
+        regex /^([^@]+)@([^@]+)$/ on E.email
+       return group 0 as reference and group 1 as local and group 2 as domain
+  from InternetEmailFinal E;
+
+create view EmailAddressWithoutAttr as
+(select E.email as email from InternetEmailFinal E)
+minus
+(select E.reference as email from EmailAddressWithAttr E);
+
+create view EmailAddressWithAttrAll as
+(select E.reference as email, E.local as local, E.domain as domain, E.reference as reference from EmailAddressWithAttr E)
+union all
+(select E.email as email, '' as local, '' as domain, E.email as reference from EmailAddressWithoutAttr E);
+
+create view EmailAddress_ as 
+select E.email as email, E.local as local, E.domain as domain, E.reference as reference
+from EmailAddressWithAttrAll E;
+

@@ -1,0 +1,84 @@
+-------------------------------------------------------------------------------
+--
+-- Tests to validate that we do not allow duplicate aliases in the FROM clause.
+--
+-------------------------------------------------------------------------------
+
+create view CapsWord as 
+extract regex /[A-Z].+/ on 1 token in D.text as match
+from Document D;
+
+-- Two from list items with identical aliases 
+-- Will throw exception: Alias 'CW' referenced multiple times in FROM clause.
+create view From1 as
+select CW.match as match
+from CapsWord CW, CapsWord CW;
+
+output view From1;
+
+-- Two from list items with no alias. By default no alias means the scoped name is the view name
+-- Will throw exception: Alias 'CapsWord' referenced multiple times in FROM clause
+create view From2 as
+select CW.match as match
+from CapsWord, CapsWord;
+
+output view From2;
+
+-- Two from list items, one with an alias, the other with no alias. By default no alias means the scoped name is the view name
+-- Will throw exception: Alias 'CapsWord' referenced multiple times in FROM clause
+create view From3 as
+select CW.match as match
+from CapsWord, CapsWord CapsWord;
+
+output view From3;
+
+-- Two from list items, one is a subquery. 
+-- Will throw exception: Alias 'CapsWord' referenced multiple times in FROM clause
+create view From4 as
+select CW.match as match
+from CapsWord, (extract regex /[A-Z].+/ on 1 token in D.text as match from Document D) CapsWord;
+
+output view From4;
+
+-- A subquery without an alias cannot be parsed
+-- Will throw exception: 
+create view From5 as
+select CW.match as match
+from (extract regex /[A-Z].+/ on 1 token in D.text as match from Document D) ;
+
+-- Two from list items with identical aliases in an EXTRCAT PATTERN statement
+-- Will throw exception: Alias 'CW' referenced multiple times in FROM clause.
+create view From6 as
+extract CW.match as match, pattern <CW.match> as match1
+from CapsWord CW, CapsWord CW;
+
+output view From6;
+
+-- Two from list items with no alias  in an EXTRCAT PATTERN statement. By default no alias means the scoped name is the view name
+-- Will throw exception: Alias 'CapsWord' referenced multiple times in FROM clause
+create view From7 as
+extract CW.match as match, pattern <CW.match> as match1
+from CapsWord, CapsWord;
+
+output view From7;
+
+-- Two from list items, one with an alias, the other with no alias in an EXTRCAT PATTERN statement. By default no alias means the scoped name is the view name
+-- Will throw exception: Alias 'CapsWord' referenced multiple times in FROM clause
+create view From8 as
+extract CW.match as match, pattern <CW.match> as match1
+from CapsWord, CapsWord CapsWord;
+
+output view From8;
+
+-- Two from list items, one is a subquery in an EXTRCAT PATTERN statement. 
+-- Will throw exception: Alias 'CapsWord' referenced multiple times in FROM clause
+create view From9 as
+extract CW.match as match, pattern <CW.match> as match1
+from CapsWord, (extract regex /[A-Z].+/ on 1 token in D.text as match from Document D) CapsWord;
+
+output view From9;
+
+
+
+
+

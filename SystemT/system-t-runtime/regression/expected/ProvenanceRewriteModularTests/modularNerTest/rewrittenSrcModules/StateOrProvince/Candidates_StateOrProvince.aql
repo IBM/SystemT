@@ -1,0 +1,68 @@
+module StateOrProvince;
+
+
+import view OrganizationFull from module OrganizationCandidates as OrganizationFull
+;
+
+
+import view StateCandidate from module CommonFeatures as StateCandidate
+;
+
+
+require document with columns
+  text Text;
+
+create view StateCandidateInvalid as
+  select  S.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StateCandidate_____sep_____S____id,
+          O.__auto__id as OrganizationFull_____sep_____O____id
+  from  StateCandidate S,
+        OrganizationFull O
+  where Overlaps(O.organization, S.match);
+
+output view StateCandidateInvalid;
+
+create view StateCandidateValid as
+  select  Op.match as match,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__369__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__369__TempOp__1 Op,
+        __Minus__369__Temp __t
+  where Equals(Op.match, __t.match);
+
+output view StateCandidateValid;
+
+create view __Minus__369__Temp as
+  select  __t.match as match
+  from  
+    ((select  Op.match as match
+      from  __Minus__369__TempOp__1 Op)
+    minus
+    (select  Op.match as match
+      from  __Minus__369__TempOp__2 Op)
+    ) __t
+  group by __t.match;
+
+output view __Minus__369__Temp;
+
+create view __Minus__369__TempOp__1 as
+  select  S.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StateCandidate_____sep_____S____id
+  from  StateCandidate S;
+
+output view __Minus__369__TempOp__1;
+
+create view __Minus__369__TempOp__2 as
+  select  S.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StateCandidateInvalid_____sep_____S____id
+  from  StateCandidateInvalid S;
+
+output view __Minus__369__TempOp__2;
+

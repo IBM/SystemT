@@ -1,0 +1,67 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test cases for extension to sequence patterns to pass through attributes
+-- Test case for passing through columns from more complex patterns consisting 
+-- of a mix of sequence, optional and alternation elements.
+--
+-------------------------------------------------------------------------------
+
+create view CapsWord as
+extract 'CapsWord' as type,
+	regex /[A-Z][a-z]*/ on 1 token in D.text as match
+from Document D
+limit 10;
+
+create view AllCapsWord as
+extract 'AllCapsWord' as type,
+	regex /[A-Z]+/ on 1 token in D.text as match
+from Document D
+limit 10;
+
+create view LowWord as
+extract 'LowWord' as type,
+	regex /[a-z]*/ on 1 token in D.text as match
+from Document D
+limit 10;
+
+-- Sequence and alternation
+create view Mixed1 as
+extract C.type as ctype, A.type as atype, L.type as ltype,
+	    pattern (<C.match> | <A.match>) (<L.match>)
+	    return group 1 as first
+	       and group 2 as last
+	       and group 0 as match
+from CapsWord C, AllCapsWord A, LowWord L;
+
+output view Mixed1;
+
+-- Sequence, alternation and optional
+create view Mixed2 as
+extract C.type as ctype, A.type as atype, L.type as ltype,
+	    pattern (<C.match> | <A.match>) (<L.match>)?
+	    return group 1 as first
+	       and group 2 as last
+	       and group 0 as match
+from CapsWord C, AllCapsWord A, LowWord L;
+
+output view Mixed2;
+
+-- Sequence, alternation and optional
+create view Mixed3 as
+extract C.type as ctype, A.type as atype, L.type as ltype,
+	    pattern (<C.match> | <A.match>)? (<L.match>)
+	    return group 1 as first
+	       and group 2 as last
+	       and group 0 as match
+from CapsWord C, AllCapsWord A, LowWord L;
+
+output view Mixed3;
+
+-- Sequence, alternation and optional
+create view Mixed4 as
+extract C.type as ctype, A.type as atype, L.type as ltype,
+	    pattern <C.match> | ((<A.match>)? (<L.match>))
+	    as match
+from CapsWord C, AllCapsWord A, LowWord L;
+
+output view Mixed4;

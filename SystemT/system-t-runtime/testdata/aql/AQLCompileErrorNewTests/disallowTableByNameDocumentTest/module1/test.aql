@@ -1,0 +1,28 @@
+-- Test to verify that compiler throws error when the user attempts to create a table by name Document
+module module1;
+
+--Expect an error for the line below. A table with the name Document is not allowed
+create table Document (name Text, location Text) as
+values 
+	('IBM', 'USA'), 
+	('BigCorp', 'Apex'), 
+	('Initech', 'Dallas'),
+	('Acme Fake Company Names', 'Somewhere');
+
+
+-- Create a dictionary of company names
+create dictionary CompanyNames as
+('IBM', 'BigCorp', 'Initech');
+
+-- Find all matches of the company names dictionary.
+create view Company as
+extract
+	dictionary 'CompanyNames' on D.text as company
+from Document D;
+	
+create view CompanyLoc as
+select N2C.location as loc, C.company as company
+from Company C, Document N2C
+where Equals(GetText(C.company), GetText(N2C.name));
+
+output view CompanyLoc;

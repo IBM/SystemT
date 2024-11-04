@@ -1,0 +1,59 @@
+create view CapsWord as
+    extract 'UpperCase' as type,
+        regex /[A-Z].*/ on 1 token in D.text as word
+    from Document D;
+
+
+create view CapsWordOneToThree as
+    extract CW1.type as type,
+    pattern 'BEGIN' ((<CW1.word>?)(<CW2.word>{0,2}))
+    return group 0 as match
+       and group 2 as cw1
+       and group 3 as cw2
+    from CapsWord CW1, CapsWord CW2;
+
+
+create view BeginOfPattern as
+    extract CW1.type as type,
+    pattern ((<CW1.word>?)(<CW2.word>{0,2})) 'END'
+    return group 0 as match
+       and group 2 as cw1
+       and group 3 as cw2
+    from CapsWord CW1, CapsWord CW2;
+
+
+create view MiddleOfPattern as
+    extract CW1.type as type,
+    pattern 'BEGIN' ((<CW1.word>?)(<CW2.word>{0,2})) 'END'
+    return group 0 as match
+       and group 2 as cw1
+       and group 3 as cw2
+    from CapsWord CW1, CapsWord CW2;
+
+
+create view EndOfPattern1 as
+    extract CW1.type as type,
+    pattern 'BEGIN' ((<CW1.word>?)(<CW2.word>{0,2})) 'ANY' ((<CW3.word>?)(<CW4.word>{0,2}))
+    return group 0 as match
+       and group 2 as cw1
+       and group 3 as cw2
+       and group 5 as cw3
+       and group 6 as cw4
+    from CapsWord CW1, CapsWord CW2, CapsWord CW3, CapsWord CW4;
+
+
+create view EndOfPattern2 as
+    extract CW1.type as type,
+    pattern 'BEGIN' ((<CW1.word>?)(<CW2.word>{0,2})) ((<CW3.word>?)(<CW4.word>{0,2}))
+    return group 0 as match
+       and group 2 as cw1
+       and group 3 as cw2
+       and group 5 as cw3
+       and group 6 as cw4
+    from CapsWord CW1, CapsWord CW2, CapsWord CW3, CapsWord CW4;
+
+output view CapsWordOneToThree;
+output view BeginOfPattern;
+output view MiddleOfPattern;
+output view EndOfPattern1;
+output view EndOfPattern2;

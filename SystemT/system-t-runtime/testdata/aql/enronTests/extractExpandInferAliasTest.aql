@@ -1,0 +1,49 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+--
+-- Test case for wildcard expansion and alias inference for 
+-- ExtractNode (extract statements other than EXTRACT PATTERN).
+--
+-------------------------------------------------------------------------------
+
+create view CapsWord as
+extract 'CapsWord' as type, 
+		1 as typeInt,
+	regex /[A-Z].*/ on 1 token in D.text as match
+from Document D;
+
+create view LowWord as
+extract 'LowWord' as type,
+		2 as typeInt,
+	regex /[a-z]*/ on 1 token in D.text as match
+from Document D;
+
+
+-- Top level extraction on attribute from wildcard expansion from the subquery, and having predicate on inferred alias
+-- Should pass validation
+create view Extract3 as
+extract C.*, regex /[eiou]/ with flags 'CASE_INSENSITIVE' on C.match as match2
+from 
+( 
+	extract C.*,
+		regex /.*/ on C.match as match1
+	from CapsWord C
+	having Not(ContainsRegex(/[Aa]/, match1))
+) C;
+
+output view Extract3;
+
+-- Top level extraction on attribute with inferred alias from the subquery 
+-- Should pass validation
+create view Extract4 as
+extract C.*, regex /[a-z].*/ on C.match as match2
+from 
+( 
+	extract C.match,
+		regex /[A-Z].*/ on C.match as match1
+	from CapsWord C
+) C;
+
+output view Extract4;
+

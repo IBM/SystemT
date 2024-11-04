@@ -1,0 +1,68 @@
+module Region;
+
+import view DocumentDetagged from module DocumentDetagger as DocumentText;
+
+import dictionary CardinalDirections from module Dictionaries as CardinalDirections;
+import dictionary WorldRegions from module Dictionaries as WorldRegions;
+import dictionary WorldRegionsUnderConflict from module Dictionaries as WorldRegionsUnderConflict;
+import dictionary RegionsOfUSA from module Dictionaries as RegionsOfUSA;
+import dictionary RegionsOfUK from module Dictionaries as RegionsOfUK;
+import dictionary RegionsOfChina from module Dictionaries as RegionsOfChina;
+import dictionary RegionsOfRussia from module Dictionaries as RegionsOfRussia;
+import dictionary RegionsOfCanada from module Dictionaries as RegionsOfCanada;
+import dictionary RegionsOfIndia from module Dictionaries as RegionsOfIndia;
+import dictionary RegionsSuffixClues from module Dictionaries as RegionsSuffixClues;
+import dictionary FinancialHubs from module Dictionaries as FinancialHubs;
+import dictionary HeritageSites from module Dictionaries as HeritageSites;
+import dictionary PoliticalCentres from module Dictionaries as PoliticalCentres;
+import dictionary SportingVenues from module Dictionaries as SportingVenues;
+import dictionary FamousSquares from module Dictionaries as FamousSquares;
+import dictionary TechnologyHubs from module Dictionaries as TechnologyHubs;
+
+create view DirectionCandidate as
+	select D.match as match
+	from 
+		(extract dictionary 'CardinalDirections' with flags 'Exact' on D.text as match from DocumentText D) D;
+		
+create view InternationalRegionCandidate as
+extract
+    dictionaries
+        'WorldRegions' 
+    and 'WorldRegionsUnderConflict'
+        on D.text   
+        as match     
+        from DocumentText D
+        having MatchesRegex(/\p{Lu}\p{M}*.+/, match);
+
+create view DomesticRegion1 as
+extract
+    dictionaries
+        'RegionsOfUSA' and 'RegionsOfUK'
+    and 'RegionsOfChina' and 'RegionsOfRussia'
+    and 'RegionsOfCanada' and 'RegionsOfIndia' 
+        on D.text   
+        as match     
+        from DocumentText D
+        having MatchesRegex(/\p{Lu}\p{M}*.+/, match);
+
+create view RegionClue as
+extract
+    dictionary
+	'RegionsSuffixClues'
+    with flags 'Exact'
+     	on D.text
+	as match
+	from DocumentText D;
+		
+-- Landmarks
+
+create view Landmark as
+extract
+    dictionaries
+        'FinancialHubs' and 'HeritageSites'
+    and 'PoliticalCentres' and 'SportingVenues'
+    and 'FamousSquares' and 'TechnologyHubs'
+    with flags 'Exact'
+        on D.text   
+        as match     
+        from DocumentText D;

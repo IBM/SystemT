@@ -1,0 +1,37 @@
+module Disambiguation;
+
+
+require document with columns
+  text Text;
+
+create view PersonDisDict as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'PersonInstancesForDisambiguation'
+    on D.text as name
+  from DocumentText D
+  having MatchesRegex(/\p{Lu}.*/, name);
+
+output view PersonDisDict;
+
+create view OrgDisDict as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'OrganizationInstancesForDisambiguation'
+    on D.text as organization
+  from DocumentText D;
+
+output view OrgDisDict;
+
+create view LocDisDict as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'LocationInstancesForDisambiguation'
+    on D.text as loc
+  from DocumentText D;
+
+output view LocDisDict;
+

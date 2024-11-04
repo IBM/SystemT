@@ -1,0 +1,166 @@
+module CommonFeatures;
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText;
+
+import dictionary WorldCountries from module Dictionaries as WorldCountries;
+import dictionary ProvincesOfCanada from module Dictionaries as ProvincesOfCanada;
+import dictionary ProvincesOfChina from module Dictionaries as ProvincesOfChina;
+import dictionary ProvincesOfRussia from module Dictionaries as ProvincesOfRussia;
+import dictionary ProvincesOfSouthKorea from module Dictionaries as ProvincesOfSouthKorea;
+import dictionary ProvincesOfSpain from module Dictionaries as ProvincesOfSpain;
+import dictionary ProvincesOfTurkey from module Dictionaries as ProvincesOfTurkey;
+import dictionary StatesOfUSA from module Dictionaries as StatesOfUSA;
+import dictionary StatesOfIndia from module Dictionaries as StatesOfIndia;
+import dictionary StatesOfFrance from module Dictionaries as StatesOfFrance;
+import dictionary StatesOfItaly from module Dictionaries as StatesOfItaly;
+import dictionary StatesOfIran from module Dictionaries as StatesOfIran;
+import dictionary StatesOfMexico from module Dictionaries as StatesOfMexico;
+import dictionary StatesOfAustralia from module Dictionaries as StatesOfAustralia;
+import dictionary StatesOfBrazil from module Dictionaries as StatesOfBrazil;
+import dictionary PrefecturesOfJapan from module Dictionaries as PrefecturesOfJapan;
+import dictionary WorldFinancialExchangesAbbreviations from module Dictionaries as WorldFinancialExchangesAbbreviations;
+import dictionary WorldFinancialExchangesTickers from module Dictionaries as WorldFinancialExchangesTickers;
+import dictionary WorldCitiesLong from module Dictionaries as WorldCitiesLong;
+import dictionary WorldCitiesShort from module Dictionaries as WorldCitiesShort;
+import dictionary CitiesOfUSASanFranciscoBayArea from module Dictionaries as CitiesOfUSASanFranciscoBayArea;
+import dictionary CitiesOfChina from module Dictionaries as CitiesOfChina;
+import dictionary CitiesOfUK from module Dictionaries as CitiesOfUK;
+import dictionary CitiesOfRussia from module Dictionaries as CitiesOfRussia;
+import dictionary CitiesOfFrance from module Dictionaries as CitiesOfFrance;
+import dictionary CitiesOfIran from module Dictionaries as CitiesOfIran;
+import dictionary CitiesOfIndia from module Dictionaries as CitiesOfIndia;
+import dictionary CitiesOfBrazil from module Dictionaries as CitiesOfBrazil;
+import dictionary CitiesOfItaly from module Dictionaries as CitiesOfItaly;
+import dictionary CitiesOfMexico from module Dictionaries as CitiesOfMexico;
+import dictionary CitiesOfSouthKorea from module Dictionaries as CitiesOfSouthKorea;
+import dictionary CitiesOfSpain from module Dictionaries as CitiesOfSpain;
+import dictionary CitiesOfIndonesia from module Dictionaries as CitiesOfIndonesia;
+import dictionary CitiesOfAustralia from module Dictionaries as CitiesOfAustralia;
+import dictionary CitiesOfTaiwan from module Dictionaries as CitiesOfTaiwan;
+import dictionary CitiesOfTurkey from module Dictionaries as CitiesOfTurkey;
+import dictionary CitiesOfSerbia from module Dictionaries as CitiesOfSerbia;
+import dictionary CitiesOfNetherlands from module Dictionaries as CitiesOfNetherlands;
+import dictionary StateCapitalsOfUSA from module Dictionaries as StateCapitalsOfUSA;
+import dictionary StatesOfUSAAbbreviations from module Dictionaries as StatesOfUSAAbbreviations;
+import dictionary StatesOfUSAAbbreviationsChicagoAP from module Dictionaries as StatesOfUSAAbbreviationsChicagoAP;
+import dictionary ProvincesOfCanadaAbbreviations from module Dictionaries as ProvincesOfCanadaAbbreviations;
+import dictionary CitiesOfUSA from module Dictionaries as CitiesOfUSA;
+import dictionary CitiesOfGermany from module Dictionaries as CitiesOfGermany;
+import dictionary WorldNationalities from module Dictionaries as WorldNationalities;
+
+require document with columns
+text Text;
+
+create view USCity as
+	select
+		D.match as match
+	from
+		(extract dictionary 'CitiesOfUSA' on D.text as match from DocumentText D) D
+	where MatchesRegex(/\p{Lu}\p{M}*.+/, D.match);	
+
+
+create view GermanCities as
+	select
+		D.match as match 
+	from
+		(extract dictionary 'CitiesOfGermany' on D.text as match from DocumentText D) D;  
+
+create view CountryCandidate as
+select
+	D.match as match
+from
+	(extract dictionary 'WorldCountries'
+			 on D.text as match
+			 from DocumentText D) D
+where MatchesRegex(/\p{Lu}\p{M}*.+/, D.match);
+
+create view StatesFromOtherMajorCountries as
+extract
+    dictionaries
+    
+        'ProvincesOfChina' and 'ProvincesOfRussia' and 'ProvincesOfSouthKorea' and 'ProvincesOfSpain' and 'ProvincesOfTurkey'
+    and 'StatesOfIndia' and 'StatesOfFrance' and 'StatesOfItaly' and 'StatesOfIran' and 'StatesOfMexico' and 'StatesOfAustralia' and 'StatesOfBrazil'
+    and 'PrefecturesOfJapan'
+           
+    with flags 'Exact'
+        on D.text   
+        as match
+from DocumentText D;
+
+create view USStateCandidate  as
+select
+		D.match as match
+	from
+		(extract dictionary 'StatesOfUSA' on D.text as match from DocumentText D) D;
+
+create view CanadianProvinceCandidate  as
+select
+		D.match as match
+	from
+		(extract dictionary 'ProvincesOfCanada' on D.text as match from DocumentText D) D;
+		
+create view StockExchanges1 as
+  extract dictionary 'WorldFinancialExchangesAbbreviations' with flags 'Exact'
+  on D.text as match
+  from DocumentText D;
+  
+
+create view StockExchange2 as
+  extract dictionary 'WorldFinancialExchangesTickers' with flags 'Exact'
+  on D.text as exchange
+  from DocumentText D;
+  
+-- major cities around the world
+create view MajorCity as
+extract
+    dictionaries
+		'WorldCitiesLong' and 'WorldCitiesShort'
+	and 'CitiesOfUSASanFranciscoBayArea' and 'CitiesOfChina'
+	and 'CitiesOfUK' and 'CitiesOfRussia'
+	and 'CitiesOfFrance' and 'CitiesOfIran'
+	and 'CitiesOfIndia' and 'CitiesOfBrazil'
+	and 'CitiesOfItaly' and 'CitiesOfMexico'
+	and 'CitiesOfSouthKorea' and 'CitiesOfSpain'
+	and 'CitiesOfIndonesia' and 'CitiesOfAustralia'
+	and 'CitiesOfTaiwan' and 'CitiesOfTurkey'
+	and 'CitiesOfSerbia' and 'CitiesOfNetherlands'
+	and 'StateCapitalsOfUSA'
+	    on D.text   
+        as match
+	from DocumentText D;
+  
+create view Zipcode as
+    select
+        R.match as match
+    from
+      (extract regex /\p{Nd}{5}(\-\p{Nd}{4})?/ 
+ 		on between 1 and 3 tokens in D.text 
+ 			as match 
+ 	  from DocumentText D) R;
+
+ create view USStateStrongAbbrev  as
+ extract 
+ 	dictionaries 
+ 		'StatesOfUSAAbbreviations' and
+ 		'StatesOfUSAAbbreviationsChicagoAP'
+    with flags 'Exact'
+ 		on D.text   
+        as match     
+        from DocumentText D;
+
+create view CanadianProvinceStrongAbbrev  as
+select D.match as match
+from (extract dictionary 'ProvincesOfCanadaAbbreviations' with flags 'Exact' on D.text as match from DocumentText D) D;
+
+create view CanadianProvinceWeakAbbrev  as
+select D.match as match
+from (extract dictionary 'ProvincesOfCanadaAbbreviations' on D.text as match from DocumentText D) D;
+
+ create view USStateWeakAbbrev  as
+    extract 
+ 	dictionaries 
+ 		'StatesOfUSAAbbreviations' and
+ 		'StatesOfUSAAbbreviationsChicagoAP'
+    	on D.text   
+        as match     
+        from DocumentText D;

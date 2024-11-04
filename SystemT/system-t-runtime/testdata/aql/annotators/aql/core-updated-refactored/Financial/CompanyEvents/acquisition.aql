@@ -1,0 +1,2363 @@
+
+
+-- ==================== Requirements ===================
+
+-- status: ANNOUNCED - references to a completed acquisition (e.g. �announced�, �confirm�)
+
+
+
+--status: CANCELLED - references an indication of cancellation of a acquisition (e.g. �failure�, �terminated�)
+
+
+
+-- status: PLANNED - references to a future acquisition (e.g, �will�, �plan�)
+
+
+        
+-- status: POSTPONED - references an indication of the delay of a acquisition (e.g. �postponed�, �detailed�)
+
+
+
+-- status: UPDATED - references a update of a acquisition transaction (e.g. �updates�)
+
+               
+-- status: KNOWN - references to a past acquisition (e.g. �previous acquisition�)
+-- status: RUMORED - references a possible acquisition that has not yet confirmed (e.g., �would�, �could�, �shouldn�t�)
+
+
+
+
+
+
+create view AcquisitionClueBetween as
+select S.clue as clue from
+(
+  --extract dictionary 'acquisition/acquisitioncluebetween.dict'
+  extract dictionary 'acquisition/fin_acqstn_posClue_ctxtBtwn_en.dict'
+  on D.text as clue
+  from Doc D
+) S
+consolidate on S.clue;
+
+--weaker pattern
+create view AcquisitionClueAfterTemp as
+select S.clue as clue from
+(
+  --extract dictionary 'acquisition/acquisitionclueafter.dict'
+  extract dictionary 'acquisition/fin_acqstn_posClue_ctxtRight_en.dict'
+  on D.text as clue
+  from Doc D
+) S
+consolidate on S.clue;
+
+
+-- find after clues contained within a between clue
+create view AcquisitionClueAfterOverlapsBetween as
+select A.clue as clue 
+from  AcquisitionClueAfterTemp A, AcquisitionClueBetween B 
+where Contains(B.clue, A.clue);
+
+create view AcquisitionClueAfter as
+( select A.clue as clue from AcquisitionClueAfterTemp A )
+minus
+( select A.clue as clue from AcquisitionClueAfterOverlapsBetween A );
+
+
+create view AcquisitionClueBefore as
+select S.clue as clue from
+(
+  --extract dictionary 'acquisition/acquisitioncluebefore.dict'
+  extract dictionary 'acquisition/fin_acqstn_posClue_ctxtLeft_en.dict'
+  on D.text as clue
+  from Doc D
+) S
+consolidate on S.clue;
+
+
+-- collect all clues, for debugging purposes
+create view AcquisitionClueAll as
+(select 'before' as type, M.clue as clue from AcquisitionClueBefore M)
+union all
+(select 'between' as type, M.clue as clue from AcquisitionClueBetween M)
+union all
+(select 'after' as type, M.clue as clue from AcquisitionClueAfter M);
+
+
+
+create view SaleClue as
+select S.clue as clue from
+(
+  --extract dictionary 'acquisition/saleclue.dict'
+  extract dictionary 'acquisition/fin_acqstn_sale_posClue_en.dict'
+  on D.text as clue
+  from Doc D
+) S
+consolidate on S.clue;
+  
+/*create dictionary ConnectTo as(
+	'to'
+);*/
+
+create view ConnectToClue as
+  --extract dictionary 'ConnectTo'
+  extract dictionary 'acquisition/fin_acqstn_sale_to_posClue_en.dict'
+  on D.text as clue
+  from Doc D;
+
+
+
+-- ================ACQUISITION rules for SHORT ANNOUNCEMENT========================
+
+-- Match statements of the form "X acquires Y"
+create view AcquisitionClueBetween2CompNames as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 SpanBetween(C1.match, C2.match) as betweencontext,
+  		 RightContext(C2.match, 20) as aftercontext,
+  		 M.clue as clue,
+  		 CombineSpans(C1.match, C2.match) as match
+  from CompanyInfoShort C1, CompanyInfoShort C2, AcquisitionClueBetween M
+  where FollowsTok(C1.match, M.clue, 0, 5) and
+  	    FollowsTok(M.clue, C2.match, 0, 4) and
+  	    Not(Equals(GetText(C1.companyname), GetText(C2.companyname)));
+  	    
+-- make sure the match is within the same announcement
+create view AcquisitionClueBetween2CompNamesShortTemp as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, A.match) as aftercontext,
+  	   M.clue as clue,
+  	   M.match as match
+from AcquisitionClueBetween2CompNames M, ShortText A
+where Contains(A.match, M.match);
+
+-- make sure the context does not contain a 3rd company name
+create view AcquisitionClueBetween2CompNamesShortBadMatch as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.betweencontext as betweencontext, 
+  	   M.aftercontext as aftercontext,
+  	   M.clue as clue,
+  	   M.match as match
+from AcquisitionClueBetween2CompNamesShortTemp M, CompanyInfoShort C
+where Contains(M.betweencontext, C.match);
+
+
+--discard the bad matches
+create view AcquisitionClueBetween2CompNamesShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.clue as clue,
+	  	   M.match as match
+	from AcquisitionClueBetween2CompNamesShortTemp M
+)
+minus
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.clue as clue,
+	  	   M.match as match
+	from AcquisitionClueBetween2CompNamesShortBadMatch M
+);
+
+
+-- Match statements of the form "X acquires Y and Z"
+create view AcquisitionClueBetween3CompNames as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 C3.exchange as exchange3, C3.ticker as ticker3, C3.companyname as company3,
+  		 SpanBetween(C1.match, C2.match) as betweencontext,
+  		 RightContext(C3.match, 20) as aftercontext,
+  		 M.clue as clue,
+  		 CombineSpans(C1.match, C3.match) as match
+  from CompanyInfoShort C1, CompanyInfoShort C2, CompanyInfoShort C3, AcquisitionClueBetween M
+  where FollowsTok(C1.match, M.clue, 0, 5) and
+  	    FollowsTok(M.clue, C2.match, 0, 4) and
+  	    FollowsTok(C2.match, C3.match, 1, 2) and
+  	    --ContainsDict('conjunction.dict', SpanBetween(C2.match, C3.match)) and
+  	    ContainsDict('lang_conjs_en.dict', SpanBetween(C2.match, C3.match)) and
+  	    Not(Equals(GetText(C1.companyname), GetText(C2.companyname))) and
+  	    Not(Equals(GetText(C2.companyname), GetText(C3.companyname))) and
+  	    Not(Equals(GetText(C1.companyname), GetText(C3.companyname)));
+  	    
+-- make sure the match is within the same announcement
+create view AcquisitionClueBetween3CompNamesShortTemp as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, A.match) as aftercontext,
+  	   M.clue as clue,
+  	   M.match as match
+from AcquisitionClueBetween3CompNames M, ShortText A
+where Contains(A.match, M.match);
+
+--union together matches of the form "X acquires Y" and "X acquires Y and Z"
+create view AcquisitionClueBetweenCompNamesShortCandidate as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,		  
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.clue as clue,
+	  	   M.match as match
+	from AcquisitionClueBetween3CompNamesShortTemp M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.clue as clue,
+	  	   M.match as match
+	from AcquisitionClueBetween2CompNamesShort M
+);
+
+
+--avoid matches of the form "X acquires A from Y (and Z) where A is not understood as a company name"
+create view AcquisitionClueBetweenCompNamesShortBadMatch as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   M.betweencontext as betweencontext, 
+  	   M.aftercontext as aftercontext,
+  	   M.match as match
+from AcquisitionClueBetweenCompNamesShortCandidate M
+where ContainsRegex(/[Ff]rom\s*$/, SpanBetween(M.clue, M.company2));
+
+
+--discard the bad matches
+create view AcquisitionClueBetweenCompNamesShortTemp as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from AcquisitionClueBetweenCompNamesShortCandidate M
+)
+minus
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from AcquisitionClueBetweenCompNamesShortBadMatch M
+);
+
+create view AcquisitionClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	   M.betweencontext as betweencontext, 
+	   M.aftercontext as aftercontext,
+	   M.match as match
+from AcquisitionClueBetweenCompNamesShortTemp M
+consolidate on M.match;
+
+ 	    
+-- Match statements of the form "X and Y acquisition"
+create view AcquisitionClueAfterCompNames as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 SpanBetween(C1.match, C2.match) as intercompanycontext,
+  		 SpanBetween(C2.match, M.clue) as betweencontext,
+  		 RightContext(M.clue, 20) as aftercontext,
+  		 CombineSpans(C1.match, M.clue) as match
+  from CompanyInfoShort C1, CompanyInfoShort C2, AcquisitionClueAfter M
+  where FollowsTok(C1.match, C2.match, 1, 6) and
+  	    FollowsTok(C2.match, M.clue, 0, 6) and
+  	    Not(Equals(GetText(C1.companyname), GetText(C2.companyname)));
+  	    
+-- make sure the match is within the same announcement
+create view AcquisitionClueAfterCompNamesShortTemp as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.intercompanycontext as intercompanycontext,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, A.match) as aftercontext,
+  	   M.match as match
+from AcquisitionClueAfterCompNames M, ShortText A
+where Contains(A.match, M.match);
+
+-- make sure the context does not contain a 3rd company name
+create view AcquisitionClueAfterCompNamesShortBadMatch as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.betweencontext as betweencontext, 
+  	   M.aftercontext as aftercontext,
+  	   M.match as match
+from AcquisitionClueAfterCompNamesShortTemp M, CompanyInfoShort C
+where Or( Contains(M.betweencontext, C.match),
+          Contains(M.intercompanycontext, C.match) 
+         );
+
+--discard the bad matches
+create view AcquisitionClueAfterCompNamesShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from AcquisitionClueAfterCompNamesShortTemp M
+)
+minus
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from AcquisitionClueAfterCompNamesShortBadMatch M
+);
+ 
+
+
+
+-- Match statements of the form "A sells X to Y" - retain X and Y
+create view SaleClueBeforeCompNames as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 LeftContext(C1.match, 30) as beforecontext,
+  		 SpanBetween(C1.match, C2.match) as betweencontext,
+  		 RightContext(C2.match, 20) as aftercontext,
+  		 CombineSpans(M.clue, C2.match) as match
+  from CompanyInfoShort C1, CompanyInfoShort C2, SaleClue M, ConnectToClue T
+  where FollowsTok(M.clue, C1.match, 0, 5) and
+  		FollowsTok(C1.match, T.clue, 0, 4) and
+  	    FollowsTok(T.clue, C2.match, 0, 3);
+  	    
+-- make sure the match is within the same announcement
+create view SaleClueBeforeCompNamesShortTemp as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.beforecontext as beforecontext, 
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, A.match) as aftercontext,
+  	   M.match as match
+from SaleClueBeforeCompNames M, ShortText A
+where Contains(A.match, M.match) and
+  	  --make sure the sentence is not broken by a semi-column
+  	  Not(ContainsRegex(/;/, M.betweencontext));
+
+-- make sure the context does not contain a 3rd company name
+create view SaleClueBeforeCompNamesShortBadMatch as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.beforecontext as beforecontext,
+  	   M.betweencontext as betweencontext,
+  	   M.aftercontext as aftercontext,
+  	   M.match as match
+from SaleClueBeforeCompNamesShortTemp M, CompanyInfoShort C
+where Contains(M.betweencontext, C.match);
+
+--discard the bad matches
+create view SaleClueBeforeCompNamesShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.beforecontext as beforecontext,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from SaleClueBeforeCompNamesShortTemp M
+)
+minus
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.beforecontext as beforecontext,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from SaleClueBeforeCompNamesShortBadMatch M
+);
+
+
+-- CANCELLED clues
+create view AcquisitionCancelledClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'cancelled' as status,
+  	   M.match as match
+from AcquisitionClueBetweenCompNamesShort M
+/*where Or(ContainsDict('acquisition/cancelledclue.dict', M.betweencontext),
+	  ContainsDict('acquisition/cancelledclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_cancel_posClue_en.dict', M.betweencontext),
+	  ContainsDict('acquisition/fin_acqstn_cancel_posClue_en.dict', M.aftercontext));
+	  
+create view AcquisitionCancelledClueAfterCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'cancelled' as status,
+  	   M.match as match
+from AcquisitionClueAfterCompNamesShort M
+/*where Or(ContainsDict('acquisition/cancelledclue.dict', M.betweencontext),
+	  ContainsDict('acquisition/cancelledclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_cancel_posClue_en.dict', M.betweencontext),
+	  ContainsDict('acquisition/fin_acqstn_cancel_posClue_en.dict', M.aftercontext));
+	  
+	  
+create view SaleCancelledClueBeforeCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'cancelled' as status,
+  	   M.match as match
+from SaleClueBeforeCompNamesShort M
+/*where Or(ContainsDict('acquisition/cancelledclue.dict', M.beforecontext),
+	  ContainsDict('acquisition/cancelledclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_cancel_posClue_en.dict', M.beforecontext),
+	  ContainsDict('acquisition/fin_acqstn_cancel_posClue_en.dict', M.aftercontext));
+	  
+	  
+create view AcquisitionCancelledShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionCancelledClueBetweenCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionCancelledClueAfterCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.status as status, M.match as match
+	from SaleCancelledClueBeforeCompNamesShort M
+);
+
+	  
+-- ANNOUNCED clues  
+create view AcquisitionAnnouncedClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'announced' as status,
+  	   M.match as match
+from AcquisitionClueBetweenCompNamesShort M
+/*where Or(ContainsDict('acquisition/announcedclue.dict', M.betweencontext),
+		ContainsDict('acquisition/announcedclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_announce_posClue_en.dict', M.betweencontext),
+	  ContainsDict('acquisition/fin_acqstn_announce_posClue_en.dict', M.aftercontext));
+
+	  
+create view AcquisitionAnnouncedClueAfterCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'announced' as status,
+  	   M.match as match
+from AcquisitionClueAfterCompNamesShort M
+/*where Or(ContainsDict('acquisition/announcedclue.dict', M.match),
+	  ContainsDict('acquisition/announcedclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_announce_posClue_en.dict', M.match),
+	  ContainsDict('acquisition/fin_acqstn_announce_posClue_en.dict', M.aftercontext));
+	  
+	  
+create view SaleAnnouncedClueBeforeCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'announced' as status,
+  	   M.match as match
+from SaleClueBeforeCompNamesShort M
+/*where Or(ContainsDict('acquisition/announcedclue.dict', M.beforecontext),
+	  ContainsDict('acquisition/announcedclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_announce_posClue_en.dict', M.beforecontext),
+	  ContainsDict('acquisition/fin_acqstn_announce_posClue_en.dict', M.aftercontext));
+	  
+create view AcquisitionAnnouncedShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionAnnouncedClueBetweenCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionAnnouncedClueAfterCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.status as status, M.match as match
+	from SaleAnnouncedClueBeforeCompNamesShort M
+);	  
+	  
+-- PLANNED clues  
+create view AcquisitionPlannedClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'planned' as status,
+  	   M.match as match
+from AcquisitionClueBetweenCompNamesShort M
+/*where Or(ContainsDict('acquisition/plannedclue.dict', M.betweencontext),
+	  ContainsDict('acquisition/plannedclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_plan_posClue_en.dict', M.betweencontext),
+	  ContainsDict('acquisition/fin_acqstn_plan_posClue_en.dict', M.aftercontext));
+
+	  
+create view AcquisitionPlannedClueAfterCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'planned' as status,
+  	   M.match as match
+from AcquisitionClueAfterCompNamesShort M
+/*where Or(ContainsDict('acquisition/plannedclue.dict', M.match),
+	  ContainsDict('acquisition/plannedclue.dict', M.aftercontext));*/	
+where Or(ContainsDict('acquisition/fin_acqstn_plan_posClue_en.dict', M.match),
+	  ContainsDict('acquisition/fin_acqstn_plan_posClue_en.dict', M.aftercontext));	
+	  
+
+create view SalePlannedClueBeforeCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'planned' as status,
+  	   M.match as match
+from SaleClueBeforeCompNamesShort M
+/*where Or(ContainsDict('acquisition/plannedclue.dict', M.beforecontext),
+	  ContainsDict('acquisition/plannedclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_plan_posClue_en.dict', M.beforecontext),
+	  ContainsDict('acquisition/fin_acqstn_plan_posClue_en.dict', M.aftercontext));
+	  
+	  
+create view AcquisitionPlannedShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionPlannedClueBetweenCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionPlannedClueAfterCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.status as status, M.match as match
+	from SalePlannedClueBeforeCompNamesShort M
+);	  
+	  
+	  
+-- POSTPONED clues  
+create view AcquisitionPostponedClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'postponed' as status,
+  	   M.match as match
+from AcquisitionClueBetweenCompNamesShort M
+/*where Or(ContainsDict('acquisition/postponedclue.dict', M.betweencontext),
+	  ContainsDict('acquisition/postponedclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_postpone_posClue_en.dict', M.betweencontext),
+	  ContainsDict('acquisition/fin_acqstn_postpone_posClue_en.dict', M.aftercontext));
+
+	  
+create view AcquisitionPostponedClueAfterCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'postponed' as status,
+  	   M.match as match
+from AcquisitionClueAfterCompNamesShort M
+/*where Or(ContainsDict('acquisition/postponedclue.dict', M.betweencontext),
+	  ContainsDict('acquisition/postponedclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_postpone_posClue_en.dict', M.betweencontext),
+	  ContainsDict('acquisition/fin_acqstn_postpone_posClue_en.dict', M.aftercontext));	  
+	  
+create view SalePostponedClueBeforeCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'postponed' as status,
+  	   M.match as match
+from SaleClueBeforeCompNamesShort M
+/*where Or(ContainsDict('acquisition/postponedclue.dict', M.beforecontext),
+	  ContainsDict('acquisition/postponedclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_postpone_posClue_en.dict', M.beforecontext),
+	  ContainsDict('acquisition/fin_acqstn_postpone_posClue_en.dict', M.aftercontext));	  
+
+create view AcquisitionPostponedShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionPostponedClueBetweenCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionPostponedClueAfterCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.status as status, M.match as match
+	from SalePostponedClueBeforeCompNamesShort M
+);	  
+	  
+	  
+-- UPDATED clues  
+create view AcquisitionUpdatedClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'updated' as status,
+  	   M.match as match
+from AcquisitionClueBetweenCompNamesShort M
+/*where Or(ContainsDict('acquisition/updatedclue.dict', M.betweencontext),
+	  ContainsDict('acquisition/updatedclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_update_posClue_en.dict', M.betweencontext),
+	  ContainsDict('acquisition/fin_acqstn_update_posClue_en.dict', M.aftercontext));
+
+	  
+create view AcquisitionUpdatedClueAfterCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'updated' as status,
+  	   M.match as match
+from AcquisitionClueAfterCompNamesShort M
+/*where Or(ContainsDict('acquisition/updatedclue.dict', M.match),
+	  ContainsDict('acquisition/updatedclue.dict', M.aftercontext));*/ 
+where Or(ContainsDict('acquisition/fin_acqstn_update_posClue_en.dict', M.match),
+	  ContainsDict('acquisition/fin_acqstn_update_posClue_en.dict', M.aftercontext)); 
+	  
+
+create view SaleUpdatedClueBeforeCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'updated' as status,
+  	   M.match as match
+from SaleClueBeforeCompNamesShort M
+/*where Or(ContainsDict('acquisition/updatedclue.dict', M.beforecontext),
+	  ContainsDict('acquisition/updatedclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_update_posClue_en.dict', M.beforecontext),
+	  ContainsDict('acquisition/fin_acqstn_update_posClue_en.dict', M.aftercontext));
+	  
+	  
+create view AcquisitionUpdatedShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionUpdatedClueBetweenCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionUpdatedClueAfterCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.status as status, M.match as match
+	from SaleUpdatedClueBeforeCompNamesShort M
+);		  
+
+
+
+-- RUMORED clues  
+create view AcquisitionRumoredClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'Rumored' as status,
+  	   M.match as match
+from AcquisitionClueBetweenCompNamesShort M
+/*where Or(ContainsDict('acquisition/rumoredclue.dict', M.betweencontext),
+	  ContainsDict('acquisition/rumoredclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_rumor_posClue_en.dict', M.betweencontext),
+	  ContainsDict('acquisition/fin_acqstn_rumor_posClue_en.dict', M.aftercontext));
+
+	  
+create view AcquisitionRumoredClueAfterCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'rumored' as status,
+  	   M.match as match
+from AcquisitionClueAfterCompNamesShort M
+/*where Or(ContainsDict('acquisition/rumoredclue.dict', M.match),
+	  ContainsDict('acquisition/rumoredclue.dict', M.aftercontext));*/ 
+where Or(ContainsDict('acquisition/fin_acqstn_rumor_posClue_en.dict', M.match),
+	  ContainsDict('acquisition/fin_acqstn_rumor_posClue_en.dict', M.aftercontext)); 	  
+
+create view SaleRumoredClueBeforeCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'rumored' as status,
+  	   M.match as match
+from SaleClueBeforeCompNamesShort M
+/*where Or(ContainsDict('acquisition/rumoredclue.dict', M.beforecontext),
+	  ContainsDict('acquisition/rumoredclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_rumor_posClue_en.dict', M.beforecontext),
+	  ContainsDict('acquisition/fin_acqstn_rumor_posClue_en.dict', M.aftercontext));	  
+	  
+create view AcquisitionRumoredShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionRumoredClueBetweenCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionRumoredClueAfterCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.status as status, M.match as match
+	from SaleRumoredClueBeforeCompNamesShort M
+);		  
+
+--Acquisitions with known status
+
+create view AcquisitionKnownStatusShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionCancelledShort M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionAnnouncedShort M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionPlannedShort M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionPostponedShort M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionUpdatedShort M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionRumoredShort M
+);
+
+
+--all acquisitions with no status info
+create view AcquisitionAllShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.match as match
+	from AcquisitionClueBetweenCompNamesShort M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.match as match
+	from AcquisitionClueAfterCompNamesShort M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.match as match
+	from SaleClueBeforeCompNamesShort M
+);
+
+
+-- Acquisitions with unknown status
+create view AcquisitionUnknownStatusShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	   	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		   M.match as match
+	from AcquisitionAllShort M
+)
+minus
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		   M.match as match
+	from AcquisitionKnownStatusShort M
+);  
+
+
+
+--all acquisitions with status info
+create view AcquisitionWithStatusShortAll as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	   M.status as status, M.match as match
+from
+(
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.status as status, M.match as match
+		from AcquisitionKnownStatusShort M
+	)
+	union all
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   '' as status, M.match as match
+		from AcquisitionUnknownStatusShort M
+	)
+) M
+order by GetBegin(M.match);
+
+--find partially overlapping matches
+create view AcquisitionWithStatusShortWithPartialOverlapTemp as
+select A1.exchange1 as exchange1_A1, A1.ticker1 as ticker1_A1, A1.company1 as company1_A1, 
+	   A1.exchange2 as exchange2_A1, A1.ticker2 as ticker2_A1, A1.company2 as company2_A1,
+	   A1.exchange3 as exchange3_A1, A1.ticker3 as ticker3_A1, A1.company3 as company3_A1,
+	   A1.status as status_A1, A1.match as match_A1,
+	   A2.exchange1 as exchange1_A2, A2.ticker1 as ticker1_A2, A2.company1 as company1_A2, 
+	   A2.exchange2 as exchange2_A2, A2.ticker2 as ticker2_A2, A2.company2 as company2_A2,
+	   A2.exchange3 as exchange3_A2, A2.ticker3 as ticker3_A2, A2.company3 as company3_A2,
+	   A2.status as status_A2, A2.match as match_A2
+from AcquisitionWithStatusShortAll A1, AcquisitionWithStatusShortAll A2
+where Overlaps(A1.match, A2.match) and
+	  Not(Contains(A1.match, A2.match)) and
+	  Not(Contains(A2.match, A1.match));
+	  
+
+create view AcquisitionWithStatusShortWithPartialOverlap as
+(
+select A.exchange1_A1 as exchange1, A.ticker1_A1 as ticker1, A.company1_A1 as company1, 
+	   A.exchange2_A1 as exchange2, A.ticker2_A1 as ticker2, A.company2_A1 as company2,
+	   A.exchange3_A1 as exchange3, A.ticker3_A1 as ticker3, A.company3_A1 as company3,
+	   A.status_A1 as status, A.match_A1 as match
+from AcquisitionWithStatusShortWithPartialOverlapTemp A
+)
+union all
+(
+select A.exchange1_A2 as exchange1, A.ticker1_A2 as ticker1, A.company1_A2 as company1, 
+	   A.exchange2_A2 as exchange2, A.ticker2_A2 as ticker2, A.company2_A2 as company2,
+	   A.exchange3_A2 as exchange3, A.ticker3_A2 as ticker3, A.company3_A2 as company3,
+	   A.status_A2 as status, A.match_A2 as match
+from AcquisitionWithStatusShortWithPartialOverlapTemp A
+);
+
+
+--remove partially overlapping matches
+create view AcquisitionWithStatusShort as
+select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+	   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+	   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+	   A.status as status, A.match as match
+from
+(
+	(
+	select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+		   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+		   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+		   A.status as status, A.match as match
+	from AcquisitionWithStatusShortAll A
+	)
+	minus
+	(
+	select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+		   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+		   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+		   A.status as status, A.match as match
+	from AcquisitionWithStatusShortWithPartialOverlap A
+	) 
+) A
+consolidate on A.match;
+
+/*
+create view ShortTextWithAcquisition as
+select T.match as match
+from ShortText T, AcquisitionWithStatusShort A
+where Contains(T.match, A.match);
+
+
+create view AcquisitionMissedShort as
+( select T.match as match from ShortText T )
+minus
+( select T.match as match from ShortTextWithAcquisition T );
+
+create view MergerAcquisitionMissedShort as
+( select T.match as match from ShortText T )
+minus
+(
+( select T.match as match from ShortTextWithAcquisition T )
+union all
+( select T.match as match from ShortTextWithMerger T )
+);
+
+output view MergerAcquisitionMissedShort;
+
+create view AcquisitionKnownStatusShortMatch as
+select A.status as status, A.match as match
+from AcquisitionWithStatusShort A
+where Not(Equals(GetText(A.status),''));
+
+output view AcquisitionKnownStatusShortMatch;
+*/
+--TODO: ask fred!
+/*
+create view AcquisitionShortWithOrg as
+(
+	select O1.organization as company1, O2.organization as company2, M.match as match
+	from AcquisitionWithStatusShort M, OrgFinancial O1, OrgFinancial O2
+	where Equals(GetText(M.company1),GetText(O1.organization)) and
+		  Equals(GetText(M.company2),GetText(O2.organization)) and
+		  Equals(GetText(M.company3),'')
+)
+union all
+(
+	select O1.organization as company1, O2.organization as company2, M.match as match
+	from AcquisitionWithStatusShort M, OrgFinancial O1, OrgFinancial O2, OrgFinancial O3
+	where Equals(GetText(M.company1),GetText(O1.organization)) and
+		  Equals(GetText(M.company2),GetText(O2.organization)) and
+		  Equals(GetText(M.company3),GetText(O3.organization))
+);
+*/
+
+/*
+create view AcquisitionShortWithOrg as
+select A.company1 as company1, A.company2 as company2, A.company3 as company3, A.match as match
+from
+(
+	(
+		select O1.organization as company1, O2.organization as company2, '' as company3, M.match as match
+		from AcquisitionWithStatusShort M, OrgFinancial O1, OrgFinancial O2
+		where Equals(GetText(M.company1),GetText(O1.organization)) and
+			  Equals(GetText(M.company2),GetText(O2.organization))
+	)
+	union all
+	(
+		select O1.organization as company1, O2.organization as company2, O3.organization as company3, M.match as match
+		from AcquisitionWithStatusShort M, OrgFinancial O1, OrgFinancial O2, OrgFinancial O3
+		where Equals(GetText(M.company1),GetText(O1.organization)) and
+			  Equals(GetText(M.company2),GetText(O2.organization)) and
+			  Equals(GetText(M.company3),GetText(O3.organization))
+	)
+) A
+consolidate on A.match;
+	  
+output view AcquisitionShortWithOrg;
+*/
+
+
+
+-- ================General ACQUISITION rules for the body of text =========================
+
+ 
+
+-- Match statements of the form "X acquired Y"
+create view AcquisitionClueBetween2CompNamesLongInitial as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 SpanBetween(C1.match, C2.match) as betweencontext,
+  		 RightContext(C2.match, 50) as aftercontext,
+  		 M.clue as clue,
+  		 CombineSpans(C1.match, C2.match) as match
+  from CompanyInfoLong C1, CompanyInfoLong C2, AcquisitionClueBetween M
+  where FollowsTok(C1.match, M.clue, 0, 20) and
+  	    FollowsTok(M.clue, C2.match, 0, 4) and
+  	    --Not(Equals(GetText(C1.companyname),GetText(C2.companyname))) and
+  	    Not(ContainsText(C1.companyname, C2.companyname)) and Not(ContainsText(C2.companyname, C1.companyname)) and
+  	    Not(Contains(C1.match, M.clue)) and Not(Contains(C2.match, M.clue));
+  	    
+-- make sure the match is within the same sentence
+create view AcquisitionClueBetween2CompNamesLongTemp as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   '' as exchange3, '' as ticker3, '' as company3,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, S.match) as aftercontext,
+  	   M.clue as clue,
+  	   M.match as match
+from AcquisitionClueBetween2CompNamesLongInitial M, LongText S
+where Contains(S.match, M.match);
+
+
+-- make sure the context does not contain a 3rd company name
+create view AcquisitionClueBetween2CompNamesLongBadMatch as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.betweencontext as betweencontext, 
+  	   M.aftercontext as aftercontext,
+  	   M.clue as clue,
+  	   M.match as match
+from AcquisitionClueBetween2CompNamesLongTemp M, CompanyInfoLong C
+where Contains(M.betweencontext, C.match);
+
+--discard the bad matches
+create view AcquisitionClueBetween2CompNamesLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.clue as clue,
+	  	   M.match as match
+	from AcquisitionClueBetween2CompNamesLongTemp M
+)
+minus
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.clue as clue,
+	  	   M.match as match
+	from AcquisitionClueBetween2CompNamesLongBadMatch M
+);
+
+
+-- Match statements of the form "X acquires Y and Z"
+create view AcquisitionClueBetween3CompNamesLongInitial as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 C3.exchange as exchange3, C3.ticker as ticker3, C3.companyname as company3,
+  		 SpanBetween(C1.match, C2.match) as betweencontext,
+  		 RightContext(C3.match, 50) as aftercontext,
+  		 M.clue as clue,
+  		 CombineSpans(C1.match, C3.match) as match
+  from CompanyInfoLong C1, CompanyInfoLong C2, CompanyInfoLong C3, AcquisitionClueBetween M
+  where FollowsTok(C1.match, M.clue, 0, 20) and
+  	    FollowsTok(M.clue, C2.match, 0, 4) and
+  	    FollowsTok(C2.match, C3.match, 0, 3) and
+  	    --ContainsDict('conjunction.dict', SpanBetween(C2.match, C3.match)) and
+  	    ContainsDict('lang_conjs_en.dict', SpanBetween(C2.match, C3.match)) and
+  	    --Not(Equals(GetText(C1.companyname), GetText(C2.companyname))) and
+  	    --Not(Equals(GetText(C2.companyname), GetText(C3.companyname))) and
+  	    --Not(Equals(GetText(C1.companyname), GetText(C3.companyname))) and
+  	    Not(ContainsText(C1.companyname, C2.companyname)) and Not(ContainsText(C2.companyname, C1.companyname)) and
+  	    Not(ContainsText(C1.companyname, C3.companyname)) and Not(ContainsText(C3.companyname, C1.companyname));
+  	    
+-- make sure the match is within the same announcement
+create view AcquisitionClueBetween3CompNamesLongTemp as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, A.match) as aftercontext,
+  	   M.clue as clue,
+  	   M.match as match
+from AcquisitionClueBetween3CompNamesLongInitial M, LongText A
+where Contains(A.match, M.match);
+
+--union together matches of the form "X acquires Y" and "X acquires Y and Z"
+create view AcquisitionClueBetweenCompNamesLongCandidate as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,		  
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.clue as clue,
+	  	   M.match as match
+	from AcquisitionClueBetween3CompNamesLongTemp M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.clue as clue,
+	  	   M.match as match
+	from AcquisitionClueBetween2CompNamesLong M
+);
+
+
+--avoid matches of the form "X acquires A from Y (and Z) where A is not understood as a company name"
+create view AcquisitionClueBetweenCompNamesLongBadMatch as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   M.betweencontext as betweencontext, 
+  	   M.aftercontext as aftercontext,
+  	   M.match as match
+from AcquisitionClueBetweenCompNamesLongCandidate M
+where ContainsRegex(/[Ff]rom\s*$/, SpanBetween(M.clue, M.company2));
+
+
+--discard the bad matches
+create view AcquisitionClueBetweenCompNamesLongTemp as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from AcquisitionClueBetweenCompNamesLongCandidate M
+)
+minus
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from AcquisitionClueBetweenCompNamesLongBadMatch M
+);
+
+create view AcquisitionClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	   M.betweencontext as betweencontext, 
+	   M.aftercontext as aftercontext,
+	   M.match as match
+from AcquisitionClueBetweenCompNamesLongTemp M
+consolidate on M.match;
+
+
+    
+-- Match statements of the form "X and Y acquisition"
+
+create view AcquisitionClueAfterCompNamesLongInitial as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 SpanBetween(C1.match, C2.match) as intercompanycontext,
+  		 SpanBetween(C2.match, M.clue) as betweencontext,
+  		 RightContext(M.clue, 50) as aftercontext,
+  		 CombineSpans(C1.match, M.clue) as match
+  from CompanyInfoLong C1, CompanyInfoLong C2, AcquisitionClueAfter M
+  where FollowsTok(C1.match, C2.match, 1, 20) and
+  	    FollowsTok(C2.match, M.clue, 0, 1) and
+  	    --Not(Equals(GetText(C1.companyname), GetText(C2.companyname))) and
+  	    Not(ContainsText(C1.companyname, C2.companyname)) and Not(ContainsText(C2.companyname, C1.companyname)) and
+  	    Not(Contains(C1.match, M.clue)) and Not(Contains(C2.match, M.clue));
+  	    
+-- make sure the match is within the same sentence
+create view AcquisitionClueAfterCompNamesLongTemp as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   '' as exchange3, '' as ticker3, '' as company3,
+  	   M.intercompanycontext as intercompanycontext,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, S.match) as aftercontext,
+  	   M.match as match
+from AcquisitionClueAfterCompNamesLongInitial M, LongText S
+where Contains(S.match, M.match);
+
+
+
+-- make sure the context does not contain a 3rd company name
+create view AcquisitionClueAfterCompNamesLongBadMatch as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   M.betweencontext as betweencontext, 
+  	   M.aftercontext as aftercontext,
+  	   M.match as match
+from AcquisitionClueAfterCompNamesLongTemp M, CompanyInfoLong C
+where Or( Contains(M.betweencontext, C.match),
+          Contains(M.intercompanycontext, C.match) 
+         );
+
+--discard the bad matches
+create view AcquisitionClueAfterCompNamesLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from AcquisitionClueAfterCompNamesLongTemp M
+)
+minus
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from AcquisitionClueAfterCompNamesLongBadMatch M
+);
+
+
+-- Match statements of the form "acquisition of X and Y"
+
+
+-- rule for acquisition between 2 companies
+create view AcquisitionClueBefore2CompNamesTmp as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 LeftContext(M.clue, 50) as beforecontext,
+  		 SpanBetween(M.clue, C2.match) as betweencontext,
+  		 RightContext(C2.match, 70) as aftercontext,
+  		 CombineSpans(M.clue, C2.match) as match
+  from CompanyInfoLong C1, CompanyInfoLong C2, AcquisitionClueBefore M
+  where FollowsTok(M.clue, C1.match, 0, 10) and
+  	    FollowsTok(C1.match, C2.match, 0, 15) and
+  	    Not(Equals(GetText(C1.companyname), GetText(C2.companyname))) and
+  	    Not(Contains(C1.match, M.clue)) and Not(Contains(C2.match, M.clue));
+  	    
+-- make sure the match is within the same sentence
+create view AcquisitionClueBefore2CompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   '' as exchange3, '' as ticker3, '' as company3,
+  	   SpanIntersection(M.beforecontext, S.match) as beforecontext,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, S.match) as aftercontext,
+  	   M.match as match
+from AcquisitionClueBefore2CompNamesTmp M, LongText S
+where Contains(S.match, M.match);
+
+-- rule for acquisition between 3 companies
+create view AcquisitionClueBefore3CompNamesTmp as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 C3.exchange as exchange3, C3.ticker as ticker3, C3.companyname as company3,
+  		 LeftContext(M.clue, 50) as beforecontext,
+  		 SpanBetween(M.clue, C3.match) as betweencontext,
+  		 RightContext(C3.match, 70) as aftercontext,
+  		 CombineSpans(M.clue, C3.match) as match
+  from CompanyInfoLong C1, CompanyInfoLong C2, CompanyInfoLong C3, AcquisitionClueBefore M
+  where FollowsTok(M.clue, C1.match, 0, 10) and
+  	    FollowsTok(C1.match, C2.match, 0, 15) and
+  	    FollowsTok(C2.match, C3.match, 0, 15) and
+  	    --Not(Equals(GetText(C1.companyname), GetText(C2.companyname))) and
+  	    --Not(Equals(GetText(C2.companyname), GetText(C3.companyname))) and
+  	    --Not(Equals(GetText(C1.companyname), GetText(C3.companyname))) and
+  	    Not(Equals( GetText(SubSpanTok(C1.companyname,1,2)), GetText(SubSpanTok(C2.companyname,1,2)) )) and
+  	    Not(Equals( GetText(SubSpanTok(C1.companyname,1,2)), GetText(SubSpanTok(C3.companyname,1,2)) )) and
+  	    Not(Contains(C1.match, M.clue)) and Not(Contains(C2.match, M.clue)) and Not(Contains(C3.match, M.clue));
+  	    
+-- make sure the match is within the same sentence
+create view AcquisitionClueBefore3CompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   SpanIntersection(M.beforecontext, S.match) as beforecontext,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, S.match) as aftercontext,
+  	   M.match as match
+from AcquisitionClueBefore3CompNamesTmp M, LongText S
+where Contains(S.match, M.match);
+
+--consolidate the matches for 2 and 3 companies
+create view AcquisitionClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	   M.beforecontext as beforecontext,
+	   M.betweencontext as betweencontext, 
+	   M.aftercontext as aftercontext,
+	   M.match as match
+from
+(
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.beforecontext as beforecontext,
+		  	   M.betweencontext as betweencontext, 
+		  	   M.aftercontext as aftercontext,
+		  	   M.match as match
+		from AcquisitionClueBefore3CompNamesLong M
+	)
+	union all
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.beforecontext as beforecontext,
+		  	   M.betweencontext as betweencontext, 
+		  	   M.aftercontext as aftercontext,
+		  	   M.match as match
+		from AcquisitionClueBefore2CompNamesLong M
+	)
+) M
+consolidate on M.match;
+
+
+
+
+ 
+-- Match statements of the form "A sells X to Y" - retain X and Y
+create view SaleClueBeforeCompNamesInitial as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 LeftContext(C1.match, 50) as beforecontext,
+  		 SpanBetween(C1.match, C2.match) as betweencontext,
+  		 RightContext(C2.match, 70) as aftercontext,
+  		 CombineSpans(M.clue, C2.match) as match
+  from CompanyInfoLong C1, CompanyInfoLong C2, SaleClue M, ConnectToClue T
+  where FollowsTok(M.clue, C1.match, 0, 10) and
+  		FollowsTok(C1.match, T.clue, 0, 10) and
+  	    FollowsTok(T.clue, C2.match, 0, 3);
+  	    
+-- make sure the match is within the same announcement
+create view SaleClueBeforeCompNamesLongTemp as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   '' as exchange3, '' as ticker3, '' as company3,
+  	   M.beforecontext as beforecontext, 
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, A.match) as aftercontext,
+  	   M.match as match
+from SaleClueBeforeCompNamesInitial M, LongText A
+where Contains(A.match, M.match) and
+  	  --make sure the sentence is not broken by a semi-column
+  	  Not(ContainsRegex(/;/, M.betweencontext));
+
+-- make sure the context does not contain a 3rd company name
+create view SaleClueBeforeCompNamesLongBadMatch as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   M.beforecontext as beforecontext,
+  	   M.betweencontext as betweencontext,
+  	   M.aftercontext as aftercontext,
+  	   M.match as match
+from SaleClueBeforeCompNamesLongTemp M, CompanyInfoLong C
+where Contains(M.betweencontext, C.match);
+
+--discard the bad matches
+create view SaleClueBeforeCompNamesLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.beforecontext as beforecontext,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from SaleClueBeforeCompNamesLongTemp M
+)
+minus
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.beforecontext as beforecontext,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from SaleClueBeforeCompNamesLongBadMatch M
+);
+
+
+-- CANCELLED clues
+create view AcquisitionCancelledClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'cancelled' as status,
+  	   M.match as match
+from AcquisitionClueBetweenCompNamesLong M
+/*where Or(ContainsDict('acquisition/cancelledclue.dict', M.betweencontext),
+	  ContainsDict('acquisition/cancelledclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_cancel_posClue_en.dict', M.betweencontext),
+	  ContainsDict('acquisition/fin_acqstn_cancel_posClue_en.dict', M.aftercontext));
+
+	  
+create view AcquisitionCancelledClueAfterCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'cancelled' as status,
+  	   M.match as match
+from AcquisitionClueAfterCompNamesLong M
+/*where Or(ContainsDict('acquisition/cancelledclue.dict', M.betweencontext),
+	  ContainsDict('acquisition/cancelledclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_cancel_posClue_en.dict', M.betweencontext),
+	  ContainsDict('acquisition/fin_acqstn_cancel_posClue_en.dict', M.aftercontext));
+	  
+	  
+create view AcquisitionCancelledClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'cancelled' as status,
+  	   M.match as match
+from AcquisitionClueBeforeCompNamesLong M
+/*where Or(ContainsDict('acquisition/cancelledclue.dict', M.betweencontext),
+	     ContainsDict('acquisition/cancelledclue.dict', M.aftercontext),
+	     ContainsDict('acquisition/cancelledclue.dict', M.beforecontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_cancel_posClue_en.dict', M.betweencontext),
+	     ContainsDict('acquisition/fin_acqstn_cancel_posClue_en.dict', M.aftercontext),
+	     ContainsDict('acquisition/fin_acqstn_cancel_posClue_en.dict', M.beforecontext));
+	     
+	     
+create view SaleCancelledClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'cancelled' as status,
+  	   M.match as match
+from SaleClueBeforeCompNamesLong M
+/*where Or(ContainsDict('acquisition/cancelledclue.dict', M.beforecontext),
+	  ContainsDict('acquisition/cancelledclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_cancel_posClue_en.dict', M.beforecontext),
+	  ContainsDict('acquisition/fin_acqstn_cancel_posClue_en.dict', M.aftercontext));
+	  
+create view AcquisitionCancelledLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionCancelledClueBetweenCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionCancelledClueAfterCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionCancelledClueBeforeCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from SaleCancelledClueBeforeCompNamesLong M
+);
+
+	  
+-- ANNOUNCED clues  
+create view AcquisitionAnnouncedClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'announced' as status,
+  	   M.match as match
+from AcquisitionClueBetweenCompNamesLong M
+/*where Or(ContainsDict('acquisition/announcedclue.dict', M.betweencontext),
+	  ContainsDict('acquisition/announcedclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_announce_posClue_en.dict', M.betweencontext),
+	  ContainsDict('acquisition/fin_acqstn_announce_posClue_en.dict', M.aftercontext));
+	  
+create view AcquisitionAnnouncedClueAfterCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'announced' as status,
+  	   M.match as match
+from AcquisitionClueAfterCompNamesLong M
+/*where Or(ContainsDict('acquisition/announcedclue.dict', M.match),
+	  ContainsDict('acquisition/announcedclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_announce_posClue_en.dict', M.match),
+	  ContainsDict('acquisition/fin_acqstn_announce_posClue_en.dict', M.aftercontext));	  
+
+create view AcquisitionAnnouncedClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'announced' as status,
+  	   M.match as match
+from AcquisitionClueBeforeCompNamesLong M
+/*where Or(ContainsDict('acquisition/announcedclue.dict', M.betweencontext),
+	     ContainsDict('acquisition/announcedclue.dict', M.aftercontext),
+	     ContainsDict('acquisition/announcedclue.dict', M.beforecontext));*/	 
+where Or(ContainsDict('acquisition/fin_acqstn_announce_posClue_en.dict', M.betweencontext),
+	     ContainsDict('acquisition/fin_acqstn_announce_posClue_en.dict', M.aftercontext),
+	     ContainsDict('acquisition/fin_acqstn_announce_posClue_en.dict', M.beforecontext));	 
+	     
+	     
+create view SaleAnnouncedClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'announced' as status,
+  	   M.match as match
+from SaleClueBeforeCompNamesLong M
+/*where Or(ContainsDict('acquisition/announcedclue.dict', M.beforecontext),
+	  ContainsDict('acquisition/announcedclue.dict', M.aftercontext));*/	     
+where Or(ContainsDict('acquisition/fin_acqstn_announce_posClue_en.dict', M.beforecontext),
+	  ContainsDict('acquisition/fin_acqstn_announce_posClue_en.dict', M.aftercontext));	     
+
+	  
+create view AcquisitionAnnouncedLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	       M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionAnnouncedClueBetweenCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	       M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionAnnouncedClueAfterCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionAnnouncedClueBeforeCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from SaleAnnouncedClueBeforeCompNamesLong M
+);	  
+	  
+-- PLANNED clues  
+create view AcquisitionPlannedClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'planned' as status,
+  	   M.match as match
+from AcquisitionClueBetweenCompNamesLong M
+/*where Or(ContainsDict('acquisition/plannedclue.dict', M.betweencontext),
+	  ContainsDict('acquisition/plannedclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_plan_posClue_en.dict', M.betweencontext),
+	  ContainsDict('acquisition/fin_acqstn_plan_posClue_en.dict', M.aftercontext));
+
+	  
+create view AcquisitionPlannedClueAfterCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'planned' as status,
+  	   M.match as match
+from AcquisitionClueAfterCompNamesLong M
+/*where Or(ContainsDict('acquisition/plannedclue.dict', M.match),
+	  ContainsDict('acquisition/plannedclue.dict', M.aftercontext));*/	
+where Or(ContainsDict('acquisition/fin_acqstn_plan_posClue_en.dict', M.match),
+	  ContainsDict('acquisition/fin_acqstn_plan_posClue_en.dict', M.aftercontext));	
+
+	  
+create view AcquisitionPlannedClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'planned' as status,
+  	   M.match as match
+from AcquisitionClueBeforeCompNamesLong M
+/*where Or(ContainsDict('acquisition/plannedclue.dict', M.betweencontext),
+	     ContainsDict('acquisition/plannedclue.dict', M.aftercontext),
+	     ContainsDict('acquisition/plannedclue.dict', M.beforecontext));*/	 
+where Or(ContainsDict('acquisition/fin_acqstn_plan_posClue_en.dict', M.betweencontext),
+	     ContainsDict('acquisition/fin_acqstn_plan_posClue_en.dict', M.aftercontext),
+	     ContainsDict('acquisition/fin_acqstn_plan_posClue_en.dict', M.beforecontext));	 
+	     
+
+create view SalePlannedClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'planned' as status,
+  	   M.match as match
+from SaleClueBeforeCompNamesLong M
+/*where Or(ContainsDict('acquisition/plannedclue.dict', M.beforecontext),
+	  ContainsDict('acquisition/plannedclue.dict', M.aftercontext));*/	     
+where Or(ContainsDict('acquisition/fin_acqstn_plan_posClue_en.dict', M.beforecontext),
+	  ContainsDict('acquisition/fin_acqstn_plan_posClue_en.dict', M.aftercontext));	     
+	     
+	     
+create view AcquisitionPlannedLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionPlannedClueBetweenCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionPlannedClueAfterCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionPlannedClueBeforeCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from SalePlannedClueBeforeCompNamesLong M
+);	  
+	  
+	  
+-- POSTPONED clues  
+create view AcquisitionPostponedClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'postponed' as status,
+  	   M.match as match
+from AcquisitionClueBetweenCompNamesLong M
+/*where Or(ContainsDict('acquisition/postponedclue.dict', M.betweencontext),
+	  ContainsDict('acquisition/postponedclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_postpone_posClue_en.dict', M.betweencontext),
+	  ContainsDict('acquisition/fin_acqstn_postpone_posClue_en.dict', M.aftercontext));
+
+	  
+create view AcquisitionPostponedClueAfterCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'postponed' as status,
+  	   M.match as match
+from AcquisitionClueAfterCompNamesLong M
+/*where Or(ContainsDict('acquisition/postponedclue.dict', M.betweencontext),
+	  ContainsDict('acquisition/postponedclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_postpone_posClue_en.dict', M.betweencontext),
+	  ContainsDict('acquisition/fin_acqstn_postpone_posClue_en.dict', M.aftercontext));
+	  
+	  
+create view AcquisitionPostponedClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'postponed' as status,
+  	   M.match as match
+from AcquisitionClueBeforeCompNamesLong M
+/*where Or(ContainsDict('acquisition/postponedclue.dict', M.betweencontext),
+	     ContainsDict('acquisition/postponedclue.dict', M.aftercontext),
+	     ContainsDict('acquisition/postponedclue.dict', M.beforecontext));*/	
+where Or(ContainsDict('acquisition/fin_acqstn_postpone_posClue_en.dict', M.betweencontext),
+	     ContainsDict('acquisition/fin_acqstn_postpone_posClue_en.dict', M.aftercontext),
+	     ContainsDict('acquisition/fin_acqstn_postpone_posClue_en.dict', M.beforecontext));	
+	  
+
+create view SalePostponedClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'postponed' as status,
+  	   M.match as match
+from SaleClueBeforeCompNamesLong M
+/*where Or(ContainsDict('acquisition/postponedclue.dict', M.beforecontext),
+	  ContainsDict('acquisition/postponedclue.dict', M.aftercontext));*/	     
+where Or(ContainsDict('acquisition/fin_acqstn_postpone_posClue_en.dict', M.beforecontext),
+	  ContainsDict('acquisition/fin_acqstn_postpone_posClue_en.dict', M.aftercontext));	     
+	     
+create view AcquisitionPostponedLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionPostponedClueBetweenCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionPostponedClueAfterCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionPostponedClueBeforeCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from SalePostponedClueBeforeCompNamesLong M
+);	  
+	  
+	  
+-- UPDATED clues  
+create view AcquisitionUpdatedClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'updated' as status,
+  	   M.match as match
+from AcquisitionClueBetweenCompNamesLong M
+/*where Or(ContainsDict('acquisition/updatedclue.dict', M.betweencontext),
+	  ContainsDict('acquisition/updatedclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_update_posClue_en.dict', M.betweencontext),
+	  ContainsDict('acquisition/fin_acqstn_update_posClue_en.dict', M.aftercontext));
+
+	  
+create view AcquisitionUpdatedClueAfterCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'updated' as status,
+  	   M.match as match
+from AcquisitionClueAfterCompNamesLong M
+/*where Or(ContainsDict('acquisition/updatedclue.dict', M.match),
+	  ContainsDict('acquisition/updatedclue.dict', M.aftercontext));*/ 
+where Or(ContainsDict('acquisition/fin_acqstn_update_posClue_en.dict', M.match),
+	  ContainsDict('acquisition/fin_acqstn_update_posClue_en.dict', M.aftercontext)); 	  
+
+create view AcquisitionUpdatedClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'updated' as status,
+  	   M.match as match
+from AcquisitionClueBeforeCompNamesLong M
+/*where Or(ContainsDict('acquisition/updatedclue.dict', M.betweencontext),
+	     ContainsDict('acquisition/updatedclue.dict', M.aftercontext),
+	     ContainsDict('acquisition/updatedclue.dict', M.beforecontext));*/		  
+where Or(ContainsDict('acquisition/fin_acqstn_update_posClue_en.dict', M.betweencontext),
+	     ContainsDict('acquisition/fin_acqstn_update_posClue_en.dict', M.aftercontext),
+	     ContainsDict('acquisition/fin_acqstn_update_posClue_en.dict', M.beforecontext));		  
+	  
+	     
+create view SaleUpdatedClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'updated' as status,
+  	   M.match as match
+from SaleClueBeforeCompNamesLong M
+/*where Or(ContainsDict('acquisition/updatedclue.dict', M.beforecontext),
+	  ContainsDict('acquisition/updatedclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_update_posClue_en.dict', M.beforecontext),
+	  ContainsDict('acquisition/fin_acqstn_update_posClue_en.dict', M.aftercontext));
+	  
+	  
+	  
+create view AcquisitionUpdatedLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionUpdatedClueBetweenCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionUpdatedClueAfterCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionUpdatedClueBeforeCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from SaleUpdatedClueBeforeCompNamesLong M
+);	
+
+
+-- Rumored clues  
+create view AcquisitionRumoredClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'rumored' as status,
+  	   M.match as match
+from AcquisitionClueBetweenCompNamesLong M
+/*where Or(ContainsDict('acquisition/rumoredclue.dict', M.betweencontext),
+	  ContainsDict('acquisition/rumoredclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_rumor_posClue_en.dict', M.betweencontext),
+	  ContainsDict('acquisition/fin_acqstn_rumor_posClue_en.dict', M.aftercontext));
+
+	  
+create view AcquisitionRumoredClueAfterCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'rumored' as status,
+  	   M.match as match
+from AcquisitionClueAfterCompNamesLong M
+/*where Or(ContainsDict('acquisition/rumoredclue.dict', M.match),
+	  ContainsDict('acquisition/rumoredclue.dict', M.aftercontext));*/ 
+where Or(ContainsDict('acquisition/fin_acqstn_rumor_posClue_en.dict', M.match),
+	  ContainsDict('acquisition/fin_acqstn_rumor_posClue_en.dict', M.aftercontext)); 
+	  
+
+create view AcquisitionRumoredClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'rumored' as status,
+  	   M.match as match
+from AcquisitionClueBeforeCompNamesLong M
+/*where Or(ContainsDict('acquisition/rumoredclue.dict', M.betweencontext),
+	     ContainsDict('acquisition/rumoredclue.dict', M.aftercontext),
+	     ContainsDict('acquisition/rumoredclue.dict', M.beforecontext));*/		  
+where Or(ContainsDict('acquisition/fin_acqstn_rumor_posClue_en.dict', M.betweencontext),
+	     ContainsDict('acquisition/fin_acqstn_rumor_posClue_en.dict', M.aftercontext),
+	     ContainsDict('acquisition/fin_acqstn_rumor_posClue_en.dict', M.beforecontext));		  	  
+	     
+create view SaleRumoredClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'rumored' as status,
+  	   M.match as match
+from SaleClueBeforeCompNamesLong M
+/*where Or(ContainsDict('acquisition/rumoredclue.dict', M.beforecontext),
+	  ContainsDict('acquisition/rumoredclue.dict', M.aftercontext));*/
+where Or(ContainsDict('acquisition/fin_acqstn_rumor_posClue_en.dict', M.beforecontext),
+	  ContainsDict('acquisition/fin_acqstn_rumor_posClue_en.dict', M.aftercontext));	  
+	  
+	  
+create view AcquisitionRumoredLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionRumoredClueBetweenCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionRumoredClueAfterCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionRumoredClueBeforeCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from SaleRumoredClueBeforeCompNamesLong M
+);
+
+
+
+--Acquisitions with known status
+
+create view AcquisitionKnownStatusLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionCancelledLong M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionAnnouncedLong M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionPlannedLong M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionPostponedLong M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionUpdatedLong M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AcquisitionRumoredLong M
+);
+
+
+--all acquisitions with no status info
+create view AcquisitionAllLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.match as match
+from
+(
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.match as match
+		from AcquisitionClueBetweenCompNamesLong M
+	)
+	union all
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.match as match
+		from AcquisitionClueAfterCompNamesLong M
+	)
+	union all
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.match as match
+		from AcquisitionClueBeforeCompNamesLong M
+	)
+	
+	union all
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.match as match
+		from SaleClueBeforeCompNamesLong M
+	)
+) M
+consolidate on M.match;
+
+
+-- Acquisitions with unknown status
+create view AcquisitionUnknownStatusLong as
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		   	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+			   M.match as match
+		from AcquisitionAllLong M
+	)
+	minus
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+			   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+			   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+			   M.match as match
+		from AcquisitionKnownStatusLong M
+	);  
+
+
+
+--all acquisitions with status info
+create view AcquisitionWithStatusLongAll as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+from
+(
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.status as status, M.match as match
+		from AcquisitionKnownStatusLong M
+	)
+	union all
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   '' as status, M.match as match
+		from AcquisitionUnknownStatusLong M
+	)
+) M
+--consolidate on M.match
+order by GetBegin(M.match);
+
+
+--find partially overlapping matches
+create view AcquisitionWithStatusLongWithPartialOverlapTemp as
+select A1.exchange1 as exchange1_A1, A1.ticker1 as ticker1_A1, A1.company1 as company1_A1, 
+	   A1.exchange2 as exchange2_A1, A1.ticker2 as ticker2_A1, A1.company2 as company2_A1,
+	   A1.exchange3 as exchange3_A1, A1.ticker3 as ticker3_A1, A1.company3 as company3_A1,
+	   A1.status as status_A1, A1.match as match_A1,
+	   A2.exchange1 as exchange1_A2, A2.ticker1 as ticker1_A2, A2.company1 as company1_A2, 
+	   A2.exchange2 as exchange2_A2, A2.ticker2 as ticker2_A2, A2.company2 as company2_A2,
+	   A2.exchange3 as exchange3_A2, A2.ticker3 as ticker3_A2, A2.company3 as company3_A2,
+	   A2.status as status_A2, A2.match as match_A2
+from AcquisitionWithStatusLongAll A1, AcquisitionWithStatusLongAll A2
+where Overlaps(A1.match, A2.match) and
+	  Not(Contains(A1.match, A2.match)) and
+	  Not(Contains(A2.match, A1.match));
+	  
+
+create view AcquisitionWithStatusLongWithPartialOverlap as
+(
+select A.exchange1_A1 as exchange1, A.ticker1_A1 as ticker1, A.company1_A1 as company1, 
+	   A.exchange2_A1 as exchange2, A.ticker2_A1 as ticker2, A.company2_A1 as company2,
+	   A.exchange3_A1 as exchange3, A.ticker3_A1 as ticker3, A.company3_A1 as company3,
+	   A.status_A1 as status, A.match_A1 as match
+from AcquisitionWithStatusLongWithPartialOverlapTemp A
+)
+union all
+(
+select A.exchange1_A2 as exchange1, A.ticker1_A2 as ticker1, A.company1_A2 as company1, 
+	   A.exchange2_A2 as exchange2, A.ticker2_A2 as ticker2, A.company2_A2 as company2,
+	   A.exchange3_A2 as exchange3, A.ticker3_A2 as ticker3, A.company3_A2 as company3,
+	   A.status_A2 as status, A.match_A2 as match
+from AcquisitionWithStatusLongWithPartialOverlapTemp A
+);
+
+-- find matches containing a ';' and remove them if the sentence is part of a bigger paragraph 
+create view AcquisitionWithStatusLongWithSemiColumn as
+select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+	  	   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+	  	   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+	  	   A.status as status, A.match as match
+from AcquisitionWithStatusLongAll A, ParagraphSentence S
+where Contains(S.match, A.match) and
+      ContainsRegex(/;/, A.match);
+      
+
+--find matches containing a person name
+create view AcquisitionWithStatusLongOverlapPerson as
+select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+	  	   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+	  	   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+	  	   A.status as status, A.match as match, P.reference as reference
+from AcquisitionWithStatusLongAll A, Person_ P
+where Contains(A.match, P.reference) and
+      Not(Overlaps(CombineSpans(A.company1, A.ticker1),P.reference)) and
+      Not(Overlaps(CombineSpans(A.company2, A.ticker2),P.reference)) and
+      Not(Overlaps(CombineSpans(A.company3, A.ticker3),P.reference));
+
+--find matches overlapping with address
+create view AcquisitionWithStatusLongOverlapAddress as
+select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+	  	   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+	  	   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+	  	   A.status as status, A.match as match
+from AcquisitionWithStatusLongAll A, AddressFinal P
+where Overlaps(A.match, P.reference);
+      
+      
+      
+      
+--remove partially overlapping matches
+create view AcquisitionWithStatusLong as
+select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+	   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+	   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+	   A.status as status, A.match as match
+from
+(
+	(
+	select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+		   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+		   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+		   A.status as status, A.match as match
+	from AcquisitionWithStatusLongAll A
+	)
+	minus
+	(
+		(
+			select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+				   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+				   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+				   A.status as status, A.match as match
+			from AcquisitionWithStatusLongWithPartialOverlap A
+		)
+		union all
+		(
+			select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+				   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+				   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+				   A.status as status, A.match as match
+			from AcquisitionWithStatusLongWithSemiColumn A
+		)
+		union all
+		(
+			select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+				   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+				   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+				   A.status as status, A.match as match
+			from AcquisitionWithStatusLongOverlapPerson A
+		)
+		union all
+		(
+			select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+				   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+				   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+				   A.status as status, A.match as match
+			from AcquisitionWithStatusLongOverlapAddress A
+		)
+	) 
+) A
+consolidate on A.match;
+
+
+create view LongTextWithAcquisition as
+select T.match as match
+from LongText T, AcquisitionWithStatusLong A
+where Contains(T.match, A.match);
+
+create view AcquisitionMissedLong as
+( select T.match as match from LongText T )
+minus
+( select T.match as match from LongTextWithAcquisition T );
+
+
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Output section <<<<<<<<<<<<<<<<
+-- ===========================================================================		
+
+
+/*
+output view AcquisitionClueBetween;
+output view AcquisitionClueBefore;
+output view AcquisitionClueAfter;
+output view AcquisitionClueAll;
+output view SaleClue;
+
+
+output view AcquisitionClueBetween2CompNames;
+output view AcquisitionClueBetween2CompNamesShortTemp;
+output view AcquisitionClueBetween2CompNamesShortBadMatch;
+output view AcquisitionClueBetween2CompNamesShort;
+output view AcquisitionClueBetween3CompNames;
+output view AcquisitionClueBetween3CompNamesShortTemp;
+output view AcquisitionClueBetweenCompNamesShortCandidate;
+output view AcquisitionClueBetweenCompNamesShortBadMatch;
+output view AcquisitionClueBetweenCompNamesShortTemp;
+output view AcquisitionClueBetweenCompNamesShort;
+
+output view AcquisitionClueAfterCompNamesShort;
+output view AcquisitionClueAfterCompNamesShortBadMatch;
+
+
+output view SaleClueBeforeCompNames;
+output view SaleClueBeforeCompNamesShortTemp;
+output view SaleClueBeforeCompNamesShortBadMatch;
+output view SaleClueBeforeCompNamesShort;
+
+output view AcquisitionCancelledClueBetweenCompNamesShort;
+output view AcquisitionCancelledClueAfterCompNamesShort;
+output view AcquisitionAnnouncedClueBetweenCompNamesShort;
+output view AcquisitionAnnouncedClueAfterCompNamesShort;
+output view AcquisitionPlannedClueBetweenCompNamesShort;
+output view AcquisitionPlannedClueAfterCompNamesShort;
+output view AcquisitionPostponedClueBetweenCompNamesShort;
+output view AcquisitionPostponedClueAfterCompNamesShort;
+output view AcquisitionUpdatedClueBetweenCompNamesShort;
+output view AcquisitionUpdatedClueAfterCompNamesShort;
+output view AcquisitionRumoredClueBetweenCompNamesShort;
+output view AcquisitionRumoredClueAfterCompNamesShort;
+
+
+output view AcquisitionAllShort;
+output view AcquisitionKnownStatusShort;
+output view AcquisitionUnknownStatusShort;
+output view AcquisitionWithStatusShortAll;
+output view AcquisitionWithStatusShortWithPartialOverlapTemp;
+output view AcquisitionWithStatusShortWithPartialOverlap;
+output view AcquisitionWithStatusShort;
+
+
+
+
+
+output view AcquisitionClueBetween2CompNamesLongInitial;
+output view AcquisitionClueBetween2CompNamesLongTemp;
+output view AcquisitionClueBetween2CompNamesLongBadMatch;
+output view AcquisitionClueBetween2CompNamesLong;
+output view AcquisitionClueBetween3CompNamesLongInitial;
+output view AcquisitionClueBetween3CompNamesLongTemp;
+output view AcquisitionClueBetweenCompNamesLongCandidate;
+output view AcquisitionClueBetweenCompNamesLongBadMatch;
+output view AcquisitionClueBetweenCompNamesLongTemp;
+output view AcquisitionClueBetweenCompNamesLong;
+
+
+output view AcquisitionClueAfterCompNamesLongInitial;
+output view AcquisitionClueAfterCompNamesLongTemp;
+output view AcquisitionClueAfterCompNamesLong;
+
+
+output view AcquisitionClueBefore2CompNamesTmp;
+output view AcquisitionClueBefore2CompNamesLong;
+output view AcquisitionClueBefore3CompNamesTmp;
+output view AcquisitionClueBefore3CompNamesLong;
+output view AcquisitionClueBeforeCompNamesLong;
+
+
+output view SaleClueBeforeCompNamesInitial;
+output view SaleClueBeforeCompNamesLongTemp;
+output view SaleClueBeforeCompNamesLongBadMatch;
+output view SaleClueBeforeCompNamesLong;
+
+
+output view AcquisitionCancelledClueBetweenCompNamesLong;
+output view AcquisitionCancelledClueAfterCompNamesLong;
+output view AcquisitionCancelledClueBeforeCompNamesLong;
+output view SaleCancelledClueBeforeCompNamesLong;
+output view AcquisitionAnnouncedClueBetweenCompNamesLong;
+output view AcquisitionAnnouncedClueAfterCompNamesLong;
+output view AcquisitionAnnouncedClueBeforeCompNamesLong;
+output view SaleAnnouncedClueBeforeCompNamesLong;
+output view AcquisitionPlannedClueBetweenCompNamesLong;
+output view AcquisitionPlannedClueAfterCompNamesLong;
+output view AcquisitionPlannedClueBeforeCompNamesLong;
+output view SalePlannedClueBeforeCompNamesLong;
+output view AcquisitionPostponedClueBetweenCompNamesLong;
+output view AcquisitionPostponedClueAfterCompNamesLong;
+output view AcquisitionPostponedClueBeforeCompNamesLong;
+output view SalePostponedClueBeforeCompNamesLong;
+output view AcquisitionUpdatedClueBetweenCompNamesLong;
+output view AcquisitionUpdatedClueAfterCompNamesLong;
+output view AcquisitionUpdatedClueBeforeCompNamesLong;
+output view SaleUpdatedClueBeforeCompNamesLong;
+output view AcquisitionRumoredClueBetweenCompNamesLong;
+output view AcquisitionRumoredClueAfterCompNamesLong;
+output view AcquisitionRumoredClueBeforeCompNamesLong;
+output view SaleRumoredClueBeforeCompNamesLong;
+output view AcquisitionAllLong;
+output view AcquisitionKnownStatusLong;
+output view AcquisitionUnknownStatusLong;
+
+output view AcquisitionWithStatusLongAll;
+output view AcquisitionWithStatusLongWithPartialOverlap;
+output view AcquisitionWithStatusLongWithSemiColumn;
+output view AcquisitionWithStatusLongOverlapPerson;
+output view AcquisitionWithStatusLongOverlapAddress;
+output view AcquisitionWithStatusLong;
+
+*/
+
+
+
+

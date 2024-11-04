@@ -1,0 +1,130 @@
+create view PersonWithinUrlEmailPlaceOrg as
+select PS.person as person
+from PersonSentence PS, UrlEmailPlaceOrg R
+where Contains (R.match, PS.person);
+
+create view PersonOverlapsWithCities as
+select P.person as person 
+from PersonSentence P,
+	 CitiesAll C
+where Overlaps(C.match, P.person)
+  and Not(Contains(P.person, C.match))
+  and Not(Contains(C.match, P.person));
+  
+create view PersonOverlapsWithOrgsAll as 
+select P.person as person, O.org as org
+from PersonSentence P, 
+	 FinalOrgConsolidatedWithoutDots O
+where Overlaps(O.org, P.person);
+
+create view PersonContainsOrgs as 
+select P.person as person
+from PersonOverlapsWithOrgsAll P
+where Contains(P.person, P.org)
+and Not(Equals(P.person, P.org));
+
+select P.person as person
+into PersonContainsOrgs_output
+from PersonContainsOrgs P;
+
+create view PersonOverlapsWithOrgs as
+	(select P.person as person from PersonOverlapsWithOrgsAll P)
+	minus
+	(select P.person as person from PersonContainsOrgs P);
+		  
+create view InvalidPerson as
+	(select P1.person as person from PersonWithinUrlEmailPlaceOrg P1)
+	union all
+	(select P1.person as person from PersonOverlapsWithCities P1)
+	union all
+	(select P1.person as person from PersonOverlapsWithOrgs P1);
+
+create view ValidPerson_1 as 
+	(select P.person as person from PersonSentence P)
+	minus
+	(select P1.person as person from InvalidPerson P1);
+
+create view PersonNameAsCity as 
+select D.match as matchText
+from Dictionary('names/missingPerson_nameAsCity.txt', DocScan.text) D 
+;
+
+create view ValidPerson_2 as 
+	(select P.person as person from ValidPerson_1 P)
+	union all
+	(select P1.matchText as person from PersonNameAsCity P1);
+
+create view ValidPerson_3 as
+select P.person as person from ValidPerson_2 P
+consolidate on P.person;
+
+create view FinalPersonConsolidated as
+select C.person as person
+--from Consolidate(PersonSentence.person) C;
+--from Consolidate('LeftToRight', ValidPerson.person) C;
+from ValidPerson_3 C
+consolidate on C.person
+using 'LeftToRight';
+
+-- deleted rules for single token person and predicates on consolidated persons
+-- these rules are now in the main Person aql file 
+-- following condition alone is retained for now as it is not expressible in Named Entity Rule interface format
+ 
+-- Yunyao: change made on 03/24/2008 
+--         avoid matches with . on both side
+--         change made on 05/05/2008
+--         avoid matches for single person name in notes email address
+-- begain block change
+
+create view PersonFinalAllWithDots as
+select P.person as person
+from FinalPersonConsolidated P
+where MatchesRegex(/[\.\/]/, LeftContext(P.person,1)) and
+	  MatchesRegex(/[\.\/]/, RightContext(P.person,1)) and
+	  MatchesRegex(/[\p{Upper}]+/, P.person);
+	  
+create view PersonFinalAllWithoutDots1 as
+	(select P.person as person from FinalPersonConsolidated P)
+	minus
+	(select P.person as person from PersonFinalAllWithDots P);	
+	
+create view PersonTokens as
+select R.match as person
+from Regex(/[^\s\.]{2,}/, PersonFinalAllWithoutDots1.person) R;
+
+create view PersonTokenCandidates as
+select CW.matchText as person
+from PersonTokens PT,
+     CapitalizedWordOptionalHyphenApostrophe__4 CW
+where Equals(GetText(PT.person), GetText(CW.matchText));
+
+select P.person as person into
+PersonTokenCandidates_output
+from PersonTokenCandidates P;
+
+create view InvalidPersonTokenCandidates as
+select PTC.person as person
+from PersonTokenCandidates PTC,
+	 UrlEmailPlaceOrg UEP
+where Contains(UEP.match, PTC.person)
+  and Not(Contains(PTC.person, UEP.match));
+
+create view ValidPersonTokenCandidates as
+	(select P.person as person from PersonTokenCandidates P)
+	minus
+	(select P.person as person from InvalidPersonTokenCandidates P);
+	
+select P.person as person into
+ValidPersonTokenCandidates_output
+from ValidPersonTokenCandidates P;
+
+create view PersonFinalAllWithoutDots2 as
+	(select P.person as person from PersonFinalAllWithoutDots1 P)
+	union all
+	(select P.person as person from ValidPersonTokenCandidates P);
+
+create view PersonFinalAllWithoutDots as
+select P.person as person
+from PersonFinalAllWithoutDots2 P
+consolidate on P.person;
+	 

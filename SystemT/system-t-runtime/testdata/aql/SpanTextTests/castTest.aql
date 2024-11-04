@@ -1,0 +1,80 @@
+------------------------------------------------------------------------------
+-- Tests of cast() support for nulls and Lists
+------------------------------------------------------------------------------
+require document with columns text Text;
+
+
+create dictionary CommonWords as (
+	'a', 'the', 'of', 'of a', 'of the'
+);
+
+-- Find pairs of common words within 20 tokens of each other.
+create view WordPairs_Unsorted as
+select D1.match as first, D2.match as second, 
+	CombineSpans(D1.match, D2.match) as annot
+from Dictionary('CommonWords', Document.text) D1,
+	Dictionary('CommonWords', Document.text) D2
+where FollowsTok(D1.match, D2.match, 0, 20);
+
+
+create view WordPairs_Sorted as
+select * from WordPairs_Unsorted W
+order by W.first, W.second, W.annot;
+
+create view WordPairs_Grouped as
+select W.first as first, List(W.second) as second
+from WordPairs_Sorted W
+group by W.first;
+
+
+-- Test for unioning list of span values with nulls
+create view WordPairs_WithNulls as
+select W.first as first, cast(null as ScalarList) as second
+from WordPairs_Grouped W;
+
+create view WordPairs_Union as
+(select * from WordPairs_Grouped)
+union all
+(select * from WordPairs_WithNulls);
+
+
+output view WordPairs_Union;
+output view WordPairs_WithNulls;
+
+
+create table CommonWordsText (word Text) as
+values 
+	('a'), ('the'), ('of'), ('of a'), ('of the');
+	
+create view WordPairsText_Unsorted as
+select W.first as first, C.word as second
+from WordPairs_Unsorted W, CommonWordsText C
+where Equals(GetText(W.second), GetText(C.word));
+
+
+create view WordPairsText_Grouped as
+select W.first as first, List(W.second) as second
+from WordPairsText_Unsorted W
+group by W.first;
+
+
+-- Test for unioning list of text values with nulls
+create view WordPairsText_WithNulls as
+select W.first as first, cast(null as ScalarList) as second
+from WordPairsText_Grouped W;
+
+create view WordPairsText_Union as
+(select * from WordPairsText_WithNulls)
+union all
+(select * from WordPairsText_Grouped);
+
+create view WordPairsText_UnionTop as
+select *
+from WordPairsText_Union W
+where NotNull(W.second);
+
+output view WordPairsText_Union;
+output view WordPairsText_WithNulls;
+output view WordPairsText_UnionTop;
+
+

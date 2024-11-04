@@ -1,0 +1,62 @@
+module nullargs;
+
+import function containsT from module nullUDFs as containsT;
+import function implies from module nullUDFs as implies;
+import function containsTEvalNull from module nullUDFs as containsTEvalNull;
+import function impliesSkipNull from module nullUDFs as impliesSkipNull;
+
+require document with columns text Text;
+
+
+-- This test suite prints out the result of UDFs
+
+
+-- CONTAINS T (return null on null input)
+
+create view ContainsTTest as
+select 'ContainsT' as testFunc,
+       Equals(GetText(N.onlyArg),'T') as onlyArg,
+       containsT(GetText(N.onlyArg)) as result
+from _NullLogic N
+consolidate on N.onlyArg;
+
+output view ContainsTTest;
+
+
+-- CONTAINS T EVAL NULL (pass in null)
+
+create view ContainsTEvalNullTest as
+select 'ContainsTEvalNull' as testFunc,
+       Equals(GetText(N.onlyArg),'T') as onlyArg,
+       containsTEvalNull(GetText(N.onlyArg)) as result
+from _NullLogic N
+consolidate on N.onlyArg;
+
+output view ContainsTEvalNullTest;
+
+
+
+
+-- IMPLIES
+
+create view ImpliesTest as
+select 'Implies' as testFunc,
+       Equals(GetText(N.firstArg),'T') as firstArg,
+       Equals(GetText(N.secondArg),'T') as secondArg,
+       implies(Equals(GetText(N.firstArg),'T'), Equals(GetText(N.secondArg),'T')) as result
+from _NullLogic N;
+
+output view ImpliesTest;
+
+
+
+-- IMPLIES (returning null on null input)
+
+create view ImpliesSkipNullTest as
+select 'ImpliesReturnNullOnNullInput' as testFunc,
+       Equals(GetText(N.firstArg),'T') as firstArg,
+       Equals(GetText(N.secondArg),'T') as secondArg,
+       impliesSkipNull(Equals(GetText(N.firstArg),'T'), Equals(GetText(N.secondArg),'T')) as result
+from _NullLogic N;
+
+output view ImpliesSkipNullTest;

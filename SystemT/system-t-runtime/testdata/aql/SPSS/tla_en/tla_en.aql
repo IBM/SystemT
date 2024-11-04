@@ -1,0 +1,27 @@
+
+module tla_en;
+
+import module udf;
+-- import view Sentences_en from module sentence_en as Sentences;
+
+set default dictionary language as 'en';
+
+--
+-- mSEP_en
+--
+create dictionary SepDict_en as 
+(
+','
+)
+;
+ 
+create view SEP_en as
+select X.typeName as typeName, X.concept as concept
+from (
+extract 'SEP' as typeName, dictionary 'SepDict_en'
+with flags 'IgnoreCase'
+on D.sentence
+as concept
+from Sentences D)X
+consolidate on X.concept
+;

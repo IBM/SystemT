@@ -1,0 +1,38 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test cases for extension to sequence patterns to pass through attributes
+-- Verifies that parsing returns the appropriate parse error in various cases.
+--
+-------------------------------------------------------------------------------
+
+create view CapsWord as
+extract 'CapsWord' as type,
+	regex /[A-Z].*/ on 1 token in D.text as match
+from Document D;
+
+create view LowWord as
+extract 'LowWord' as type,
+	regex /[a-z]*/ on 1 token in D.text as match
+from Document D;
+
+-- Make sure we throw the right exception because of the missing "and" token in the return clause.
+-- Exception should be: Encountered " "group" "group "" at line 24, column 28.
+create view Sequence1 as
+extract C.type as ctype,
+	    pattern (<C.match>) <L.match> 
+	    return group 0 as match
+	   		   group 1 as frst
+from CapsWord C, LowWord L;
+
+output view Sequence1;
+
+-- Validate that extract * is not allowed in an extract pattern statement
+create view ColRefAtom14 as
+extract *,
+	pattern <C.match> as match
+from CapsWord C;
+
+output view ColRefAtom14;
+
+
+

@@ -1,0 +1,27 @@
+-- Tests defect #39646 by importing views into namespace and then making sure the right statements throw errors
+
+module module2;
+
+-- This should obviously work fine -- setting up the subsequent statements
+import module module1;
+
+-- NO ERROR: This will lead to redundant import, but not conflicting import -- Compiler will *not* throw any error or warning
+import view foo from module module1; 
+
+-- This should not throw an error because of the alias
+import view foo from module module1 as my_foo;
+
+-- This THROWS AN ERROR because my_foo is declared twice
+import view bar from module module1 as my_foo;
+
+-- This imports module1.bar as just module2.my_bar
+import view bar from module module1 as my_bar;
+
+-- unqualified bar is not visible, THROW ERROR
+create view testView1 as select B.match from bar B;
+
+-- fully qualified version of bar is visible
+create view testView2 as select B.match from module2.my_bar B;
+
+-- imported version alias my_foo is visible
+create view testView3 as select F.match from my_foo F;

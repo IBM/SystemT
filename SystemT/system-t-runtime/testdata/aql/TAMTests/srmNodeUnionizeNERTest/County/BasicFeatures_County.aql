@@ -1,0 +1,15 @@
+module County;
+
+import view DocumentDetagged from module DocumentDetagger as DocumentText;
+
+import dictionary CountyPositiveClues from module Dictionaries as CountyPositiveClues;
+import dictionary WorldCountries from module Dictionaries as WorldCountries;
+
+create view CountyClue as
+select D.match as match
+from (extract dictionary 'CountyPositiveClues' on D.text as match from DocumentText D) D;
+
+create view WeakCounty as
+	select D.match as match
+	from (extract dictionary 'WorldCountries' on D.text as match from DocumentText D) D
+	where MatchesRegex(/\p{Lu}\p{M}*.+/, D.match);

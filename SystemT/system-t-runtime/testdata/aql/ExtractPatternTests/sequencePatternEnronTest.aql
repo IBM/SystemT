@@ -1,0 +1,27 @@
+-- Test for a bug when casting nulls to ensure union compatibility 
+-- for groups returned from alternation and optional nodes
+-- when the target view is not Document;
+detag Document.text as Doc;
+
+create view CapsWordDoc as
+	extract pattern /[A-Z][a-z]+/ as match
+	from Doc D;
+
+create view SP10 as
+	extract pattern <CW1.match> (<CW2.match>)?
+		return group 0 as match
+		   and group 1 as optional
+	from CapsWordDoc CW1, CapsWordDoc CW2
+	limit 10;
+	
+create view SP10_a as
+	extract pattern <CW1.match> (<CW2.match>)?
+		return group 0 as match
+		   and group 1 as optional
+		   and group 0 as match1
+		   and group 1 as optional1
+	from CapsWordDoc CW1, CapsWordDoc CW2
+	limit 10;
+	
+output view SP10;
+output view SP10_a;

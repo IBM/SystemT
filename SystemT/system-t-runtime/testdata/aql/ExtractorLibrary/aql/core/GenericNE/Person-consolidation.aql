@@ -1,0 +1,316 @@
+create view PersonWithinUrlEmailPlaceOrg as
+select PS.person as person
+from PersonSentence PS, UrlEmailPlaceOrg R
+where Contains (R.match, PS.person);
+
+create view PersonOverlapsWithCities as
+select P.person as person 
+from PersonSentence P,
+	 CitiesAll C
+where Overlaps(C.match, P.person)
+  and Not(Contains(P.person, C.match))
+  and Not(Contains(C.match, P.person));
+  
+--Yunyao: added on 11/11/2008
+create view PersonEqualsToCities as
+select P.person as person 
+from PersonSentence P,
+	 CitiesAll C
+where Equals(C.match, P.person);
+  
+create view PersonOverlapsWithOrgsAll as 
+select P.person as person, O.org as org
+from PersonSentence P, 
+	 FinalOrgConsolidatedWithoutDots O
+where Overlaps(O.org, P.person);
+
+create view PersonContainsOrgs as 
+select P.person as person
+from PersonOverlapsWithOrgsAll P
+where Contains(P.person, P.org)
+and Not(Equals(P.person, P.org));
+
+/*
+select P.person as person
+into PersonContainsOrgs_output
+from PersonContainsOrgs P;
+*/
+
+create view PersonOverlapsWithOrgs as
+	(select P.person as person from PersonOverlapsWithOrgsAll P)
+	minus
+	(select P.person as person from PersonContainsOrgs P);
+		  
+create view InvalidPerson as
+	(select P1.person as person from PersonWithinUrlEmailPlaceOrg P1)
+	union all
+	(select P1.person as person from PersonOverlapsWithCities P1)
+	union all
+	(select P1.person as person from PersonOverlapsWithOrgs P1)
+	union all
+	(select P1.person as person from PersonEqualsToCities P1)
+--	union all
+--	(select P1.person as person from PersonEqualsToCountry P1)
+--	union all
+--	(select P1.person as person from PersonFilterDict P1)
+;
+
+create view ValidPerson as 
+	(select P.person as person from PersonSentence P)
+	minus
+	(select P1.person as person from InvalidPerson P1);
+
+create view FinalPersonConsolidated as
+select C.person as person
+--from Consolidate(PersonSentence.person) C;
+--from Consolidate('LeftToRight', ValidPerson.person) C;
+from ValidPerson C
+consolidate on C.person
+using 'LeftToRight';
+
+create view UrlEmailPlaceOrgPerson as 
+     (select R.match as match from UrlEmailPlaceOrg R)
+     union all
+     (select R.person as match from FinalPersonConsolidated R);
+      
+create view PersonStrongSingleTokenWithinUrlEmailPlaceOrg as
+select PS.person as person
+from PersonStrongSingleToken PS, UrlEmailPlaceOrgPerson R
+where Contains (R.match, PS.person);
+ -- TODO: when city name is the exactly the same as person names (James)
+ 
+create view FinalPersonStrongSingleToken as 
+	(select P.person as person from PersonStrongSingleToken P)
+	minus
+	(select P1.person as person from PersonStrongSingleTokenWithinUrlEmailPlaceOrg P1);
+ 
+create view FinalPersonStrongSingleTokenConsolidated as
+select C.person as person
+--from Consolidate(FinalPersonStrongSingleToken.person) C;
+from FinalPersonStrongSingleToken C
+consolidate on C.person;
+
+
+
+--- start changing this block
+/*create view PersonFinalAll as
+(select P.person as person from FinalPersonConsolidated P)
+union all
+(select P.person as person from FinalPersonStrongSingleTokenConsolidated P);*/
+
+-- filter entries where an invalid person fragment is present
+-- filter entries where the token to the left is present in a dictionary
+-- filter entries where the token to the right is present in a dictionary
+-- filter entries where the token to the left matches a regular expression
+
+create view PersonStrongSingleTokenOverlaps as
+select P.person as person 
+from FinalPersonStrongSingleTokenConsolidated P, FinalPersonConsolidated P1
+where Overlaps(P.person,P1.person);
+
+create view PersonStrongSingleTokenNonOverlaps as
+(select P.person as person from FinalPersonStrongSingleTokenConsolidated P)
+minus
+(select P.person as person from  PersonStrongSingleTokenOverlaps P);
+
+
+--Laura 04/30/2009: carry over an additional attribute 
+--to indicate whether the match is single or multi-token
+create view PersonFinalAllMatches as
+(select P.person as person, 'MULTITOKEN' as type from FinalPersonConsolidated P)
+union all
+(select P.person as person, 'SINGLETOKEN' as type from PersonStrongSingleTokenNonOverlaps P
+ where Not(MatchesRegex(/.{1,2}/,P.person)));
+ 
+--output view PersonFinalAllMatches;
+ 
+-- Yunyao: added on 03/21/2008 to avoid matches overlapping with invalid person fragments
+-- begin block change  
+--create view PersonFinalAllCandidate as
+--select P.person as person 
+--from   PersonFinalAllMatches P
+--where  Not(ContainsDict('invalidPersonFragment.dict', P.person));
+
+create view InvalidPersonFragments as
+select D.match as match
+from Dictionary('invalidPersonFragment.dict', Doc.text) D;
+ 
+create view InvalidPersonFinalAllMatches as
+select P.person as person, P.type as type 
+from   PersonFinalAllMatches P,
+	   InvalidPersonFragments F
+where Overlaps(F.match, P.person);
+
+create view PersonFinalAllCandidate as
+	(select P.person as person, P.type as type  from PersonFinalAllMatches P)
+	minus
+	(select P.person as person, P.type as type  from InvalidPersonFinalAllMatches P);
+	
+-- end block change
+ 
+create view PersonContext as
+select LeftContext(R.person,20) as lc, R.person as person, RightContext(R.person, 20) as rc
+from   PersonFinalAllCandidate R;
+ 
+create view PersonLeftContext as
+select R.match as name 
+from   Regex(/\b(\p{L}\p{M}*){1,20}\W+$/,  PersonContext.lc) R
+where  ContainsDict('filterPerson_LCDict.dict', R.match);
+
+create view PersonRightContext as
+select R.match as name 
+from   Regex(/^\s*\b(\p{L}\p{M}*){1,20}\W+/,  PersonContext.rc) R
+where  ContainsDict('filterPerson_RCDict.dict', R.match);
+
+create view PersonFinalAllCandidateToDeleteLC as
+select P.person as person, P.type as type 
+from PersonFinalAllCandidate P, PersonLeftContext PLC
+where FollowsTok(PLC.name,P.person,0,1) and
+      MatchesRegex(/\W+/,SpanBetween(PLC.name,P.person));
+
+create view PersonFinalAllCandidateToDeleteLC1 as
+select P.person as person, P.type as type 
+from PersonFinalAllCandidate P, PersonLeftContext PLC
+where FollowsTok(PLC.name,P.person,0,1) and
+	  MatchesRegex(/\W+/,SpanBetween(PLC.name,P.person)) and
+      MatchesRegex(/.+(ing)/,PLC.name) and
+      MatchesRegex(/.+,.+/,P.person);
+      
+create view PersonFinalAllCandidateToDeleteRC as
+select P.person as person, P.type as type 
+from PersonFinalAllCandidate P, PersonRightContext PRC
+where FollowsTok(P.person,PRC.name,0,1) and
+      MatchesRegex(/\W+/,SpanBetween(P.person,PRC.name));
+
+create view PersonFinalAllNoLC as
+(select P.person as person, P.type as type  from PersonFinalAllCandidate P)
+minus
+(select P.person as person, P.type as type  from PersonFinalAllCandidateToDeleteLC P);
+
+create view PersonFinalAllNoLC1 as
+(select P.person as person, P.type as type  from PersonFinalAllNoLC P)
+minus
+(select P.person as person, P.type as type  from PersonFinalAllCandidateToDeleteLC1 P);
+
+create view PersonFinalAll as
+(select P.person as person, P.type as type  from PersonFinalAllNoLC1 P)
+minus
+(select P.person as person, P.type as type  from PersonFinalAllCandidateToDeleteRC P);
+
+-- Yunyao: change made on 03/24/2008 
+--         avoid matches with . on both side
+--         change made on 05/05/2008
+--         avoid matches for single person name in notes email address
+-- begain block change
+create view PersonFinalAllWithDots as
+select P.person as person, P.type as type 
+from PersonFinalAll P
+where MatchesRegex(/[\.\/]/, LeftContext(P.person,1)) and
+	  MatchesRegex(/[\.\/]/, RightContext(P.person,1)) and
+	  MatchesRegex(/[\p{Upper}]+/, P.person);
+	  
+	  
+create view PersonFinalAllWithoutDots1 as
+	(select P.person as person, P.type as type  from PersonFinalAll P)
+	minus
+	(select P.person as person, P.type as type  from PersonFinalAllWithDots P);	
+
+--Yunyao: added on 04/14/2009
+-- begin
+create view PersonTokens as
+select R.match as person
+from Regex(/[^\s\.]{2,}/, PersonFinalAllWithoutDots1.person) R;
+
+
+
+-- Laura 07/22/09 - replaced the next block with SELECT DISTINCT version below
+-- to avoid significant performance degradation on long documents. 
+-- Such documents might contain the same match in multiple places, 
+-- thus making the value-based join in PersonTokenCandidates very expensive 
+-- if deduplication does not occur prior to computing the join
+
+--******************** BEGIN OLD VERSION W/OD EDUP*********************
+/*
+create view PersonTokenCandidates as
+select CW.name as person
+from PersonTokens PT,
+     CapsPerson CW
+where Equals(GetText(PT.person), GetText(CW.name));
+
+
+create view InvalidPersonTokenCandidates as
+select PTC.person as person
+from PersonTokenCandidates PTC,
+	 UrlEmailPlaceOrg UEP
+where Contains(UEP.match, PTC.person)
+  and Not(Contains(PTC.person, UEP.match));
+
+create view ValidPersonTokenCandidates as
+	(select P.person as person from PersonTokenCandidates P)
+	minus
+	(select P.person as person from InvalidPersonTokenCandidates P);
+*/
+--******************** END OLD VERSION W/OD EDUP*********************
+
+--******************** BEGIN SELECT DISTINCT VERSION *********************
+
+create view InvalidCapsPerson as
+select CP.name as name
+from CapsPerson CP,
+	 UrlEmailPlaceOrg UEP
+where Contains(UEP.match, CP.name)
+  and Not(Contains(CP.name, UEP.match));
+
+create view ValidCapsPersonCandidates as
+	(select P.name as name from CapsPerson P)
+	minus
+	(select P.name as name from InvalidCapsPerson P);
+
+create view PersonTokenCandidateDedup as
+select GetText(PT.person) as person
+from PersonTokens PT
+group by GetText(PT.person);
+
+
+create view ValidPersonTokenCandidates as
+select CW.name as person
+from PersonTokenCandidateDedup PT,
+     ValidCapsPersonCandidates CW
+where Equals(GetText(PT.person), GetText(CW.name));
+
+--******************** END SELECT DISTINCT VERSION *********************
+-- Laura 07/22/09 : end block change
+
+
+/*
+select P.person as person into
+ValidPersonTokenCandidates_output
+from ValidPersonTokenCandidates P;
+*/
+
+-- Yunyao: added 11/21/2008 to extend valid tokens to include initials
+create view ValidPersonTokenCandidatesExtended as
+select CombineSpans(I.word, P.person) as person 
+from InitialWord I,
+	 ValidPersonTokenCandidates P
+where FollowsTok(I.word, P.person, 0, 0);
+
+/*
+output view PersonTokens;
+output view PersonTokenCandidates;
+output view ValidPersonTokenCandidates;
+output view ValidPersonTokenCandidatesExtended;
+*/
+
+create view PersonFinalAllWithoutDots2 as
+	(select P.person as person, P.type as type from PersonFinalAllWithoutDots1 P)
+	union all
+	(select P.person as person, 'SINGLETOKEN' as type from ValidPersonTokenCandidates P)
+	union all
+	(select P.person as person, 'SINGLETOKEN' as type from ValidPersonTokenCandidatesExtended P);
+--end
+
+create view PersonFinalAllWithoutDots as
+select P.person as person, P.type as type
+from PersonFinalAllWithoutDots2 P
+consolidate on P.person;

@@ -1,0 +1,75 @@
+create view PersonWithinUrlEmailPlaceOrg as
+select PS.person as person
+from PersonSentence PS, UrlEmailPlaceOrg R
+where Contains (R.match, PS.person);
+
+create view PersonOverlapsWithCities as
+select P.person as person 
+from PersonSentence P,
+	 CitiesAll C
+where Overlaps(C.match, P.person)
+  and Not(Contains(P.person, C.match))
+  and Not(Contains(C.match, P.person));
+  
+create view PersonOverlapsWithOrgsAll as 
+select P.person as person, O.org as org
+from PersonSentence P, 
+	 FinalOrgConsolidatedWithoutDots O
+where Overlaps(O.org, P.person);
+
+create view PersonContainsOrgs as 
+select P.person as person
+from PersonOverlapsWithOrgsAll P
+where Contains(P.person, P.org)
+and Not(Equals(P.person, P.org));
+
+select P.person as person
+into PersonContainsOrgs_output
+from PersonContainsOrgs P;
+
+create view PersonOverlapsWithOrgs as
+	(select P.person as person from PersonOverlapsWithOrgsAll P)
+	minus
+	(select P.person as person from PersonContainsOrgs P);
+		  
+create view InvalidPerson as
+	(select P1.person as person from PersonWithinUrlEmailPlaceOrg P1)
+	union all
+	(select P1.person as person from PersonOverlapsWithCities P1)
+	union all
+	(select P1.person as person from PersonOverlapsWithOrgs P1);
+
+create view ValidPerson as 
+	(select P.person as person from PersonSentence P)
+	minus
+	(select P1.person as person from InvalidPerson P1);
+
+create view FinalPersonConsolidated as
+select C.person as person
+--from Consolidate(PersonSentence.person) C;
+--from Consolidate('LeftToRight', ValidPerson.person) C;
+from ValidPerson C
+consolidate on C.person
+using 'LeftToRight';
+
+-- deleted rules for single token person and predicates on consolidated persons
+-- these rules are now in the main Person aql file 
+-- following condition alone is retained for now as it is not expressible in Named Entity Rule interface format
+ 
+-- Yunyao: change made on 03/24/2008 
+--         avoid matches with . on both side
+--         change made on 05/05/2008
+--         avoid matches for single person name in notes email address
+-- begain block change
+
+create view PersonFinalAllWithDots as
+select P.person as person
+from FinalPersonConsolidated P
+where MatchesRegex(/[\.\/]/, LeftContext(P.person,1)) and
+	  MatchesRegex(/[\.\/]/, RightContext(P.person,1)) and
+	  MatchesRegex(/[\p{Upper}]+/, P.person);
+	  
+create view PersonFinalAllWithoutDots as
+	(select P.person as person from FinalPersonConsolidated P)
+	minus
+	(select P.person as person from PersonFinalAllWithDots P);	

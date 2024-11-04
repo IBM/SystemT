@@ -1,0 +1,63 @@
+############################################################
+# personOrgFastRegex.aog
+#
+# Version of personOrgRegex with Regex() calls replaced by FastRegex()
+
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+
+# The base regex for CapsPerson
+$CapsPersonRaw = 
+	FastRegexTok(/\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['\-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}/,
+	(0 => "match"), 3, "text", $Document);
+	
+$CapsOrg = 
+	FastRegexTok(/\p{Lu}\p{M}*([\p{Ll}\p{Lo}\&\.'\-\,]\p{M}*)*[\p{Ll}\p{Lo}]/,
+	(0 => "match"), 10, "text", $Document);
+	
+$WeakInitialWord = 
+	FastRegexTok(/([\p{Upper}]\.?\s*){1,5}/,
+	(0 => "match"), 12, "text", $Document);	
+	
+$AllCapsOrg = 
+	FastRegexTok(/(\p{Lu}\p{M}*){2,30}/,
+	(0 => "match"), 1, "text", $Document);	
+	
+$InitialWord = 
+	FastRegexTok(/([\p{Upper}]\.\s*){0,4}[\p{Upper}]\./,
+	(0 => "match"), 10, "text", $Document);	
+	
+$Time4 = 
+	FastRegexTok(/(\d{1,2}:\d{2}(:\d{2})?|\d{1,2}-\d{1,2})(\s*[AP])?/,
+	(0 => "match"), 10, "text", $Document);		
+	
+$TwoDigitsInterval = 
+	FastRegexTok(/([0123])?[\d]( )*[\-]( )*([0123])?[\d]/, 
+	(0 => "match"), 3, "text", $Document);			
+
+$CapsPersonNoP =
+	Select(Not(ContainsRegex(RegexConst(/'/, "SimpleRegex"), GetCol("match"))), $CapsPersonRaw);
+	
+$StrictCapsPersonR = 
+	FastRegex(/\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}/,
+	(0 => "name"), "match", $CapsPersonNoP);
+	
+$StrictCapsPerson = 
+	Select(
+		MatchesRegex(
+			RegexConst(/\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){1,20}/, "SimpleRegex"), 
+		GetCol("name")), 
+		$StrictCapsPersonR);
+				
+$StrictCapsPerson2 = 
+	FastRegexTok(/\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){1,20}/, 
+		(0 => "match"), 1, "text", $Document);			
+		
+Output: $CapsPersonRaw, $CapsOrg, $WeakInitialWord, $AllCapsOrg, $InitialWord, 
+	$Time4, $TwoDigitsInterval, $StrictCapsPersonR, $StrictCapsPerson,
+	$StrictCapsPerson2;
+	

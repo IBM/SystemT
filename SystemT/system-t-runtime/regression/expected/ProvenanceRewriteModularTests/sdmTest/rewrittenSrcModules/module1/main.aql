@@ -1,0 +1,52 @@
+module module1;
+
+
+create dictionary "TheDict"
+with case insensitive
+as (
+  'the'
+);
+
+
+create dictionary "ADict"
+with case insensitive
+as (
+  'a'
+);
+
+
+create view DocCopy as
+  select  D.text as text,
+          D.label as tweetId,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as Document_____sep_____D____id
+  from  Document D;
+
+output view DocCopy;
+
+create view Dict1 as
+  extract D.tweetId as tweetId,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    D.__auto__id as DocCopy_____sep_____D____id,
+    dictionary 'ADict'
+    on D.text as aWord
+  from DocCopy D;
+
+output view Dict1;
+
+create view Dict2 as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    D.__auto__id as DocCopy_____sep_____D____id,
+    dictionary 'TheDict'
+    on D.text as match
+  from DocCopy D;
+
+output view Dict2;
+
+
+
+
+

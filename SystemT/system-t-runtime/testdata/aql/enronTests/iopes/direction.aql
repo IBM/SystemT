@@ -1,0 +1,272 @@
+-- include 'forwardBlock.aql';
+
+/*******************************************************************************
+* direction.aql
+*
+* A version of the 'direction' annotator that uses the Avatar operator
+* framework.
+*
+* This file is written based on direction.aog
+*******************************************************************************/
+
+/*******************************************************************************
+* REGULAR EXPRESSIONS OVER DOCUMENTS
+*
+* Identify strong direction candidates by regular expression matching
+* 
+* Each regex is evaluated as a selection over $Document, producing 'Raw' tuples
+* with the schema: <doc, DirectionCandidates>
+*
+* The union of the candidates are then consolidated: any candidate that is
+* contained by another is discarded
+*******************************************************************************/
+
+create view DirectionCandidates1 as
+select R.match as annot
+from Regex(/(directions?\s+to\s+(my\s+(house|home)|the\s+party))/, 'CASE_INSENSITIVE|DOTALL', Document.text) R;
+
+create view DirectionCandidates2 as
+select R.match as annot
+from Regex(/(directions?\s+to\s+my\s+house)/, 'CASE_INSENSITIVE|DOTALL|DOTALL', Document.text) R;
+
+create view DirectionCandidates3 as
+select R.match as annot
+from Regex(/((turn|bear)\s+(left|right)\s+(onto|on|to|at))/, 'CASE_INSENSITIVE|DOTALL', Document.text) R;
+
+create view DirectionCandidates4 as
+select R.match as annot
+from Regex(/(follow\s+the\s+signs?\s+(to|for))/, 'CASE_INSENSITIVE|DOTALL', Document.text) R;
+
+create view DirectionCandidates5 as
+select R.match as annot
+from Regex(/(take\s+(([A-Za-z]+\s*-?\s*\d+)|(\d+\s*-?\s*[A-Za-z]+))(\s+exit)\s*to)/, 'CASE_INSENSITIVE|DOTALL', Document.text) R;
+
+create view DirectionCandidates6 as
+select R.match as annot
+from Regex(/((exit|merge)\s+(onto|at|on)?\s*(([A-Za-z]+\s*-?\s*\d+)|(\d+\s*-?\s*[A-Za-z]+)))/, 'CASE_INSENSITIVE|DOTALL', Document.text) R;
+
+create view DirectionCandidates7 as
+select R.match as annot
+from Regex(/(keep\s+going\s+straight)/, 'CASE_INSENSITIVE|DOTALL', Document.text) R;
+
+create view DirectionCandidates8 as
+select R.match as annot
+from Regex(/(follow\s+(([A-Za-z]+\s*-?\s*\d+)|(\d+\s*-?\s*[A-Za-z]+))\s+(to\s+the\s+end|for))/, 'CASE_INSENSITIVE|DOTALL', Document.text) R;
+
+create view DirectionCandidates9 as
+select R.match as annot
+from Regex(/(exit.{0,20}(north|south|east|west))/, 'CASE_INSENSITIVE|DOTALL', Document.text) R;
+
+create view DirectionCandidates10 as
+select R.match as annot
+from Regex(/(directions\s+from\s+(([A-Za-z]+\s*-?\s*\d+)|(\d+\s*-?\s*[A-Za-z]+)))/, 'CASE_INSENSITIVE|DOTALL', Document.text) R;
+
+create view DirectionCandidates11 as
+select R.match as annot
+from Regex(/(make\s+a?\s*(right|left)|(directions?\s+(from|to)\s+\w+\s+(from|to)\w+)|(suggested\s+(route|directions))|(take\s+exit)|(u(\s*-\s*)?turn\s+(on|at))|(at\s+the\s+\w+\s+light)|(will\s+be\s+(on|to)\s+(the|your))\s+(right|left))([ A-Za-z0-9\t])*/, 'CASE_INSENSITIVE|DOTALL', Document.text) R;
+
+/*
+Consolidate all direction candidates
+*/
+create view DirectionCandidatesAll as 
+     (select DC1.annot as annot from DirectionCandidates1 DC1)
+     union all
+     (select DC2.annot as annot from DirectionCandidates2 DC2)
+     union all
+     (select DC3.annot as annot from DirectionCandidates3 DC3)
+     union all
+     (select DC4.annot as annot from DirectionCandidates4 DC4)
+     union all
+     (select DC5.annot as annot from DirectionCandidates5 DC5)
+     union all
+     (select DC6.annot as annot from DirectionCandidates6 DC6)
+     union all
+     (select DC7.annot as annot from DirectionCandidates7 DC7)
+     union all
+     (select DC8.annot as annot from DirectionCandidates8 DC8)
+     union all
+     (select DC9.annot as annot from DirectionCandidates9 DC9)
+     union all
+     (select DC10.annot as annot from DirectionCandidates10 DC10)
+     union all
+     (select DC11.annot as annot from DirectionCandidates11 DC11);
+     
+
+create view DirectionCandidates as
+select DC.annot as annot
+--into DirectionCandidates
+from DirectionCandidatesAll DC
+consolidate on DC.annot;   
+
+/*******************************************************************************
+* REGULAR EXPRESSIONS OVER DOCUMENTS
+*
+* Identify week direction candidates by regular expression matching
+* 
+* Each regex is evaluated as a selection over $Document, producing 'Raw' tuples
+* with the schema: <doc, WeakDirectionCandidates>
+*
+* The union of the candidates are then consolidated: any candidate that is
+* contained by another is discarded
+*******************************************************************************/
+create view WeakDirectionCandidates1 as
+select R.match as annot
+from Regex(/([Dd]riving[ \t]+[Dd]irections.{0,30}(:|From|To|Via))([ A-Za-z0-9\t,])*/, 'CASE_INSENSITIVE|DOTALL',Document.text) R;
+
+create view WeakDirectionCandidates2 as
+select R.match as annot
+from Regex(/(From\s+[A-Z][a-z]+)([ A-Za-z0-9\t,])*/, 'CASE_INSENSITIVE|DOTALL',Document.text) R;
+
+create view WeakDirectionCandidates3 as
+select R.match as annot
+from Regex(/(Start(ing)?\s+at)([ A-Za-z0-9\t,])*/, 'CASE_INSENSITIVE|DOTALL',Document.text) R;
+
+create view WeakDirectionCandidates4 as
+select R.match as annot
+from Regex(/((corner|intersection)\s+of\s+[A-Z][a-z]+)([ A-Za-z0-9\t,])*/, 'CASE_INSENSITIVE|DOTALL',Document.text) R;
+
+create view WeakDirectionCandidates5 as
+select R.match as annot
+--from Regex(/(take\s+(([A-Za-z]+\s*-?\s*\d+)|(\d+\s*-?\s*[A-Za-z]+))(\s+exit)?\s*[from|to])([ A-Za-z0-9\t,])*/, Document.text) R;
+from Regex(/(take\s+(the\s+)?(([A-Za-z]+\s*-?\s*\d+)|(\d+\s*-?\s*[A-Za-z]+)))([ A-Za-z0-9\t,])*/, 'CASE_INSENSITIVE|DOTALL',Document.text) R;
+ 
+create view WeakDirectionCandidates6 as
+select R.match as annot
+from Regex(/([A-Za-z]{4,10}.{0,5}becomes.{0,5}[A-Za-z]{4,10})([ A-Za-z0-9\t,])*/, 'CASE_INSENSITIVE|DOTALL',Document.text) R;
+
+create view WeakDirectionCandidates7 as
+select R.match as annot
+from Regex(/(block.{0,20}(left|right))([ A-Za-z0-9\t,])*/, 'CASE_INSENSITIVE|DOTALL',Document.text) R;
+
+create view WeakDirectionCandidates8 as
+select R.match as annot
+from Regex(/(total\W{0,2}\w{0,15}\W{0,2}((time)|(distance)))([ A-Za-z0-9\t,])*/, 'CASE_INSENSITIVE|DOTALL',Document.text) R;
+
+create view WeakDirectionCandidates9 as
+select R.match as annot
+from Regex(/\d[.\d]+\s*(miles|mins|min|mi|kms|km|hours|hrs|ft)\s/, 'CASE_INSENSITIVE|DOTALL',Document.text) R;
+
+create view WeakDirectionCandidates10 as
+select R.match as annot
+from Regex(/(head.{0,20}(north|south|east|west)([ A-Za-z0-9\t,])*)/, 'CASE_INSENSITIVE|DOTALL', Document.text) R;
+
+create view WeakDirectionCandidates11 as
+select R.match as annot
+-- directions on a single line or "immediately" followed by clue
+from Regex(/(\n\s*directions\s*(\n|(\W+(:|From|To|Via))([ A-Za-z0-9\t,]))*)/, 'CASE_INSENSITIVE|DOTALL', Document.text) R;
+
+/*
+Consolidate all direction candidates
+*/
+create view WeakDirectionCandidatesAll as 
+     (select DC1.annot as annot from WeakDirectionCandidates1 DC1)
+     union all
+     (select DC2.annot as annot from WeakDirectionCandidates2 DC2)
+     union all
+     (select DC3.annot as annot from WeakDirectionCandidates3 DC3)
+     union all
+     (select DC4.annot as annot from WeakDirectionCandidates4 DC4)
+     union all
+     (select DC5.annot as annot from WeakDirectionCandidates5 DC5)
+     union all
+     (select DC6.annot as annot from WeakDirectionCandidates6 DC6)
+     union all
+     (select DC7.annot as annot from WeakDirectionCandidates7 DC7)
+     union all
+     (select DC8.annot as annot from WeakDirectionCandidates8 DC8)
+      union all
+     (select DC9.annot as annot from WeakDirectionCandidates9 DC9)
+     union all
+     (select DC10.annot as annot from WeakDirectionCandidates10 DC10)
+     union all
+     (select DC11.annot as annot from WeakDirectionCandidates11 DC11);
+     
+create view WeakDirectionCandidates as
+select DC.annot as annot
+--into WeakDirectionCandidates 
+from WeakDirectionCandidatesAll DC
+consolidate on DC.annot;     
+
+/********************************************************************************
+* CREATE BLOCKS OF DIRECTION
+*
+* All blocks satisfying the conditions are created. 
+*
+* First of all, we identify all the blocks containing at least two direction candidates, 
+* which can be strong direction candidates or week direction candidates.
+*
+* Then only the blocks contain at least one strong direction candidates are kept
+*
+********************************************************************************/
+
+create view AllDirectionCandidates as
+ 	  (select DC.annot as annot from DirectionCandidates DC)
+ 	  union all
+ 	  (select WDC.annot as annot from WeakDirectionCandidates WDC);
+
+create view AllDirectionBlockCandidates as
+select B.block as annot
+from Block(300, 2, AllDirectionCandidates.annot) B;
+
+create view DirectionBlockCandidates as
+select ADC.annot as annot
+from AllDirectionBlockCandidates ADC, DirectionCandidates DC
+where Contains(ADC.annot, DC.annot);
+ 
+/********************************************************************************
+* SELECT DIRECTIONS EXISING IN THE BODY OF EACH EMAIL
+*
+* $DirectionBlockCandidates generated earlier contains all the possible direction 
+* blocks, 
+* Here all $DirectionBlockCandidates contain $ForwardBlock are discarded such that
+* Direction contained emails are seperated by forward blocks. 
+*
+* In addition, all the $DirectionBlockCandidates that are contained by others are
+* discarded as well
+*
+* This process is divided into three steps:
+* Step 1: Identifying all the $DirectionBlockCandidates that contain $ForwardBlock
+* Step 2: Discard all the $DirectionBlockCandidates identified at Step 1
+* Step 3: Discard all the remaining $DirectionBlockCandidates contained by others 
+********************************************************************************/
+create view WrongDirectionBlocks as
+select DBC.annot as annot
+from DirectionBlockCandidates DBC, ForwardBlock FB
+where Contains(DBC.annot, FB.annot);
+
+create view CorrectDirectionBlocks as
+	(select DBC.annot as annot from DirectionBlockCandidates DBC)
+		minus
+	(select WDB.annot as annot from WrongDirectionBlocks WDB);
+	
+create view FinalDirection as
+select CDB.annot as annot
+from CorrectDirectionBlocks CDB     
+consolidate on CDB.annot;
+
+create view DirectionRC as
+select RightContextTok(D.annot,20) as context
+from FinalDirection D;
+
+create view FinalDirectionExtension as
+select R.match as annot
+from Regex(/^[ A-Za-z0-9\t,-]*/,DirectionRC.context) R;
+
+create view DirectionWithExtension as
+select CombineSpans(D.annot,E.annot) as annot
+from FinalDirection D, FinalDirectionExtension E
+where FollowsTok(D.annot,E.annot,0,0);
+
+create view AllFinalDirections as
+(select R.annot as annot from FinalDirection R)
+union all
+(select R.annot as annot from DirectionWithExtension R);
+
+select R.annot as annot
+into Direction
+from AllFinalDirections R
+consolidate on R.annot;
+
+--select A.annot as annot
+--into output
+--from AllDirectionCandidates A;

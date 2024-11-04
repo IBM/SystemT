@@ -1,0 +1,72 @@
+--  ****************************************************************************
+--	@Nisanth Simon June 08 2011
+--
+--	Purpose: 
+--	Extract the Package Name and Class Details from log record
+-- ****************************************************************************
+
+create function getPackageCategory(packageName String, className String)
+	return String
+	external_name '../lib/logAAqlUDFs.jar:com.ibm.logparse.aql.Util!getCategory'
+	language java
+	deterministic
+	return null on null input;
+
+create view PackageClassName as 
+extract regex /((?:[a-z])+)(\.)*((?:\w|-|_|\.|\$)*)\.([A-Z](?:\w|\$)*)/
+	on D.text as annot
+from Doc D;
+	
+create view PackageClassNameInterim as 
+select D.annot as packageClassName_Span, GetText(D.annot) as packageClassName_Text
+from PackageClassName D;
+
+-- Extract the package Details from document 
+-- Only run this regex at locations where PackageClassName (which has the
+-- exact same regex, but with no groups) matches.
+create view PackageDetails as 
+extract 
+	regex /(((?:[a-z])+)(\.)*((?:\w|-|_|\.|\$)*))\.([A-Z](?:\w|\$)*)/ on  P.annot
+	return 
+	 group 0 as packageClassName and
+	 group 1 as packageName and 
+	 group 5 as className 
+	from PackageClassName P;
+
+-- View for Span and Text for Package Name and Class Name
+create view PackageDetailsInterim as 
+select 
+GetText(P.packageClassName) as packageClassName_Text, P.packageClassName as packageClassName_Span,
+GetText(P.packageName) as package_Text, P.packageName as package_Span,
+GetText(P.className) as className_Text, P.className as className_Span,
+getPackageCategory(GetString(P.packageName), GetString(P.className)) as category
+from PackageDetails P;
+
+create view PackageDetailsOutput as 
+select 
+P.packageClassName_Text as text, P.packageClassName_Span as span,
+P.package_Text as package_text, P.package_Span as package_span,
+P.className_Text as className_text, P.className_Span as className_span,
+getPackageCategory(GetString(P.package_Text), GetString(P.className_Text)) as category,
+GetString('PackageClass') as field_type
+from PackageDetailsInterim P;
+
+create view PackageClassNameOutput as
+select D.packageClassName_Span as PackageClassName_span, D.packageClassName_Text as PackageClassName_text, GetString('PackageClassName') as field_type
+from PackageDetailsInterim D;
+
+-- View for grouping the classes per package
+create view GroupByPackage as 
+select GetText(P.package_Span) as package_Text,
+List(P.className_Text) as className_Text_List, 
+List(P.className_Span) as className_Span_List
+from PackageDetailsInterim P consolidate on P.package_Span using 'ContainedWithin'
+group by GetText(P.package_Span)
+order by GetText(P.package_Span);
+
+
+	
+
+
+
+  

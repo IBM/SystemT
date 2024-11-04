@@ -1,0 +1,502 @@
+include 'aql/SentimentRules.aql';
+
+-- these are the sentences that contain at least one model
+-- we remove duplicate sentences that contain the same model more than once using "consolidate"
+-- we create a different view for each model 
+
+-- AQLGENERATOR: Create views UniqueModelSentences, LeftModelSentences, RightModelSentences, ModelSentences,
+-- MSN, MSN_C, ModelSnippets_* for each model; 
+create view UniqueModelSentences_0 as
+	select MS.model as model, MS.sentenceText as sentenceText, MS.modelMatch as modelMatch 
+	from ( 
+	extract 'InPerson' as model, S.sentenceText as sentenceText, 
+	regex /at&t|\satt\s|at&t/ with flags 'CASE_INSENSITIVE' on S.sentenceText as modelMatch from Sentences S ) 
+	MS consolidate on MS.sentenceText using 'ExactMatch';
+
+create view LeftModelSentences_0 as
+	select M.model , SL.sentenceText , M.modelMatch
+	from UniqueModelSentences_0 M, Sentences SL where Equals(GetEnd(SL.sentenceText),GetBegin(M.sentenceText));
+
+create view RightModelSentences_0 as
+	select M.model, SR.sentenceText , M.modelMatch
+	from UniqueModelSentences_0 M, Sentences SR where Equals(GetEnd(M.sentenceText),GetBegin(SR.sentenceText));
+
+create view ModelSentences_0 as
+	(select * from UniqueModelSentences_0) union all 
+	(select * from LeftModelSentences_0) union all 
+	(select * from RightModelSentences_0);
+
+create view MSN_0 as 
+	 extract blocks with count between 1 and 6 and separation 0 tokens 
+	 on M.sentenceText as sentenceText from ModelSentences_0 M;
+create view MSN_C_0 as 
+	 select * from  MSN_0 MSN consolidate on MSN.sentenceText using 'ContainedWithin';
+
+create view ModelSnippets_0 as 
+	 select UMS.model as model, MS.sentenceText as snippetText, UMS.modelMatch as modelMatch 
+	 from MSN_C_0 MS, UniqueModelSentences_0 UMS 
+	 where Contains(MS.sentenceText, UMS.sentenceText) consolidate on MS.sentenceText using 'ContainedWithin';
+
+create view UniqueModelSentences_1 as
+	select MS.model as model, MS.sentenceText as sentenceText, MS.modelMatch as modelMatch 
+	from ( 
+	extract 'VoiceSupport' as model, S.sentenceText as sentenceText, 
+	regex /at&t|\satt\s|at&t/ with flags 'CASE_INSENSITIVE' on S.sentenceText as modelMatch from Sentences S ) 
+	MS consolidate on MS.sentenceText using 'ExactMatch';
+
+create view LeftModelSentences_1 as
+	select M.model , SL.sentenceText , M.modelMatch
+	from UniqueModelSentences_1 M, Sentences SL where Equals(GetEnd(SL.sentenceText),GetBegin(M.sentenceText));
+
+create view RightModelSentences_1 as
+	select M.model, SR.sentenceText , M.modelMatch
+	from UniqueModelSentences_1 M, Sentences SR where Equals(GetEnd(M.sentenceText),GetBegin(SR.sentenceText));
+
+create view ModelSentences_1 as
+	(select * from UniqueModelSentences_1) union all 
+	(select * from LeftModelSentences_1) union all 
+	(select * from RightModelSentences_1);
+
+create view MSN_1 as 
+	 extract blocks with count between 1 and 6 and separation 0 tokens 
+	 on M.sentenceText as sentenceText from ModelSentences_1 M;
+create view MSN_C_1 as 
+	 select * from  MSN_1 MSN consolidate on MSN.sentenceText using 'ContainedWithin';
+
+create view ModelSnippets_1 as 
+	 select UMS.model as model, MS.sentenceText as snippetText, UMS.modelMatch as modelMatch 
+	 from MSN_C_1 MS, UniqueModelSentences_1 UMS 
+	 where Contains(MS.sentenceText, UMS.sentenceText) consolidate on MS.sentenceText using 'ContainedWithin';
+
+create view UniqueModelSentences_2 as
+	select MS.model as model, MS.sentenceText as sentenceText, MS.modelMatch as modelMatch 
+	from ( 
+	extract 'WebBasedSupport' as model, S.sentenceText as sentenceText, 
+	regex /at&t|\satt\s|at&t/ with flags 'CASE_INSENSITIVE' on S.sentenceText as modelMatch from Sentences S ) 
+	MS consolidate on MS.sentenceText using 'ExactMatch';
+
+create view LeftModelSentences_2 as
+	select M.model , SL.sentenceText , M.modelMatch
+	from UniqueModelSentences_2 M, Sentences SL where Equals(GetEnd(SL.sentenceText),GetBegin(M.sentenceText));
+
+create view RightModelSentences_2 as
+	select M.model, SR.sentenceText , M.modelMatch
+	from UniqueModelSentences_2 M, Sentences SR where Equals(GetEnd(M.sentenceText),GetBegin(SR.sentenceText));
+
+create view ModelSentences_2 as
+	(select * from UniqueModelSentences_2) union all 
+	(select * from LeftModelSentences_2) union all 
+	(select * from RightModelSentences_2);
+
+create view MSN_2 as 
+	 extract blocks with count between 1 and 6 and separation 0 tokens 
+	 on M.sentenceText as sentenceText from ModelSentences_2 M;
+create view MSN_C_2 as 
+	 select * from  MSN_2 MSN consolidate on MSN.sentenceText using 'ContainedWithin';
+
+create view ModelSnippets_2 as 
+	 select UMS.model as model, MS.sentenceText as snippetText, UMS.modelMatch as modelMatch 
+	 from MSN_C_2 MS, UniqueModelSentences_2 UMS 
+	 where Contains(MS.sentenceText, UMS.sentenceText) consolidate on MS.sentenceText using 'ContainedWithin';
+
+create view ModelSnippets as
+	(select * from ModelSnippets_0 M)union all
+	(select * from ModelSnippets_1 M)union all
+	(select * from ModelSnippets_2 M);
+output view ModelSnippets;
+
+-- now, we have ModelSnippets for each model in the view ModelSnippets_N
+-- each model-specific view contains the "maximal" snippets in the sense that we combined overlapping snippets into larger ones
+
+-- brands are only evaluated in the context of their model
+-- we assign 'multibrand' to a snippet matching two brands, but rather create
+-- create two ModelSnippetsWithBrand tuples.
+
+-- AQLGENERATOR: Create views ModelSnippetsWithBrand_* for each Model and one consolidated view ModelSnippetsWithBrand
+create view ModelSnippetsWithBrand_0 as 
+	(select MS.model as model, MS.modelMatch as modelMatch, MS.snippetSpan as snippetSpan, MS.brand as brand, MS.brandMatch as brandMatch 
+	from ( 
+		extract M.model as model, M.modelMatch as modelMatch, M.snippetText as snippetSpan, 
+		'Counter' as brand, regex /counter|desk|kiosk/ 
+		with flags 'CASE_INSENSITIVE' on M.snippetText as brandMatch from ModelSnippets_0 M
+		having Not(ContainsRegex(/sitemap/, 'CASE_INSENSITIVE', snippetSpan))) MS)
+ union all 
+	(select MS.model as model, MS.modelMatch as modelMatch, MS.snippetSpan as snippetSpan, MS.brand as brand, MS.brandMatch as brandMatch 
+	from ( 
+		extract M.model as model, M.modelMatch as modelMatch, M.snippetText as snippetSpan, 
+		'Outlet' as brand, regex /outlet|shop/ 
+		with flags 'CASE_INSENSITIVE' on M.snippetText as brandMatch from ModelSnippets_0 M
+		having Not(ContainsRegex(/sitemap/, 'CASE_INSENSITIVE', snippetSpan))) MS)
+ union all 
+	(select MS.model as model, MS.modelMatch as modelMatch, MS.snippetSpan as snippetSpan, MS.brand as brand, MS.brandMatch as brandMatch 
+	from ( 
+		extract M.model as model, M.modelMatch as modelMatch, M.snippetText as snippetSpan, 
+		'Store' as brand, regex /store/ 
+		with flags 'CASE_INSENSITIVE' on M.snippetText as brandMatch from ModelSnippets_0 M
+		having Not(ContainsRegex(/sitemap/, 'CASE_INSENSITIVE', snippetSpan))) MS);
+
+create view ModelSnippetsWithBrand_1 as 
+	(select MS.model as model, MS.modelMatch as modelMatch, MS.snippetSpan as snippetSpan, MS.brand as brand, MS.brandMatch as brandMatch 
+	from ( 
+		extract M.model as model, M.modelMatch as modelMatch, M.snippetText as snippetSpan, 
+		'Call' as brand, regex /call/ 
+		with flags 'CASE_INSENSITIVE' on M.snippetText as brandMatch from ModelSnippets_1 M
+		having Not(ContainsRegex(/rate.{0,10}call|calling.{0,10}card/, 'CASE_INSENSITIVE', snippetSpan))) MS)
+ union all 
+	(select MS.model as model, MS.modelMatch as modelMatch, MS.snippetSpan as snippetSpan, MS.brand as brand, MS.brandMatch as brandMatch 
+	from ( 
+		extract M.model as model, M.modelMatch as modelMatch, M.snippetText as snippetSpan, 
+		'Customer_Care' as brand, regex /customer care|call center|customer center|customer.{0,10}service|interaction.{0,10}center|interaction.{0,10}centre |ivr|interactive voice response|computer voice/ 
+		with flags 'CASE_INSENSITIVE' on M.snippetText as brandMatch from ModelSnippets_1 M
+		having Not(ContainsRegex(/sitemap/, 'CASE_INSENSITIVE', snippetSpan))) MS)
+ union all 
+	(select MS.model as model, MS.modelMatch as modelMatch, MS.snippetSpan as snippetSpan, MS.brand as brand, MS.brandMatch as brandMatch 
+	from ( 
+		extract M.model as model, M.modelMatch as modelMatch, M.snippetText as snippetSpan, 
+		'Tech_support' as brand, regex /tech support|technology support/ 
+		with flags 'CASE_INSENSITIVE' on M.snippetText as brandMatch from ModelSnippets_1 M
+		having Not(ContainsRegex(/sitemap/, 'CASE_INSENSITIVE', snippetSpan))) MS);
+
+create view ModelSnippetsWithBrand_2 as 
+	(select MS.model as model, MS.modelMatch as modelMatch, MS.snippetSpan as snippetSpan, MS.brand as brand, MS.brandMatch as brandMatch 
+	from ( 
+		extract M.model as model, M.modelMatch as modelMatch, M.snippetText as snippetSpan, 
+		'Chat' as brand, regex /chat/ 
+		with flags 'CASE_INSENSITIVE' on M.snippetText as brandMatch from ModelSnippets_2 M
+		having Not(ContainsRegex(/chatting|messenger|chatter|chateau|chatelaine|chateura|chatroom|chattel|chattily|chatty|sitemap|remail/, 'CASE_INSENSITIVE', snippetSpan))) MS)
+ union all 
+	(select MS.model as model, MS.modelMatch as modelMatch, MS.snippetSpan as snippetSpan, MS.brand as brand, MS.brandMatch as brandMatch 
+	from ( 
+		extract M.model as model, M.modelMatch as modelMatch, M.snippetText as snippetSpan, 
+		'Email' as brand, regex /email/ 
+		with flags 'CASE_INSENSITIVE' on M.snippetText as brandMatch from ModelSnippets_2 M
+		having Not(ContainsRegex(/emailing|email account|sitemap/, 'CASE_INSENSITIVE', snippetSpan))) MS)
+ union all 
+	(select MS.model as model, MS.modelMatch as modelMatch, MS.snippetSpan as snippetSpan, MS.brand as brand, MS.brandMatch as brandMatch 
+	from ( 
+		extract M.model as model, M.modelMatch as modelMatch, M.snippetText as snippetSpan, 
+		'Website' as brand, regex /internet|website|online|portal|account.{0,20}online|website.{0,20}account|internet.{0,20}account|wireless.{0,20}account|online.{0,20}account|account.{0,20}website|account.{0,20}internet|account.{0,20}wireless|faq|frequently asked question/ 
+		with flags 'CASE_INSENSITIVE' on M.snippetText as brandMatch from ModelSnippets_2 M
+		having Not(ContainsRegex(/sitemap|faqir|faquir|accounting|department|accounta|accounts|remail/, 'CASE_INSENSITIVE', snippetSpan))) MS);
+
+create view ModelSnippetsWithBrand as
+	(select * from ModelSnippetsWithBrand_0 M)union all
+	(select * from ModelSnippetsWithBrand_1 M)union all
+	(select * from ModelSnippetsWithBrand_2 M);
+output view ModelSnippetsWithBrand;
+
+--first, deduplicate the brands
+create view ModelSnippetsWithBrand_Dedup as
+select MS.model, MS.modelMatch, MS.snippetSpan, MS.brand
+from ModelSnippetsWithBrand MS
+group by MS.model, MS.modelMatch, MS.snippetSpan, MS.brand;
+output view ModelSnippetsWithBrand_Dedup;
+
+--aggregate the deduplicated brands
+create view ModelSnippetsWithBrand_List  as
+select MS.model, MS.modelMatch, MS.snippetSpan, List(MS.brand) as brands, Count(*) as numBrands
+from ModelSnippetsWithBrand_Dedup MS
+group by MS.model, MS.modelMatch, MS.snippetSpan;
+
+output view ModelSnippetsWithBrand_List;
+
+-- aggregate the brand matches
+create view ModelSnippetsWithBrandMatch_List  as
+select MS.model, MS.modelMatch, MS.snippetSpan, List(MS.brandMatch) as brandMatch
+from ModelSnippetsWithBrand MS
+group by MS.model, MS.modelMatch, MS.snippetSpan;
+output view ModelSnippetsWithBrandMatch_List;
+
+-- join back on the super-key to obtain the two aggregated lists
+create view ModelSnippetsWithBrandListMatchList  as
+select MS1.model, MS1.modelMatch, MS1.snippetSpan, MS1.brands, MS1.numBrands, MS2.brandMatch as brandMatches
+from ModelSnippetsWithBrand_List MS1, ModelSnippetsWithBrandMatch_List MS2
+where Equals(MS1.model, MS2.model) and Equals(MS1.modelMatch, MS2.modelMatch) and Equals(MS1.snippetSpan, MS2.snippetSpan);
+output view ModelSnippetsWithBrandListMatchList;
+
+-- assign "multiBrand" to those snippets that contain more than one brand
+create view AllBrandsForModel as
+( select M.*, 
+'multibrand' as brandName from
+  ModelSnippetsWithBrandListMatchList M
+  where Not(Equals(M.numBrands, 1))
+  )
+  union all
+  (select M.*, MD.brand as brandName
+  from ModelSnippetsWithBrandListMatchList M, ModelSnippetsWithBrand_Dedup MD
+  where Equals(M.numBrands, 1) and Equals(M.model, MD.model) and Equals(M.modelMatch, MD.modelMatch) and Equals(M.snippetSpan, MD.snippetSpan)
+  );
+  
+output view AllBrandsForModel;
+
+-- detection of hotwords: smaller rank values will take precedence over larger values
+create table Hotword2Rank (hotword Text, rank Integer) as values
+-- AQLGENERATOR: Create a rank table for all hotwords and the view ModelSnippetsWithHotwords
+('Billing_Errors', 0),
+('Complaint_Handling', 1),
+('Data_Transfer', 2),
+('Domain_Knowledge', 3),
+('Employees', 4),
+('Hack', 5),
+('Multilingual_support', 6),
+('Polite', 7),
+('Price', 8),
+('Product_Availability', 9),
+('Product_Display', 10),
+('Professionalism', 11),
+('Purchase', 12),
+('Return', 13),
+('Rude', 14),
+('Satisfied', 15),
+('Swear_Words', 16),
+('Wait_Time', 17);
+
+create view ModelSnippetsWithHotwords as
+
+	(extract 'Billing_Errors' as hotword, M.model as model, M.snippetText as snippetSpan, 
+	regex /bill.{0,10}error|bill.{0,20}change|bill.{0,20}add|bill.{0,20}mistake|bill.{0,20}fault|mistake.{0,20}bill|error.{0,10}bill|wrong.{0,20}bill|bill.{0,20}wrong|extra.{0,20}charge|charge.{0,20}more|incorrect.{0,20}bill|bill.{0,30}not.{0,20}correct|not.{0,30}correct.{0,30}bill|bill.{0,30}incorrect|charge.{0,30}extra/ with flags 'CASE_INSENSITIVE' on M.snippetText as hotwordMatch 
+	from ModelSnippets M 
+	having Not(ContainsRegex(/charger|address/, 'CASE_INSENSITIVE', snippetSpan)))
+ union all
+	(extract 'Complaint_Handling' as hotword, M.model as model, M.snippetText as snippetSpan, 
+	regex /complaint|escalate|problem.{0,20}solve|question.{0,20}handle|doubts.{0,20}solve|resolve|resolut| problem| error/ with flags 'CASE_INSENSITIVE' on M.snippetText as hotwordMatch 
+	from ModelSnippets M )
+ union all
+	(extract 'Data_Transfer' as hotword, M.model as model, M.snippetText as snippetSpan, 
+	regex /address.{0,20}book.{0,20}transfer|transfer.{0,20}address.{0,20}book|addressbook.{0,20}transfer|transfer.{0,20}addressbook| change.{0,30}sim | change.{0,30}number | transfer.{0,30}sim | transfer.{0,30}number/ with flags 'CASE_INSENSITIVE' on M.snippetText as hotwordMatch 
+	from ModelSnippets M )
+ union all
+	(extract 'Domain_Knowledge' as hotword, M.model as model, M.snippetText as snippetSpan, 
+	regex /knowledgeable|intelligent|knowledge|expert|well.{0,20}train|domain.{0,20}knowledge/ with flags 'CASE_INSENSITIVE' on M.snippetText as hotwordMatch 
+	from ModelSnippets M )
+ union all
+	(extract 'Employees' as hotword, M.model as model, M.snippetText as snippetSpan, 
+	regex /at&t.{0,40}employee|employee.{0,40}at&t|advisor|customer executive|manager|supervisor|sales rep/ with flags 'CASE_INSENSITIVE' on M.snippetText as hotwordMatch 
+	from ModelSnippets M )
+ union all
+	(extract 'Hack' as hotword, M.model as model, M.snippetText as snippetSpan, 
+	regex /unblock|hack|crack|unregistered/ with flags 'CASE_INSENSITIVE' on M.snippetText as hotwordMatch 
+	from ModelSnippets M 
+	having Not(ContainsRegex(/shack|whack|sex/, 'CASE_INSENSITIVE', snippetSpan)))
+ union all
+	(extract 'Multilingual_support' as hotword, M.model as model, M.snippetText as snippetSpan, 
+	regex /bilingual|spanish|mutilingual/ with flags 'CASE_INSENSITIVE' on M.snippetText as hotwordMatch 
+	from ModelSnippets M 
+	having Not(ContainsRegex(/country/, 'CASE_INSENSITIVE', snippetSpan)))
+ union all
+	(extract 'Polite' as hotword, M.model as model, M.snippetText as snippetSpan, 
+	regex /friendly|nice|polite|helpful|treated.{0,20}well|greet|recommend|no problems|behave|attitude|warm|caring|care|thank|welcome|grateful|assistance|supportive/ with flags 'CASE_INSENSITIVE' on M.snippetText as hotwordMatch 
+	from ModelSnippets M 
+	having Not(ContainsRegex(/ungrateful|customer care|career/, 'CASE_INSENSITIVE', snippetSpan)))
+ union all
+	(extract 'Price' as hotword, M.model as model, M.snippetText as snippetSpan, 
+	regex /price|cost/ with flags 'CASE_INSENSITIVE' on M.snippetText as hotwordMatch 
+	from ModelSnippets M 
+	having Not(ContainsRegex(/costco/, 'CASE_INSENSITIVE', snippetSpan)))
+ union all
+	(extract 'Product_Availability' as hotword, M.model as model, M.snippetText as snippetSpan, 
+	regex /product.{0,50}availab|availab.{0,50}product|not.{0,20}available/ with flags 'CASE_INSENSITIVE' on M.snippetText as hotwordMatch 
+	from ModelSnippets M )
+ union all
+	(extract 'Product_Display' as hotword, M.model as model, M.snippetText as snippetSpan, 
+	regex /display|boxed/ with flags 'CASE_INSENSITIVE' on M.snippetText as hotwordMatch 
+	from ModelSnippets M )
+ union all
+	(extract 'Professionalism' as hotword, M.model as model, M.snippetText as snippetSpan, 
+	regex /training|well.{0,20}trained|mature|immature|professional|unprofessional/ with flags 'CASE_INSENSITIVE' on M.snippetText as hotwordMatch 
+	from ModelSnippets M )
+ union all
+	(extract 'Purchase' as hotword, M.model as model, M.snippetText as snippetSpan, 
+	regex /purchase|buy|new.{0,10}connection|bought|online.{0,40}purchase|purchase.{0,40}online/ with flags 'CASE_INSENSITIVE' on M.snippetText as hotwordMatch 
+	from ModelSnippets M )
+ union all
+	(extract 'Return' as hotword, M.model as model, M.snippetText as snippetSpan, 
+	regex /repair|replace|return|warranty|product.{0,10}recall|battery.{0,10}recall/ with flags 'CASE_INSENSITIVE' on M.snippetText as hotwordMatch 
+	from ModelSnippets M )
+ union all
+	(extract 'Rude' as hotword, M.model as model, M.snippetText as snippetSpan, 
+	regex /crap|bad|horrible|rude|incompetent|lousy|desperate/ with flags 'CASE_INSENSITIVE' on M.snippetText as hotwordMatch 
+	from ModelSnippets M 
+	having Not(ContainsRegex(/sex/, 'CASE_INSENSITIVE', snippetSpan)))
+ union all
+	(extract 'Satisfied' as hotword, M.model as model, M.snippetText as snippetSpan, 
+	regex /satisf|happy|pleased|gratif|loyal|excellent.{0,20}service|dedicat|trust/ with flags 'CASE_INSENSITIVE' on M.snippetText as hotwordMatch 
+	from ModelSnippets M )
+ union all
+	(extract 'Swear_Words' as hotword, M.model as model, M.snippetText as snippetSpan, 
+	regex /bullshit|crap|suck|hell| hate|annoying|upset|confused|awful|fuck/ with flags 'CASE_INSENSITIVE' on M.snippetText as hotwordMatch 
+	from ModelSnippets M 
+	having Not(ContainsRegex(/sex|crapberry|chell|hello/, 'CASE_INSENSITIVE', snippetSpan)))
+ union all
+	(extract 'Wait_Time' as hotword, M.model as model, M.snippetText as snippetSpan, 
+	regex /hold.{0,10}time|wait|long.{0,20}time|waiting|time.{0,20}waste|waste.{0,20}time|queue.{0,20}time|time.{0,20}queue|on hold|in line|huge.{0,20}line|long.{0,20}line|big.{0,20}line/ with flags 'CASE_INSENSITIVE' on M.snippetText as hotwordMatch 
+	from ModelSnippets M 
+	having Not(ContainsRegex(/main line/, 'CASE_INSENSITIVE', snippetSpan)));
+
+create view ModelHotwordMatches as
+  select M.hotword, M.model, M.snippetSpan, List(M.hotwordMatch) as hotwordMatches
+  from ModelSnippetsWithHotwords M
+  group by M.model, M.snippetSpan, M.hotword;
+
+
+--create a view where the hotword has its rank associated with it
+create view ModelSnippetsWithHotwordsRank as
+select M.*, H.rank
+from ModelHotwordMatches M, Hotword2Rank H
+where Equals(GetText(M.hotword), GetText(H.hotword));
+
+--find the highest rank for a hotword for all model snippets that cover the same input text
+create view ModelSnippetsWithHotwordsTopRank as
+select M.model, M.snippetSpan, Min(M.rank) as topRank
+from ModelSnippetsWithHotwordsRank M
+group by M.model, M.snippetSpan;
+
+-- contains the highest-ranked hotword
+create view ModelSnippetsWithTopHotword as
+select M.model, M.snippetSpan, H.hotword as topHotword
+from ModelSnippetsWithHotwordsTopRank M, Hotword2Rank H
+where Equals(M.topRank, H.rank);
+
+-- combine the highest-ranked hotword with the list of its matches
+-- as ModelHotwordMatches contains one tuple for each distinct hotword, and we
+-- know that there is exactly one top-ranked hotword for a given model snippet
+-- this "join" below will always yield exactly one result tuple
+create view ModelSnippetWithHotwordFinal as
+  select M.model, M.snippetSpan,M.topHotword, MH.hotwordMatches
+  from ModelSnippetsWithTopHotword M, ModelHotwordMatches MH
+  where Equals(M.model, MH.model) and Equals(M.snippetSpan, MH.snippetSpan) and Equals(GetText(M.topHotword), GetText(MH.hotword));
+
+output view ModelSnippetWithHotwordFinal;
+
+
+  
+-- snippets that contain a brand, but no hotword  
+create view MSBwithoutHotwords as
+  (select M.model, M.snippetSpan, M.brandName, M.brands, M.brandMatches
+  from AllBrandsForModel M)
+  minus
+  (select M.model, M.snippetSpan, M.brandName, M.brands, M.brandMatches
+  from AllBrandsForModel M, ModelSnippetWithHotwordFinal MSH
+ where Equals(M.snippetSpan, MSH.snippetSpan) and Equals(M.model, MSH.model));
+output view MSBwithoutHotwords ;
+
+
+-- snippets that contain a hotword, but no brand
+create view MSHwithoutBrands as
+  (select M.model, M.snippetSpan, M.topHotword as hotwordName, M.hotwordMatches
+  from ModelSnippetWithHotwordFinal M)
+  minus
+   (select M.model, M.snippetSpan, M.topHotword as hotwordName, M.hotwordMatches
+  from AllBrandsForModel MSB, ModelSnippetWithHotwordFinal M
+ where Equals(MSB.snippetSpan, M.snippetSpan) and Equals(MSB.model, M.model));
+output view MSHwithoutBrands;
+
+  
+-- returning the final set of snippets for DB and index
+
+--- SENTIMENT-UPDATE START
+create view ModelBrandHotwordSnippet as
+  -- snippets that contain both a brand and a hotword
+(
+  select MSB.model, MSB.snippetSpan, MSB.brandName, MSH.topHotword as hotwordName, GetText(MSB.snippetSpan) as snippetText, MSB.brands, MSB.brandMatches,  MSH.hotwordMatches
+from AllBrandsForModel MSB, ModelSnippetWithHotwordFinal MSH
+where Equals(MSB.snippetSpan, MSH.snippetSpan) and Equals(MSB.model, MSH.model)
+)
+union all
+  -- snippets that contain a brand, but no hotword  
+  -- they will include 'other' as hotword, and dummy spans as hotwordMatches
+(
+ select MSB.model, MSB.snippetSpan, MSB.brandName, 'other' as hotwordName, GetText(MSB.snippetSpan) as snippetText, MSB.brands , MSB.brandMatches,  cast(null as ScalarList) as hotwordMatches 
+from MSBwithoutHotwords MSB)
+union all
+  -- snippets that contain a hotword, but no brand
+  -- they will include 'other' as brand, and dummy spans as brandMatches
+(
+select MSH.model, MSH.snippetSpan, 'other' as brandName, MSH.hotwordName, GetText(MSH.snippetSpan) as snippetText, cast(null as ScalarList) as brands , cast(null as ScalarList) as brandMatches, MSH.hotwordMatches
+from MSHwithoutBrands MSH)
+  ;
+
+--output view ModelBrandHotwordSnippet;
+
+create view ModelPositiveSentiment as
+  select M.model, M.snippetSpan, Count(S.sentimentTerm) as numPositiveSent, 0 as numNegativeSent, List(S.sentimentTerm) as positiveSentimentTerms, List(S.sentimentMatch) as positiveSentimentMatches
+   from ModelBrandHotwordSnippet M, SentimentExpression S
+  where Equals(GetText(S.polarity), 'positive') and Contains(M.snippetSpan, S.sentimentMatch)
+  group by M.model, M.snippetSpan;
+output view ModelPositiveSentiment; 
+
+create view ModelNegativeSentiment as
+  select M.model, M.snippetSpan, 0 as numPositiveSent, Count(S.sentimentTerm) as numNegativeSent, List(S.sentimentTerm) as negativeSentimentTerms, List(S.sentimentMatch) as negativeSentimentMatches
+   from ModelBrandHotwordSnippet M, SentimentExpression S
+  where Equals(GetText(S.polarity), 'negative') and Contains(M.snippetSpan, S.sentimentMatch)
+  group by M.model, M.snippetSpan;
+  
+--output view ModelNegativeSentiment; 
+
+create view ModelBothSentiment as
+  select MP.model, MP.snippetSpan, MP.numPositiveSent, MN.numNegativeSent, MP.positiveSentimentTerms, MP.positiveSentimentMatches, MN.negativeSentimentTerms, MN.negativeSentimentMatches
+  from ModelPositiveSentiment MP, ModelNegativeSentiment MN
+  where Equals(MP.model, MN.model) and Equals(MP.snippetSpan, MN.snippetSpan);
+
+--output view ModelBothSentiment;
+
+create view ModelSentimentCount as
+  (select * from ModelBothSentiment)
+  union all
+  (
+   (select M.model, M.snippetSpan, M.numPositiveSent, M.numNegativeSent, M.positiveSentimentTerms, M.positiveSentimentMatches, cast(null as ScalarList) as negativeSentimentTerms, cast(null as ScalarList) as negativeSentimentMatches
+   from ModelPositiveSentiment M)
+   minus
+  (select M.model, M.snippetSpan, M.numPositiveSent, M.numNegativeSent, M.positiveSentimentTerms, M.positiveSentimentMatches, cast(null as ScalarList) as negativeSentimentTerms, cast(null as ScalarList) as negativeSentimentMatches 
+   from ModelPositiveSentiment M, ModelBothSentiment MB
+   where Equals(M.model, MB.model) and Equals (M.snippetSpan, MB.snippetSpan)
+  ))
+  union all
+  (
+   (select M.model, M.snippetSpan, M.numPositiveSent, M.numNegativeSent, cast(null as ScalarList) as positiveSentimentTerms, cast(null as ScalarList) as positiveSentimentMatches, M.negativeSentimentTerms, M.negativeSentimentMatches
+  from ModelNegativeSentiment M)
+   minus
+  (select M.model, M.snippetSpan, M.numPositiveSent, M.numNegativeSent, cast(null as ScalarList) as positiveSentimentTerms, cast(null as ScalarList) as positiveSentimentMatches, M.negativeSentimentTerms, M.negativeSentimentMatches
+   from ModelNegativeSentiment M, ModelBothSentiment MB
+   where Equals(M.model, MB.model) and Equals (M.snippetSpan, MB.snippetSpan)));
+
+output view ModelSentimentCount;
+
+--compute the sentiment for the snippet
+create view ModelSentiment as
+  --(select M.*, 'positive' as sentiment
+  --from ModelSentimentCount M
+  --where GreaterThan(M.numPositiveSent, M.numNegativeSent))
+  -- union all
+  (select M.*, 'ambivalent' as sentiment
+  from ModelSentimentCount M
+  where Or(Not(Equals(M.numPositiveSent,0)), Not(Equals(M.numNegativeSent, 0)))
+          --and Equals(M.numPositiveSent, M.numNegativeSent)))
+  )
+  union all
+  (select M.*, 'neutral' as sentiment
+  from ModelSentimentCount M
+   where Equals(M.numPositiveSent, 0) and Equals(M.numNegativeSent,0))
+  --union all
+  --  (select M.*, 'negative' as sentiment
+  --from ModelSentimentCount M
+  --where GreaterThan(M.numNegativeSent, M.numPositiveSent))
+  ;
+--output view ModelSentiment;
+
+--combine the sentiment with the brand and hotword information to arrive at the FinalSnippet
+create view FinalSnippets as
+  select M.*, S.sentiment, S.numPositiveSent, S.numNegativeSent, S.positiveSentimentTerms, S.negativeSentimentTerms, S.positiveSentimentMatches, S.negativeSentimentMatches
+  from ModelBrandHotwordSnippet M, ModelSentiment S
+  where Equals(M.model, S.model) and Equals(M.snippetSpan, S.snippetSpan);
+
+output view FinalSnippets;
+
+--- END SENTIMENT-UPDATE
+
+
+
+
+
+  
+

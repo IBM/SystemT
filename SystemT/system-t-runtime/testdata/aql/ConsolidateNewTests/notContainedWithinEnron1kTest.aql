@@ -1,0 +1,37 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test case for consolidators (new) on large corpus of data
+--
+-------------------------------------------------------------------------------
+
+
+
+create view ShortWord as
+extract 'LowWord' as type,
+	regex /[a-z]{2,4}/ on 1 token in D.text as match
+from Document D;
+
+-- Use 3-4 words within 10 characters on large corpus
+create view ThreeToFourShortWords as
+extract blocks
+	with count between 3 and 4
+	and separation between 0 and 10 characters
+	on S.match as capswords
+from ShortWord S;
+
+create view ConsolidatedNotWords as
+extract blocks
+	with count between 3 and 4
+	and separation between 0 and 10 characters
+	on S.match as capswords
+from ShortWord S
+consolidate on capswords using 'NotContainedWithin'; 
+
+output view ThreeToFourShortWords;
+output view ConsolidatedNotWords;
+
+
+
+
+
+

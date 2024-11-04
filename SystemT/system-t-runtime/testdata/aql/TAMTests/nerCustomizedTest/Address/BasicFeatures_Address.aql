@@ -1,0 +1,128 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module Address;
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText;
+
+import dictionary AddressStreetSuffix from module Dictionaries as AddressStreetSuffix;
+import dictionary AddressStreetSuffixWeak from module Dictionaries as AddressStreetSuffixWeak;
+import dictionary AddressBuildingUnits from module Dictionaries as AddressBuildingUnits;
+import dictionary RoadAbbreviations from module Dictionaries as RoadAbbreviations;
+
+require document with columns
+text Text;
+ 
+ create view OptionalGapBlock as
+ select
+     R.match as match
+ from 
+    (extract regex /(>>)+/ 
+ 		on between 1 and 12 tokens in D.text 
+ 			as match 
+ 	  from DocumentText D) R;
+
+     
+   create view StreetSuffixNoCase  as
+    select
+        D.match as match
+    from
+       (extract dictionary 'AddressStreetSuffix' on D.text as match from DocumentText D) D;
+ 		
+    
+  create view StreetSuffixWeakNoCase  as
+    select
+        D.match as match
+    from
+		(extract dictionary 'AddressStreetSuffixWeak' on D.text as match from DocumentText D) D;
+		
+
+  create view SecondaryUnitNoCase  as
+    select
+        D.match as match
+    from
+         (extract dictionary 'AddressBuildingUnits' on D.text as match from DocumentText D) D;
+         
+  
+  create view NumCP as
+    select
+        R.match as match
+    from
+      (extract regex /(([1-9\p{L}]\p{M}*[[\p{Nd}\p{L}\-\,]\p{M}*]*)?\p{Nd}([\p{Nd}\p{L}\-\,]\p{M}*)*)/ 
+ 		on between 1 and 20 tokens in D.text 
+ 			as match 
+ 	  from DocumentText D) R             
+    where Not(MatchesRegex(/[1-9]\p{Nd}{3}[,-]\s+.*/, R.match));
+    
+    
+  ----- highway address
+  create view NumForHighwayAddress as
+    select
+        R.match as match
+    from
+     (extract regex /\p{Nd}{1,5}-?(\p{Lu}\p{M}*)?/ 
+ 		on between 1 and 3 tokens in D.text 
+ 			as match 
+ 	  from DocumentText D) R;    
+
+ create view HighwayDictionary as 
+	select D.match as match
+	from (extract dictionary 'RoadAbbreviations' with flags 'Exact' on D.text as match from DocumentText D) D;
+	
+
+ create view HighwayNum as 
+	select R.match as match
+	from (extract regex /[1-9]\p{Nd}{0,2}(\s*(N|S|E|W))?(\s*(N|S|E|W))?/ 
+ 		on between 1 and 3 tokens in D.text 
+ 			as match 
+ 		  from DocumentText D) R;
+ 		  
+  create view GermanZipcode as
+    select
+        R.match as match
+    from
+	  (extract regex /(D-)?\p{Nd}{4,5}/ 
+ 		on between 1 and 3 tokens in D.text 
+ 			as match 
+ 	  from DocumentText D) R;
+ 	  
+-- need to support street numbers such as 1/3
+-- allow hyphenated street names in the beginning    
+-- allow park/bridge mentions
+-- no newline in streetname
+
+create view GermanStreetAddressSuffix1 as
+ select R.match as match
+from (extract regex /(\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20})?([Aa]llee|[Bb]erg|[Cc]haussee|[Dd]amm|[Dd]ämme|[Gg]asse|[Gg]aerten|[Gg]ärten|[Hh]alde|[Hh]öfe|[Hh]of|[Hh]oefe|[Ll]andstraße|[Ll]andstrasse|[Mm]ärkte|[Mm]arkt|[Mm]aerkte|[Pp]fad|[Pp]latz|[Pp]lätze|[Rr]ing|[Ss]teig|[Ss]tr\.|[Ss]traße|[Ss]trasse|[Uu]fer|[Ww]eg|[Zz]eile)\s*,?\s*([[1-9]\p{L}\p{M}*\-\,])*\p{Nd}([\p{Nd}\p{L}\p{M}*\/\-\,])*/ 
+ 		on between 1 and 25 tokens in D.text 
+ 			as match 
+ 	  from DocumentText D) R;
+
+
+create view GermanStreetAddressSuffix2 as
+ select R.match as match
+from (extract regex /(An [dD]er|[Aa]m|[dD]ie|[dD]er|[dD]as)?[ \t]*(Brücke|Park|Postfach|Hauptbahnhof)\b\s*,?\s*([[1-9]\p{L}\p{M}*\-\,])*\p{Nd}([\p{Nd}\p{L}\p{M}*\/\-\,])*/ 
+ 		on between 1 and 25 tokens in D.text 
+ 			as match 
+ 	  from DocumentText D) R;
+ 	  
+ create view GermanStreetAddress2 as
+ select R.match as match
+ from (extract regex /([Aa]llee|[Bb]erg|[Cc]haussee|[Dd]amm|[Dd]ämme|[Gg]asse|[Gg]aerten|[Gg]ärten|[Hh]alde|[Hh]öfe|[Hh]of|[Hh]oefe|[Ll]andstraße|[Ll]andstrasse|[Mm]ärkte|[Mm]arkt|[Mm]aerkte|[Pp]fad|[Pp]latz|[Pp]lätze|[Pp]laetze|[Rr]ing|[Ss]teig|[Ss]tr\.|[Ss]traße|[Ss]trasse|[Uu]fer|[Ww]eg|[Zz]eile)[ \t]+([Aa]n [dD]er|[Aa]m|[dD]ie|[dD]er|[dD]as)?[ \t]*\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}\s*,?\s*([[1-9]\p{L}\p{M}*\-\,]*\p{Nd}[\p{Nd}\p{L}\p{M}*\/\-\,]*)/ 
+ 		on between 1 and 25 tokens in D.text 
+ 			as match 
+ 	  from DocumentText D) R;
+ 	 

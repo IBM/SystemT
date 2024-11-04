@@ -1,0 +1,27 @@
+-----------------------------------------------------------------------------
+-- regexTokBug2.aql
+--
+-- Test case for a crash inside RegexTok.
+-----------------------------------------------------------------------------
+
+create view Email2_a as
+select R.match as annot
+from   Regex(/\b((\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*[\p{Ll}\p{Lu}\p{Lt}\p{Lo}\p{Nd}\p{Pc}]{1,20}\s*[\/]\s*)((\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}\s*){1,2}[\/]\s*){1,2}(\p{Lu}\p{M}*){2,20}(@(\p{L}\p{M}*){2,20})?)(?!\/)\b/, DocScan.text) R;
+
+create view OrgWithinNotesEmail1 as
+select R.match as match
+from RegexTok(/[a-zA-Z]+/, 1, Email2_a.annot) R;
+
+create view OrgWithinNotesEmail2 as
+select R.match as match
+from RegexTok(/[a-zA-Z]+/, 1, Email2_a.annot) R;
+
+select O.match as match
+into Results1
+from OrgWithinNotesEmail1 O;
+
+select O.match as match
+into Results2
+from OrgWithinNotesEmail2 O;
+
+

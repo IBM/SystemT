@@ -1,0 +1,85 @@
+module genericModule;
+
+
+create view FirstName as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'firstnames.dict'
+    on D.text as name
+  from Document D
+  having MatchesRegex(/\A[A-Z][a-z]*\Z/, name);
+
+output view FirstName;
+
+create view PhoneNumber as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regexes /\+?\([1-9]\d{2}\)\d{3}-\d{4}/
+    and /\+?[Xx]\.?\d{4,5}/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as num
+  from Document D;
+
+output view PhoneNumber;
+
+create view PersonPhoneAll as
+  select  name.name as person,
+          phone.num as phone,
+          CombineSpans(name.name, phone.num) as personphone,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          name.__auto__id as FirstName_____sep_____name____id,
+          phone.__auto__id as PhoneNumber_____sep_____phone____id
+  from  FirstName name,
+        PhoneNumber phone
+  where Follows(name.name, phone.num, 0, 40);
+
+output view PersonPhoneAll;
+
+create view PersonPhone as
+  select  __t2.person as person,
+          __t2.phone as phone,
+          __t2.personphone as personphone,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__1__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__1__Temp__1 __t1,
+        __Consolidate__1__Temp__2 __t2
+  where Contains(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.person, __t2.phone, __t2.personphone;
+
+output view PersonPhone;
+
+
+
+
+
+
+
+
+
+create view __Consolidate__1__Temp__1 as
+  select  PPF.person as person,
+          PPF.phone as phone,
+          PPF.personphone as personphone,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          PPF.__auto__id as PersonPhoneAll_____sep_____PPF____id,
+          PPF.personphone as __consolidate__target
+  from  PersonPhoneAll PPF;
+
+output view __Consolidate__1__Temp__1;
+
+create view __Consolidate__1__Temp__2 as
+  select  __t1.person as person,
+          __t1.phone as phone,
+          __t1.personphone as personphone,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__1__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'NotContainedWithin';
+
+output view __Consolidate__1__Temp__2;
+

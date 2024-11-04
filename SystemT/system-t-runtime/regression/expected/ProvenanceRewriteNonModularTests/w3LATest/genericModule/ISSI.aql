@@ -1,0 +1,34 @@
+module genericModule;
+
+
+create view ISSIPlatformClue as
+  select  toUpperCase(I.name) as name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as InputTag_____sep_____I____id
+  from  InputTag I
+  where MatchesDict('ISSIPlatformDict', I.name);
+
+output view ISSIPlatformClue;
+
+create view ISSIPlatform as
+  select  M.label as platform,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          I.__auto__id as ISSIPlatformClue_____sep_____I____id,
+          -1 as ISSIPlatformMappingTable_____sep_____M____id
+  from  ISSIPlatformClue I,
+        ISSIPlatformMappingTable M
+  where Equals(GetText(I.name), GetText(M.str));
+
+output view ISSIPlatform;
+
+create view ISSI as
+  select  I.platform as platform,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          I.__auto__id as ISSIPlatform_____sep_____I____id
+  from  ISSIPlatform I;
+
+output view ISSI;
+

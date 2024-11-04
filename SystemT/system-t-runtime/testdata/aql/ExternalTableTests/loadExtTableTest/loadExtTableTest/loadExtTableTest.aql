@@ -1,0 +1,29 @@
+/*
+Test to verify, that the loader has populated, the operator graph with tuples from external tables.
+*/
+
+module loadExtTableTest;
+
+require document with columns text Text;
+
+-- create external table - can be empty 
+create external table extTab1(id Integer, text Text)
+allow_empty true;
+
+-- create external table - cannot be empty
+create external table extTab2(id2 Integer, text2 Text)
+allow_empty false;
+
+-- View to extract capital words
+create view CapsWord as
+extract regex /[A-Z][a-z]*/ on D.text as match 
+from Document D;
+
+-- join Capital word view with external table extTab1
+select T.*, Cap.* into dumpExtTab1
+from extTab1 T, CapsWord Cap; 
+
+-- join Capital word view with external table extTab2
+select T.*, Cap.* into dumpExtTab2
+from extTab2 T, CapsWord Cap; 
+

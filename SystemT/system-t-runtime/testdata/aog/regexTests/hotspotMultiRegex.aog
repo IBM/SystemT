@@ -1,0 +1,59 @@
+############################################################
+# hotspotMultiRegex.aog
+#
+# Expensive regular expressions from the named-entity annotators,
+# executed via the MultiRegex operator.`
+
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+
+# All the regular expressions over $Document get evaluated at once.
+($CapsPersonRaw, $CapsOrg, $WeakInitialWord, $AllCapsOrg, $InitialWord, 
+        $Time4, $TwoDigitsInterval, $StrictCapsPerson2) =
+    RegexesTok(
+        (
+            (/\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['\-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}/,
+                "", 1, 3) => "match",
+            (/\p{Lu}\p{M}*([\p{Ll}\p{Lo}\&\.'\-\,]\p{M}*)*[\p{Ll}\p{Lo}]/,
+                "", 1, 10) => "match",
+            (/([\p{Upper}]\.?\s*){1,5}/,
+                "", 1, 12) => "match",
+            (/(\p{Lu}\p{M}*){2,30}/,
+                "", 1, 1) => "match",
+            (/([\p{Upper}]\.\s*){0,4}[\p{Upper}]\./,
+                "", 1, 10) => "match",
+            (/(\d{1,2}:\d{2}(:\d{2})?|\d{1,2}-\d{1,2})(\s*[AP])?/,
+                "", 1, 10) => "match",
+            (/([0123])?[\d]( )*[\-]( )*([0123])?[\d]/, 
+                "", 1, 3) => "match",
+            (/\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){1,20}/, 
+                "", 1, 1) => "match"
+        ),
+        "text", $Document
+    );
+
+
+# Perform postprocessing to get the various CapsPerson answers.	
+$CapsPersonNoP =
+	Select(Not(ContainsRegex(RegexConst(/'/, "SimpleRegex"), GetCol("match"))), $CapsPersonRaw);
+	
+$StrictCapsPersonR = 
+	FastRegex(/\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}/,
+	(0 => "name"), "match", $CapsPersonNoP);
+	
+$StrictCapsPerson = 
+	Select(
+		MatchesRegex(
+			RegexConst(/\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){1,20}/, "SimpleRegex"), 
+		GetCol("name")), 
+		$StrictCapsPersonR);
+				
+	
+Output: $CapsPersonRaw, $CapsOrg, $WeakInitialWord, $AllCapsOrg, $InitialWord, 
+	$Time4, $TwoDigitsInterval, $StrictCapsPersonR, $StrictCapsPerson,
+	$StrictCapsPerson2;
+	

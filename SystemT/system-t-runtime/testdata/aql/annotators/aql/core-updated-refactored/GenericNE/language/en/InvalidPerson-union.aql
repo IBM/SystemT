@@ -1,0 +1,21 @@
+create view InvalidPerson as
+	(select P1.person as person from PersonWithinUrlEmailPlaceOrg P1)
+	union all
+	(select P1.person as person from PersonOverlapsWithCities P1)
+	union all
+	(select P1.person as person from PersonOverlapsWithOrgs P1)
+	union all
+	(select P1.person as person from PersonEqualsToCities P1)
+--	union all
+--	(select P1.person as person from PersonEqualsToCountry P1)
+--	union all
+--	(select P1.person as person from PersonFilterDict P1)
+;
+
+
+create view InvalidCapsPerson as
+select CP.name as name
+from CapsPerson CP,
+	 UrlEmailPlaceOrg UEP
+where Contains(UEP.match, CP.name)
+  and Not(Contains(CP.name, UEP.match));

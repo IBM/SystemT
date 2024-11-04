@@ -1,0 +1,43 @@
+create view StockExchanges1 as
+  extract dictionary 'stockmarket/exchanges.dict' with flags 'Exact'
+  on D.text as match
+  from Doc D;
+  
+create view StockExchangeContext1 as 
+  select LeftContext(R.match,50) as lc, RightContext(R.match,10) as rc, R.match as match
+  from StockExchanges1 R;
+
+create view StockExchangeAndTicker1 as
+  extract R.match as exchange, R.lc as lc,
+        regex /[ ]?:[ ]?((\p{Lu}\p{M}*)+)/ on R.rc
+       return group 1 as ticker
+  from StockExchangeContext1 R;
+  
+  
+-- Stock Exchange and ticker, Reuters-style
+  
+create view StockExchange2 as
+  extract dictionary 'stockmarket/reuters_instrument_codes.dict' with flags 'Exact'
+  on D.text as exchange
+  from Doc D;
+  
+create view StockExchangeContext2 as 
+  select LeftContextTok(R.exchange,3) as lc, R.exchange
+  from StockExchange2 R;
+
+create view StockExchangeAndTicker2 as
+select R.exchange, LeftContext(R.ticker, 50) as lc, R.ticker as ticker
+from
+(
+  extract R.exchange as exchange,
+        regex /[\(\[)][ ]?((\p{Lu}\p{M}*)+)[ ]?\.[ ]?\z/ on 3 tokens in R.lc
+       return group 1 as ticker
+  from StockExchangeContext2 R
+) R;
+
+create view StockExchangeAndTicker as
+(select * from StockExchangeAndTicker1)
+union all
+(select * from StockExchangeAndTicker2);
+  
+--output view StockExchangeAndTicker;

@@ -1,0 +1,202 @@
+module County;
+
+
+import dictionary CountyNegativeClues from module Dictionaries as CountyNegativeClues
+;
+
+
+import view CapsPlaceOnetoTwo from module Linguistics as CapsPlaceOnetoTwo
+;
+
+
+import view OrganizationFull from module OrganizationCandidates as OrganizationFull
+;
+
+
+import view StateCandidate from module CommonFeatures as StateCandidate
+;
+
+
+import view CityorStateOrCountry from module CommonFeatures as CityorStateOrCountry
+;
+
+
+create view CountyCandidates1 as
+  select  CombineSpans(C.match, CC.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CapsPlaceOnetoTwo_____sep_____C____id,
+          CC.__auto__id as CountyClue_____sep_____CC____id
+  from  CapsPlaceOnetoTwo C,
+        CountyClue CC
+  where FollowsTok(C.match, CC.match, 0, 0)
+     and Not(ContainsRegex(/[\r\n\t]/, C.match))
+     and Not(ContainsRegex(/[\r\n\t]{2}/, SpanBetween(C.match, CC.match)))
+     and Not(ContainsDict('CountyNegativeClues', C.match));
+
+output view CountyCandidates1;
+
+create view CountyCandidates2 as
+  select  CombineSpans(C.match, CC.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as WeakCounty_____sep_____C____id,
+          CC.__auto__id as CountyClue_____sep_____CC____id
+  from  WeakCounty C,
+        CountyClue CC
+  where FollowsTok(C.match, CC.match, 0, 0)
+     and Not(ContainsRegex(/[\r\n\t]/, C.match))
+     and Not(ContainsRegex(/[\r\n\t]{2}/, SpanBetween(C.match, CC.match)));
+
+output view CountyCandidates2;
+
+
+
+
+
+create view CountyCandidates3 as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StateCandidate_____sep_____S____id,
+          C.__auto__id as WeakCounty_____sep_____C____id
+  from  StateCandidate S,
+        WeakCounty C
+  where FollowsTok(C.match, S.match, 1, 1)
+     and MatchesRegex(/\s*\(\s*/, SpanBetween(C.match, S.match))
+     and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(C.match, S.match)));
+
+output view CountyCandidates3;
+
+create view CountyCandidates as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__380__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__380__TempOp__1 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__380__TempOp__2 Op);
+
+output view CountyCandidates;
+
+create view CountyConsolidated as
+  select  __t2.match as match,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__381__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__381__Temp__1 __t1,
+        __Consolidate__381__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.match;
+
+output view CountyConsolidated;
+
+create view CountyInvalid as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          O.__auto__id as OrganizationFull_____sep_____O____id,
+          C.__auto__id as CountyConsolidated_____sep_____C____id
+  from  OrganizationFull O,
+        CountyConsolidated C
+  where Contains(O.organization, C.match);
+
+output view CountyInvalid;
+
+create view CountyValid as
+  select  Op.match as match,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__382__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__382__TempOp__1 Op,
+        __Minus__382__Temp __t
+  where Equals(Op.match, __t.match);
+
+output view CountyValid;
+
+create view __Consolidate__381__Temp__1 as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CountyCandidates_____sep_____C____id,
+          C.match as __consolidate__target
+  from  CountyCandidates C;
+
+output view __Consolidate__381__Temp__1;
+
+create view __Consolidate__381__Temp__2 as
+  select  __t1.match as match,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__381__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__381__Temp__2;
+
+create view __Minus__382__Temp as
+  select  __t.match as match
+  from  
+    ((select  Op.match as match
+      from  __Minus__382__TempOp__1 Op)
+    minus
+    (select  Op.match as match
+      from  __Minus__382__TempOp__2 Op)
+    ) __t
+  group by __t.match;
+
+output view __Minus__382__Temp;
+
+create view __Minus__382__TempOp__1 as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CountyConsolidated_____sep_____C____id
+  from  CountyConsolidated C;
+
+output view __Minus__382__TempOp__1;
+
+create view __Minus__382__TempOp__2 as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CountyInvalid_____sep_____C____id
+  from  CountyInvalid C;
+
+output view __Minus__382__TempOp__2;
+
+create view __Union__380__TempOp__0 as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CountyCandidates1_____sep_____C____id
+  from  CountyCandidates1 C;
+
+output view __Union__380__TempOp__0;
+
+create view __Union__380__TempOp__1 as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CountyCandidates2_____sep_____C____id
+  from  CountyCandidates2 C;
+
+output view __Union__380__TempOp__1;
+
+create view __Union__380__TempOp__2 as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CountyCandidates3_____sep_____C____id
+  from  CountyCandidates3 C;
+
+output view __Union__380__TempOp__2;
+

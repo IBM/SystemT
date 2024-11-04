@@ -1,0 +1,35 @@
+module module1;
+
+
+require document with columns
+  text Text;
+
+create function MyTableFunc(
+  firstArg table (spanVal Span) as locator  ,secondArg table (spanVal Span, strVal Text) as locator)
+return table (outSpan1 Span, outSpan2 Span, outStr Text)
+external_name 'tableFnTestsUDFs.jar:com.ibm.test.udfs.TableConsumingTableFunc!eval'
+language java
+deterministic
+called on null input
+
+;
+
+
+export function module1.MyTableFunc;
+
+
+create view FirstInputView as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /\d+/
+    with flags 'DOTALL'
+    on between 1 and 1 tokens in D.text
+    return group 0 as match
+  from Document D;
+
+output view FirstInputView;
+
+export view module1.FirstInputView;
+
+

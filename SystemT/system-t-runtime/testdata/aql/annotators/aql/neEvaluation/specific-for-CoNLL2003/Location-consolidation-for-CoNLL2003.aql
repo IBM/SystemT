@@ -1,0 +1,159 @@
+----------------------------------------------
+-- Consolidation:
+-- For now, we just remove annotations that are completely
+-- contained within other annotations.
+----------------------------------------------
+create view StateOrCountry as
+	(select S.match as match from StateStrongAll S)
+	union all
+	(select C.match as match from CountryCandidate C);
+
+-- only keep cities that do not have the same name as a country or state
+create view CityConsolidatedFiltered as
+	(select C.match as match from CityConsolidated C)
+	minus 
+	(select SC.match as match from StateOrCountry SC);
+	
+create view CityCountry as
+select CC.match as match, 'city' as subtype, CC.match as city, '' as county, '' as state, C.match as country, '' as continent, CombineSpans(CC.match, C.match) as reference
+from CityConsolidatedFiltered CC,
+	 CountryCandidate C
+where FollowsTok(CC.match, C.match, 0, 1)
+  and MatchesRegex(/\s*[,]?\s*/, SpanBetween(CC.match, C.match))
+  and Not(ContainsRegex(/[\n\r]/, SpanBetween(CC.match, C.match)));
+  
+create view AllCityStateCountryZipcode as
+	(select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.match as reference from AllCityStateCountry C)
+	union all
+	(select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityCountry C);
+
+create view CityStateCountryInvalid1 as
+select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference
+from   AllCityStateCountryZipcode C,
+	   PersonFinalAllWithoutDots P
+where  Contains(P.person, C.match)
+  and  Not(Equals(P.person, C.match));      
+
+create view CityStateCountryInvalid2 as
+select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference
+from   AllCityStateCountryZipcode C,
+	   OrganizationConsolidated O 
+where  Contains(O.org, C.match)
+  and  Not(Equals(O.org, C.match));   
+
+create view CityStateCountryInvalid3 as
+select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference
+from   AllCityStateCountryZipcode C,
+	   OrganizationConsolidated O 
+where  Overlaps(O.org, C.match)
+  and  Not(Contains(O.org, C.match));  
+
+create view CityStateCountryInvalid4 as
+select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference
+from   AllCityStateCountryZipcode C,
+	   OrganizationConsolidated O 
+where  Overlaps(O.org, C.match)
+  and  Not(Contains(O.org, C.match));  
+ 
+
+create view CityStateCountryInvalid as
+	(select C.match as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityStateCountryInvalid1 C)
+	union all
+	(select C.match as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityStateCountryInvalid2 C)
+	union all
+	(select C.match as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityStateCountryInvalid3 C);
+
+create view CityStateCountryValid as
+	(select C.match as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from AllCityStateCountryZipcode C)
+	minus
+	(select C.loc as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityStateCountryInvalid C);
+	
+create view CityConsolidatedInvalid as
+select C.match as match
+from   CityStateCountryInvalid CI,
+	   CityConsolidated C
+where  Equals(CI.loc, C.match);   
+	
+create view CityConsolidatedValid as
+	(select C.match as match from CityConsolidated C)
+	 minus 
+	(select C.match as match from CityConsolidatedInvalid C);
+	
+create view StateCandidateInvalid as
+select S.match as match
+from   StateCandidate S,
+	   OrganizationConsolidated O 
+where  Overlaps(O.org, S.match); 
+
+create view StateCandidateValid as
+	(select S.match as match from StateCandidate S)
+	minus
+	(select S.match as match from StateCandidateInvalid S); 
+
+create view CountryCandidateInvalid as
+select C.match as match
+from   CountryCandidate C,
+	   OrganizationConsolidated O 
+where  Overlaps(O.org, C.match); 
+
+create view CountryCandidateValidAll as
+	(select C.match as match from CountryCandidate C)
+	minus
+	(select C.match as match from CountryCandidateInvalid C);
+
+create view CountryCandidateValid as
+select C.*
+from CountryCandidateValidAll C
+consolidate on C.match;
+			
+create view CountyInvalid as
+select C.match as match
+from OrganizationConsolidated O,
+	 CountyConsolidated C
+where Contains(O.org, C.match);
+
+create view CountyValid as
+	(select C.match as match from CountyConsolidated C)
+	minus
+	(select C.match as match from CountyInvalid C);
+
+create view RegionInvalid1 as
+select R.match as match
+from   RegionCandidate R,
+	   PersonFinalAllWithoutDots P
+where  Contains(P.person, R.match)
+  and  Not(Equals(P.person, R.match));      
+
+create view RegionInvalid2 as
+select R.match as match
+from   RegionCandidate R,
+	   OrganizationConsolidated O 
+where  Contains(O.org, R.match)
+  and  Not(Equals(O.org, R.match));   
+
+create view RegionInvalid3 as
+select R.match as match
+from   RegionCandidate R,
+	   OrganizationConsolidated O 
+where  Overlaps(O.org, R.match)
+  and  Not(Contains(O.org, R.match));  
+ 
+create view RegionInvalid4 as
+select R.match as match
+from   RegionCandidate R,
+	   CityStateCountryValid O 
+where  Contains(O.loc, R.match);
+
+create view RegionInvalid as
+	(select R.match as match from RegionInvalid1 R)
+	union all 
+	(select R.match as match from RegionInvalid2 R)
+	union all 
+	(select R.match as match from RegionInvalid3 R)
+	union all
+	(select R.match as match from RegionInvalid4 R);
+
+create view RegionValid as
+	(select R.match as match from RegionCandidate R)
+	minus
+	(select R.match as match from RegionInvalid R);

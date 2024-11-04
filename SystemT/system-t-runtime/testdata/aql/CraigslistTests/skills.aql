@@ -1,0 +1,108 @@
+-----------------------------------------------------------------------------
+-- skills.aql
+--
+-- Top-level AQL file that runs all the various pieces of the SIGMOD demo
+-- annotators for Craigslist data.
+--
+-- Depends on the following AQL files:
+--		dicts.aql
+--		xml.aql
+-----------------------------------------------------------------------------
+
+include 'skillDicts.aql';
+
+-----------------------------------------------------------------------------
+-- BASIC FEATURES
+
+-- Various skills that an applicant might have
+create view SkillName as
+extract dictionaries 
+		SoftwareNameDict 
+		and HardwareNameDict 
+		and ProgSkillsDict
+		and ProgSkillsDict_ExactCase
+	on D.text as name
+from DetaggedDoc D
+consolidate on name;
+
+-- Phrases that, when they come before a skill, indicate that the applicant
+-- should have the skill.
+create view ShouldHaveSkill_Before as
+extract dictionary ShouldHaveSkillDict_Before on D.text as phrase
+from DetaggedDoc D
+consolidate on phrase;
+
+-- Phrases that, when they come after a skill, indicate that the applicant
+-- should have the skill.
+create view ShouldHaveSkill_After as
+extract dictionary ShouldHaveSkillDict_After on D.text as phrase
+from DetaggedDoc D
+consolidate on phrase;
+
+-----------------------------------------------------------------------------
+-- COMPOSITE FEATURES
+
+-- Phrases like "good understanding of Windows CE" and "knowledge of C++"
+create view NeedSkill1 as
+select S.name as skill, CombineSpans(B.phrase, S.name) as phrase
+from SkillName S, ShouldHaveSkill_Before B
+where FollowsTok(B.phrase, S.name, 0, 15);
+
+-- Phrases like "debugging skills" and "ARM assembly experience"
+create view NeedSkill2 as
+select S.name as skill, CombineSpans(S.name, A.phrase) as phrase
+from SkillName S, ShouldHaveSkill_After A
+where FollowsTok(S.name, A.phrase, 0, 10);
+
+create view NeedSkill_All as
+(select * from NeedSkill1)
+union all (select * from NeedSkill2);
+
+-----------------------------------------------------------------------------
+-- Consolidation and subtraction
+
+-- Identify skill relationships that span lines or sentences.
+-- These are most likely false positives.
+create view NeedSkill_SpansLines as
+select N.*
+from NeedSkill_All N, BR B
+where Contains(N.phrase, B.match);
+
+create view NeedSkill_SpansSentences as
+select N.*
+from NeedSkill_All N, SentenceBound B
+where Contains(N.phrase, B.boundary);
+
+-- Identify skill relationships that were found in header or footer 
+-- sections of the Craigslist posting.
+-- These are most likely false positives.
+create view NeedSkill_InHeaderOrFooter as
+select N.*
+from NeedSkill_All N, HeadersAndFooters H
+where Overlaps(H.match, N.phrase);
+
+create view NeedSkill_FalsePositives as
+(select * from NeedSkill_SpansLines)
+union all (select * from NeedSkill_SpansSentences)
+union all (select * from NeedSkill_InHeaderOrFooter N)
+;
+
+-- Remove false positives to generate the final output type.
+create view NeedSkill_Final as
+(select * from NeedSkill_All) 
+minus
+(select * from NeedSkill_FalsePositives);
+
+-- Filter out duplicates so that MashupHub doesn't have to.
+-- Note that Min() applied to a Span column returns the first Span.
+create view NeedSkill_Dedup as
+select Min(N.skill) as skill, Min(N.phrase) as phrase
+from NeedSkill_Final N
+group by GetText(N.skill);
+
+-- Rename columns for MashupHub
+create view NeedSkill as
+select N.skill as skill, N.phrase as phrase, N.skill as reference
+from NeedSkill_Dedup N;
+
+

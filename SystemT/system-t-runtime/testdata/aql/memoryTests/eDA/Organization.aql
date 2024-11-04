@@ -1,0 +1,843 @@
+  /* common conjuctions for all the supported languages within the
+    organization names */
+ create dictionary OrgConjDict as
+(
+	'&','and','und', 'e', 'y','et'
+);
+ 
+ /* common prepositions for all the supported languages within the
+    organization names */
+ create dictionary OrgPrepDict as
+(
+	 'of','for', 'für', 'de', 'fuer', 'de las', 'de los', 'di', 'del', 'du'
+);
+
+ /* common articles for all the supported languages within the
+    organization names */
+create dictionary TheDict as
+(
+	 'The',
+	 -- German
+	 'Die',
+	 'Der',
+	 'Das',
+	 'Ein',
+     'El',
+     --'Les',
+	 'Le',
+	 --'Los',
+	 'La'
+);
+
+create dictionary OrgToAvoidDict as
+(	
+	'The',      --in TheDict und OrgToAvoid
+	'Travel',
+	'Internal',
+	'Betting',
+	'Solution',
+	'Resolution',
+	'Des',
+	'des',
+	'West',
+	'North',
+	'South',
+	'East',
+	'High',
+	'Community',
+	'Sunday',
+	'Summer',
+	'American',
+	'Law',
+	'Business',
+	'Elementary',
+	'Middle',
+	'Health',
+	'Structure',
+	'Newly Formed',
+	-- added 02/08/2008
+	'Luxury',
+	-- added 04/22/2008
+	'New',
+	'Private',
+	'S-',
+	'For',
+    -- added 04/02/2009
+    'claro',
+    'media',
+    'viajes',
+    'hoteles',
+    'Keane',
+    'gol',
+    'Argentinos',
+    'enero',
+    'abril'
+);
+
+create dictionary OrgPartnershipDict as 
+(
+	'LP',
+	'L.P.',
+	'LLP',
+	'L.L.P.',
+	'LLLP',
+	'L.L.L.P.'
+);
+ 
+ create view OrgConj as
+	select D.match as match
+	from
+		Dictionary('OrgConjDict', Document.text) D;
+		
+ create view OrgPrep as
+	select D.match as match
+	from
+		Dictionary('OrgPrepDict', Document.text) D;
+		
+ create view The as
+	select D.match as match
+	from
+		Dictionary('TheDict', Document.text) D;
+
+-- capitalized words, that can possibly be organization names 
+ create view CapsOrg as
+	select R.match as match
+	from
+		-- switch to faster regex math
+	    RegexTok(/\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}([\p{Ll}\p{Lo}]\p{M}*|[\&\.'\-\,])+\b/, 6, Document.text) R
+        where Not(ContainsDict('dictionaries/en/filterOrg_english.dict', R.match))
+        and Not(ContainsDict('dictionaries/de/filterOrg_german.dict', R.match))
+	    and Not(ContainsDict('dictionaries/es/filterOrg_spanish.dict', R.match))
+		and Not(ContainsDict('dictionaries/fr/filterOrg_french.dict', R.match));
+ 
+-- Added 02/08/2008
+create view AllCapsOrg as
+	select R.match as match
+	from RegexTok(/(\p{Lu}\p{M}*){1,2}((\s*&\s*)?(\p{Lu}\p{M}*)+|([\p{Ll}\p{Lo}]\p{M}*)+(\p{Lu}\p{M}*)([\p{Ll}\p{Lo}]\p{M}*)+)/, 3, Document.text) R;
+    
+-------------------------------------------------------------------
+ 
+-- Yunyao: changes made to use dictionary
+-- start block change
+create dictionary DotComSuffixDict as (
+		'.com'
+	);
+
+-- organizations with '.com' suffix, e.g. 'flowers24.com'
+create view DotComAnchor as
+	select D.match as anchor
+	from Dictionary('DotComSuffixDict', Document.text) D;
+	
+create view DotComContext as
+    select LeftContextTok(R.anchor,4) as lc, R.anchor as anchor
+    from   DotComAnchor R;
+ 
+create view DotComLC as
+    select  R.match  as match 
+    from   RegexTok(/[a-zA-Z][\w\&\-]+$/,  25, DotComContext.lc) R
+    where Not(MatchesRegex(/[\.@]/, LeftContextTok(R.match,1)));
+    
+create view DotCom as
+	select CombineSpans(R1.match,R2.anchor) as match
+	from   DotComLC R1, DotComAnchor R2
+	where FollowsTok(R1.match, R2.anchor,0,0);
+    
+-------------------------------------------------------------------
+-- load dictionaries with common organization suffixes/prefixes
+	 
+create view OrgClueStIndCaps as
+	select D.match as match
+	from Dictionary('dictionaries/industryType_suffix.dict', 'Exact', Document.text) D;
+		
+create view OrgClueStIndPrefixCaps as
+	select D.match as match
+	from Dictionary('dictionaries/industryType_prefix.dict', 'Exact', Document.text) D;
+		
+ --create view OrgClueStSuffix as
+create view OrgClueStSuffixCaps as
+	select D.match as match
+	from Dictionary('dictionaries/organization_suffix.dict', 'Exact', Document.text) D;
+	
+		
+create view OrgClueStCaps as
+	(select OCSIC.match as match from OrgClueStIndCaps OCSIC)
+    union all
+    (select OCSSC.match as match from OrgClueStSuffixCaps OCSSC);
+    
+-------------------------------------------------------------------
+
+-- load organization dictionaries
+    
+create view OrgFullCase as
+	(select D.match as match
+	from Dictionary('dictionaries/organization_full_case.dict', 'Exact', Document.text) D)
+	union all
+	(select D.match as match
+	from Dictionary('dictionaries/organization_media.dict', 'Exact', Document.text) D)
+	union all
+	(select D.match as match
+	from Dictionary('dictionaries/organization_newspaper.dict', 'Exact', Document.text) D)
+	union all
+	(select D.match as match
+	from Dictionary('dictionaries/organization_politics.dict', 'Exact', Document.text)D);
+
+		
+create view OrgFullNoCase as
+	select D.match as match
+	from Dictionary('dictionaries/organization_full_noCase.dict', Document.text) D;
+		
+		
+create view OrgFull1 as 
+	 (select R.match as match from OrgFullNoCase R)
+     union all 
+	 (select R.match as match from OrgFullCase R);
+     
+-------------------------------------------------------------------
+     
+create view OrgFull as
+    select OF1.match as match	 
+	from OrgFull1 OF1
+	where Not(ContainsDict('dictionaries/title.dict', LeftContext(OF1.match,14)));
+	
+-- Identify blocks of one to two capitalized words within 0 tokens of each other   
+create view Coonetotwo as
+    select B.block as match
+    from BlockTok(0, 1, 2, CapsOrg.match) B;
+
+-- Identify blocks of one to three capitalized words within 0 tokens of each other
+create view Coonetothree as
+    select B.block as match
+    from BlockTok(0, 1, 3, CapsOrg.match) B;
+		
+-- rule 7
+/* blocks of one to two capitalized words followed by an
+    organization/industry suffix, folllowed by an organization preposition, followed by one to two capitalized words with 0 tokens
+    distance between them */  
+create view CoOcscOpCo as
+	select CombineSpans(coco1.match, coco2.match) as match
+	from Coonetotwo coco1,
+		OrgClueStCaps ocsc,
+		OrgPrep op,
+		Coonetotwo coco2
+ 	where FollowsTok(coco1.match, ocsc.match, 0, 0) and
+		FollowsTok(ocsc.match, op.match,0, 0) and
+		FollowsTok(op.match, coco2.match, 0, 0);	
+
+-- rule 10
+
+/* blocks of one to three capitalized words with 0 token distance between them
+   followed by an industry suffix from the dictionary */
+   create view CoOcsic1 as
+	select CombineSpans(coco.match, ocsic.match) as match
+	from Coonetothree coco,
+		OrgClueStIndCaps ocsic 
+ 	where FollowsTok(coco.match, ocsic.match, 0, 0) and
+		Not(ContainsRegex(/[\n\r]/, CombineSpans(coco.match, ocsic.match)));
+
+/* blocks of one to three capitalized words with 0 token distance between them
+   followed by an organization suffix from the dictionary */		
+create view CoOcsic2 as
+	select CombineSpans(coco.match, ocsic.match) as match
+	from Coonetothree coco,
+ 		OrgClueStSuffixCaps ocsic
+ 	where FollowsTok(coco.match, ocsic.match, 0, 0) and
+		Not(ContainsRegex(/[\n\r]/, CombineSpans(coco.match, ocsic.match)));
+
+create view Nationalities as
+    select D.match as match
+    from   Dictionary('dictionaries/nationality.dict', Document.text) D;
+
+create view OrgToAvoid as
+    select D.match as match
+    from Dictionary('OrgToAvoidDict', Document.text) D;
+
+-- collect non-organization matches
+create view NonOrgDictMatches as
+	(select D.match as match from ContinentsAll D)
+	union all
+	(select D.match as match from Nationalities D)
+	union all
+	(select D.match as match from Country D)
+	union all
+	(select D.match as match from State D)
+	union all
+	(select D.match as match from OrgToAvoid D);
+
+-- collect non-organization matches followed by an oragization/industry suffix
+-- with one token distance between, which is a non-word match
+create view NonOrgs as
+    select CombineSpans(NO.match, OC.match) as match
+    from NonOrgDictMatches NO,
+ 	   OrgClueStCaps OC
+    where FollowsTok(NO.match, OC.match, 0, 1)
+	    and MatchesRegex(/\s*\W*\s*/, SpanBetween(NO.match, OC.match)); 
+	
+
+create view CoOcsicAll as
+	(select C.match as match from CoOcsic1 C)
+	union all
+	(select C.match as match from CoOcsic2 C);
+
+create view CoOcsic as
+	(select C.match as match from CoOcsicAll C)
+	minus
+	(select C.match as match from NonOrgs C);
+
+-- rule 10 expansion
+-- view CoOcsic1 expanded with the organization suffix and a capitalized word
+create view CoOcsicEx as
+	select CombineSpans(C.match, S.match) as match
+	from   CoOcsic1 C,
+		   OrgClueStSuffixCaps S,
+		   CapsOrg O
+	where  FollowsTok(C.match, O.match, 0, 0)
+	   and FollowsTok(O.match, S.match, 0, 0);
+
+--rule 9
+/* blocks of one to three capitalized words with 1 token distance between them
+   followed by an organization suffix from the dictionary, A comma match is allowed between the tokens */ 
+create view CoOcsscAll as
+	select CombineSpans(coco.match, ocssc.match) as match
+	from Coonetothree coco,
+		OrgClueStSuffixCaps ocssc 
+ 	where FollowsTok(coco.match, ocssc.match, 0, 1) and
+		-- allow cases such as 'Test Test AG' as well		
+		MatchesRegex(/\s*[,\s]\s*/, SpanBetween(coco.match,ocssc.match));
+		
+create view CoOcssc as
+	(select C.match as match from CoOcsscAll C)
+	minus
+	(select C.match as match from NonOrgs C);
+	
+-- rule 5
+/* industry type prefix, followed by an organization preposition, followed by a
+    block of one to two capitalized words, followed by an organization conjunction,
+    followed by a block of one to three capitalized words. 0 token distance between
+    all the membersof this combination. No new line, tab and carriage return character allowed between.*/
+create view OcscOpCoOcCoAll as
+	select CombineSpans(ocsc.match, coco2.match) as match, coco2.match as suffix
+	from --OrgClueStCaps ocsc,
+		OrgClueStIndPrefixCaps ocsc,
+		OrgPrep op,
+		Coonetotwo coco1,
+		OrgConj oc,
+		Coonetothree coco2
+	 where FollowsTok(ocsc.match, op.match, 0, 0) and
+		FollowsTok(op.match, coco1.match, 0, 0) and
+		FollowsTok(coco1.match, oc.match, 0, 0) and
+		FollowsTok(oc.match, coco2.match, 0, 0)  and
+   		Not(ContainsRegex(/[\t\n\r]/, CombineSpans(ocsc.match, coco2.match)));
+  
+-- Yunyao: added 04/22/2008			
+-- avoid match "Univ. of Michigan and Ohio State University"
+create view OcscOpCoOcCoInvalid as
+   select o.match as match, c.match as suffix
+   from OcscOpCoOcCoAll o,
+   		CoOcsic1 c
+   where Overlaps(o.suffix, c.match) and
+   		Not(ContainsRegex(/&/, o.match));
+
+-- filter them out   
+create view OcscOpCoOcCo as 
+   	(select o.match as match  from	OcscOpCoOcCoAll o)
+   	minus
+   	(select o.match as match  from	OcscOpCoOcCoInvalid o);
+
+/* extending the already found combinations of capitalized words, starting
+    with the industry prefix, to include the left standing blocks of 1 to 3 
+    blocks of capitalized words, where new line, tab and carriage return characters
+    are not allowed  */ 			   
+create view CoOcscOpCoOcCo as 
+  	  select CombineSpans(coco.match, R1.match) as match
+  	  from Coonetothree coco,
+  	  		OcscOpCoOcCo R1
+  	  where FollowsTok(coco.match,R1.match,0,0) and
+  	  		-- 04/23/2008 to avoid line break
+  	  		Not(ContainsRegex(/[\t\n\r]/, CombineSpans(coco.match, R1.match)));
+  
+create view CoOcscOpCoOcCoAll as
+    (select o.match as match from OcscOpCoOcCo o)
+   	 union all
+ 	(select o.match as match from CoOcscOpCoOcCo o);
+ 
+-- remove duplicates
+create view CoOcscOpCoOcCoConsolidated as
+   select o.match as match 
+   from CoOcscOpCoOcCoAll o
+   consolidate on o.match;
+   	   
+-- R1
+/* known organizations from dictionaries immediately
+   followed by blocks of one to two capitalized words*/
+create view OfCo as
+    select CombineSpans(of.match,coco.match) as match
+	from OrgFull of,
+		Coonetotwo coco
+	where FollowsTok(of.match,coco.match,0,0);
+	  	  		
+create view OfCozerototwo as
+	(select R.match as match from OrgFull R)
+	union all
+	(select R.match as match from OfCo R);
+	
+/* organizations from dictionaries and extended organizations
+   from dictionaries(OfCo) followed by an industry/organization suffix */	    
+create view OfCoOcsc as
+	select CombineSpans(of.match,ocsc.match) as match
+	from OfCozerototwo of,
+	    OrgClueStCaps ocsc
+	where FollowsTok(of.match,ocsc.match,0,0);
+	     	
+-- R2
+-- blocks of 1 to 2 + conjunction
+-- 0 token distance between the components
+create view CoOc as
+    select CombineSpans(co.match,oc.match) as match
+	from Coonetotwo co,
+	    OrgConj oc
+    where FollowsTok(co.match,oc.match,0,0);
+
+-- blocks of 1 to 2 + conjunction + blocks of 1 to 2
+-- 0 token distance between the components	     	
+create view CoOcCo as
+	select CombineSpans(cooc.match,co.match) as match
+	from CoOc cooc,
+	    Coonetotwo co
+	where FollowsTok(cooc.match,co.match,0,0);
+
+create view CoOcCozerototwo as
+	(select R.match as match from CoOc R)
+	union all 
+	(select R.match as match from CoOcCo R); 
+
+/* (blocks of 1 to 2 + conjunction) or (blocks of 1 to 2 + conjunction + blocks of 1 to 2)
+   followed by an organization/industry suffix, followed by a preposition,
+   followed by a block of 1 to 2 capitalized words*/
+create view CoOcCozerototwoOcscOpCo as
+	select CombineSpans(coocco.match,co.match) as match
+	from CoOcCozerototwo coocco,
+	    OrgClueStCaps ocsc,
+	    OrgPrep op,
+	    Coonetotwo co
+	where FollowsTok(coocco.match, ocsc.match,0,0) and
+	    FollowsTok(ocsc.match,op.match,0,0) and
+	    FollowsTok(op.match,co.match,0,0) and
+	    Not(ContainsRegex(/[\t\r\n]/, CombineSpans(coocco.match,co.match)));
+	     	
+-- R11
+-- Added by Yunyao Li to support organization names such as 'the University of Washington' etc
+-- Yunyao: 05/23/2008 split into two
+
+/* industry type prefix, followed by a preposition, followed by a
+   block of one to three capitalized words. 0 token distance between
+   the components */
+create view OrganizationR11_no_quantifierTemp1 as
+    select OP.match as match, CO.match as block
+    from OrgClueStIndPrefixCaps OP,
+        OrgPrep P, 
+        Coonetothree CO
+    where FollowsTok(OP.match, P.match, 0, 0)
+        and FollowsTok(P.match, CO.match, 0, 0);
+
+/* remove new lines,carriage return characters, as well as the
+   the annotations, where the last part of the combination, namely
+   the blocks of one to three capitalized characters, contain an
+   industry prefix */  
+create view OrganizationR11_no_quantifier as
+    select CombineSpans(O.match, O.block) as match
+    from OrganizationR11_no_quantifierTemp1 O
+    where  -- do not allow new line
+        Not(ContainsRegex(/[\n\r]/, CombineSpans(O.match, O.block)))
+  	    -- Avoid capture partial organization name such as '[Univ. of Michigan College] of Engineering'
+        and Not(ContainsDict('dictionaries/industryType_prefix.dict', O.block));
+    
+-- Tatiana: 28.01.09 added to cover "University of Washington College of Forest Resources"   
+create view OrganizationR11_no_quantifier_long as
+    select CombineSpans(O.match, Org.match) as match
+    from OrganizationR11_no_quantifier O,
+        OrganizationR11_no_quantifier Org
+    where MatchesRegex(/\s/, SpanBetween(O.match, Org.match));
+
+/* extend OrganizationR11_no_quantifier to iclude the preceding blocks
+   of 1 to 3 capitalized words */ 
+create view OrganizationR11_with_quantifier as
+    select CombineSpans(CO.match, O.match) as match	
+    from Coonetothree CO,
+	    OrganizationR11_no_quantifier O
+        where FollowsTok(CO.match, O.match, 0, 0);
+
+create view OrganizationR11_no_the as 
+ 	(select O.match as match from OrganizationR11_no_quantifier O)
+    union all
+	(select O.match as match from OrganizationR11_with_quantifier O)
+    union all
+    (select O.match as match from OrganizationR11_no_quantifier_long O);
+    
+
+--------------------------------------------------------------------------------------------------
+                --Tatiana 30.01.09 added to cover some German Organizations         
+--------------------------------------------------------------------------------------------------
+  	 
+-- German uppercase organization types                                                                                                  
+create view OrgKeywordLu as
+	select R.match as match
+    from RegexTok(/(Amt|Anstalt|Anwaltschaft|Beh(ö|oe)rde|Bund(es)?|Gemeinde|Gemeinschaft|Genossenschaft|Gericht|Gesellschaft|Gewerkschaft|Partei|Rat|Stiftung|Verband|Verein)/,1, Document.text) R;    
+
+-- German compounds, with an organization suffix at the end of the word, e.g. 'Kinderschutzverein'
+create view OrgWithSuffixGE as
+	select R.match as match
+    from RegexTok(/(\p{L}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20})?(akademie(n)?|amt(s)?|anstalt|anwaltschaft|bank|beh[ö|oe]rde|bund(es)?|gemeinde|gemeinschaft|genossenschaft|gericht|gesellschaft|gewerkschaft(s)?|initiative|partei|kasse|LB|rat|stiftung|verband|verbindung|verein)/, 25, Document.text) R;
+
+create view OrgGeSuffix as
+    (select M.match as match from OrgWithSuffixGE M)
+    union all
+    (select M.match as match from OrgKeywordLu M);
+
+-- Fraunhofer-Gesellschaft    
+create view OrgGeSuffixCompoundLeft as
+    select CombineSpans(LeftContextTok(S.match, 2), S.match) as word
+    from OrgGeSuffix S 
+    where MatchesRegex(/([A-Za-z\-]{2,20})+/, LeftContextTok(S.match, 2));
+	
+create view OrgGeSuffixCompoundRight as
+    select CombineSpans(S.match, RightContextTok(S.match, 2)) as word
+    from OrgGeSuffix S 
+    where MatchesRegex(/([A-Za-z\-]{2,20})+/, RightContextTok(S.match, 2));
+
+    
+create view OrgGeSuffixCompound as
+    (select S.word as match from OrgGeSuffixCompoundLeft S)
+    union all
+    (select S.word as match from OrgGeSuffixCompoundRight S); 
+    
+--'Zentrum für ...', 'Union zur ...', 'Akademien der ...'
+create view OrgGermanWithPrep as
+    select R.match as match
+    from Regex(/(Zentrum(s)?|Zentren|Institut(es|s)?|Akademie(n)?|Union|Universit(ä|ae)t(en)?)\s(f(ü|ue)r|zur|zum|der)\s\p{L}{2,30}/, Document.text) R;
+    
+create view OrgGeSuffixAll as
+    (select S.match as match from OrgGeSuffix S)
+    union all
+    (select S.match as match from OrgGeSuffixCompound S)
+    union all
+    (select S.match as match from OrgGermanWithPrep S);
+
+-- filter out the false positives, where bank is part of compound, but
+-- the word has nothing to do with organization, e.g.'eckbank'
+create view OrgWithSuffixBank as
+	select R.match as match
+    from RegexTok(/(\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20})(bank)/, 25, Document.text) R
+    where Not(ContainsDict('dictionaries/de/filterSuffixOrg_german.dict', R.match));    
+
+-- German organization suffix with a preceding specifier, e.g. 'BMW Stiftung'   
+create view SpecOrgKeywordLu as
+    select R.match as match
+    from RegexTok(/(\p{Lu}\p{M}*[\p{L}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,25})?\s(Amt|Anstalt|Anwaltschaft|Beh(ö|oe)rde|Bund(es)?|Gemeinde|Gemeinschaft|Genossenschaft|Gericht|Gesellschaft|Gewerkschaft|Partei|Rat|Servicegesellschaft|Stiftung|Verband)/, 25, Document.text) R;                                                                                                 
+
+-- Historischer Verein fuer Wurttembergische Franken
+create view DerOrgKeywordLu as
+    select R.match as match
+    from RegexTok(/(\p{Lu}\p{M}*[\p{L}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}\s)?(Amt|Anstalt|Anwaltschaft|Beh(ö|oe)rde|Bund(es)?|Gemeinde|Gemeinschaft|Genossenschaft|Gericht|Gesellschaft|Gewerkschaft|Institut(es|s)?|Partei|Rat|Stiftung|Verband)\s(der|für|fuer|fur)(\s\p{Lu}\p{M}*[\p{L}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}){1,2}/, 25, Document.text) R;
+
+--Deutscher Gewerkschafts-Verbund
+create view DeutscheOrgKeywordLu as
+    select CombineSpans(R.match, M.match) as match
+    from RegexTok(/((D|d)eutsche(r|s|n)?)/, 1, Document.text) R,
+          OrgGeSuffixAll M
+    where FollowsTok(R.match, M.match, 0, 0);
+
+
+--Landesbank Baden-Württemberg
+create view OrganizationStateGe as
+    select CombineSpans(OWSG.match, GS.match) as match
+	from  OrgWithSuffixGE OWSG,
+        GEState GS
+	where FollowsTok(OWSG.match, GS.match, 0, 0);
+
+-------------------------------------------------------
+--Karlsruher    ADD Bayersche etc.!!!!!!!!!!!!!!!!!!!!!!!!!!
+create view LocSpecOrgGEWord as
+    select R.match as word
+    from RegexTok(/(\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,30})?(er|(i)?sche(r|n)?)/, 1, Document.text) R;
+
+-- Pull off the prefix and suffix part of words that start with a cardinal direction.
+create view LocSpecOrgGESuffix as
+    select R.match as suffix, LeftContextTok(R.match, 1) as prefix
+    from Regex(/(er|(i)?sche(r|n)?)\Z/, LocSpecOrgGEWord.word) R;
+
+-- Find suffixes that match a "location" dictionary, then join back with the 
+-- set of compound words.
+create view LocSpecOrgGECity1 as
+select S.suffix as suffix, S.prefix as prefix, W.word as wholeword
+    from LocSpecOrgGEWord W, LocSpecOrgGESuffix S
+    where Or(ContainsDict('dictionaries/de/city_german.dict', S.prefix), ContainsDict('dictionaries/de/stateListGe.dict', S.prefix))
+        and Contains(W.word, S.suffix)
+        and Contains(W.word, S.prefix);
+
+-- for the adjectives, formed from location with a slight modification, e.g. 'Reutlingen -> Reutlinger'
+create view LocSpecOrgGECity2 as
+    select S.suffix as suffix, S.prefix as prefix, W.word as wholeword
+    from LocSpecOrgGEWord W, LocSpecOrgGESuffix S
+    where ContainsDict('dictionaries/de/loc_german_adj_stem.dict', S.prefix)
+        and Contains(W.word, S.suffix)
+        and Contains(W.word, S.prefix);
+        
+
+create view LocSpecOrgGECity as
+    (select S.wholeword as wholeword from LocSpecOrgGECity1 S)
+    union all
+    (select S.wholeword as wholeword from LocSpecOrgGECity2 S);
+
+-------------------------------------------------------
+
+-- Reutlinger Kreditbank
+create view SpecGeOrg as
+    select CombineSpans(S.wholeword, O.match) as match
+    from LocSpecOrgGECity S,
+        OrgGeSuffixAll O
+    where FollowsTok(S.wholeword, O.match, 0, 0);
+        
+create view GermanOrg as
+    (select R.match as match from SpecOrgKeywordLu R)
+    union all
+    (select R.match as match from DerOrgKeywordLu R)
+    union all
+    (select R.match as match from DeutscheOrgKeywordLu R)
+    union all
+    (select R.match as match from OrganizationStateGe R)
+    union all
+    (select R.match as match from OrgWithSuffixBank R)
+    union all
+    (select R.match as match from SpecGeOrg R)
+    union all
+    (select R.match as match from OrgGermanWithPrep R);
+   -- union all
+   -- (select R.match as match from OrgGeSuffixAll R);
+    
+--------------------------------------------------------------------------------------------------
+                --Tatiana 20.01.09 added to cover Universität Tübingen, Stadtwerke München etc         
+--------------------------------------------------------------------------------------------------
+-- german_org_city_prefix.dict contains only the organization prefixes, which can be combined
+-- with German cities to form an organization name          
+create view GermanOrgCityPrefix1 as
+    select D.match as match
+	from Dictionary('dictionaries/de/german_org_city_prefix.dict', Document.text) D;
+    
+create view GermanOrgCityPrefixAll as
+    (select O.match as match from GermanOrgCityPrefix1 O)
+    union all
+	(select O.match as match from OrgGeSuffixAll O);
+
+create view OrganizationCity as
+    select CombineSpans(GOCP.match, GC.match) as match
+	from  GermanOrgCityPrefixAll GOCP,
+        GermanCities GC
+	where FollowsTok(GOCP.match, GC.match, 0, 0)
+        and Not(ContainsDict('dictionaries/de/filterOrg_german.dict', GOCP.match));
+        
+--------------------------------------------------------------------------------------------------                                                                                
+
+	
+-- R5, R7, R9, R10, R11
+ 
+create view Org5791011 as 
+    (select R.match as match from CoOcscOpCoOcCoConsolidated R)
+	union all 
+	(select R.match as match from CoOcsic R)
+	union all 
+	(select R.match as match from CoOcssc R)
+	union all 
+	(select R.match as match from CoOcscOpCo R)
+	union all
+	(select R.match as match from OrganizationR11_no_the R)
+	union all
+	(select R.match as match from CoOcsicEx R)
+    union all
+	(select R.match as match from OrganizationCity R)
+    union all
+	(select R.match as match from SpecOrgKeywordLu R);
+
+-- Find initial words 
+create view InitialWord as
+	select R.match as word
+	from RegexTok(/([\p{Upper}]\.\s*){1,5}/, 10, Document.text) R
+	-- added on 04/18/2008
+	where Not(MatchesRegex(/M\.D\./, R.match));
+
+-- Find weak initial words 
+create view WeakInitialWord as
+	select R.match as word
+	from RegexTok(/([\p{Upper}]\.?\s*){1,5}/, 10, Document.text) R
+	-- added on 05/12/2008
+	-- Do not allow weak initial word to be a word longer than three characters
+	where Not(ContainsRegex(/[\p{Upper}]{3}/, R.match));
+	
+-- added 02/08/2008
+create view ExpandedOrg5791011R1 as
+	select CombineSpans(ab.match, org5791011.match) as match
+  	from AllCapsOrg  ab,
+  	  	Org5791011 org5791011
+  	where FollowsTok(ab.match,org5791011.match,0,0) and
+  	  	Not(ContainsRegex(/[\n\r]/, SpanBetween(ab.match,org5791011.match)));
+	
+create view ExpandedOrg5791011R2 as
+	select CombineSpans(ab.word, org5791011.match) as match
+  	from InitialWord  ab,
+  	  	Org5791011 org5791011
+  	where FollowsTok(ab.word,org5791011.match,0,0) and
+  	  	Not(ContainsRegex(/[\n\r]/, SpanBetween(ab.word,org5791011.match)));
+	
+create view ExpandedOrg5791011 as
+	(select O.match as match from  ExpandedOrg5791011R1 O)
+	union all
+	(select O.match as match from  ExpandedOrg5791011R2 O);
+		
+create view TheOrg5791011 as  
+  	select CombineSpans(C.match, org5791011.match) as match
+  	from The  the,
+  	  	CoOc C,
+  	  	Org5791011 org5791011
+    where FollowsTok(the.match,C.match,0,0) and
+  	  	FollowsTok(C.match,org5791011.match,0,0);
+  	  		  	 
+-- Yunyao: added 04/18/2008
+create view ExpandedOrg5791011WithAnd1 as
+	select CombineSpans(C.match, O.match) as match
+	from Coonetothree C,
+		Org5791011 O
+	where FollowsTok(C.match, O.match, 0,1) and
+		MatchesRegex(/\s+[&]\s+/, SpanBetween(C.match, O.match)) and
+		Not(ContainsRegex(/[\t\n\r]/, CombineSpans(C.match, O.match)));
+	
+create view ExpandedOrg5791011WithAnd2 as
+	select CombineSpans(C.match, O.match) as match
+	from AllCapsOrg C,
+		ExpandedOrg5791011WithAnd1 O
+	where FollowsTok(C.match, O.match, 0,0) and
+		Not(ContainsRegex(/[\t\n\r]/, SpanBetween(C.match, O.match)));
+		
+
+create view ExpandedOrg5791011WithAnd3 as
+	select CombineSpans(I.word, O.match) as match
+	from InitialWord I,
+		ExpandedOrg5791011WithAnd1 O
+	where FollowsTok(I.word, O.match, 0,0) and
+		Not(ContainsRegex(/[\t\n\r]/, SpanBetween(I.word, O.match)));
+		
+create view ExpandedOrg5791011WithAnd as
+	(select O.match as match from ExpandedOrg5791011WithAnd1 O)
+	union all
+	(select O.match as match from ExpandedOrg5791011WithAnd2 O)
+	union all
+	(select O.match as match from ExpandedOrg5791011WithAnd3 O);
+    
+                                                                                                   
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Aggregation/Consolidation section <<<<<<<<<<<<<<<<
+-- ===========================================================================
+
+-- Merge all the different rules.
+create view OrgAll1 as
+	(select R.match as org from DotCom R)
+    union all 
+	 (select R.match as org from OrgFull R)
+    union all
+	 (select R.match as org from Org5791011 R)
+    union all
+	 (select R.match as org from TheOrg5791011 R)
+    union all
+	 (select R.match as org from ExpandedOrg5791011 R)
+    union all
+	 (select R.match as org from ExpandedOrg5791011WithAnd R)
+    union all
+     (select R.match as org from OfCoOcsc R)
+    union all 
+	 (select R.match as org from CoOcCozerototwoOcscOpCo R)
+    union all
+     (select R.match as org from GermanOrg R)
+	union all
+	(select R.org as org from divisionsTwo R);
+
+-- remove organizations with new lines     
+create view OrgAll as
+    (select OA1.org as org	 
+	from OrgAll1 OA1
+	where
+		-- do not allow new line
+        Not(ContainsRegex(/[\n\r]/, OA1.org))
+        --and Not(ContainsDict('dictionaries/en/filterOrg_english.dict', OA1.org))
+        --and Not(ContainsDict('dictionaries/de/filterOrg_german.dict', OA1.org))	
+		--and Not(ContainsDict('dictionaries/industryType_prefix.dict',OA1.org))
+	)
+	union all
+    (select R.match as org from OrgFull R);
+	
+-- keep only annotations within sentence boundaries
+create view OrgSentenceOne as                           --- former OrgSentence, remove One and the filtersection below to have previous state
+    (select OA.org as org from OrgAll OA)
+    minus
+    (select OA.org as org	 
+	from SentenceBoundary S, OrgAll OA
+	where Contains(OA.org, S.boundary));
+
+---dictionaries for filter, as without filters are not applied to items in Organization_politics etc. 
+
+create dictionary FilterOrgaEnglishDict 
+    from file 'dictionaries/en/filterOrg_english.dict'
+    with language as 'en';
+	
+create view FilterOrgaEnglish as
+    extract dictionary 'FilterOrgaEnglishDict'
+            on D.text   
+    as match
+    from Document D;
+	
+create dictionary FilterOrgaGermanDict 
+    from file 'dictionaries/de/filterOrg_german.dict'
+    with language as 'de';
+	
+create view FilterOrgaGerman as
+    extract dictionary 'FilterOrgaGermanDict'
+            on D.text   
+    as match
+    from Document D;
+	
+create dictionary FilterOrgaSpanishDict 
+    from file 'dictionaries/es/filterOrg_spanish.dict'
+    with language as 'es';
+
+create view FilterOrgaSpanish as
+    extract dictionary 'FilterOrgaSpanishDict'
+            on D.text   
+    as match
+    from Document D;
+	
+create dictionary FilterOrgaFrenchDict 
+    from file 'dictionaries/fr/filterOrg_french.dict'
+    with language as 'fr';
+
+create view FilterOrgaFrench as
+    extract dictionary 'FilterOrgaFrenchDict'
+            on D.text   
+    as match
+    from Document D;
+
+create view FilterOrga as
+    (select D.match as match
+        from FilterOrgaEnglish D)
+    union all
+    (select D.match as match
+        from FilterOrgaGerman D)
+    union all
+    (select D.match as match
+        from FilterOrgaSpanish D)
+	union all
+    (select D.match as match
+        from FilterOrgaFrench D);
+
+---		apply filter
+	
+create view OrgSentence as
+    (select OA.org as org from OrgSentenceOne OA)
+    minus
+    (select D.match as org from FilterOrga D);

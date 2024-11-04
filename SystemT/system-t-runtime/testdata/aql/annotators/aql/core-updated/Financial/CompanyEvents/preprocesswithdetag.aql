@@ -1,0 +1,268 @@
+-- ================ Detect short headlines =====================
+
+-- Remove information about the source website from the title
+-- For now we remove anything before the '-' character
+/*
+create view Title as
+(
+	select Chomp(T1.title) as title
+	from 
+		(	
+		extract regex /[^-]*-(.+)/ 
+			on T.match
+			return 
+				group 1 as title
+		from AllTitle T
+		) T1
+)
+union all
+(
+	select T.match as title
+	from AllTitle T
+	where Not(ContainsRegex(/-/, T.match))
+);
+*/
+
+--HACK - identify lists of short events from StreetInsider.com
+create view ShortAnnouncementListItem as
+extract regex /^-\s([^\n]*)\n/ 
+	with flags 'MULTILINE'
+	on B.match
+	return 
+		group 0 as item
+from Body B;
+
+
+-- the titles and short announcements are treated as short text. 
+-- a plain text document less than 200 characters, is also treated as short text
+create view ShortTextTemp as
+select T.match as text
+from
+(
+	( select T.match as match from Title T )
+	union all
+	( select L.match as match from ListItem L )
+--	union all
+--	( select L.item as match from ShortAnnouncementListItem L );
+	union all
+	( select D.text as match from Doc D where GreaterThan(200, GetLength(D.text)))
+) T
+consolidate on T.match using 'NotContainedWithin';
+
+
+--HACK: remove the string before the first '-' in the StreetInsider.com title
+create view ShortText as
+(
+	select Chomp(T.match) as match
+	from 
+		(	
+		extract regex /\A[^-]*-[ ]+(.+)/ 
+			on T.text
+			return 
+				group 1 as match
+		from ShortTextTemp T
+		) T
+)
+union all
+(
+	select T.text as match
+	from ShortTextTemp T
+	where Not(ContainsRegex(/\A[^-]*-[ ]+/, T.text))
+);
+
+
+
+-- ================ Detect body of text =====================
+
+
+-- the body of the html document is treated as long text. 
+-- a plain text document longer than 200 characters, is also treated as long text
+create view MainContent as
+select T.match as match
+from
+(
+	( select B.match as match from Body B )
+	union all
+	( select D.text as match from Doc D where GreaterThan(GetLength(D.text), 200))
+) T
+consolidate on T.match using 'NotContainedWithin';
+
+create view SentenceBoundaryInitial as
+extract 
+        C.match as text,
+        -- added "..." boundary for cases where a white-space is not present
+        regex /(([\.\?!]+\s?)|(\n\s*\n))/ on C.match as boundary
+        from MainContent C
+		-- Filter the candidate boundaries.
+		having Not(ContainsDict('abbreviation.dict', 
+            CombineSpans(LeftContextTok(boundary, 1), boundary)));
+
+
+create view SentenceInitial as
+extract 
+    split using S.boundary 
+        retain right split point
+        on S.text
+        as match
+from SentenceBoundaryInitial S;
+
+
+-- Find additional sentence boundaries
+
+-- Find list item boundaries: all </li> tags
+create view SentenceBoundaryLI as 
+select RightContext(L.match, 0) as match
+from ListItem L;
+
+
+-- Find informal list item boundaries: all <br> tags followed by '-'
+create view SentenceBoundaryBrDash as 
+select CombineSpans(B.br, B.dash) as match
+from 
+(
+	extract B.br as br, 
+			regex /-/ on B.rc as dash
+	from 
+	(
+		select B.match as br, RightContextTok(B.match, 1) as rc
+		from BR B
+	) B
+) B;
+
+
+-- Find all sentences containing the additional boundaries
+create view SentenceBoundaryAdditional as
+select B.match as boundary, S.match as text
+from SentenceInitial S, 
+	(
+		(select B.match as match from SentenceBoundaryLI B)
+		union all
+		(select B.match as match from SentenceBoundaryBrDash B)
+	) B
+where Contains(S.match, B.match);
+
+create view SentenceBoundaryAll as
+( select S.boundary as boundary from SentenceBoundaryInitial S )
+union all
+( select S.boundary as boundary from SentenceBoundaryAdditional S );
+
+
+--Find additional sentences
+create view SentenceAdditional as
+extract 
+ split using S.boundary 
+        retain right split point
+		on S.text
+		as match
+from SentenceBoundaryAdditional S;
+		
+-- All sentences
+create view SentenceAll as
+(select S.match as match from SentenceInitial S)
+union all
+(select S.match as match from SentenceAdditional S);
+	
+	
+create view LongTextCandidate as
+select Chomp(S.match) as match
+from SentenceAll S
+--to avoid complete sentences (begin,end) to disappear because of the right split point being an empty span (i.e., (end,end)).
+where Not(Equals(GetText(S.match), ''))
+-- consolidation removes sentences containing additional boundaries while retaining their splits
+consolidate on S.match using 'NotContainedWithin';
+
+--indentify long sentences containing short text - to filter out, to avoid incorrect matches on title
+create view LongTextOverlapShort as
+select L.match as match
+from LongTextCandidate L, ShortText S
+where Contains(L.match, S.match);
+
+create view LongText as
+( select L.match as match from LongTextCandidate L )
+minus
+( select L.match as match from LongTextOverlapShort L );
+
+
+/*
+create view ShortTextOverlapLong as
+select S.match as match
+from LongTextCandidate L, ShortText S
+where Contains(S.match, L.match) and
+	  Not(Equals(GetText(S.match), GetText(L.match)));
+*/
+
+
+/*
+create view SentenceEndingInDot as 
+select S.sentence as match
+from  SentenceTmp S;
+--where ContainsRegex(/\.\s*\Z/,S.sentence);
+*/
+
+
+
+
+-- find sentences that might be a title (i.e., are preceded and followed by double new line)
+create view SolitarySentence as
+select L.match as match
+from LongText L
+where ContainsRegex(/\s*\n\s*\n$/, LeftContext(L.match,20)) and
+      ContainsRegex(/^\s*\n\s*\n/, RightContext(L.match,20));
+
+-- find sentences that might be part of a bigger paragraph
+create view ParagraphSentence as
+(select L.match as match from LongText L )
+minus
+(select S.match as match from SolitarySentence S);
+
+-- find paragraphs of text (with 2 or more sentences)
+create view ParagraphCandidate as
+select P.match as match
+from
+(
+	extract blocks
+    	with count between 2 and 100
+    	and separation 0 tokens
+    	on L.match as match
+	from ParagraphSentence L
+) P
+consolidate on P.match;
+
+create view Paragraph as
+
+	extract 
+		   split using P.boundary 
+		       on P.text
+		       as match
+	from 
+	(
+		extract 
+	      P.match as text,
+	      regex /(\n\s*\n)/ on P.match as boundary
+       from ParagraphSentence P
+	) P;
+
+
+
+/*
+output view Title;
+output view Body;
+output view ListItem;
+output view BR;
+output view ShortTextTemp;
+output view ShortText;
+output view MainContent;
+output view SentenceInitial;
+output view SentenceBoundaryBrDash;
+output view SentenceBoundaryAdditional;
+output view SentenceBoundaryAll;
+output view SentenceAdditional;
+output view SentenceAll;
+output view LongTextCandidate;
+output view LongText;
+output view LongTextOverlapShort;
+--output view ShortTextOverlapLong;
+output view ParagraphCandidate;
+output view Paragraph;
+output view SolitarySentence;
+*/

@@ -1,0 +1,107 @@
+
+-- Customization 1: Nationality + Org Governmental = Organization
+create view NationalityAndOrgGov as
+extract 
+	pattern <N.match> <O.org> as org
+from Nationalities N, OrgSentence O
+having Not(ContainsRegex(/[\n\r\t]{2,}/, org));
+
+--output view NationalityAndOrgGov;
+
+-- Customization 2: Location/Nationality + 'Stock/Securities Exchange' = Organization
+create dictionary Exchange as(
+	'Exchange', 'Stock Exchange', 'Securities Exchange', 'Monetary Exchange', 'Petroleum Exchange',
+	'Financial Futures Exchange', 'Securities & Derivatives Exchange', 'Metal Exchange',
+	'Commodities', 'Secondary Market', 'Securities', 'Futures and Options Exchange'
+);
+
+create view StockEx as
+extract dictionary 'Exchange' 
+	on D.text as match 
+from Doc D
+having MatchesRegex(/\p{Lu}\p{M}*.+/, SubSpanTok(match,0,1));
+
+create view NationalityStockEx as
+select CombineSpans(N.match, S.match)  as org
+from Nationalities N, StockEx S
+where FollowsTok(N.match, S.match, 0, 0)
+  and Not(ContainsRegex(/[\n\r\t]{2,}/, SpanBetween(N.match, S.match)));
+
+
+-- Customization 3: the + NewspaperSuffix = ORG; NewspaperSuffix + article/column/editorial/reports... = ORG
+create dictionary OrgNewspaperAdditional as(
+	'Economist'
+);
+
+
+create view NewspaperAbbrv as
+(select * from OrgNewspaperSuffix)
+union all
+(extract dictionary 'OrgNewspaperAdditional' with flags 'Exact' on D.text as match from Doc D);
+
+
+create view NewspaperClue1 as
+extract pattern ('The'|'the'|'printed') (<N.match>)
+	return group 2 as org
+	with inline_match on Doc.text
+from NewspaperAbbrv N;
+
+create view NewspaperClue2 as
+extract pattern (<N.match>) ('article'|'column'|'editorial'|'reports'|'reported'|'said'|'quoted')
+	return group 1 as org
+	with inline_match on Doc.text
+from NewspaperAbbrv N;
+
+create view NewspaperShortForm as
+(select * from NewspaperClue1)
+union all
+( select * from NewspaperClue2);	
+
+
+create dictionary SportsRCFilterClueDict as(
+	'Cup'
+);
+
+-- Customization 4: general sports orgs
+create view OrgSportsGeneral as
+extract 
+	    dictionary 'orgs/conll2003/sports/general_sports_orgs.dict'
+        on D.text as org
+from Doc D
+having Not(MatchesDict('SportsRCFilterClueDict', RightContextTok(org,1)));
+
+-- Customization 5: add missing entries
+create view OrgCoNLL2003Partial as
+	extract
+		dictionaries 'orgs/conll2003/conll2003PartialOrganization.dict'
+		with flags 'Exact'
+		on D.text
+		as org
+		from Doc D;	
+		
+-- Customization 6: add missing entries
+create view OrgCoNLL2003Missing as
+	extract
+		dictionaries 'orgs/conll2003/conll2003MissingOrganizationCleansed.dict'
+		and  'orgs/conll2003/OrgNamesStrict.dict'
+		with flags 'Exact'
+		on D.text
+		as org
+		from Doc D;	
+		
+create view OrgCoNLL2003MissingManual as
+	extract
+		dictionaries 'orgs/conll2003/conll2003MissingOrganization_manual.dict'
+		on D.text
+		as org
+		from Doc D
+		having MatchesRegex(/\p{Lu}\p{M}*.*/, org);	
+		
+
+-- Reuters Toronto Bureau
+create view ReutersBureau as 
+extract pattern 'Reuters' <Token> ('Bureau'|'Burea') as org
+	with inline_match on Doc.text
+from Doc D;
+
+--output view ReutersBureau;

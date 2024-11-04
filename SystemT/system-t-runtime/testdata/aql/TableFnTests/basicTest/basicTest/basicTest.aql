@@ -1,0 +1,53 @@
+module basicTest;
+
+require document with columns text Text;
+
+-- A simple test of table functions; checks whether table functions work at
+-- all.
+
+-- Declare a simple table function
+create function MyTableFunc( intArg Integer )
+return table( stringVal Text, realVal Float )
+external_name 
+    -- Path relative to module root; udfjars is inside <project root>/testdata
+    '../../../../udfjars/tableFnTestsUDFs.jar:com.ibm.test.udfs.BasicTableFunc!eval'
+language java
+deterministic
+called on null input;
+
+-- Access the table function via select *
+create view TabFuncOutput as
+select * from MyTableFunc(3);
+
+output view TabFuncOutput;
+
+-- Access via selecting a particular column
+create view TabFuncOutput2 as
+select F.stringVal as strval from MyTableFunc(4) F;
+
+output view TabFuncOutput2;
+
+-- Pass through an expression to make sure that type inference is working
+create view TabFuncOutput3 as
+select 
+    F.stringVal as inVal,
+    case 
+        when Equals('Two', GetText(F.stringVal)) then 'Yo'
+        else 'Moo'
+    as outVal
+from MyTableFunc(2) F;
+
+output view TabFuncOutput3;
+
+
+-- Call the table function with a scalar function in the arguments list.
+create view TabFuncOutput4 as
+select *
+from MyTableFunc(
+    case 
+        when Equals('Hello', 'World') then 3
+        else 4
+    );
+
+output view TabFuncOutput4;
+

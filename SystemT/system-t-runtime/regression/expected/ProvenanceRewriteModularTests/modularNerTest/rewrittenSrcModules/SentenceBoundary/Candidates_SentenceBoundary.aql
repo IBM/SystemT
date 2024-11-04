@@ -1,0 +1,248 @@
+module SentenceBoundary;
+
+
+import view DivContent from module InputDocumentProcessor as DivContent
+;
+
+
+import view SpanContent from module InputDocumentProcessor as SpanContent
+;
+
+
+import view AnchorContent from module InputDocumentProcessor as AnchorContent
+;
+
+
+import view ParagraphContent from module InputDocumentProcessor as ParagraphContent
+;
+
+
+import dictionary PrepositionsInEnglish from module Dictionaries as PrepositionsInEnglish
+;
+
+
+import dictionary DeterminersInEnglish from module Dictionaries as DeterminersInEnglish
+;
+
+
+import dictionary TokensFoundInTitles from module Dictionaries as TokensFoundInTitles
+;
+
+
+create view FirstCapsToken as
+  select  T.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as CapsToken_____sep_____T____id
+  from  CapsToken T
+  where ContainsRegex(/[\n\r]/, LeftContextTok(T.match, 1));
+
+output view FirstCapsToken;
+
+create view LastCapsToken as
+  select  T.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as CapsToken_____sep_____T____id
+  from  CapsToken T
+  where ContainsRegex(/[\n\r]/, RightContextTok(T.match, 1));
+
+output view LastCapsToken;
+
+create view HeadlineCandSingleToken as
+  select  T.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as FirstCapsToken_____sep_____T____id
+  from  FirstCapsToken T
+  where ContainsRegex(/[\n\r]/, RightContextTok(T.match, 1));
+
+output view HeadlineCandSingleToken;
+
+create view HeadlineCandMultiToken as
+  select  CombineSpans(F.match, L.match) as headline,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          F.__auto__id as FirstCapsToken_____sep_____F____id,
+          L.__auto__id as LastCapsToken_____sep_____L____id
+  from  FirstCapsToken F,
+        LastCapsToken L
+  where FollowsTok(F.match, L.match, 0, 30)
+     and Not(ContainsRegex(/[\n\r]/, CombineSpans(F.match, L.match)));
+
+output view HeadlineCandMultiToken;
+
+create view HeadlineCand as
+  (select  Op.headline as headline,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__33__TempOp__0 Op)
+  union all
+  (select  Op.headline as headline,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__33__TempOp__1 Op);
+
+output view HeadlineCand;
+
+create view HeadlineInvalid as
+  extract H.headline as headline,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    H.__auto__id as HeadlineCand_____sep_____H____id,
+    regex /\p{Ll}\p{M}*.*/
+    with flags 'DOTALL'
+    on between 1 and 1 tokens in H.headline
+    return group 0 as ltoken
+  from HeadlineCand H
+  having Not(MatchesDict('PrepositionsInEnglish', ltoken))
+     and Not(MatchesDict('DeterminersInEnglish', ltoken))
+     and Not(MatchesDict('TokensFoundInTitles', ltoken))
+  consolidate on headline using 'ContainedWithin';
+
+output view HeadlineInvalid;
+
+create view HeadlineValid as
+  select  Op.headline as headline,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__34__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__34__TempOp__1 Op,
+        __Minus__34__Temp __t
+  where Equals(Op.headline, __t.headline);
+
+output view HeadlineValid;
+
+create view HeadlineMixedCaps as
+  select  LeftContext(H.headline, 1) as lb,
+          RightContext(H.headline, 1) as rb,
+          H.headline as headline,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          H.__auto__id as HeadlineValid_____sep_____H____id
+  from  HeadlineValid H;
+
+output view HeadlineMixedCaps;
+
+create view HTMLTagBoundary as
+  (select  Op.lb as lb,
+            Op.rb as rb,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__35__TempOp__0 Op)
+  union all
+  (select  Op.lb as lb,
+            Op.rb as rb,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__35__TempOp__1 Op)
+  union all
+  (select  Op.lb as lb,
+            Op.rb as rb,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__35__TempOp__2 Op)
+  union all
+  (select  Op.lb as lb,
+            Op.rb as rb,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__35__TempOp__3 Op);
+
+output view HTMLTagBoundary;
+
+create view __Minus__34__Temp as
+  select  __t.headline as headline
+  from  
+    ((select  Op.headline as headline
+      from  __Minus__34__TempOp__1 Op)
+    minus
+    (select  Op.headline as headline
+      from  __Minus__34__TempOp__2 Op)
+    ) __t
+  group by __t.headline;
+
+output view __Minus__34__Temp;
+
+create view __Minus__34__TempOp__1 as
+  select  H.headline as headline,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          H.__auto__id as HeadlineCand_____sep_____H____id
+  from  HeadlineCand H;
+
+output view __Minus__34__TempOp__1;
+
+create view __Minus__34__TempOp__2 as
+  select  H.headline as headline,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          H.__auto__id as HeadlineInvalid_____sep_____H____id
+  from  HeadlineInvalid H;
+
+output view __Minus__34__TempOp__2;
+
+create view __Union__33__TempOp__0 as
+  select  H.match as headline,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          H.__auto__id as HeadlineCandSingleToken_____sep_____H____id
+  from  HeadlineCandSingleToken H;
+
+output view __Union__33__TempOp__0;
+
+create view __Union__33__TempOp__1 as
+  select  H.headline as headline,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          H.__auto__id as HeadlineCandMultiToken_____sep_____H____id
+  from  HeadlineCandMultiToken H;
+
+output view __Union__33__TempOp__1;
+
+create view __Union__35__TempOp__0 as
+  select  LeftContext(T.match, 0) as lb,
+          RightContext(T.match, 0) as rb,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivContent_____sep_____T____id
+  from  DivContent T;
+
+output view __Union__35__TempOp__0;
+
+create view __Union__35__TempOp__1 as
+  select  LeftContext(T.match, 0) as lb,
+          RightContext(T.match, 0) as rb,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as SpanContent_____sep_____T____id
+  from  SpanContent T;
+
+output view __Union__35__TempOp__1;
+
+create view __Union__35__TempOp__2 as
+  select  LeftContext(T.match, 0) as lb,
+          RightContext(T.match, 0) as rb,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as AnchorContent_____sep_____T____id
+  from  AnchorContent T;
+
+output view __Union__35__TempOp__2;
+
+create view __Union__35__TempOp__3 as
+  select  LeftContext(T.match, 0) as lb,
+          RightContext(T.match, 0) as rb,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as ParagraphContent_____sep_____T____id
+  from  ParagraphContent T;
+
+output view __Union__35__TempOp__3;
+

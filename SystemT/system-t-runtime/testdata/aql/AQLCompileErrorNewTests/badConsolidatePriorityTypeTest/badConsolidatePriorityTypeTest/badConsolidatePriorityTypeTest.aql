@@ -1,0 +1,78 @@
+module badConsolidatePriorityTypeTest;
+
+create view ViewFrom as 
+select D.text, 'a' as A, Contains('a','b') as B 
+--on D.text 
+from Document D;
+
+create view ConsolidateBadPriorType as
+  select A.A
+  from ViewFrom A
+  consolidate on A.A
+  using 'LeftToRight' with priority from A.B;
+  
+create view ConsolidateSelectBadPrior as
+  select A.B
+  from ViewFrom A
+  consolidate on A.B
+  using 'MyOrder';
+  
+create view ConsolidateBadPriorPolicy as
+ select A.A
+ from ViewFrom A
+ consolidate on A.A
+ using 'ContainedWithin' with priority from A.A;
+  
+create view ConsolidateExtractBadPriorType as 
+ extract D.text as documentText,
+  Contains ('a','b') as B,
+  regex /[A-Z]/ on D.text as Cap 
+   from Document D
+  consolidate on documentText
+  using 'LeftToRight' with priority from B;  
+
+create view ConsolidateExtractPatBadPriorType as 
+ extract 
+    IsNull(VF.A) as aBool,
+   pattern /[A-Z]/ <VF.A> as pat
+   from ViewFrom VF
+  consolidate on pat
+  using 'LeftToRight' with priority from aBool;  
+
+create view ConsolidatePriorBadFunc as 
+  select A.A
+  from ViewFrom A
+  consolidate on A.A
+  using 'LeftToRight' with priority from IsNull(A.A);
+
+create view ConsolidateExtractBadPriorFunc as 
+ extract D.text as documentText,
+  Contains ('a','b') as B,
+  regex /[A-Z]/ on D.text as Cap 
+   from Document D
+  consolidate on documentText
+  using 'LeftToRight' with priority from IsNull(B);  
+  
+ create view ConsolidateExtractPatBadPriorFunc as 
+ extract pattern
+   /[A-Z]/ <VF.A> as pat
+   from ViewFrom VF
+  consolidate on pat
+  using 'LeftToRight' with priority from IsNull(pat);  
+  
+  create view ConsolidateExtractPatBadPriorCol as 
+ extract pattern
+   /[A-Z]/ <VF.A> as pat
+   from ViewFrom VF
+  consolidate on pat
+  using 'LeftToRight' with priority from IsNull(VF.A);  
+
+output view ConsolidateBadPriorType;
+output view ConsolidateSelectBadPrior;
+output view ConsolidateBadPriorPolicy;
+output view ConsolidateExtractBadPriorType;
+output view ConsolidatePriorBadFunc;
+output view ConsolidateExtractBadPriorFunc;
+output view ConsolidateExtractPatBadPriorType;
+output view ConsolidateExtractPatBadPriorFunc;
+output view ConsolidateExtractPatBadPriorCol;

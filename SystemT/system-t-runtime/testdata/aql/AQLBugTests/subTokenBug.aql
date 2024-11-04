@@ -1,0 +1,25 @@
+-----------------------------------------------------------------------------
+-- subTokenBug.aql
+--
+-- Test case for bug #???: Extraction operations within a token can cause a
+-- runtime exception
+-----------------------------------------------------------------------------
+require document with columns text Text;
+
+
+-- Find all the tokens in the document.
+-- Not a recommended thing to do in general, but it reproduces the bug.
+-- Laura: replaced Token view name with TokenView, as "Token" is now 
+-- a reserved word for token gaps in sequence patterns
+create view TokenView as
+extract regex /.*/ on 1 token in D.text as tok
+from Document D;
+
+output view TokenView;
+
+-- Do a regex match on token boundaries over the resulting tokens.
+create view SubToken as
+extract regex /./ on 1 token in T.tok as char
+from TokenView T;
+
+output view SubToken;

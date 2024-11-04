@@ -1,0 +1,128 @@
+--    <mi category="Private" value="dict;;${0.str}"><w id="0" category=".email.private"/></mi>
+create view PrivateDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/private/email.private.dict', Document.text) D;	
+
+
+create view StrongPrivateDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/private/email.private.dict.strong', Document.text) D;	
+
+
+create view PrivateObjectDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/private/objects.dict', Document.text) D;	
+
+create view PrivateObjectQualifierDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/private/objectQualifier.dict', Document.text) D;	
+
+
+
+create view PrivateSportsDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/private/sports.dict', Document.text) D;	
+
+
+create view PrivateMatchDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/private/match.dict', Document.text) D;	
+
+
+
+create view SlangDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/private/slang.dict', Document.text) D;	
+
+
+
+create view NegativeEvidenceDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/private/negativeEvidence.dict', Document.text) D;	
+
+-- "my TV", "watch TV", "our honeymoon", "have for dinner"...
+create view Private1 as
+	select
+ 		CombineSpans(poqd.match, pod.match) as match
+	from
+		PrivateObjectDict pod,
+		PrivateObjectQualifierDict poqd
+ 	where  
+ 		FollowsTok(poqd.match, pod.match, 0, 3);
+
+
+-- "my TV", "watch TV", "our honeymoon"
+create view Private2 as
+	select
+ 		CombineSpans(psd.match, pmd.match) as match
+	from
+		PrivateSportsDict psd,
+		PrivateMatchDict pmd
+ 	where  
+ 		FollowsTok(psd.match, pmd.match, 0, 3);
+
+
+
+
+-- "cute photographer", "sleek camera"...
+create view Private3 as
+	select
+ 		CombineSpans(poqd.match, pod.match) as match
+	from
+		PrivateObjectDict pod,
+		AdjDict poqd
+ 	where  
+ 		FollowsTok(poqd.match, pod.match, 0, 3);
+
+
+
+-- "More than one slang words
+create view Private4 as
+	select
+ 		CombineSpans(slang1.match, slang2.match) as match
+	from
+		SlangDict slang1,
+		SlangDict slang2
+ 	where  
+ 		FollowsTok(slang1.match, slang2.match, 0, 5);
+
+
+
+create view PrivateIndividualAll as 
+     (select R.match as match from Private1 R)
+     union all
+     (select R.match as match from Private2 R)
+     union all
+     (select R.match as match from Private3 R)
+     union all
+     (select R.match as match from Private4 R)
+     union all
+     (select R.match as match from PrivateDict R);
+
+
+create view PrivateCombinedRaw as
+	(select B.block as match from Block(500, 4, PrivateIndividualAll.match) B)
+	union all
+     	(select R.match as match from StrongPrivateDict R);
+
+create view PrivateAll as 
+	(select PrivateCombinedRaw.match as match from PrivateCombinedRaw) 
+	minus 
+	(select NegativeEvidenceDict.match as match from NegativeEvidenceDict);
+

@@ -1,0 +1,180 @@
+module DateTime;
+
+
+import view Dates from module Date as Dates
+;
+
+
+import view Times from module Time as Times
+;
+
+
+require document with columns
+  text Text;
+
+create view DateTime1 as
+  select  CombineSpans(D.match, T.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as Dates_____sep_____D____id,
+          T.__auto__id as Times_____sep_____T____id
+  from  Dates D,
+        Times T
+  where FollowsTok(D.match, T.match, 0, 0);
+
+output view DateTime1;
+
+create view DateTimeAll as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__99__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__99__TempOp__1 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__99__TempOp__2 Op);
+
+output view DateTimeAll;
+
+create view DateTimeCandidates as
+  select  __t2.match as match,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__100__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__100__Temp__1 __t1,
+        __Consolidate__100__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.match;
+
+output view DateTimeCandidates;
+
+create view DateTimeMerged as
+  select  CombineSpans(D1.match, D2.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D1.__auto__id as DateTimeCandidates_____sep_____D1____id,
+          D2.__auto__id as DateTimeCandidates_____sep_____D2____id
+  from  DateTimeCandidates D1,
+        DateTimeCandidates D2
+  where Overlaps(D1.match, D2.match)
+     and GreaterThan(GetEnd(D2.match), GetEnd(D1.match));
+
+output view DateTimeMerged;
+
+create view DateTimeMergedAll as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__101__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__101__TempOp__1 Op);
+
+output view DateTimeMergedAll;
+
+create view DateTimes as
+  select  __t2.match as match,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__102__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__102__Temp__1 __t1,
+        __Consolidate__102__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.match;
+
+output view DateTimes;
+
+create view __Consolidate__100__Temp__1 as
+  select  DT.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          DT.__auto__id as DateTimeAll_____sep_____DT____id,
+          DT.match as __consolidate__target
+  from  DateTimeAll DT;
+
+output view __Consolidate__100__Temp__1;
+
+create view __Consolidate__100__Temp__2 as
+  select  __t1.match as match,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__100__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__100__Temp__2;
+
+create view __Consolidate__102__Temp__1 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as DateTimeMergedAll_____sep_____D____id,
+          D.match as __consolidate__target
+  from  DateTimeMergedAll D;
+
+output view __Consolidate__102__Temp__1;
+
+create view __Consolidate__102__Temp__2 as
+  select  __t1.match as match,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__102__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__102__Temp__2;
+
+create view __Union__101__TempOp__0 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as DateTimeCandidates_____sep_____D____id
+  from  DateTimeCandidates D;
+
+output view __Union__101__TempOp__0;
+
+create view __Union__101__TempOp__1 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as DateTimeMerged_____sep_____D____id
+  from  DateTimeMerged D;
+
+output view __Union__101__TempOp__1;
+
+create view __Union__99__TempOp__0 as
+  select  DT.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          DT.__auto__id as DateTime1_____sep_____DT____id
+  from  DateTime1 DT;
+
+output view __Union__99__TempOp__0;
+
+create view __Union__99__TempOp__1 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as Dates_____sep_____D____id
+  from  Dates D;
+
+output view __Union__99__TempOp__1;
+
+create view __Union__99__TempOp__2 as
+  select  T.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as Times_____sep_____T____id
+  from  Times T;
+
+output view __Union__99__TempOp__2;
+

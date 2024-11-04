@@ -1,0 +1,371 @@
+module travel;
+
+import table Loc_AliasToNormalized_Countries from module geographicExtractorText as Loc_AliasToNormalized_Countries;
+import table Loc_CountryToISO from module geographicExtractorText as Loc_CountryToISO;
+
+---- pull in the travel_inputView
+---- no mention of Document should happen.
+--include 'jpmc/travel/travelTextInputView.aql';
+--include 'jpmc/travel/travelShared.aql';
+--include 'jpmc/travel/indirectReference.aql';
+--
+---- prelinaries done
+--include 'jpmc/travel/travelTextOntrip.aql';
+--include 'jpmc/travel/travelTextIntent.aql';
+--include 'jpmc/travel/travelTextWishful.aql';
+--include 'jpmc/travel/travelTextPast.aql';
+
+create dictionary travel_pastclue as 
+('went');
+
+
+create view travel_ontrip_output_intent as
+select T.text as text,
+T.keyPhrase as keyPhrase from
+travel_ontrip_output_maybeintent T, travel_intent_both I
+where Overlaps(T.text,I.text);
+
+create view travel_ontrip_output_nointent_tmp as
+	(select A.text from travel_ontrip_output_maybeintent A)
+	minus
+	(select B.text from travel_ontrip_output_intent B);
+
+
+create view travel_ontrip_output_nointent as
+	(select A.text from travel_ontrip_output_nointent A)
+	minus 
+	(select C.text from travel_ontrip_output_maybeintent_haswant C);
+
+
+create view travel_ontrip_output_postfilter as
+select A.text as text,
+	B.keyPhrase as keyPhrase,
+	B.rule as rule from
+travel_ontrip_output_maybeintent B, travel_ontrip_output_nointent A,travel_I_present I
+where And(Overlaps(A.text,B.keyPhrase),
+	Or(FollowsTok(I.firstPerson,B.keyPhrase,0,0), ContainsDict('travel_firstPerson_pronoun_dict',B.keyPhrase))) and
+	Not(ContainsDict('travel_wishful_dict',LeftContext(B.keyPhrase, 140))) and
+	Not(ContainsDict('travel_negation_dict',LeftContext(B.keyPhrase, 140)))
+consolidate on B.keyPhrase;
+
+create view travel_ontrip_output_preConsol as 
+(select * from travel_ontrip_output_postfilter)
+union all
+(select A.text as text,
+	B.keyPhrase as keyPhrase,
+	B.rule as rule
+from travel_ontrip_prefiltered B, travel_inputView A 
+	where Contains(A.text, B.keyPhrase))
+;
+
+create view  travel_ontrip_output as
+select A.* from travel_ontrip_output_preConsol A
+consolidate on A.text;
+
+
+create view travel_want_output_all as
+(select E.keyPhrase as keyPhrase  from  travel_tripto E)
+union all
+(select F.keyPhrase as keyPhrase from travel_mytrip F)
+union all
+(select G.keyPhrase as keyPhrase from travel_other G)
+union all
+(select H.keyPhrase as keyPhrase from travel_going_vacation_want H)
+union all
+(select I.keyPhrase as keyPhrase from travel_want_traveldesire I)
+union all
+(select J.keyPhrase as keyPhrase from travel_want_travel_dest J)
+;
+--output view travel_want_output_all;
+--output view travel_going_vacation_want;
+
+
+
+/*
+create view travel_want_output_debug as
+select I.text as text,
+	A.keyPhrase as keyPhrase,
+	F.firstPerson as pronoun,
+	W.wishPhrase as wishPhrase,
+	ContainsDict('travel_first_person_pos_dict',W.wishPhrase) as fpWishPhrase,
+	FollowsTok(F.firstPerson,A.keyPhrase,0,20) as firstPersonPronoun,
+	Overlaps( W.wishPhrase,A.keyPhrase) as overlapsPhrases,
+	FollowsTok(W.wishPhrase,A.keyPhrase,0,20) as wishKey,
+	Not(ContainsDict('travel_liveNotTravel_dict',LeftContext(A.keyPhrase,140))) as liveNotTravel
+	
+	 from travel_want_output_all A, travel_inputView I, travel_I_all F, travel_wishful_all W;
+--output view travel_want_output_debug;
+*/
+
+-- ecxlude "Need to loose weight before I go on vacation. Like pronto"
+create dictionary travel_notwant_dict as 
+('before');
+
+
+create view travel_want_output_prefilter as
+select 
+	CombineSpans(W.wishPhrase,A.keyPhrase) as keyPhrase,
+	W.wishPhrase as wishPhrase,
+	A.keyPhrase as travelPhrase
+	from travel_want_output_all A, travel_wishful_all W
+where
+	Or(FollowsTok(W.wishPhrase,A.keyPhrase,0,20),
+		Overlaps(W.wishPhrase,A.keyPhrase));
+-- consolidate?
+		
+create view travel_want_output as
+	select I.text as text,
+		O.keyPhrase as keyPhrase  	
+/*	,  Or(ContainsDict('travel_my_dict',O.keyPhrase),
+			   FollowsTok(F.firstPerson,O.keyPhrase,0,10)) as firstPerson
+	,  Not(ContainsDict('travel_liveNotTravel_dict',LeftContext(O.keyPhrase,140))) as travelNotLife
+	, Not(ContainsDict('travel_negation_dict',LeftContextTok(O.wishPhrase,10))) as negation
+	,  Not(ContainsDict('travel_notwant_dict',O.keyPhrase)) as before */
+	 from travel_want_output_prefilter O,  travel_inputView I, travel_I_all F
+where 
+	-- check for author-is travellers
+	Or(ContainsDict('travel_my_dict',O.keyPhrase),
+			   FollowsTok(F.firstPerson,O.keyPhrase,0,10)) and
+	-- exclude "lived in", "moved"
+	Not(ContainsDict('travel_liveNotTravel_dict',LeftContext(O.keyPhrase,140))) and 
+	-- exclude negations
+	Not(ContainsDict('travel_negation_dict',LeftContextTok(O.wishPhrase,10))) and
+	-- exclude "before I go to"
+	Not(ContainsDict('travel_notwant_dict',O.keyPhrase))
+	
+consolidate on I.text;
+
+--output view travel_want_output;
+
+-- Now deal with the travel_wishful_maybeintent view
+create view travel_wishful_notIntent as 
+(select I.text from travel_wishful_maybeintent A, travel_inputView I where
+	Overlaps(I.text, A.keyPhrase))
+minus 
+(select I.text from travel_intent_both I);
+
+create view travel_want_remove_intent as 
+select B.text as text,
+	A.keyPhrase as keyPhrase
+from travel_wishful_maybeintent A, travel_wishful_notIntent B
+where Overlaps(B.text,A.keyPhrase);
+
+-- Now get the the unknown stuff
+create view travel_unknown_output_all as 
+select I.text as text,
+	T.keyPhrase as keyPhrase
+from  travel_strongtravel_notime T, travel_inputView I
+consolidate on I.text;
+
+-- Jus the text of the real unknown outputs, taking away intent, ontrip, and past.
+create view travel_unknown_output_text as 
+(select A.text from travel_unknown_output_all A)
+minus 
+((select B.text from travel_intent_both B)
+union all 
+(select C.text from travel_ontrip_output C)
+union all
+(select D.text from travel_past_output D)
+union all
+(select E.text from travel_want_output E)
+union all 
+(select F.text from travel_want_remove_intent F)
+);
+
+
+-- now
+create view travel_unknown_output as
+select A.text as text,
+	A.keyPhrase as keyPhrase
+from travel_unknown_output_all A, travel_unknown_output_text B
+where Overlaps(A.text,B.text);
+
+
+create view travel_all_predest_preConsolidate as 
+(select A.text as text,
+	    A.keyPhrase as keyPhrase,
+	    GetString('wishful') as kind
+from travel_want_output A)
+union all
+(select AA.text as text,
+	AA.keyPhrase as keyPhrase,
+	GetString('wishful') as kind
+from travel_want_remove_intent AA)
+union all
+(select B.text as text,
+	    B.keyPhrase as keyPhrase,
+	    GetString('intent') as kind
+from travel_intent_notnear_output B)
+union all 
+(select B.text as text,
+	    B.keyPhrase as keyPhrase,
+	    GetString('near_intent') as kind
+from travel_intent_near_output B)
+union all 
+(select C.text as text,
+	    C.keyPhrase as keyPhrase,
+	    GetString('during') as kind
+from travel_ontrip_output C)
+union all
+(select D.text as text,
+	    D.keyPhrase as keyPhrase,
+	    GetString('post') as kind
+from travel_past_output D)
+union all 
+(select E.text as text,
+	E.keyPhrase as keyPhrase,
+	GetString('unknown') as kind
+from travel_unknown_output E)
+;
+
+create view travel_all_predest
+as select A.* from
+travel_all_predest_preConsolidate A
+consolidate on A.keyPhrase using 'ContainedWithin';
+
+-- Destinationis part of the keyPhrase
+create view travel_all_dest_tight as
+select T.text as text,
+	    T.keyPhrase as keyPhrase,
+	    T.kind as kind,
+	    D.destination as destination
+--	    dictionaries 'travel_destination_case_dict' and
+--	    	'travel_destination_at_dict' and
+--	    	'travel_destination_in_dict' and 
+--	    	'travel_airportnames_dict' on T.text as destination
+from travel_all_predest T, travel_destination_word D
+where Overlaps(T.keyPhrase,D.destination);
+
+-- Destination is anywhere in the text.  We use this for non-ambiguous destinations
+create view travel_all_dest_loose as
+select T.text as text,
+	    T.keyPhrase as keyPhrase,
+	    T.kind as kind,
+	    D.destination as destination
+--	    dictionaries 'travel_destination_case_dict' and
+--	    	'travel_destination_at_dict' and
+--	    	'travel_destination_in_dict' and 
+--	    	'travel_airportnames_dict' on T.text as destination
+from travel_all_predest T, travel_destinationCityState  D
+where Overlaps(T.text,D.destination);
+
+create view travel_all_dest as 
+select A.* from 
+((select * from travel_all_dest_loose)
+union all
+(select * from travel_all_dest_tight)) A
+consolidate on A.destination using 'ContainedWithin';
+
+--include 'jpmc/travel/destination_to_city.aql';
+create view travel_all_dest_details_table as
+	select T.text as text,
+		T.keyPhrase as keyPhrase,
+		T.kind as kind,
+		T.destination as destination,
+		M.city as destinationCity,
+		M.state as destinationState,
+		'US' as destinationCountry
+from travel_all_dest T, destination_to_city M 
+where Equals(ToLowerCase(T.destination),ToLowerCase(M.destination));
+
+create view travel_all_dest_details_text as
+	select T.text as text,
+		   T.keyPhrase as keyPhrase,
+		   T.kind as kind,
+		   T.destination as destination,
+		   M.city as destinationCity,
+		   M.state as destinationState,
+		  'US' as destinationCountry
+from travel_all_dest T, travel_destinationCityState M 
+where Equals(M.destination,T.destination);
+
+create view travel_all_dest_details_country as
+	select T.text as text,
+		   T.keyPhrase as keyPhrase,
+		   T.kind as kind,
+		   T.destination as destination,
+		   '' as destinationCity,
+		   '' as destinationState,
+		   T.destination as destinationCountry
+from travel_all_dest T
+where MatchesDict('Loc_CountryDict',T.destination);
+
+create view travel_all_dest_details_countryAlias as
+	select T.text as text,
+		   T.keyPhrase as keyPhrase,
+		   T.kind as kind,
+		   T.destination as destination,
+		   '' as destinationCity,
+		   '' as destinationState,
+		   N.country as destinationCountry
+from travel_all_dest T, Loc_AliasToNormalized_Countries M, Loc_CountryToISO N
+where MatchesDict('Loc_CountryDict_Alias',T.destination) and
+	  Equals(ToLowerCase(T.destination),ToLowerCase(M.alias)) and
+	  Equals(ToLowerCase(M.countryISO),ToLowerCase(N.countryISO))
+consolidate on T.destination;
+	  
+
+create view travel_all_dest_details as
+(select * from travel_all_dest_details_text)
+union all
+(select * from travel_all_dest_details_table)
+union all
+(select * from travel_all_dest_details_countryAlias)
+union all
+(select * from travel_all_dest_details_country)
+;
+
+create view travel_all_dest_nodetails as 
+(select T.text as text,
+	    T.keyPhrase as keyPhrase,
+	    T.kind as kind,
+	    T.destination as destination from travel_all_dest T) 
+minus
+( select T.text as text,
+		T.keyPhrase as keyPhrase,
+		T.kind as kind,
+		T.destination as destination
+		from travel_all_dest_details T);
+
+create view travel_all_nodest as 
+(select * from travel_all_predest)
+minus
+(select T.text as text,
+	    T.keyPhrase as keyPhrase,
+	    T.kind as kind
+from travel_all_dest  T);
+
+create view travel_Output as
+(select T.text as text,
+	T.keyPhrase as keyPhrase,
+	T.kind as kind,
+	'' as destination ,
+	'' as destinationCity,
+	'' as destinationState,
+	'' as destinationCountry
+from travel_all_nodest T)
+union all
+(select T.text as text,
+	T.keyPhrase as keyPhrase,
+	T.kind as kind,
+	T.destination as destination,
+	'' as destinationCity,
+	'' as destinationState,
+	'' as destinationCountry
+from travel_all_dest_nodetails T)
+union all
+(select * from travel_all_dest_details)
+;
+
+export view travel_Output;
+
+/*
+output view travel_all_nodest;
+output view travel_all_dest_nodetails;
+output view travel_all_dest_details;
+output view rental_output_all;
+output view airport_output_all;
+*/
+
+
+

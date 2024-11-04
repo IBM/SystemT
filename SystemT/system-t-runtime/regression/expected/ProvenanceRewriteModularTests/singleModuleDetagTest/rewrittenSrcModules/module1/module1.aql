@@ -1,0 +1,40 @@
+module module1;
+
+
+detag Document.text as DetaggedDoc 
+detect content_type never
+  annotate
+     element 'A' as AnchorTag
+       with attribute 'href' as href;
+
+create dictionary "MyDict"
+with case insensitive
+as (
+  'enron'
+);
+
+
+create view DetagDocTest as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DetaggedDoc_____sep_____R____id,
+    dictionary 'MyDict'
+    on R.text as match
+  from DetaggedDoc R;
+
+output view DetagDocTest;
+
+
+
+create view AnchorTagTest as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as AnchorTag_____sep_____R____id,
+    dictionary 'MyDict'
+    on R.match as match
+  from AnchorTag R;
+
+output view AnchorTagTest;
+
+
+

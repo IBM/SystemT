@@ -1,0 +1,31 @@
+-------------------------------------------------------------------------------
+-- OrgChartServlet.aql from Java Revision No 130 for OrgChartServlet.java
+
+-- Based on Huiayu's original Java implementation.
+
+-------------------------------------------------------------------------------
+--matching input URLs with url_orgchartservlet_pattern
+create view OrgChartServletCand as
+extract
+		D.text as text,
+		D.label as url,
+		--modified original regex from approach Document to match with data created. 
+		--Approved by Laura on Call.
+		regex /\/techcenter.austin.ibm.com\/OrgChartServlet/ on D.label as match
+		from Document D;
+
+--Extract person name from contents of URLs for which url_orgchartservlet_pattern is matching.
+--i/p: <html><body><CENTER><FONT FACE="Verdana, Arial, Helvetica" COLOR="000088" SIZE="2"><A HREF="OrgChartServlet7?cnum=178362897"><IMG SRC="/images/mgr.gif" BORDER="0"></A><BR><B>Lind, Geoffrey J. (Geoff)</B><BR></body></html>
+--o/p: Person-->Lind, Geoffrey J. (Geoff)
+create view OrgChartServletWithPerson as
+extract
+		regex /<CENTER><FONT[^>]*><A HREF=\"OrgChartServlet\d*\?cnum=[A-Fa-f\d]+"><IMG[^>]*><\/A><BR><B>([^<]+)<\/B><BR>/ on O.text
+		return group 1 as person
+		from OrgChartServletCand O;
+
+--UnEscaping html characters if any from Person name obtained in view ExtractPerson
+--i/p: Person-->Lind, Geoffrey J. (Geoff)
+--o/p: Person-->Lind, Geoffrey J. (Geoff)
+create view OrgChartServlet as
+select GetBegin(P.person) as begin, GetEnd(P.person) as end, UnescapeHTML(GetText(P.person)) as person
+from OrgChartServletWithPerson P;

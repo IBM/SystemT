@@ -1,0 +1,335 @@
+/**
+	This file identifies relevant financial tables based on dictionary
+	and regex based clues to classify tables of interest.
+*/
+
+module table_types;
+import view ParagraphContent from module detag_doc as ParagraphContent; 
+import dictionary month from module annotator_library as month;
+import view TABLE from module detag_doc as Table;
+
+-------------------------------------------------------------------------------
+--  External dictionary for title keys
+-------------------------------------------------------------------------------
+create external dictionary financial_table_titlekeys
+allow_empty false
+with case insensitive;
+
+-------------------------------------------------------------------------------
+--	External dictionary for title keys for notes table
+--	(will be preceeded by number pattern)
+-------------------------------------------------------------------------------
+create external dictionary financial_table_titlekeys_notes
+allow_empty false
+with case insensitive;
+
+-------------------------------------------------------------------------------
+--  External dictionary for row and column headers
+-------------------------------------------------------------------------------
+create external dictionary financial_table_row_column_headers
+allow_empty false
+with case insensitive;
+
+-------------------------------------------------------------------------------
+--  External dictionary for invalid table clues
+-------------------------------------------------------------------------------
+create external dictionary financial_table_invalid_table_clues
+allow_empty false
+with case insensitive;
+
+-------------------------------------------------------------------------------
+--  External dictionary for invalid table titles
+-------------------------------------------------------------------------------
+create external dictionary financial_table_invalid_titles
+allow_empty false
+with case insensitive;
+
+-------------------------------------------------------------------------------
+--  Extract the title keys from the detagged document(Doc)
+--	1) extract the regular title keys (just title key span)
+--	2) extract the title keys from notes (preceeded by number span)
+--		a) extract notes index pattern -- number preceeding note title span 
+--			(with other punctuation + letters possibly)
+--		b) get complete pattern
+--		c) Identify <p> tag preceding <table> tag as candidate for table title span
+--			Using regex identify notes senction title. 
+--			This captures all candidate tables which get missed out due to dictionary usage    
+--	3) take union of (1) and (2) to get all title keys for all tables
+-------------------------------------------------------------------------------
+create view FinanceSpan_TitleKeys_1 as
+extract dictionary 'financial_table_titlekeys' on D.text as match
+from Doc D;
+
+create view FinanceSpan_TitleKeys as 
+select F.match as match
+from FinanceSpan_TitleKeys_1 F
+where ContainsRegex(/^[A-Z]/,F.match)
+;
+
+--	Get the note identifying number
+create view Notes_SectionNumber as
+extract regex /\b\d{1,2}(\.)?\(?(\d{1,2}|[a-z]|[A-Z])?\)?\s/ 
+on D.text as match
+from Doc D
+consolidate on match;
+
+--	Get notes table title key (without number)
+create view FinanceSpan_Notes_TitleKeys_1 as
+extract dictionary 'financial_table_titlekeys_notes' on D.text as match
+from Doc D;
+
+--	Get complete pattern (includes notes index -- number preceeding note title
+create view FinanceSpan_Notes_TitleKeys as
+extract 
+	pattern (<N.match>) <Token>{0,6} (<T.match>)
+	return  group 0 as match
+	  and   group 1 as noteIndex
+	  and   group 2 as title 
+from Notes_SectionNumber N, FinanceSpan_Notes_TitleKeys_1 T
+having Not(ContainsRegex(/\n/, Chomp(match)))
+and Not(ContainsRegex(/\bexclude\b/,RightContextTok(match,3)))
+consolidate on match using 'NotContainedWithin'; 
+
+
+--  Get <p> tag followed by <table> tag as candidate for title span of table
+create view TitleSpanForTable as 
+ extract 
+	pattern (<P.match>)(<T.match>)
+	return  group 0 as match
+	  and   group 1 as paraContent
+	  and   group 2 as tableSpan 
+from TABLE T,ParagraphContent P
+;
+
+--  Use regex to identify patterns like "1.01 Financial Expenses" in this <p> span
+create view NotesSectionTitleCandidates as 
+extract regex /^(\s*[\d]{1,2}((?:\.\d{1,2})|(?:[A-Za-z\-\,]))?)\s{1,10}(.+?)[\n\r\t]/
+with flags 'CASE_INSENSITIVE'
+on T.match 
+return group 0 as match
+and group 1 as noteIndex
+from TitleSpanForTable T
+consolidate on match;
+
+--  Map notes section title with table
+create view NotesSectionTitle as 
+select N.* 
+from NotesSectionTitleCandidates N,TABLE T
+where Not(Overlaps(N.match,T.match))
+and Not(ContainsDict('financial_table_invalid_titles',N.match))
+consolidate on N.match using 'NotContainedWithin'
+;
+
+-----------------------------------------------------------------
+--  Identify first cell of table to find dictionary clues within table
+--	(1) Identify first row of table as minimum of all rows
+--	(2) Identify first cell as minimum of all TD's in that row.
+--	(3) Check if table title -dictionary based lies within the first cell.
+-----------------------------------------------------------------
+
+--	Identify first row of table as minimum of all rows
+create view FirstRowOfTable as 
+select Min(R.match) as match,T1.match as tablespan
+from TR R, TABLE T1
+where Contains(T1.match,R.match)
+consolidate on R.match
+group by T1.match
+;
+
+--	Identify first cell as minimum of all TD's in that row.
+create view FirstCellOfTable as 
+select Min(D.match) as match
+from FirstRowOfTable R,TD D 
+where Contains(R.match,D.match)
+consolidate on R.match
+group by R.match
+;
+
+--  Check if table title -dictionary based lies within the first cell.
+create view TableTitleInFirstCell as 
+select F.match as match
+from FirstCellOfTable F ,FinanceSpan_Notes_TitleKeys_1 N
+where Contains(F.match,N.match)
+;
+
+
+-------------------------------------------------------------------------------
+--	Take union to obtain all title keys for all tables 
+--	Semantics: each record will have two attributes- noteIndex and match
+--	where noteIndex is the note number and match is the title key
+-------------------------------------------------------------------------------	
+create view FinanceSpan_1 as
+(select '' as noteIndex, S.match as match from FinanceSpan_TitleKeys S)
+union all
+(select S.noteIndex, S.match from FinanceSpan_Notes_TitleKeys S)
+union all
+(select S.noteIndex, S.match from NotesSectionTitle S)
+union all
+(select '' as noteIndex, S.match from TableTitleInFirstCell S)
+;
+
+-------------------------------------------------------------------------------
+--  get right 100 tokens of the key (start span for the required table)
+-------------------------------------------------------------------------------
+create view FinanceSpan_2 as
+select D.label, S.noteIndex, S.match as match, RightContextTok(S.match,100) as rttok 
+from FinanceSpan_1 S, Doc D
+where Not(MatchesRegex(/\d{1,2}/,Chomp(S.match)))
+;
+
+
+-------------------------------------------------------------------------------
+--  extract following table
+--  in order to get span between titlekey and table match
+--	Semantics: Each record is a table with noteIndex,title key and span between title key 
+--	and table as leftmatch.
+-------------------------------------------------------------------------------
+create view FinanceSpan_3 as 
+select DD.label, T.match as table1, S1.noteIndex, S1.match as titlekey, SpanBetween(S1.match, T.match) as leftmatch
+from Doc DD, FinanceSpan_2 S1, TABLE T
+where Overlaps(T.match,S1.rttok)
+;
+------------------------------------------------------------------------------
+--	Extract remaining tables which do not have a title key mapped as 
+-- candidates for weak title
+------------------------------------------------------------------------------
+create view Tables_With_Weak_TitlePattern as 
+(select T.match as match from TABLE T)
+minus
+(select F.table1 as match from FinanceSpan_3 F)
+;
+
+--	Get weakTitleSpan as context to the left of table
+create view TitlePattern_Weak_Span as 
+select LeftContextTok(T.match,20) as weakTitleSpan, T.match as match
+from Tables_With_Weak_TitlePattern T
+;
+
+-------------------------------------------------------------------
+--	Weak pattern 1 for table title 
+-- 	Example: Digits followed by a sentence
+--	"1.01 The financial expenses for the last year including the borrowings..."
+-------------------------------------------------------------------
+create view TitlePattern_Weak_1 as
+extract T.weakTitleSpan as weakTitleSpan ,T.match as tableSpan,
+regex /\b(\d{1,2}(?:\.\d{1,2})?)\b\s{1,10}(?:\w+\s{1,10})+/ 
+on T.weakTitleSpan 
+return group 0 as match
+and group 1 as noteIndex
+from TitlePattern_Weak_Span T
+;
+
+--  Map other attributes for the table and remove false positives
+create view TitlePattern_Weak_Pattern_1 as
+select DD.label, T.tableSpan as table1,T.noteIndex as noteIndex,T.match as titlekey
+,SpanBetween(T.match,T1.match) as leftmatch
+from Doc DD,TitlePattern_Weak_1 T,TABLE T1
+where FollowsTok(T.weakTitleSpan,T1.match,0,0)
+and Not(ContainsDict('month','IgnoreCase',T.match))
+and ContainsRegex(/([A-Za-z]+[\s\,]){3,}/,T.match) --This is to avoid matches like "...1.02 million. <table> tag"
+and Not(ContainsRegex(/[\-\/\.\$]/,LeftContextTok(T.match,1)))
+;
+
+-------------------------------------------------------------------------------------------
+--	Weak pattern 2 for table title 
+-- 	Example: Sentences ending with keywors like follows, below etc. followed by a "- or :"
+--	"1.01 The details of the leases and borrowings are as follows-"
+-------------------------------------------------------------------------------------------
+create view TitlePattern_Weak_2 as
+select P.match,T.match as tableSpan, T.weakTitleSpan as weakTitleSpan
+from ParagraphContent P,TitlePattern_Weak_Span T
+where FollowsTok(P.match,T.match,0,3)
+and ContainsRegex(/\b(?:follows|following|comprises|comprised of|below|were|table)\s{0,3}[\:\-]$/,Chomp(P.match))
+;
+
+-- Map other attributes for the table and remove false positives
+create view TitlePattern_Weak_Pattern_2 as
+select DD.label, T.tableSpan as table1,'' as noteIndex,T.match as titlekey,SpanBetween(T.match,T1.match) as leftmatch
+from Doc DD,TitlePattern_Weak_2 T,TABLE T1
+where FollowsTok(T.weakTitleSpan,T1.match,0,0)
+;
+
+--  Title pattern weak 3 : Table 1: /Figure 1.1:/Schedule 1
+create view TitlePattern_Weak_Pattern_3_1 as 
+extract pattern (<P1.match>) <P.match>{0,1} (<T.match>)
+return  group 0 as match
+	  and   group 1 as titlekey
+	  and   group 2 as table1 
+from ParagraphContent P1, ParagraphContent P,TABLE T
+having ContainsRegex(/(?:Table|Figure|Schedule)\s{0,2}(?:\d{1,2}(?:\.\d{1,2})?)\s{0,5}[\:\-].*?[\n\r\t]/,'MULTILINE',titlekey)
+;
+
+-- Map other attributes for the table and remove false positives
+create view TitlePattern_Weak_Pattern_3 as
+select DD.label, T.table1 as table1,'' as noteIndex,T.titlekey as titlekey,SpanBetween(T.titlekey,T.table1) as leftmatch
+from Doc DD,TitlePattern_Weak_Pattern_3_1 T
+;
+
+--  Title Pattern weak 4 : Notes to the financial statements ..Year ended..
+create view TitlePattern_Weak_Pattern_4_1 as
+extract pattern (<P.match>) (<P1.match>)
+return  group 0 as match
+	  and   group 1 as titlekey
+	  and 	group 2 as dateSpan	  
+from ParagraphContent P1, ParagraphContent P
+having ContainsRegex(/\bNOTES?\s{0,3}TO\s{0,3}(?:THE)?\s{0,3}FINANCIAL\s{0,3}STATEMENTS\s{0,3}/,titlekey)
+and   ContainsRegex(/\b(?:FOR)?\s{0,3}(?:THE)?\s{0,3}YEAR\s{0,3}END(?:ED)?\b/,dateSpan)
+;
+
+-- Map other attributes for the table
+create view TitlePattern_Weak_Pattern_4 as
+select DD.label, T1.match as table1,'' as noteIndex,T.titlekey as titlekey,SpanBetween(T.titlekey,T1.match) as leftmatch
+from Doc DD,TitlePattern_Weak_Pattern_4_1 T,TABLE T1
+where FollowsTok(T.match,T1.match,0,0)
+;
+
+--  Union all the weak title key patterns 
+create view TitlePattern_Weak as 
+(select T.* from TitlePattern_Weak_Pattern_1 T )
+union all
+(select T.* from TitlePattern_Weak_Pattern_2 T )
+union all
+(select T.* from TitlePattern_Weak_Pattern_3 T )
+union all
+(select T.* from TitlePattern_Weak_Pattern_4 T )
+;
+
+--  Union tables with weak title clues with the ones extracted earlier 
+create view FinanceSpan_4 as
+(select T.* from FinanceSpan_3 T)
+union all
+(select T.* from TitlePattern_Weak T)
+;
+
+--  Get starting token of the table
+create view FinanceSpan_5_1 as
+extract T.*, regex /^./
+on T.table1 as tableStart
+from FinanceSpan_4 T
+;
+
+-------------------------------------------------------------------------------
+--	Get valid tables by removing records (tables) having invalid table clues 
+--	like "index", "Pages" etc which generally are in non-financial tables 
+--	Invalid table clues appear generally in first few characters of table
+------------------------------------------------------------------------------
+
+create view FinanceSpan_5 as 
+select S.* 
+from FinanceSpan_5_1 S
+where Not(ContainsDict('financial_table_invalid_table_clues','IgnoreCase',
+SpanBetween(S.tableStart,RightContextTok(S.tableStart,10))))
+;
+------------------------------------------------------------------------------
+--  Check for false positives(validity of the table)
+--  row header or column header should be present within 
+--  the table in order to call it as a Financial Table
+--  added table type as 'FinancialTable' for each table
+--  Added condition to make sure two tables do not have same title.
+--  Created lot of inconsitencies if the condition is not covered.
+--  Semantics: each record is title key and table type (FinancialTable) 
+-------------------------------------------------------------------------------
+create view FinancialTables_All_1 as
+select S.label, S.table1 as table1, S.noteIndex, S.titlekey, 'FinancialTable' as type, S.leftmatch
+from FinanceSpan_5 S
+where ContainsDict('financial_table_row_column_headers',S.table1);

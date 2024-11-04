@@ -1,0 +1,68 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test cases for extension to sequence patterns to pass through attributes
+-- Verifies that the pattern expression is validated
+--
+-------------------------------------------------------------------------------
+
+create view CapsWord as
+extract 'CapsWord' as type,
+	regex /[A-Z].*/ on 1 token in D.text as match
+from Document D;
+
+create view LowWord as
+extract 'LowWord' as type,
+	regex /[a-z]*/ on 1 token in D.text as match
+from Document D;
+
+-- Correct statement
+create view ColRefAtom1 as
+extract pattern <C.match> as match
+from (select * from CapsWord) C;
+
+output view ColRefAtom1;
+
+-- Test col ref validation in PATTERN expression
+-- Wrong statement - should throw an error that "Subquery C has no output column called 'match1' (columns are [type, match])"
+create view ColRefAtom2 as
+extract pattern <C.match1> as match
+from (select * from CapsWord) C;
+
+output view ColRefAtom2;
+
+-- Test col ref validation in PATTERN expression: each col ref must have an explicit view name and the view name must appear in the FROM clause
+-- This should throw 2 exceptions: 
+-- 1) Don't understand column reference 'match'. The column reference must be of the form '<viewname>.<colname>'
+-- 2) Name 'F' not found in from list
+-- However, the validation is done in Catalog.validatePattern(), which throws the first exception encountered.
+-- TODO: modify this testcase whenever Catalog.validatePattern() is modified to collect all exceptions, instead of throwing the first exception
+create view ColRefAtom3 as
+extract pattern <match><F.match> as match
+from CapsWord C;
+
+output view ColRefAtom3;
+
+-- Test col ref validation in PATTERN expression: each col ref must have an explicit view name and the view name must appear in the FROM clause
+-- This should throw 2 exceptions: 
+-- 1) Don't understand column reference 'match'. The column reference must be of the form '<viewname>.<colname>'
+-- 2) Name 'F' not found in from list
+-- However, the validation is done in Catalog.validatePattern(), which throws the first exception encountered.
+-- TODO: modify this testcase whenever Catalog.validatePattern() is modified to collect all exceptions, instead of throwing the first exception
+create view ColRefAtom4 as
+extract pattern <F.match><match> as match
+from CapsWord C;
+
+output view ColRefAtom4;
+
+-- Test validation for pattern expression that matches empty string
+-- Will throw exception: The PATTERN clause <C.match>? matches the empty string
+create view ColRefAtom5 as
+extract C.type as type,
+		pattern <C.match>? as match
+from CapsWord C;
+
+output view ColRefAtom5;
+
+
+
+

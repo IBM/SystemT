@@ -1,0 +1,104 @@
+module webaccess;
+
+
+create view UserAgent_base as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__46__Temp_____sep_____R____id
+  from  __Subquery__46__Temp R;
+
+output view UserAgent_base;
+
+create view UserAgent_interim as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as UserAgent_base_____sep_____C____id
+  from  UserAgent_base C
+  where MatchesRegex(/\"/, LeftContext(C.match, 1))
+     and MatchesRegex(/\"/, RightContext(C.match, 1));
+
+output view UserAgent_interim;
+
+create view referrer_interim as
+  select  C.referrer_uri_span as referrer_uri_span,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as referrerDetails_____sep_____C____id
+  from  referrerDetails C
+  where MatchesRegex(/\"/, LeftContext(C.referrer_uri_span, 1))
+     and MatchesRegex(/\"/, RightContext(C.referrer_uri_span, 1));
+
+output view referrer_interim;
+
+create view UserAgent as
+  select  __t2.userAgent as userAgent,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__47__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__47__Temp__1 __t1,
+        __Consolidate__47__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.userAgent;
+
+output view UserAgent;
+
+create view UserAgentOutputInterim as
+  select  D.userAgent as userAgent_Span,
+          GetText(D.userAgent) as userAgent_Text,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as UserAgent_____sep_____D____id
+  from  UserAgent D;
+
+output view UserAgentOutputInterim;
+
+create view UserAgentOutput as
+  select  U.userAgent_Span as span,
+          U.userAgent_Text as text,
+          GetString('UserAgent') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as UserAgentOutputInterim_____sep_____U____id
+  from  UserAgentOutputInterim U;
+
+output view UserAgentOutput;
+
+export view webaccess.UserAgentOutput;
+
+
+create view __Consolidate__47__Temp__1 as
+  select  userAgentI.match as userAgent,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          referrerF.__auto__id as referrer_interim_____sep_____referrerF____id,
+          userAgentI.__auto__id as UserAgent_interim_____sep_____userAgentI____id,
+          userAgentI.match as __consolidate__target
+  from  referrer_interim referrerF,
+        UserAgent_interim userAgentI
+  where FollowsTok(referrerF.referrer_uri_span, userAgentI.match, 1, 30)
+     and MatchesRegex(/"[\s*|]"/, SpanBetween(referrerF.referrer_uri_span, userAgentI.match));
+
+output view __Consolidate__47__Temp__1;
+
+create view __Consolidate__47__Temp__2 as
+  select  __t1.userAgent as userAgent,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__47__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__47__Temp__2;
+
+create view __Subquery__46__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____Document____id,
+    regex /[a-zA-Z][\w*\.\s\[\]\(;\)\/\-:]*/
+    with flags 'DOTALL'
+    on Document.text
+    return group 0 as match
+  from Document Document;
+
+output view __Subquery__46__Temp;
+

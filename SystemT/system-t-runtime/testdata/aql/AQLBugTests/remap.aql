@@ -1,0 +1,18 @@
+-- remap.aql
+-- Test case for problems with remapping spans on detagged HTML documents.
+
+detag Document.text as DetaggedDoc;
+
+
+
+-- Mark the earliest word in the document that doesn't get correctly remapped.
+create view Word as
+extract regex /.*/ on 1 token in D.text as word
+from DetaggedDoc D;
+
+create view WordRemap as
+select Remap(W.word) as word
+from Word W;
+
+output view Word;
+output view WordRemap;

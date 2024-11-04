@@ -1,0 +1,55 @@
+-- Dictionary of severity levels in a log
+create dictionary SeverityLevels with case exact as 
+(
+'SUCCESS','TRACE','DEBUG','INFO','WARN','ERROR','FATAL','OFF','CRITICAL','CRITICAL_ERROR','SEVERE','IGNORE', 'SEVERE', 'WARNING', 'INFO', 'CONFIG', 'FINE', 'FINER', 'FINEST', 'ALL'
+);
+
+
+-- Find all matches of the severity dictionary.
+create view SeverityUseUnfiltered as
+extract
+	dictionary 'SeverityLevels' on D.text as severity
+from Document D;
+
+-- filter out the format "_OFF" or "OFF_"
+create view SeverityToFilter as
+    (
+    select D.severity 
+    from SeverityUseUnfiltered D
+    where MatchesRegex(/_|-/,LeftContext(D.severity,1))
+    )
+    union all
+    (
+    select D.severity 
+    from SeverityUseUnfiltered D
+    where MatchesRegex(/_|-/,RightContext(D.severity,1))
+    );
+create view SeverityUse as 
+    (
+    select D.severity 
+    from SeverityUseUnfiltered D
+    )
+    minus
+    (
+    select D.severity 
+    from SeverityToFilter D
+    );
+
+create view SeverityInterim as 
+select D.severity as severity_span, GetText(D.severity) as severity_text
+from SeverityUse D;
+
+create view SeverityOutput as
+select D.severity_span as span, D.severity_text as text, GetString('Severity') as field_type
+from SeverityInterim D;
+
+/*
+create view SeverityMatches as 
+    extract regex /\b(SUCCESS)|(TRACE)|(DEBUG)|(INFO)|(WARN)|(ERROR)|(FATAL)|(OFF)|(CRITICAL)|(CRITICAL_ERROR)|(SEVERE)|(IGNORE)|(SEVERE)|(WARNING)|(INFO)|(CONFIG)|(FINE)|(FINER)|(FINEST)|(ALL)\b/
+    on D.text as severity
+    from Document D;
+
+create view SeverityInterim as 
+select D.severity as severity_span, GetText(D.severity) as severity_text
+from SeverityMatches D;
+*/

@@ -1,0 +1,18 @@
+module detagLocalViewTest2; 
+
+create dictionary CDATADict as ('CDATA');
+
+create view Docs as
+	extract split using B.match on B.text as text
+from 
+(
+	extract GetText(D.text) as text,
+	dictionary 'CDATADict' on D.text as match
+	from Document D
+) B;
+
+-- Detag local view Docs by referring the view thru qualified name
+detag detagLocalViewTest2.Docs.text as NoTagDocs 
+detect content_type always;
+
+output view NoTagDocs;

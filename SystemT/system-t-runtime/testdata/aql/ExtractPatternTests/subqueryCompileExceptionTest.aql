@@ -1,0 +1,38 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test cases for extension to sequence patterns to pass through attributes
+-- Verifies that wild card expansion and alias inference is performed properly when a ParseNode appears inside a subquery.
+--
+-------------------------------------------------------------------------------
+
+create view CapsWord as
+extract 'CapsWord' as type,
+	regex /[A-Z].*/ on 1 token in D.text as match
+from Document D
+limit 10;
+
+create view LowWord as
+extract 'LowWord' as type,
+	regex /[a-z]*/ on 1 token in D.text as match
+from Document D
+limit 10;
+
+-- Should throw an exception Return groups [1] are not defined in pattern expression <C.match> <L.match>
+create view SubqueryInSelect as
+select P.*
+from
+(
+	extract C.*,
+	    pattern <C.match> <L.match>
+	    return group 0 as fullMatch
+	   	   and group 1 as first
+	from CapsWord C, LowWord L
+) P;
+
+output view SubqueryInSelect;
+
+
+
+
+
+

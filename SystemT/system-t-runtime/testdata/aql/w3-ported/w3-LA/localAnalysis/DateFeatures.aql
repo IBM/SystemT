@@ -1,0 +1,180 @@
+-------------------------------------------------------------------------------
+-- DateFeatures.aql  
+--
+--
+-- Depends on HTML.aql
+--
+-- Based on Huiayu's original Java implementation.
+-------------------------------------------------------------------------------
+
+
+
+--UDF for fixing month string
+create function FixMonth(month String)
+return String
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.DateUDF!fixMonth'
+language java
+deterministic
+return null on null input;
+
+
+--UDF for fixing day string
+create function FixDay(date String)
+return String
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.DateUDF!fixDay'
+language java
+deterministic
+return null on null input;
+
+-------------------------------------------------------------------------------
+
+
+-- DateStamp
+create view DateStamp as
+select
+	T.match as content
+from PTag T
+where
+	NotNull(T.id) and 
+	MatchesRegex(/date-stamp/, T.id)
+;
+
+
+-- MetaWithContent
+create view
+	MetaWithContent
+as 
+	select * from MetaOriginal T
+	where NotNull(T.name)
+	 and NotNull(T.content)
+;
+
+-------------------------------------------------------------------------------
+
+-- DateStampDate
+create view DateStampDateCand as 
+select
+	GetText(S.year) as year,
+	FixMonth(GetText(S.month)) as month,
+	GetText(S.day) as day
+from (
+	extract regex /\A(?:Published|Updated) on\s+(\d{1,2})\s+(\w+)\s+(\d{4})\z/
+	on T.content
+	return group 1 as day
+	   and group 2 as month
+	   and group 3 as year
+	from DateStamp T
+	) S
+;
+
+create view DateStampDate as
+select *
+from DateStampDateCand D
+where NotNull(D.month);
+
+
+-- Meta Description
+create view
+	MetaDescriptionDate
+as select
+	GetText(S.year) as year,
+	GetText(S.month) as month,
+	GetText(S.day) as day
+from (
+	extract
+		regex /\AIBM Research\s*:\s+(\d{2})\/(\d{2})\/(\d{4})\s+\d{2}:\d{2}\s+[AP]M\z/
+		on T.content
+		return group 1 as month
+	   		and group 2 as day
+	   		and group 3 as year
+		from MetaDescription T
+	) S
+;
+
+create dictionary IBMEffectiveDict as(
+	'IBM.Effective'
+);
+
+-- Meta IBM.Effective
+create view MetaIBMEffectiveDate
+as select
+	GetText(S.year) as year,
+	GetText(S.month) as month,
+	GetText(S.day) as day
+from (
+	extract
+		T.name as name,
+		regex /\A(\d+)-(\d+)-(\d+)\z/
+		on T.content
+		return group 1 as year
+		   and group 2 as month
+		   and group 3 as day
+		from MetaWithContent T
+		--having Equals(GetText(name), 'IBM.Effective')
+		having MatchesDict('IBMEffectiveDict', name)
+	) S
+;
+
+create dictionary DCDateDict as(
+	'dc.date'
+);
+
+
+-- Meta DC.Date
+create view MetaDCDateDate
+as select
+	GetText(S.year) as year,
+	GetText(S.month) as month,
+	GetText(S.day) as day
+from (
+	extract
+		T.name as name,
+		regex /\A(\d{4})-(\d{2})-(\d{2})\z/
+		on T.content
+		return group 1 as year
+		   and group 2 as month
+		   and group 3 as day
+		from MetaWithContent T
+		--having Equals(GetText(name), 'DC.Date')
+		having MatchesDict('DCDateDict', name)
+	) S
+;
+
+
+-- Meta dc.date
+create view MetadcdateDate
+as select
+	GetText(S.year) as year,
+	GetText(S.month) as month,
+	GetText(S.day) as day
+from (
+	extract
+		T.name as name,
+		regex /\A(\d{2})-(\d{2})-(\d{4})\z/
+		on T.content
+		return group 1 as month
+		   and group 2 as day
+		   and group 3 as year
+		from MetaWithContent T
+		--having Equals(GetText(name), 'dc.date')
+		having MatchesDict('DCDateDict', name)
+	) S
+;
+
+
+-- UrlDate
+create view UrlDateDate
+as select
+	GetText(S.year) as year,
+	GetText(S.month) as month,
+	FixDay(GetText(S.day)) as day
+from (
+	extract regex /\A(\d{4})(\d{2})(\d{2})\z/
+	on T.content
+	return group 1 as year
+	   and group 2 as month
+	   and group 3 as day
+	from UrlDate T
+	) S
+;
+

@@ -1,0 +1,172 @@
+require document with columns text Text;
+
+include 'DictsForPlace.aql';
+include 'DictsForName.aql';
+include 'Sentence.aql';
+include 'MacrosForTimeDates.aql';
+include 'Date.aql';
+include 'Time.aql';
+include 'Url.aql';
+include 'PhoneNumber.aql';
+include 'Place.aql';
+include 'CityStateCountry.aql';
+include 'OrgWithinNotesEmail.aql';
+include 'Organization.aql';
+include 'Person.aql';
+include 'Email.aql';
+include 'Place-simplecons.aql';
+include 'Organization-complexcons.aql';
+include 'Person-cons.aql';
+include 'legal_concepts/legal_concepts.aql';
+
+---------------------------------------------
+-- Consolidation:
+-- For now, we just remove annotations that are completely
+-- contained within other annotations.
+
+--collects person names within Internet e-mails,
+-- e.g. 'mary.smith@domain.com'
+create view PersonWithinInternetEmail as
+    select PFAWD.person as person
+    from InternetEmail IE,
+        PersonFinalAllWithoutDots PFAWD
+    where Contains(IE.match, PFAWD.person);
+
+-- filter out person names from internet e-mails    
+create view PersonValid as
+    (select PFAWD.person as person from PersonFinalAllWithoutDots PFAWD)
+    minus
+    (select PWIE.person as person from PersonWithinInternetEmail PWIE);
+    
+-- collects locations completely contained within person ,
+-- e.g. 'Maria Paris Smith'
+create view CityStateCountryWithinPerson as
+    select C.match as match
+    from AllCityStateCountry C,
+	   PersonValid P
+    where Contains(P.person, C.match); 
+
+-- add locations as a part of organization, if the annotations are
+-- separated with a white space, e.g. 'IBM Deustchland'
+create view OrgWithLocation as
+    select CombineSpans(FOCWD.org, ACSC.match) as org 
+    from FinalOrgConsolidatedWithoutDots FOCWD,
+        AllCityStateCountry ACSC
+    where MatchesRegex(/\s/, SpanBetween(FOCWD.org, ACSC.match));
+
+/* before collecting organizations within Internet e-mails, unite
+  all the organization annotations identified so far */   
+create view OrgUnion as
+   (select C.org as org from OrgWithLocation C)
+	union all
+   (select C.org as org from FinalOrgConsolidatedWithoutDots C);
+    
+--collect organizations from Internet e-mails
+create view OrgWithinInternetEmail as
+    select OU.org as org, IE.match as match
+    from InternetEmail IE,
+        OrgUnion OU
+    where Contains(IE.match, OU.org);
+
+-- fileter out the organizations within Internet e-mails    
+create view OrgValid as
+    (select OU.org as org from OrgUnion OU)
+    minus
+    (select OWIE.org as org from OrgWithinInternetEmail OWIE);
+
+/* collect locations completely contained within organizations
+   e.g. 'IBM Deustchland GmbH' */
+create view CityStateCountryWithinOrg as
+select C.match as match
+from   AllCityStateCountry C,
+	   OrgValid O 
+where  Contains(O.org, C.match);  
+
+-- collect locations that are within the addresses	
+create view CityStateCountryWithinAddress as
+    select L.match as loc, A.loc as add
+    from AllCityStateCountry L,
+        FinalPlaceConsolidated A 
+    where  Contains(A.loc, L.match);
+    
+
+-- Tatiana: added 27.01.09 collects all the locations that are either
+-- completely contained within the LotusNotes emails(more precisely
+-- in the part before the first slash) or annotated for both
+create view WrongLocationWithinLotusNotes as
+    (select P.match as loc
+    from   AllCityStateCountry P,
+	   NameWithinLotusEmail N 
+    where Equals(N.match,P.match))
+    union all
+    (select P.match as loc
+    from   AllCityStateCountry P,
+	   NameWithinLotusEmail N 
+    where Contains(N.match,P.match));
+
+
+-- collect locations, comletely contained within Internet e-mails   
+create view CityStateCountryWithinInternetEmail as
+    select CSCV1.match as loc, IE.match as match
+	from InternetEmail IE,
+		AllCityStateCountry CSCV1
+ 	where
+		Contains(IE.match, CSCV1.match);
+
+/* collect all the location annotations all the annotations,
+   that are completely contained within person names, organizations,
+   addresses, Lotus Notes e-mail addresses and Internet e-mails */        
+create view CityStateCountryInvalid as
+	(select C.match as loc from CityStateCountryWithinPerson C)
+	union all
+	(select C.match as loc from CityStateCountryWithinOrg C)
+    union all
+	(select C.loc as loc from CityStateCountryWithinAddress C)
+    union all
+	(select C.loc as loc from WrongLocationWithinLotusNotes C)
+    union all
+	(select C.loc as loc from CityStateCountryWithinInternetEmail C);
+        
+-- final locations do not all the locations from the view above   
+create view CityStateCountryValid as
+    (select C.match as loc from AllCityStateCountry C)
+       minus
+    (select C.loc as loc from CityStateCountryInvalid C);                                                       
+ 
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Output section <<<<<<<<<<<<<<<<
+-- ===========================================================================	
+
+create view SystemTPhoneNumber as select P.num as num
+from PhoneNumOnly P
+-- disallow multiple new line
+where Not(ContainsRegex(/[\n\r]{2,}/, P.num));
+
+output view SystemTPhoneNumber as 'com.ibm.systemT.PhoneNumber';
+
+create view SystemTAddress as select P.loc as loc
+-- change output to remove unwanted types
+from FinalPlaceConsolidated P
+consolidate on P.loc
+using 'LeftToRight';
+
+output view SystemTAddress as 'com.ibm.systemT.Address';
+
+create view SystemTOrg as select O.org as org
+from OrgValid O
+consolidate on O.org
+using 'LeftToRight';
+
+output view SystemTOrg as 'com.ibm.systemT.Organization';
+
+create view SystemTLocation as select L.loc as loc
+from CityStateCountryValid L
+consolidate on L.loc;  
+
+output view SystemTLocation as 'com.ibm.systemT.Location';
+
+create view SystemTPerson as select P.person as name
+from PersonValid P
+consolidate on P.person;
+
+output view SystemTPerson as 'com.ibm.systemT.Person';

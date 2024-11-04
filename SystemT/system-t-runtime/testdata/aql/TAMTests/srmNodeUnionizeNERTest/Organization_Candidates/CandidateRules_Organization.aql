@@ -1,0 +1,336 @@
+module Organization_Candidates;
+
+-- Extend full orgs with auxiliary suffix (e.g., Global, International)
+-- or industry weak suffix 
+ create view OrgFullExtended as
+ extract pattern <O.match> (<SA.match> | <SIW.match> | <SI.match>) as match
+ from OrgFull O, OrgClueStSuffixAuxCaps SA, OrgClueStIndSuffixWeakCaps SIW, OrgClueStIndCaps SI;
+ 
+   
+    create view Coonetotwo as
+    select B.block as match
+    from BlockTok(0, 1, 2, CapsOrg.match) B;
+
+    create view Coonetothree as
+    select B.block as match
+    from BlockTok(0, 1, 3, CapsOrg.match) B;
+		
+-- rule 7
+		
+	create view CoOcscOpCo as
+	select
+ 		CombineSpans(coco1.match, coco2.match) as match
+	from
+		Coonetotwo coco1,
+		OrgClueStCaps ocsc,
+		OrgPrep op,
+		Coonetotwo coco2
+ 	where
+		FollowsTok(coco1.match, ocsc.match, 0, 0) and
+		FollowsTok(ocsc.match, op.match,0, 0) and
+		FollowsTok(op.match, coco2.match, 0, 0);
+		
+
+-- rule 10
+
+  create view CoOcsic1 as
+	select
+ 		CombineSpans(coco.match, ocsic.match) as match
+	from
+		Coonetothree coco,
+		OrgClueStIndCaps ocsic 
+ 	where
+		FollowsTok(coco.match, ocsic.match, 0, 0);
+		
+ create view CoOcsic2 as
+	select
+ 		CombineSpans(coco.match, ocsic.match) as match
+	from
+		Coonetothree coco,
+ 		OrgClueStSuffixCaps ocsic
+ 	where
+		FollowsTok(coco.match, ocsic.match, 0, 0)
+		-- to avoid matches such as Hampering E.P.A. where P.A. is the suffix
+		and MatchesRegex(/\s+/, SpanBetween(coco.match, ocsic.match));
+
+
+create view CoOcsicAll as
+	(select C.match as match from CoOcsic1 C)
+	union all
+	(select C.match as match from CoOcsic2 C)
+	union all
+	(select C.companyname as match from CompanyInfoStrong C);
+
+create view CoOcsic as
+	(select C.match as match from CoOcsicAll C)
+	minus
+	(select C.match as match from NonOrgs C);
+
+-- rule 10 expansion
+	create view CoOcsicEx as
+	select CombineSpans(C.match, S.match) as match
+	from   CoOcsic1 C,
+		   OrgClueStSuffixCaps S,
+		   CapsOrg O
+	where  FollowsTok(C.match, O.match, 0, 0)
+	   and FollowsTok(O.match, S.match, 0, 0);
+
+--rule 9
+
+  create view CoOcsscAll as
+	select
+ 		CombineSpans(coco.match, ocssc.match) as match
+	from
+		Coonetothree coco,
+		OrgClueStSuffixCaps ocssc 
+ 	where
+		FollowsTok(coco.match, ocssc.match, 0, 1) and
+		-- allow cases such as 'Test Test AG' as well		
+		MatchesRegex(/\s*[,\s]\s*/, SpanBetween(coco.match,ocssc.match));
+		
+	create view CoOcssc as
+	(select C.match as match from CoOcsscAll C)
+	minus
+	(select C.match as match from NonOrgs C);
+	
+-- rule 5
+  create view OcscOpCoOcCoAll as
+	select
+ 		CombineSpans(ocsc.match, coco2.match) as match, coco2.match as suffix
+	from
+		OrgClueStIndPrefixCaps ocsc,
+		OrgPrep op,
+		Coonetotwo coco1,
+		OrgConj oc,
+		Coonetothree coco2
+	 	where
+			FollowsTok(ocsc.match, op.match, 0, 0) and
+			FollowsTok(op.match, coco1.match, 0, 0) and
+			FollowsTok(coco1.match, oc.match, 0, 0) and
+			FollowsTok(oc.match, coco2.match, 0, 0);
+  
+  -- avoid match "Univ. of Michigan and Ohio State University"
+   create view OcscOpCoOcCoInvalid as
+   select o.match as match, c.match as suffix
+   from 
+   		OcscOpCoOcCoAll o,
+   		CoOcsic1 c
+   where 
+   		Overlaps(o.suffix, c.match) and
+   		Not(ContainsRegex(/&/, o.match));
+   
+   create view OcscOpCoOcCo as 
+   		(select o.match as match  from	OcscOpCoOcCoAll o)
+   		minus
+   		(select o.match as match  from	OcscOpCoOcCoInvalid o);
+   			   
+   create view CoOcscOpCoOcCo as 
+  	  select 
+  	  		CombineSpans(coco.match, R1.match) as match
+  	  from 
+  	  		Coonetothree coco,
+  	  		OcscOpCoOcCo R1
+  	  where 
+  	  		FollowsTok(coco.match,R1.match,0,0);
+  
+   create view CoOcscOpCoOcCoAll as
+   	   	(select o.match as match from OcscOpCoOcCo o)
+   	   union all
+ 		(select o.match as match from CoOcscOpCoOcCo o);
+ 
+
+   create view CoOcscOpCoOcCoConsolidated as
+   select 
+   		o.match as match
+   from 
+   		CoOcscOpCoOcCoAll o;
+   	   
+-- R1
+
+	create view OfCo as
+		select 
+			CombineSpans(of.match,coco.match) as match
+		from
+			OrgFull of,
+			Coonetotwo coco
+		where
+			FollowsTok(of.match,coco.match,0,0);
+	  	  		
+	 create view OfCozerototwo as
+	 	(select R.match as match from OrgFull R)
+	 union all
+	    (select R.match as match from OfCo R);
+	    
+	 create view OfCoOcsc as
+	     select
+	     	CombineSpans(of.match,ocsc.match) as match
+	     from
+	     	OfCozerototwo of,
+	     	OrgClueStCaps ocsc
+	     where
+	     	FollowsTok(of.match,ocsc.match,0,0);
+	     	
+-- R2
+
+	create view CoOc as
+	     select
+	     	CombineSpans(co.match,oc.match) as match
+	     from
+	     	Coonetotwo co,
+	     	OrgConj oc
+	     where
+	     	FollowsTok(co.match,oc.match,0,0);
+	     	
+	create view CoOcCo as
+	     select
+	     	CombineSpans(cooc.match,co.match) as match
+	     from
+	     	CoOc cooc,
+	     	Coonetotwo co
+	     where
+	     	FollowsTok(cooc.match,co.match,0,0);
+
+	create view CoOcCozerototwo as
+		(select R.match as match from CoOc R)
+	union all 
+		(select R.match as match from CoOcCo R); 
+
+	create view CoOcCozerototwoOcscOpCo as
+		select
+	     	CombineSpans(coocco.match,co.match) as match
+	     from
+	     	CoOcCozerototwo coocco,
+	     	OrgClueStCaps ocsc,
+	     	OrgPrep op,
+	     	Coonetotwo co
+	     where
+	     	FollowsTok(coocco.match, ocsc.match,0,0) and
+	     	FollowsTok(ocsc.match,op.match,0,0) and
+	     	FollowsTok(op.match,co.match,0,0);
+	
+	-- to support organization names as 'MedCare Inc'
+	create view AllCapsOrgStClue as 
+	select CombineSpans(O.match, C.match) as match 
+	from OrgClueStCaps C,
+		 AllCapsOrg	O
+	where FollowsTok(O.match, C.match, 0, 0);
+	     	
+-- R11
+-- to support organization names such as 'the University of Washington' etc
+
+create view OrganizationR11_no_quantifiertemp as
+select OP.match as match, CO.match as block
+from  Coonetothree CO,
+	  OrgPrep P,
+      OrgClueStIndPrefixCaps OP
+where FollowsTok(OP.match, P.match, 0, 0)
+  and FollowsTok(P.match, CO.match, 0, 0);
+  
+create view OrganizationR11_no_quantifier as
+select CombineSpans(O.match, O.block) as match
+from OrganizationR11_no_quantifiertemp O
+where  
+  	  -- Avoid capture partial organization name such as '[Univ. of Michigan College] of Engineering'
+     Not(ContainsDict('PrefixesForGroupsOfOrganizations', O.block)) and
+     Not(ContainsDict('PrefixesForEducationalOrganizations', O.block)) and
+     Not(ContainsDict('PrefixesForGovernmentOrganizations', O.block)) and
+     Not(ContainsDict('PrefixesForMedicalOrganizations', O.block)) and
+     Not(ContainsDict('PrefixesForOtherOrganizations', O.block));
+  
+create view OrganizationR11_with_quantifier as
+select CombineSpans(CO.match, O.match) as match	
+from Coonetothree CO,
+	 OrganizationR11_no_quantifier O
+where FollowsTok(CO.match, O.match, 0, 0);
+
+
+create view OrganizationR11_no_the as 
+ 	(select O.match as match from OrganizationR11_no_quantifier O)
+union all
+	(select O.match as match from OrganizationR11_with_quantifier O);
+	
+-- R5, R7, R9, R10, R11
+ 
+ 	create view Org5791011	
+	as 
+	 (select R.match as match from  CoOcscOpCoOcCoConsolidated R)
+	 union all 
+	 (select R.match as match from  CoOcsic R)
+	union all 
+	 (select R.match as match from CoOcssc R)
+	union all 
+	 (select R.match as match from  CoOcscOpCo R)
+	union all
+	 (select R.match as match from  OrganizationR11_no_the R)
+	union all
+	 (select R.match as match from CoOcsicEx R);
+
+ create view ExpandedOrg5791011R1 as
+	 	select
+			CombineSpans(ab.match, org5791011.match) as match
+  	  from 
+  	  		AllCapsOrg  ab,
+  	  		Org5791011 org5791011
+  	  where 
+  	  		FollowsTok(ab.match,org5791011.match,0,0);
+  	  		
+  	create view ExpandedOrg5791011R2 as
+	 	select
+			CombineSpans(ab.word, org5791011.match) as match
+  	  from 
+  	  		InitialWord  ab,
+  	  		Org5791011 org5791011
+  	  where 
+  	  		FollowsTok(ab.word,org5791011.match,0,0);
+	
+	create view ExpandedOrg5791011 as
+		(select O.match as match from  ExpandedOrg5791011R1 O)
+		union all
+		(select O.match as match from  ExpandedOrg5791011R2 O);
+		
+  	 create view TheOrg5791011 as  
+  	  select 
+  	  		CombineSpans(C.match, org5791011.match) as match
+  	  from 
+  	  		The  the,
+  	  		CoOc C,
+  	  		Org5791011 org5791011
+  	  where 
+  	  		FollowsTok(the.match,C.match,0,0) and
+  	  		FollowsTok(C.match,org5791011.match,0,0);
+  	  		  	 
+ 	create view ExpandedOrg5791011WithAnd1 as
+	select 
+		CombineSpans(C.match, O.match) as match
+	from 
+		Coonetothree C,
+		Org5791011 O
+	where
+		FollowsTok(C.match, O.match, 0,1) and
+		MatchesRegex(/\s+[&]\s+/, SpanBetween(C.match, O.match));
+	
+	create view ExpandedOrg5791011WithAnd2 as
+	select 
+		CombineSpans(C.match, O.match) as match
+	from 
+		AllCapsOrg C,
+		ExpandedOrg5791011WithAnd1 O
+	where
+		FollowsTok(C.match, O.match, 0,0);
+	
+	create view ExpandedOrg5791011WithAnd3 as
+	select 
+		CombineSpans(I.word, O.match) as match
+	from 
+		InitialWord I,
+		ExpandedOrg5791011WithAnd1 O
+	where
+		FollowsTok(I.word, O.match, 0,0);
+		
+	create view ExpandedOrg5791011WithAnd as
+		(select O.match as match from ExpandedOrg5791011WithAnd1 O)
+		union all
+		(select O.match as match from ExpandedOrg5791011WithAnd2 O)
+		union all
+		(select O.match as match from ExpandedOrg5791011WithAnd3 O);
+  

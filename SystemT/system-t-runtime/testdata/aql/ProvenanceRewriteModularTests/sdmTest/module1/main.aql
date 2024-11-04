@@ -1,0 +1,26 @@
+module module1;
+
+create dictionary TheDict as(
+'the'
+);
+
+create dictionary ADict as (
+'a'
+);
+
+-- Copy of the view Document
+create view DocCopy as 
+	select D.text as text, D.label as tweetId
+	from Document D;
+	
+-- Force SDM on DocCopy.text
+create view Dict1 as
+extract D.tweetId as tweetId, dictionary 'ADict' on D.text as aWord 
+from DocCopy D;
+
+create view Dict2 as
+extract dictionary 'TheDict' on D.text as match 
+from DocCopy D;
+	
+output view Dict1;
+output view Dict2;

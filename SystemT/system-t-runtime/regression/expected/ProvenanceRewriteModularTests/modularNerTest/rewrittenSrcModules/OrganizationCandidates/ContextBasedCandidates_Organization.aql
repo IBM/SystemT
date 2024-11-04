@@ -1,0 +1,356 @@
+module OrganizationCandidates;
+
+
+create view OrgAbbrevFormal as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    O.__auto__id as __Subquery__241__Temp_____sep_____O____id,
+    regex /\(\s*(\p{Lu}\p{M}*(\p{L}\p{M}*)+)\s*\)/
+    with flags 'DOTALL'
+    on between 3 and 3 tokens in O.rc
+    return group 1 as org
+  from __Subquery__241__Temp O
+  having Not(MatchesDict('FiltersForOrganizationAll', org));
+
+output view OrgAbbrevFormal;
+
+create view AnyCapsOrgWithDash as
+  select  CombineSpans(CW.match, RightContextTok(CW.match, 1)) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CW.__auto__id as AnyCapsOrg_____sep_____CW____id
+  from  AnyCapsOrg CW
+  where MatchesRegex(/[^-]+-/, CW.match)
+     and MatchesRegex(/\p{Lu}\p{M}*.*/, RightContextTok(CW.match, 1));
+
+output view AnyCapsOrgWithDash;
+
+create view AnyCapsOrgExtended as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__242__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__242__TempOp__1 Op);
+
+output view AnyCapsOrgExtended;
+
+create view CapsWordOnetoFive as
+  select  Op.match as match,
+          AutoID() as __auto__id
+  from  __Base__OrganizationCandidates__CapsWordOnetoFive__Temp Op;
+
+output view CapsWordOnetoFive;
+
+
+
+
+
+create view LeftClue9Single as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionaries 'SingularPositiveCluesForOrganizationWithinNineTokenstoLeft'
+                   and 'PluralPositiveCluesForOrganizationWithinNineTokenstoLeft'
+    on D.text as match
+  from DocumentText D
+  having MatchesRegex(/[\p{Ll}\p{M}* ]+/, match)
+     and Not(MatchesDict('PositiveCluesForOrganizationWithinNineTokenstoLeft', 'Exact', match));
+
+output view LeftClue9Single;
+
+
+
+create view OrgAdditional9Single as
+  select  Op.org as org,
+          AutoID() as __auto__id
+  from  __Base__OrganizationCandidates__OrgAdditional9Single__Temp Op;
+
+output view OrgAdditional9Single;
+
+create view OrgAdditional9PluralList as
+  select  Op.orgList as orgList,
+          AutoID() as __auto__id
+  from  __Base__OrganizationCandidates__OrgAdditional9PluralList__Temp Op;
+
+output view OrgAdditional9PluralList;
+
+create view OrgAdditional9Plural as
+  select  CW.match as org,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CW.__auto__id as CapsWordOnetoFive_____sep_____CW____id,
+          O.__auto__id as OrgAdditional9PluralList_____sep_____O____id
+  from  CapsWordOnetoFive CW,
+        OrgAdditional9PluralList O
+  where Contains(O.orgList, CW.match)
+     and Not(ContainsDict('WorldCountries', CW.match))
+     and Not(ContainsDict('WorldNationalities', CW.match));
+
+output view OrgAdditional9Plural;
+
+create view LeftClue10 as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'PositiveCluesForOrganizationWithinTenTokensToLeft'
+    on D.text as match
+  from DocumentText D
+  having Not(MatchesRegex(/[\p{Lu}\p{M}* ]+/, match));
+
+output view LeftClue10;
+
+create view OrgAdditional10 as
+  select  Op.org as org,
+          AutoID() as __auto__id
+  from  __Base__OrganizationCandidates__OrgAdditional10__Temp Op;
+
+output view OrgAdditional10;
+
+create view OrgContext as
+  (select  Op.org as org,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__243__TempOp__0 Op)
+  union all
+  (select  Op.org as org,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__243__TempOp__1 Op)
+  union all
+  (select  Op.org as org,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__243__TempOp__2 Op);
+
+output view OrgContext;
+
+create view OrgContextExtended1 as
+  select  CombineSpans(O.org, OCSC.match) as org,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          O.__auto__id as OrgContext_____sep_____O____id,
+          OCSC.__auto__id as OrgClueStCaps_____sep_____OCSC____id
+  from  OrgContext O,
+        OrgClueStCaps OCSC
+  where Overlaps(O.org, OCSC.match)
+     and GreaterThan(GetBegin(OCSC.match), GetBegin(O.org));
+
+output view OrgContextExtended1;
+
+create view OrgContextExtended2 as
+  select  CombineSpans(O.org, OCSC.match) as org,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          O.__auto__id as OrgContext_____sep_____O____id,
+          OCSC.__auto__id as OrgClueStCaps_____sep_____OCSC____id
+  from  OrgContext O,
+        OrgClueStCaps OCSC
+  where FollowsTok(O.org, OCSC.match, 0, 0);
+
+output view OrgContextExtended2;
+
+create view OrgContextExtended as
+  (select  Op.org as org,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__244__TempOp__0 Op)
+  union all
+  (select  Op.org as org,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__244__TempOp__1 Op);
+
+output view OrgContextExtended;
+
+create view OrgFormal as
+  (select  Op.org as org,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__245__TempOp__0 Op)
+  union all
+  (select  Op.org as org,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__245__TempOp__1 Op)
+  union all
+  (select  Op.org as org,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__245__TempOp__2 Op);
+
+output view OrgFormal;
+
+create view __Base__OrganizationCandidates__CapsWordOnetoFive__Temp as
+  extract pattern (<CW.match>|<IW.word>|'&'|'-'){1,5}
+  return group 0 as match
+  with inline_match on DocumentText.text
+  from  AnyCapsOrgExtended CW,
+        InitialWord IW
+  having  MatchesRegex(/\p{L}\p{M}*.+/, match);
+
+output view __Base__OrganizationCandidates__CapsWordOnetoFive__Temp;
+
+create view __Base__OrganizationCandidates__OrgAdditional10__Temp as
+  select  O.org as org
+  from  
+    (extract pattern <C.match> (<O.match>)
+    return group 0 as match
+       and group 1 as org
+    from  LeftClue10 C,
+          CapsWordOnetoFive O
+    having  Not(ContainsRegex(/[\n\r]/, match))
+    consolidate on match using 'ContainedWithin'
+    ) O
+  where Not(ContainsDict('WorldCountries', O.org))
+     and Not(MatchesDict('WorldNationalities', O.org))
+     and Not(MatchesRegex(/\s*'\s*s/, RightContextTok(O.org, 2)))
+     and Not(ContainsDict('NegativeCluesForOrganizationWithinTenTokens', O.org));
+
+output view __Base__OrganizationCandidates__OrgAdditional10__Temp;
+
+create view __Base__OrganizationCandidates__OrgAdditional9PluralList__Temp as
+  select  O.orgList as orgList
+  from  
+    (extract pattern <O.org> ((('and'|',') <CW.match>){1,3})
+    return group 0 as match
+       and group 1 as orgList
+    with inline_match on DocumentText.text
+    from  OrgAdditional9Single O,
+          CapsWordOnetoFive CW
+    having  ContainsDict('PluralPositiveCluesForOrganizationWithinNineTokenstoLeft', LeftContextTok(match, 1))
+    consolidate on match using 'ContainedWithin'
+    ) O;
+
+output view __Base__OrganizationCandidates__OrgAdditional9PluralList__Temp;
+
+create view __Base__OrganizationCandidates__OrgAdditional9Single__Temp as
+  select  O.org as org
+  from  
+    (extract pattern <C.match> ('--')? (<O.match>)
+    return group 0 as match
+       and group 2 as org
+    with inline_match on DocumentText.text
+    from  LeftClue9Single C,
+          CapsWordOnetoFive O
+    having  Not(ContainsRegex(/[\n\r]/, match))
+    consolidate on match using 'ContainedWithin'
+    ) O
+  where Not(MatchesDict('WorldCountries', O.org))
+     and Not(MatchesDict('WorldNationalities', O.org))
+     and Not(MatchesDict('NegativeCluesForOrganizationWithinNineTokens', O.org));
+
+output view __Base__OrganizationCandidates__OrgAdditional9Single__Temp;
+
+create view __Subquery__241__Temp as
+  select  RightContextTok(O.org, 3) as rc,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          O.__auto__id as FinalOrgConsolidated_____sep_____O____id
+  from  FinalOrgConsolidated O;
+
+output view __Subquery__241__Temp;
+
+create view __Union__242__TempOp__0 as
+  select  AnyCapsOrg.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          AnyCapsOrg.__auto__id as AnyCapsOrg_____sep_____AnyCapsOrg____id
+  from  AnyCapsOrg AnyCapsOrg;
+
+output view __Union__242__TempOp__0;
+
+create view __Union__242__TempOp__1 as
+  select  AnyCapsOrgWithDash.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          AnyCapsOrgWithDash.__auto__id as AnyCapsOrgWithDash_____sep_____AnyCapsOrgWithDash____id
+  from  AnyCapsOrgWithDash AnyCapsOrgWithDash;
+
+output view __Union__242__TempOp__1;
+
+create view __Union__243__TempOp__0 as
+  select  R.org as org,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as OrgAdditional9Single_____sep_____R____id
+  from  OrgAdditional9Single R;
+
+output view __Union__243__TempOp__0;
+
+create view __Union__243__TempOp__1 as
+  select  R.org as org,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as OrgAdditional9Plural_____sep_____R____id
+  from  OrgAdditional9Plural R;
+
+output view __Union__243__TempOp__1;
+
+create view __Union__243__TempOp__2 as
+  select  R.org as org,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as OrgAdditional10_____sep_____R____id
+  from  OrgAdditional10 R;
+
+output view __Union__243__TempOp__2;
+
+create view __Union__244__TempOp__0 as
+  select  OrgContextExtended1.org as org,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          OrgContextExtended1.__auto__id as OrgContextExtended1_____sep_____OrgContextExtended1____id
+  from  OrgContextExtended1 OrgContextExtended1;
+
+output view __Union__244__TempOp__0;
+
+create view __Union__244__TempOp__1 as
+  select  OrgContextExtended2.org as org,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          OrgContextExtended2.__auto__id as OrgContextExtended2_____sep_____OrgContextExtended2____id
+  from  OrgContextExtended2 OrgContextExtended2;
+
+output view __Union__244__TempOp__1;
+
+create view __Union__245__TempOp__0 as
+  select  R.org as org,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as OrgAbbrevFormal_____sep_____R____id
+  from  OrgAbbrevFormal R;
+
+output view __Union__245__TempOp__0;
+
+create view __Union__245__TempOp__1 as
+  select  R.org as org,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as OrgContext_____sep_____R____id
+  from  OrgContext R;
+
+output view __Union__245__TempOp__1;
+
+create view __Union__245__TempOp__2 as
+  select  R.org as org,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as OrgContextExtended_____sep_____R____id
+  from  OrgContextExtended R;
+
+output view __Union__245__TempOp__2;
+

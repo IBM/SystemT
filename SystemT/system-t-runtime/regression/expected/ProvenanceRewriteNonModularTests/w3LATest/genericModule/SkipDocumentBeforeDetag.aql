@@ -1,0 +1,49 @@
+module genericModule;
+
+
+create function skipDocument(
+  text Span  ,minCharCount Integer  ,headerCheckLimit Integer  ,outList ScalarList)
+return ScalarList like outList
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.SkipUDF!SkipDocument'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create view OutListForSkipDocument as
+  select  Op.list as list,
+          AutoID() as __auto__id
+  from  __Base__OutListForSkipDocument__Temp Op;
+
+output view OutListForSkipDocument;
+
+create view SkipDocumentAll as
+  select  skipDocument(D.text, 48, 80, L.list) as skipResult,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as Document_____sep_____D____id,
+          L.__auto__id as OutListForSkipDocument_____sep_____L____id
+  from  Document D,
+        OutListForSkipDocument L;
+
+output view SkipDocumentAll;
+
+create view SkipDocumentBeforeDetagging as
+  select  getElementFromStrList(S.skipResult, 0) as reason,
+          getElementFromStrList(S.skipResult, 1) as content,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as SkipDocumentAll_____sep_____S____id
+  from  SkipDocumentAll S
+  where NotNull(S.skipResult);
+
+output view SkipDocumentBeforeDetagging;
+
+create view __Base__OutListForSkipDocument__Temp as
+  select  List(0) as list
+  from  Document D;
+
+output view __Base__OutListForSkipDocument__Temp;
+

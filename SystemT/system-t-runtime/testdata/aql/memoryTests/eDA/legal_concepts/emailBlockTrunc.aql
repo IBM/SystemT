@@ -1,0 +1,114 @@
+
+--Prasad -- This query is very costly, so commenting it out. Did a workaround, so don't need it anymore.
+--create view Subject as
+--select R.match as annot
+--into Subject
+--from Regex(/(?m)^(?-s).*\w+.*$\s*\z/, Document.text) R;
+
+create view BodyBetweenFB as
+select SpanBetween(FB1.annot, FB2.annot) as annot
+--into BodyBetweenFB 
+from ForwardBlock FB1, ForwardBlock FB2
+where GreaterThan(GetBegin(FB2.annot), GetEnd(FB1.annot));
+
+create view BodyAtBegin as
+select SpanBetween(R.match, FB.annot) as annot
+--into BodyAtBegin
+from Regex(/\A/, Document.text) R, ForwardBlock FB;
+
+create view BodyAtEnd as
+select SpanBetween(FB.annot, R.match) as annot
+--into BodyAtEnd
+from ForwardBlock FB, Regex(/\z/, Document.text) R;
+
+create view EntireBody as
+select SpanBetween(R1.match, R2.match) as annot
+-- into EntireBody
+from Regex(/\A/, Document.text) R1, Regex(/\z/, Document.text) R2;
+
+create view BodyAll as
+    (select B.annot as annot from BodyBetweenFB B)
+    union all
+    (select B.annot as annot from BodyAtBegin B)
+    union all
+    (select B.annot as annot from BodyAtEnd B)
+    union all
+    (select B.annot as annot from EntireBody B);
+--    union all
+--    (select S.annot as annot from Subject S);
+
+create view EmailBlock as
+select B.annot as annot
+--into EmailBlock
+from BodyAll B
+consolidate on B.annot
+using 'NotContainedWithin';
+
+create view Greeting as
+select R.match as annot
+-- into Greeting
+from Regex(/\n\W*(regards|thanks?|bye|ciao|best,|best\s+regards|sincerely|enjoy.)(\s*\w+){0,4}\W*\n/, 'CASE_INSENSITIVE', EmailBlock.annot) R;
+
+-- Find a separator that has at least 10 words after it
+
+create view Separator1 as
+select R.match as annot
+-- into Separator1
+-- from Regex(/(?m)\n[_\-=\*]{10,}.*$(?m)(?s)\W*\w/, EmailBlock.annot) R;
+from Regex(/(?m)\s*[_\-=\*\.]{10,}(?-s).*$/, EmailBlock.annot) R
+where Not(ContainsRegex(/[fF]orward/, R.match));
+
+create view Separator as
+select S1.annot as annot
+-- into Separator
+from Separator1 S1, EmailBlock EB
+where And(Contains(EB.annot, S1.annot), Follows(S1.annot, RightContext(EB.annot,0),100,1500));
+
+
+-- Remove part after the signature
+create view EmailBlockTrunc1 as
+select SpanBetween(LeftContext(EB.annot,0), G.annot) as annot
+-- into EmailBlockTrunc1
+from EmailBlock EB, Greeting G
+where Contains(EB.annot, G.annot);
+
+-- Remove part after the separator
+create view EmailBlockTrunc2Candidate as
+select SpanBetween(LeftContext(EB.annot, 0), S.annot) as annot
+--into EmailBlockTrunc2Candidate
+from EmailBlock EB, Separator S
+where Contains(EB.annot, S.annot);
+
+create view EmailBlockTrunc2 as
+select EBT.annot as annot
+--into EmailBlockTrunc2
+from EmailBlockTrunc2Candidate EBT
+consolidate on EBT.annot
+using 'ContainedWithin';
+
+-- Disregard separators that come before the Greetings since they don't indicate footer
+create view EmailBlockTrunc3 as 
+   (select EBT2.annot as annot
+    from EmailBlockTrunc2 EBT2)
+minus
+   (select EBT2.annot as annot
+    from EmailBlockTrunc1 EBT1, EmailBlockTrunc2 EBT2
+    where Contains(EBT1.annot, EBT2.annot));
+
+-- Find the appropriate truncation, based on presence of Greeting and Separator
+create view EmailBlockTrunc4 as
+   (select EB.annot as annot
+    from EmailBlock EB)
+union all
+   (select EBT1.annot as annot
+    from EmailBlockTrunc1 EBT1)
+union all
+   (select EBT3.annot as annot
+    from EmailBlockTrunc3 EBT3);
+
+create view EmailBlockTrunc as
+select EBT4.annot as annot
+--into EmailBlockTrunc
+from EmailBlockTrunc4 EBT4
+consolidate on EBT4.annot
+using 'NotContainedWithin';

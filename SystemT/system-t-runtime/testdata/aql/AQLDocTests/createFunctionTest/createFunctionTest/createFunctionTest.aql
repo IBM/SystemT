@@ -1,0 +1,124 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test cases for associating AQL Doc comments with the right create function 
+-- statement when there are no ParseExceptions.
+--
+-------------------------------------------------------------------------------
+
+
+module createFunctionTest;
+
+/* A comment spanning a single line. Will be ignored.*/
+
+/*
+A comment spanning
+multiple lines.
+Will be ignored.
+*/
+
+
+/** An AQL Doc comment for Test1 on a single line. Should be attached to Test1.*/
+create function Test1(p1 Span, p2 Span)
+return Span like p1
+external_name 'udfs.jar:com.ibm.test.udfs.udf1!combineSpans'
+language java 
+deterministic
+return null on null input;
+
+
+/** An AQL Doc comment for Test2 
+on two lines. Should be parsed and attaced to Test2.*/
+create function Test2(p1 Span, p2 Span)
+return Span like p1
+external_name 'udfs.jar:com.ibm.test.udfs.udf1!combineSpans'
+language java 
+deterministic
+return null on null input;
+
+
+/** 
+ * An AQL Doc comment for Test3 
+ * on multiple lines. 
+ * Should be parsed and attached to Test3.
+ */
+create function Test3(p1 Span, p2 Span)
+return Span like p1
+external_name 'udfs.jar:com.ibm.test.udfs.udf1!combineSpans'
+language java 
+deterministic
+return null on null input;
+
+
+/** 
+ * Some AQL Doc comment. Should be parsed but not attached to the next view.
+ * Instead, the next view will be paired with the following AQL doc comment. 
+ */
+/** 
+ * An AQL Doc comment for Test4. Should be parsed and attached to Test4.
+ */
+create function Test4(p1 Span, p2 Span)
+return Span like p1
+external_name 'udfs.jar:com.ibm.test.udfs.udf1!combineSpans'
+language java 
+deterministic
+return null on null input;
+
+
+/** 
+ * An AQL Doc comment for Test5. Should be parsed and attached to Test5. 
+ * The next multiline comment and single line comments will be ignored.
+ */
+/* 
+ * A multiline comment. Should be ignored.
+ */
+-- A single line comment. Should be ignored.
+create function Test5 (p1 Span, p2 Span)
+return Span like p1
+external_name 'udfs.jar:com.ibm.test.udfs.udf1!combineSpans'
+language java 
+deterministic
+return null on null input;
+
+
+/** 
+ * An AQL Doc comment for Test6. Should be parsed and attached to Test6. 
+ * The next single line comment will be ignored.
+ */
+-- A single line comment. Should be ignored.
+create function Test6 (p1 Span, p2 Span)
+return Span like p1
+external_name 'udfs.jar:com.ibm.test.udfs.udf1!combineSpans'
+language java 
+deterministic
+return null on null input;
+
+/** 
+ * An AQL Doc comment for Test7. Should be parsed and attached to Test7. 
+ * The next multiline comment will be ignored.
+ */
+/* 
+ * A multiline comment. Should be ignored.
+ */
+create function Test7 (p1 Span, p2 Span)
+return Span like p1
+external_name 'udfs.jar:com.ibm.test.udfs.udf1!combineSpans'
+language java 
+deterministic
+return null on null input;
+
+-- A function with no AQL doc comment
+create function Test8 (p1 Span, p2 Span)
+return Span like p1
+external_name 'udfs.jar:com.ibm.test.udfs.udf1!combineSpans'
+language java 
+deterministic
+return null on null input;
+
+export function Test1;
+export function Test2;
+export function Test3;
+export function Test4;
+export function Test5;
+export function Test6;
+export function Test7;
+export function Test8;

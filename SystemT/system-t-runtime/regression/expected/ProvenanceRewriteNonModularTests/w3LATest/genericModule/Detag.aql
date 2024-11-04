@@ -1,0 +1,1821 @@
+module genericModule;
+
+
+create function SkipTags(
+  text String  ,skiplist ScalarList  ,bodyBegin Integer  ,bodyEnd Integer  ,skippedBodySpan ScalarList)
+return Text
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.SkipUDF!SkipTags'
+language java
+deterministic
+called on null input
+
+;
+
+
+create function Substring(
+  text String  ,begin Integer  ,end Integer)
+return Text
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UDF!Substring'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create view DocumentAfterSkip as
+  (select  Op.text as text,
+            Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__10__TempOp__0 Op)
+  union all
+  (select  Op.text as text,
+            Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__10__TempOp__1 Op);
+
+output view DocumentAfterSkip;
+
+create view TempViewForList as
+  select  Op.list as list,
+          AutoID() as __auto__id
+  from  __Base__TempViewForList__Temp Op;
+
+output view TempViewForList;
+
+detag DocumentAfterSkip.text as DetaggedDoc 
+detect content_type never
+  annotate
+     element 'a' as ATag
+       with attribute 'href' as target
+       and attribute 'id' as id
+       and attribute 'class' as class,
+     element 'h1' as H1Tag
+       with attribute 'id' as id
+       and attribute 'class' as class,
+     element 'h2' as H2Tag
+       with attribute 'id' as id
+       and attribute 'class' as class,
+     element 'h3' as H3Tag,
+     element 'title' as AllTitleTag,
+     element 'font' as FontTag,
+     element 'meta' as MetaTagAll
+       with attribute 'name' as name
+       and attribute 'content' as content
+       and attribute 'value' as value,
+     element 'input' as InputTag
+       with attribute 'name' as name,
+     element 'script' as ScriptTag,
+     element 'style' as StyleTag,
+     element 'noscript' as NoscriptTag,
+     element 'p' as PTag
+       with attribute 'id' as id
+       and attribute 'class' as class,
+     element 'div' as DivTag
+       with attribute 'id' as id
+       and attribute 'class' as class,
+     element 'span' as SpanTag
+       with attribute 'id' as id
+       and attribute 'class' as class,
+     element 'td' as TdTag
+       with attribute 'id' as id
+       and attribute 'class' as class
+       and attribute 'onmouseover' as onmouseover,
+     element 'tr' as TrTag
+       with attribute 'id' as id
+       and attribute 'class' as class,
+     element 'body' as BodyTag;
+
+create view TagsToSkipNoTitle as
+  select  T.type as type,
+          T.id as id,
+          T.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as __Subquery__12__Temp_____sep_____T____id
+  from  __Subquery__12__Temp T
+  order by T.match;
+
+output view TagsToSkipNoTitle;
+
+create view TagsToSkipNoTitleConsolidated as
+  select  __t2.match as match,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__13__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__13__Temp__1 __t1,
+        __Consolidate__13__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.match;
+
+output view TagsToSkipNoTitleConsolidated;
+
+create view NoscriptContentToSkip as
+  select  NS.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          NS.__auto__id as __Subquery__14__Temp_____sep_____NS____id
+  from  __Subquery__14__Temp NS;
+
+output view NoscriptContentToSkip;
+
+create view TagsToSkip as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__15__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__15__TempOp__1 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__15__TempOp__2 Op);
+
+output view TagsToSkip;
+
+create view TagsToSkipConsolidated as
+  select  __t2.match as match,
+          __t2.group_by as group_by,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__16__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__16__Temp__1 __t1,
+        __Consolidate__16__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.match, __t2.group_by;
+
+output view TagsToSkipConsolidated;
+
+create view TagsToSkipGroup as
+  select  Op.group_by as group_by,
+          Op.skiplist as skiplist,
+          AutoID() as __auto__id
+  from  __Base__TagsToSkipGroup__Temp Op;
+
+output view TagsToSkipGroup;
+
+create view BodyTagMissing as
+  select  Op.bodyBegin as bodyBegin,
+          Op.bodyEnd as bodyEnd,
+          AutoID() as __auto__id
+  from  __Base__BodyTagMissing__Temp Op;
+
+output view BodyTagMissing;
+
+create view BodyTagSpansAll as
+  (select  Op.bodyBegin as bodyBegin,
+            Op.bodyEnd as bodyEnd,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__17__TempOp__0 Op)
+  union all
+  (select  Op.bodyBegin as bodyBegin,
+            Op.bodyEnd as bodyEnd,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__17__TempOp__1 Op);
+
+output view BodyTagSpansAll;
+
+create view SkippedBodySpanOutList as
+  select  Op.skippedBodySpan as skippedBodySpan,
+          AutoID() as __auto__id
+  from  __Base__SkippedBodySpanOutList__Temp Op;
+
+output view SkippedBodySpanOutList;
+
+create view DetaggedDocumentUnnormalizedWhitespace as
+  select  SkipTags(GetText(D.text), T.skiplist, B.bodyBegin, B.bodyEnd, SBS.skippedBodySpan) as content,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DetaggedDoc_____sep_____D____id,
+          T.__auto__id as TagsToSkipGroup_____sep_____T____id,
+          B.__auto__id as BodyTagSpansAll_____sep_____B____id,
+          SBS.__auto__id as SkippedBodySpanOutList_____sep_____SBS____id
+  from  DetaggedDoc D,
+        TagsToSkipGroup T,
+        BodyTagSpansAll B,
+        SkippedBodySpanOutList SBS;
+
+output view DetaggedDocumentUnnormalizedWhitespace;
+
+create view DetaggedDocument as
+  select  NormalizeWhitespace(GetText(D.content)) as content,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as DetaggedDocumentUnnormalizedWhitespace_____sep_____D____id
+  from  DetaggedDocumentUnnormalizedWhitespace D
+  where NotNull(D.content);
+
+output view DetaggedDocument;
+
+create view DetaggedBody as
+  select  NormalizeWhitespace(GetString(D.content)) as content,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__18__Temp_____sep_____D____id
+  from  __Subquery__18__Temp D
+  where NotNull(D.content);
+
+output view DetaggedBody;
+
+create view DetaggedContent as
+  select  Op.content as content,
+          AutoID() as __auto__id
+  from  __Base__DetaggedContent__Temp Op;
+
+output view DetaggedContent;
+
+create view __Base__BodyTagMissing__Temp as
+  select  0 as bodyBegin,
+          0 as bodyEnd
+  from  Document D,
+
+        (select  Count(*) as bodyTagCount
+        from  BodyTag B
+        ) BC
+  where Equals(BC.bodyTagCount, 0);
+
+output view __Base__BodyTagMissing__Temp;
+
+create view __Base__DetaggedContent__Temp as
+  (select  D.content as content
+    from  DetaggedBody D)
+  union all
+  (select  D.content as content
+    from  DetaggedDocument D,
+
+          (select  Count(*) as cnt
+          from  DetaggedBody DetaggedBody
+          ) B
+    where Equals(B.cnt, 0));
+
+output view __Base__DetaggedContent__Temp;
+
+create view __Base__SkippedBodySpanOutList__Temp as
+  select  List(0) as skippedBodySpan
+  from  Document D;
+
+output view __Base__SkippedBodySpanOutList__Temp;
+
+create view __Base__TagsToSkipGroup__Temp as
+  (select  T.group_by as group_by,
+            List(T.match) as skiplist
+    from  
+      (select  T.match as match,
+              T.group_by as group_by
+      from  TagsToSkipConsolidated T
+      order by T.match
+      ) T
+    group by T.group_by)
+  union all
+  (select  0 as group_by,
+            Cast(null, 'ScalarList') as skiplist
+    from  DetaggedDoc D,
+
+          (select  Count(*) as cnt
+          from  TagsToSkipConsolidated TagsToSkipConsolidated
+          ) T
+    where Equals(T.cnt, 0));
+
+output view __Base__TagsToSkipGroup__Temp;
+
+create view __Base__TempViewForList__Temp as
+  select  List('') as list
+  from  Document D;
+
+output view __Base__TempViewForList__Temp;
+
+create view __Consolidate__13__Temp__1 as
+  select  T.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as TagsToSkipNoTitle_____sep_____T____id,
+          T.match as __consolidate__target
+  from  TagsToSkipNoTitle T
+  where NotNull(T.match);
+
+output view __Consolidate__13__Temp__1;
+
+create view __Consolidate__13__Temp__2 as
+  select  __t1.match as match,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__13__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__13__Temp__2;
+
+create view __Consolidate__16__Temp__1 as
+  select  T.match as match,
+          0 as group_by,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as TagsToSkip_____sep_____T____id,
+          T.match as __consolidate__target
+  from  TagsToSkip T
+  where NotNull(T.match);
+
+output view __Consolidate__16__Temp__1;
+
+create view __Consolidate__16__Temp__2 as
+  select  __t1.match as match,
+          __t1.group_by as group_by,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__16__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__16__Temp__2;
+
+create view __Subquery__12__Temp as
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__0 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__1 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__2 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__3 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__4 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__5 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__6 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__7 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__8 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__9 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__10 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__11 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__12 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__13 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__14 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__15 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__16 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__17 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__18 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__19 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__20 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__21 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__22 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__23 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__24 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__25 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__26 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__27 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__28 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__29 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__30 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__31 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__32 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__33 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__34 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__35 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__36 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__37 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__38 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__39 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__40 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__41 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__42 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__43 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__44 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__45 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__46 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__47 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__48 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__49 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__50 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__51 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__52 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__53 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__54 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__55 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__56 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__57 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__58 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__59 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__60 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__61 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__62 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__63 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__64 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__65 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__66 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__67 Op)
+  union all
+  (select  Op.type as type,
+            Op.id as id,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__68 Op);
+
+output view __Subquery__12__Temp;
+
+create view __Subquery__14__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as NoscriptTag_____sep_____NoscriptTag____id,
+    dictionary 'detag/noscript.dict'
+    with flags 'IgnoreCase'
+    on NoscriptTag.match as match
+  from NoscriptTag NoscriptTag;
+
+output view __Subquery__14__Temp;
+
+create view __Subquery__18__Temp as
+  select  Substring(GetString(D.content), getElementFromIntList(SBS.skippedBodySpan, 0), getElementFromIntList(SBS.skippedBodySpan, 1)) as content,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as DetaggedDocumentUnnormalizedWhitespace_____sep_____D____id,
+          SBS.__auto__id as SkippedBodySpanOutList_____sep_____SBS____id,
+          -1 as BodyTag_____sep_____B____id
+  from  DetaggedDocumentUnnormalizedWhitespace D,
+        SkippedBodySpanOutList SBS,
+        BodyTag B
+  where NotNull(D.content);
+
+output view __Subquery__18__Temp;
+
+create view __Union__10__TempOp__0 as
+  select  D.text as text,
+          D.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as Document_____sep_____D____id,
+          S.__auto__id as SkipDocumentAll_____sep_____S____id
+  from  Document D,
+        SkipDocumentAll S
+  where Not(NotNull(S.skipResult));
+
+output view __Union__10__TempOp__0;
+
+create view __Union__10__TempOp__1 as
+  select  '' as text,
+          D.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as Document_____sep_____D____id,
+          S.__auto__id as SkipDocumentAll_____sep_____S____id
+  from  Document D,
+        SkipDocumentAll S
+  where NotNull(S.skipResult);
+
+output view __Union__10__TempOp__1;
+
+create view __Union__11__TempOp__0 as
+  select  'Script' as type,
+          '' as id,
+          T.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as ScriptTag_____sep_____T____id
+  from  ScriptTag T;
+
+output view __Union__11__TempOp__0;
+
+create view __Union__11__TempOp__1 as
+  select  'Style' as type,
+          '' as id,
+          T.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as StyleTag_____sep_____T____id
+  from  StyleTag T;
+
+output view __Union__11__TempOp__1;
+
+create view __Union__11__TempOp__10 as
+  select  'Div' as type,
+          D.id as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/access-info/, D.id);
+
+output view __Union__11__TempOp__10;
+
+create view __Union__11__TempOp__11 as
+  select  'Div' as type,
+          D.class as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/access-info/, D.class);
+
+output view __Union__11__TempOp__11;
+
+create view __Union__11__TempOp__12 as
+  select  'Div' as type,
+          D.id as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/header-search/, D.id);
+
+output view __Union__11__TempOp__12;
+
+create view __Union__11__TempOp__13 as
+  select  'Div' as type,
+          D.class as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/header-search/, D.class);
+
+output view __Union__11__TempOp__13;
+
+create view __Union__11__TempOp__14 as
+  select  'Div' as type,
+          D.id as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/browser-warning/, D.id);
+
+output view __Union__11__TempOp__14;
+
+create view __Union__11__TempOp__15 as
+  select  'Div' as type,
+          D.class as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/browser-warning/, D.class);
+
+output view __Union__11__TempOp__15;
+
+create view __Union__11__TempOp__16 as
+  select  'Div' as type,
+          D.id as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/menus/, D.id);
+
+output view __Union__11__TempOp__16;
+
+create view __Union__11__TempOp__17 as
+  select  'Div' as type,
+          D.class as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/menus/, D.class);
+
+output view __Union__11__TempOp__17;
+
+create view __Union__11__TempOp__18 as
+  select  'Div' as type,
+          D.id as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/menu/, D.id);
+
+output view __Union__11__TempOp__18;
+
+create view __Union__11__TempOp__19 as
+  select  'Div' as type,
+          D.class as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/menu/, D.class);
+
+output view __Union__11__TempOp__19;
+
+create view __Union__11__TempOp__2 as
+  select  'P' as type,
+          T.id as id,
+          T.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as PTag_____sep_____T____id
+  from  PTag T
+  where MatchesRegex(/access/, T.id);
+
+output view __Union__11__TempOp__2;
+
+create view __Union__11__TempOp__20 as
+  select  'Div' as type,
+          D.id as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/mainmenu/, D.id);
+
+output view __Union__11__TempOp__20;
+
+create view __Union__11__TempOp__21 as
+  select  'Div' as type,
+          D.class as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/mainmenu/, D.class);
+
+output view __Union__11__TempOp__21;
+
+create view __Union__11__TempOp__22 as
+  select  'Div' as type,
+          D.id as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/navigation/, D.id);
+
+output view __Union__11__TempOp__22;
+
+create view __Union__11__TempOp__23 as
+  select  'Div' as type,
+          D.class as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/navigation/, D.class);
+
+output view __Union__11__TempOp__23;
+
+create view __Union__11__TempOp__24 as
+  select  'Div' as type,
+          D.id as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/persistent-nav/, D.id);
+
+output view __Union__11__TempOp__24;
+
+create view __Union__11__TempOp__25 as
+  select  'Div' as type,
+          D.class as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/persistent-nav/, D.class);
+
+output view __Union__11__TempOp__25;
+
+create view __Union__11__TempOp__26 as
+  select  'Div' as type,
+          D.id as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/jump-to-nav/, D.id);
+
+output view __Union__11__TempOp__26;
+
+create view __Union__11__TempOp__27 as
+  select  'Div' as type,
+          D.class as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/jump-to-nav/, D.class);
+
+output view __Union__11__TempOp__27;
+
+create view __Union__11__TempOp__28 as
+  select  'Div' as type,
+          D.id as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/personalization-links/, D.id);
+
+output view __Union__11__TempOp__28;
+
+create view __Union__11__TempOp__29 as
+  select  'Div' as type,
+          D.class as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/personalization-links/, D.class);
+
+output view __Union__11__TempOp__29;
+
+create view __Union__11__TempOp__3 as
+  select  'P' as type,
+          T.class as id,
+          T.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as PTag_____sep_____T____id
+  from  PTag T
+  where MatchesRegex(/access/, T.class);
+
+output view __Union__11__TempOp__3;
+
+create view __Union__11__TempOp__30 as
+  select  'Div' as type,
+          D.id as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/ibm-top/, D.id);
+
+output view __Union__11__TempOp__30;
+
+create view __Union__11__TempOp__31 as
+  select  'Div' as type,
+          D.class as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/ibm-top/, D.class);
+
+output view __Union__11__TempOp__31;
+
+create view __Union__11__TempOp__32 as
+  select  'Div' as type,
+          D.id as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/lotusBanner/, D.id);
+
+output view __Union__11__TempOp__32;
+
+create view __Union__11__TempOp__33 as
+  select  'Div' as type,
+          D.class as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/lotusBanner/, D.class);
+
+output view __Union__11__TempOp__33;
+
+create view __Union__11__TempOp__34 as
+  select  'Div' as type,
+          D.id as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/lotusAccess/, D.id);
+
+output view __Union__11__TempOp__34;
+
+create view __Union__11__TempOp__35 as
+  select  'Div' as type,
+          D.class as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/lotusAccess/, D.class);
+
+output view __Union__11__TempOp__35;
+
+create view __Union__11__TempOp__36 as
+  select  'Div' as type,
+          D.id as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/masthead/, D.id);
+
+output view __Union__11__TempOp__36;
+
+create view __Union__11__TempOp__37 as
+  select  'Div' as type,
+          D.class as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/masthead/, D.class);
+
+output view __Union__11__TempOp__37;
+
+create view __Union__11__TempOp__38 as
+  select  'Div' as type,
+          D.id as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/ibm-masthead/, D.id);
+
+output view __Union__11__TempOp__38;
+
+create view __Union__11__TempOp__39 as
+  select  'Div' as type,
+          D.class as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/ibm-masthead/, D.class);
+
+output view __Union__11__TempOp__39;
+
+create view __Union__11__TempOp__4 as
+  select  'P' as type,
+          T.id as id,
+          T.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as PTag_____sep_____T____id
+  from  PTag T
+  where MatchesRegex(/date-stamp/, T.id);
+
+output view __Union__11__TempOp__4;
+
+create view __Union__11__TempOp__40 as
+  select  'Div' as type,
+          D.id as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/ibm-tab-navigation/, D.id);
+
+output view __Union__11__TempOp__40;
+
+create view __Union__11__TempOp__41 as
+  select  'Div' as type,
+          D.class as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/ibm-tab-navigation/, D.class);
+
+output view __Union__11__TempOp__41;
+
+create view __Union__11__TempOp__42 as
+  select  'H1' as type,
+          H1.id as id,
+          H1.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as H1Tag_____sep_____H1____id
+  from  H1Tag H1
+  where MatchesRegex(/access/, H1.id);
+
+output view __Union__11__TempOp__42;
+
+create view __Union__11__TempOp__43 as
+  select  'H1' as type,
+          H1.class as id,
+          H1.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as H1Tag_____sep_____H1____id
+  from  H1Tag H1
+  where MatchesRegex(/access/, H1.class);
+
+output view __Union__11__TempOp__43;
+
+create view __Union__11__TempOp__44 as
+  select  'H2' as type,
+          H2.id as id,
+          H2.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as H2Tag_____sep_____H2____id
+  from  H2Tag H2
+  where MatchesRegex(/access/, H2.id);
+
+output view __Union__11__TempOp__44;
+
+create view __Union__11__TempOp__45 as
+  select  'H2' as type,
+          H2.class as id,
+          H2.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as H2Tag_____sep_____H2____id
+  from  H2Tag H2
+  where MatchesRegex(/access/, H2.class);
+
+output view __Union__11__TempOp__45;
+
+create view __Union__11__TempOp__46 as
+  select  'H2' as type,
+          H2.id as id,
+          H2.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as H2Tag_____sep_____H2____id
+  from  H2Tag H2
+  where MatchesRegex(/alert-stop/, H2.id);
+
+output view __Union__11__TempOp__46;
+
+create view __Union__11__TempOp__47 as
+  select  'H2' as type,
+          H2.class as id,
+          H2.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as H2Tag_____sep_____H2____id
+  from  H2Tag H2
+  where MatchesRegex(/alert-stop/, H2.class);
+
+output view __Union__11__TempOp__47;
+
+create view __Union__11__TempOp__48 as
+  select  'Span' as type,
+          S.id as id,
+          S.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as SpanTag_____sep_____S____id
+  from  SpanTag S
+  where MatchesRegex(/anz-date-stamp/, S.id);
+
+output view __Union__11__TempOp__48;
+
+create view __Union__11__TempOp__49 as
+  select  'Span' as type,
+          S.class as id,
+          S.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as SpanTag_____sep_____S____id
+  from  SpanTag S
+  where MatchesRegex(/anz-date-stamp/, S.class);
+
+output view __Union__11__TempOp__49;
+
+create view __Union__11__TempOp__5 as
+  select  'P' as type,
+          T.class as id,
+          T.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as PTag_____sep_____T____id
+  from  PTag T
+  where MatchesRegex(/date-stamp/, T.class);
+
+output view __Union__11__TempOp__5;
+
+create view __Union__11__TempOp__50 as
+  select  'Span' as type,
+          S.id as id,
+          S.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as SpanTag_____sep_____S____id
+  from  SpanTag S
+  where MatchesRegex(/nav/, S.id);
+
+output view __Union__11__TempOp__50;
+
+create view __Union__11__TempOp__51 as
+  select  'Span' as type,
+          S.class as id,
+          S.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as SpanTag_____sep_____S____id
+  from  SpanTag S
+  where MatchesRegex(/nav/, S.class);
+
+output view __Union__11__TempOp__51;
+
+create view __Union__11__TempOp__52 as
+  select  'Span' as type,
+          S.id as id,
+          S.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as SpanTag_____sep_____S____id
+  from  SpanTag S
+  where MatchesRegex(/rnav/, S.id);
+
+output view __Union__11__TempOp__52;
+
+create view __Union__11__TempOp__53 as
+  select  'Span' as type,
+          S.class as id,
+          S.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as SpanTag_____sep_____S____id
+  from  SpanTag S
+  where MatchesRegex(/rnav/, S.class);
+
+output view __Union__11__TempOp__53;
+
+create view __Union__11__TempOp__54 as
+  select  'A' as type,
+          A.id as id,
+          A.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as ATag_____sep_____A____id
+  from  ATag A
+  where MatchesRegex(/mainlink/, A.id);
+
+output view __Union__11__TempOp__54;
+
+create view __Union__11__TempOp__55 as
+  select  'A' as type,
+          A.class as id,
+          A.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as ATag_____sep_____A____id
+  from  ATag A
+  where MatchesRegex(/mainlink/, A.class);
+
+output view __Union__11__TempOp__55;
+
+create view __Union__11__TempOp__56 as
+  select  'A' as type,
+          A.id as id,
+          A.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as ATag_____sep_____A____id
+  from  ATag A
+  where MatchesRegex(/skiplink/, A.id);
+
+output view __Union__11__TempOp__56;
+
+create view __Union__11__TempOp__57 as
+  select  'A' as type,
+          A.class as id,
+          A.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as ATag_____sep_____A____id
+  from  ATag A
+  where MatchesRegex(/skiplink/, A.class);
+
+output view __Union__11__TempOp__57;
+
+create view __Union__11__TempOp__58 as
+  select  'A' as type,
+          A.id as id,
+          A.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as ATag_____sep_____A____id
+  from  ATag A
+  where MatchesRegex(/masthead-mainlink/, A.id);
+
+output view __Union__11__TempOp__58;
+
+create view __Union__11__TempOp__59 as
+  select  'A' as type,
+          A.class as id,
+          A.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as ATag_____sep_____A____id
+  from  ATag A
+  where MatchesRegex(/masthead-mainlink/, A.class);
+
+output view __Union__11__TempOp__59;
+
+create view __Union__11__TempOp__6 as
+  select  'Div' as type,
+          D.id as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/skip/, D.id);
+
+output view __Union__11__TempOp__6;
+
+create view __Union__11__TempOp__60 as
+  select  'A' as type,
+          A.id as id,
+          A.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as ATag_____sep_____A____id
+  from  ATag A
+  where MatchesRegex(/rlinks/, A.id);
+
+output view __Union__11__TempOp__60;
+
+create view __Union__11__TempOp__61 as
+  select  'A' as type,
+          A.class as id,
+          A.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as ATag_____sep_____A____id
+  from  ATag A
+  where MatchesRegex(/rlinks/, A.class);
+
+output view __Union__11__TempOp__61;
+
+create view __Union__11__TempOp__62 as
+  select  'A' as type,
+          A.id as id,
+          A.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as ATag_____sep_____A____id
+  from  ATag A
+  where MatchesRegex(/nav/, A.id);
+
+output view __Union__11__TempOp__62;
+
+create view __Union__11__TempOp__63 as
+  select  'A' as type,
+          A.class as id,
+          A.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as ATag_____sep_____A____id
+  from  ATag A
+  where MatchesRegex(/nav/, A.class);
+
+output view __Union__11__TempOp__63;
+
+create view __Union__11__TempOp__64 as
+  select  'TD' as type,
+          T.id as id,
+          T.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as TdTag_____sep_____T____id
+  from  TdTag T
+  where MatchesRegex(/NAVIGATION/, T.id);
+
+output view __Union__11__TempOp__64;
+
+create view __Union__11__TempOp__65 as
+  select  'TD' as type,
+          T.class as id,
+          T.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as TdTag_____sep_____T____id
+  from  TdTag T
+  where MatchesRegex(/NAVIGATION/, T.class);
+
+output view __Union__11__TempOp__65;
+
+create view __Union__11__TempOp__66 as
+  select  'TD' as type,
+          T.id as id,
+          T.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as TdTag_____sep_____T____id
+  from  TdTag T
+  where MatchesRegex(/this\.className='index\-selected';/, T.onmouseover);
+
+output view __Union__11__TempOp__66;
+
+create view __Union__11__TempOp__67 as
+  select  'TR' as type,
+          T.id as id,
+          T.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as TrTag_____sep_____T____id
+  from  TrTag T
+  where MatchesRegex(/cty-tou/, T.id);
+
+output view __Union__11__TempOp__67;
+
+create view __Union__11__TempOp__68 as
+  select  'TR' as type,
+          T.class as id,
+          T.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as TrTag_____sep_____T____id
+  from  TrTag T
+  where MatchesRegex(/cty-tou/, T.class);
+
+output view __Union__11__TempOp__68;
+
+create view __Union__11__TempOp__7 as
+  select  'Div' as type,
+          D.class as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/skip/, D.class);
+
+output view __Union__11__TempOp__7;
+
+create view __Union__11__TempOp__8 as
+  select  'Div' as type,
+          D.id as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/access/, D.id);
+
+output view __Union__11__TempOp__8;
+
+create view __Union__11__TempOp__9 as
+  select  'Div' as type,
+          D.class as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as DivTag_____sep_____D____id
+  from  DivTag D
+  where MatchesRegex(/access/, D.class);
+
+output view __Union__11__TempOp__9;
+
+create view __Union__15__TempOp__0 as
+  select  T.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as AllTitleTag_____sep_____T____id
+  from  AllTitleTag T;
+
+output view __Union__15__TempOp__0;
+
+create view __Union__15__TempOp__1 as
+  select  T.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as TagsToSkipNoTitleConsolidated_____sep_____T____id
+  from  TagsToSkipNoTitleConsolidated T;
+
+output view __Union__15__TempOp__1;
+
+create view __Union__15__TempOp__2 as
+  select  NS.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          NS.__auto__id as NoscriptContentToSkip_____sep_____NS____id
+  from  NoscriptContentToSkip NS;
+
+output view __Union__15__TempOp__2;
+
+create view __Union__17__TempOp__0 as
+  select  GetBegin(B.match) as bodyBegin,
+          GetEnd(B.match) as bodyEnd,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as BodyTag_____sep_____B____id
+  from  BodyTag B
+  limit 1;
+
+output view __Union__17__TempOp__0;
+
+create view __Union__17__TempOp__1 as
+  select  BodyTagMissing.bodyBegin as bodyBegin,
+          BodyTagMissing.bodyEnd as bodyEnd,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          BodyTagMissing.__auto__id as BodyTagMissing_____sep_____BodyTagMissing____id
+  from  BodyTagMissing BodyTagMissing;
+
+output view __Union__17__TempOp__1;
+

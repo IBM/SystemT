@@ -1,0 +1,70 @@
+-----------------------------------------------------------------------------
+-- periodDictBug.aql
+--
+-- Test case for bug #126764
+--
+-- Based on Sentence.aql, sent by Thomas Hampp.
+-----------------------------------------------------------------------------
+require document with columns text Text;
+
+
+--===========================================================================
+-- Sentence annotator
+--===========================================================================
+-- Regex with the usual sentence final punctuation is used to identify the
+-- sentence boundary. The usual abbreviations, listed in the abbreviation.dict
+-- are filtered out
+
+-- FRED: abbreviation.dict inlined.
+create dictionary AbbreviationsDict with case exact
+as (
+    'A.', 'Adj.', 'Adm.', 'Adv.', 'al.', 'Apr.', 'Asst.', 'Aug.', 'B.',
+    'Bart.', 'Bldg.', 'Brig.', 'Bros.', 'C.', 'Capt.', 'Cd.', 'Cmdr.', 'Co.',
+    'Col.', 'Cia.', 'C', 'Cía.', 'Comdr.', 'Con.', 'Corp.', 'Cpl.', 'D.',
+    'Dec.', 'DR.', 'Dr.', 'E.', 'Ens.', 'etc.', 'F.', 'Feb.', 'G.', 'Gen.',
+    'Gov.', 'H.', 'Hon.', 'Hosp.', 'I.', 'inc.', 'Inc.', 'Insp.', 'J.', 'Jan.',
+    'Jr.', 'K.', 'L.', 'Lt.', 'M.', 'M.', 'Maj.', 'Messers.', 'Messrs.',
+    'Miss.', 'Mlle.', 'MM.', 'Mme.', 'MR.', 'Mr.', 'MRS.', 'Mrs.', 'MS.',
+    'Ms.', 'Msgr.', 'Mt.', 'N.', 'Nov.', 'O.', 'Oct.', 'Op.', 'Ord.', 'P.',
+    'Pfc.', 'Ph.', 'Prof.', 'Pt.', 'Pvt.', 'Q.', 'R.', 'Rep.', 'Reps.', 'Res.',
+    'Rev.', 'Rev.', 'Rt.', 'S.', 'Sen.', 'Sens.', 'Sept.', 'Sfc.', 'Sgt.',
+    'Sr.', 'St.', 'Supt.', 'Surg.', 'T.', 'U.', 'V.', 'v.', 'vs.', 'W.', 'X.',
+    'Y.', 'Yahoo!', 'Z.'
+);
+--    with language as 'en';
+
+create view Abbreviations as
+    extract dictionary 'AbbreviationsDict' on D.text   
+    as match
+    from Document D;
+
+create view SentenceBoundary as
+    select R.match as boundary
+    from Regex(/(([\.\?!]+\s)|(\n\s*\n))/, Document.text) R, Abbreviations A
+    where Overlaps(R.match, A.match);
+	    -- Filter the candidate boundaries.
+	    --Not(ContainsDict('dictionaries/abbreviation.dict', 
+		--CombineSpans(LeftContextTok(R.match, 2), R.match)));
+	
+--[Armin2009]
+--this view will be used in ne-... to exclude items which result from formatting errors which occur when converting emails or the likes
+--it is here where at later stages, you can include any such character sequences or characters; e.g. when German text would be
+--edited and the 'ß' would be converted to &szlig and thus the word Rußland(=Russia) would become Ru&szligland, the Tokenization
+--would recognize Rus as a token, suppose there was an orga named Rus, it would hence be selected into Orgas, a false positive
+--to exclude it or any such item, extend the regex below to: /=|\&|\&szlig/ and the false positive will be omitted
+--items predeeded or followed directly by content of the regex will be excluded
+	
+create view FormattingErrorBoundary as 
+    select R.match as boundary
+	from Regex( /=|\&/, Document.text) R;
+
+/* eventually divide filter in ne...aql into preceeding and following items	
+create view FormattingErrorBoundaryFollowing as 
+    select R.match as boundary
+	from Regex( /\&/, Document.text) R;
+*/
+	
+output view SentenceBoundary;
+output view Abbreviations;
+
+	

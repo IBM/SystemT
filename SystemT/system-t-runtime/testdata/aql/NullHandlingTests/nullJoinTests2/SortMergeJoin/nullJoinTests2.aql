@@ -1,0 +1,45 @@
+module SortMergeJoin;
+require document with columns text Text;
+
+--------------------------------------------
+-- Extract names and nulls from the document
+create view _Name as
+  extract regex 
+    /!(\w+)?,(\w+)?,(\w+)?/
+  on D.text
+  return 
+    group 1 as firstname
+    and group 2 as middlename
+    and group 3 as lastname
+  from Document D;
+  
+output view _Name;
+
+
+-------------------------------------------
+-- Extract ages and nulls from the document
+create view _Age as 
+  extract regex 
+    /,(\d+)?@/
+  on D.text
+  return
+    group 1 as age
+  from Document D;
+  
+output view _Age;
+
+
+
+-- SORT MERGE JOIN
+-- Find all first name spans within 10 characters of the ages in this document
+
+create view NullSMJoinTest as
+select
+       N.firstname as match1,
+       A.age as match2
+from _Name N, _Age A
+where Follows(N.firstname, A.age, 0, 10);
+
+output view NullSMJoinTest;
+
+

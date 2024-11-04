@@ -1,0 +1,19 @@
+module phone;
+
+create view PhoneNumber as
+select P.num as number, LeftContextTok(P.num, 3) as lc
+from
+(
+extract 
+    regexes /\+?\([1-9]\d{2}\)\d{3}-\d{4}/ and /\+?[Xx]\.?\d{4,5}/
+    on D.text as num
+from Document D
+) P;
+
+-- create a dummy additional view
+create view NewView as
+select 'SampleText' as match 
+from Document D;
+
+export view PhoneNumber;
+export view NewView;

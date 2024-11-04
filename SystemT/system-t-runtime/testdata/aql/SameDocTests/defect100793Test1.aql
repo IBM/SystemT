@@ -1,0 +1,24 @@
+-- test for defect100793
+
+require document with columns label Text and text Text;
+
+create view Temp1 as
+extract regex /([^?]+)/ on D.label return group 1 as text and group 0 as sentence
+from Document D;
+
+create view Temp2 as
+extract regex /([^.]+)/ on D.text return group 1 as text and group 0 as sentence
+from Document D;
+
+create view Actions as
+(select * from Temp1) union all (select * from Temp2);
+
+create view QActions as
+    select A.*
+    from Actions A, Document D
+    where Contains (D.label, A.text);
+    
+output view Temp1;
+output view Temp2;
+output view Actions;
+output view QActions;

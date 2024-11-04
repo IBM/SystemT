@@ -1,0 +1,456 @@
+module genericModule;
+
+
+create dictionary "SalutationDict"
+with case insensitive
+as (
+  'rev.',
+  'col.',
+  'reverend',
+  'prof.',
+  'professor',
+  'lady',
+  'miss.',
+  'mrs.',
+  'mrs',
+  'mr.',
+  'pt.',
+  'ms.',
+  'messrs.',
+  'dr.',
+  'master.',
+  'marquis',
+  'monsieur',
+  'ds',
+  'di',
+  'herr',
+  'Fraeulein',
+  'Doktor',
+  'Herr Doktor',
+  'Frau Doktor',
+  'Herr Professor',
+  'Frau professor',
+  'Baron',
+  'graf'
+);
+
+
+create view Salutation as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'SalutationDict'
+    on D.text as salutation
+  from Document D;
+
+output view Salutation;
+
+create dictionary "GreetingDict"
+with case insensitive
+as (
+  'regards',
+  'regds',
+  'hello',
+  'hi',
+  'thanks',
+  'best',
+  'subj',
+  'to',
+  'from'
+);
+
+
+create view CapsPerson as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /\b\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}\b/
+    with flags 'DOTALL'
+    on between 1 and 10 tokens in D.text
+    return group 0 as word
+  from Document D
+  having Not(MatchesDict('GreetingDict', word));
+
+output view CapsPerson;
+
+create view InitialWord as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /\b([\p{Upper}]\.\s*){1,5}\b/
+    with flags 'DOTALL'
+    on between 1 and 10 tokens in D.text
+    return group 0 as word
+  from Document D;
+
+output view InitialWord;
+
+create view LastName as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'strictLast.dict'
+    on D.text as last
+  from Document D
+  having MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, last);
+
+output view LastName;
+
+create view FirstName as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'strictFirst.dict'
+    on D.text as first
+  from Document D
+  having MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, first);
+
+output view FirstName;
+
+create view FirstLast as
+  select  CombineSpans(FN.first, LN.last) as name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          FN.__auto__id as FirstName_____sep_____FN____id,
+          LN.__auto__id as LastName_____sep_____LN____id
+  from  FirstName FN,
+        LastName LN
+  where FollowsTok(FN.first, LN.last, 0, 0);
+
+output view FirstLast;
+
+create view CapsLast as
+  select  CombineSpans(CP.word, LN.last) as name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CP.__auto__id as CapsPerson_____sep_____CP____id,
+          LN.__auto__id as LastName_____sep_____LN____id
+  from  CapsPerson CP,
+        LastName LN
+  where FollowsTok(CP.word, LN.last, 0, 0);
+
+output view CapsLast;
+
+create view FirstCaps as
+  select  CombineSpans(FN.first, CP.word) as name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          FN.__auto__id as FirstName_____sep_____FN____id,
+          CP.__auto__id as CapsPerson_____sep_____CP____id
+  from  FirstName FN,
+        CapsPerson CP
+  where FollowsTok(FN.first, CP.word, 0, 0);
+
+output view FirstCaps;
+
+
+
+
+
+
+
+create view SalCaps as
+  select  CP.word as name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as Salutation_____sep_____S____id,
+          CP.__auto__id as CapsPerson_____sep_____CP____id
+  from  Salutation S,
+        CapsPerson CP
+  where FollowsTok(S.salutation, CP.word, 0, 0);
+
+output view SalCaps;
+
+create view SalCapsCaps as
+  select  CombineSpans(CP1.word, CP2.word) as name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as Salutation_____sep_____S____id,
+          CP1.__auto__id as CapsPerson_____sep_____CP1____id,
+          CP2.__auto__id as CapsPerson_____sep_____CP2____id
+  from  Salutation S,
+        CapsPerson CP1,
+        CapsPerson CP2
+  where FollowsTok(S.salutation, CP1.word, 0, 0)
+     and FollowsTok(CP1.word, CP2.word, 0, 0);
+
+output view SalCapsCaps;
+
+create view InitialLast as
+  select  CombineSpans(IW.word, LN.last) as name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          IW.__auto__id as InitialWord_____sep_____IW____id,
+          LN.__auto__id as LastName_____sep_____LN____id
+  from  InitialWord IW,
+        LastName LN
+  where FollowsTok(IW.word, LN.last, 0, 0);
+
+output view InitialLast;
+
+create view InitialFirst as
+  select  CombineSpans(IW.word, FN.first) as name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          IW.__auto__id as InitialWord_____sep_____IW____id,
+          FN.__auto__id as FirstName_____sep_____FN____id
+  from  InitialWord IW,
+        FirstName FN
+  where FollowsTok(IW.word, FN.first, 0, 0);
+
+output view InitialFirst;
+
+create view FirstInitialLast as
+  select  CombineSpans(FN.first, LN.last) as name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          FN.__auto__id as FirstName_____sep_____FN____id,
+          IW.__auto__id as InitialWord_____sep_____IW____id,
+          LN.__auto__id as LastName_____sep_____LN____id
+  from  FirstName FN,
+        InitialWord IW,
+        LastName LN
+  where FollowsTok(FN.first, IW.word, 0, 0)
+     and FollowsTok(IW.word, LN.last, 0, 0);
+
+output view FirstInitialLast;
+
+create view CapsInitialCaps as
+  select  CombineSpans(CP1.word, CP2.word) as name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CP1.__auto__id as CapsPerson_____sep_____CP1____id,
+          IW.__auto__id as InitialWord_____sep_____IW____id,
+          CP2.__auto__id as CapsPerson_____sep_____CP2____id
+  from  CapsPerson CP1,
+        InitialWord IW,
+        CapsPerson CP2
+  where FollowsTok(CP1.word, IW.word, 0, 0)
+     and FollowsTok(IW.word, CP2.word, 0, 0);
+
+output view CapsInitialCaps;
+
+create view PersonCand as
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__1__TempOp__0 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__1__TempOp__1 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__1__TempOp__2 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__1__TempOp__3 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__1__TempOp__4 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__1__TempOp__5 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__1__TempOp__6 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__1__TempOp__7 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__1__TempOp__8 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__1__TempOp__9 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__1__TempOp__10 Op);
+
+output view PersonCand;
+
+create view Person as
+  select  __t2.person as person,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__2__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__2__Temp__1 __t1,
+        __Consolidate__2__Temp__2 __t2
+  where Or(GreaterThan(GetBegin(__t1.__consolidate__target), GetBegin(__t2.__consolidate__target)), Equals(GetBegin(__t1.__consolidate__target), GetBegin(__t2.__consolidate__target)))
+     and Overlaps(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.person;
+
+output view Person;
+
+create view PhoneNumber as
+  select  P.num as number,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as __Subquery__3__Temp_____sep_____P____id
+  from  __Subquery__3__Temp P;
+
+output view PhoneNumber;
+
+
+
+
+
+create view __Consolidate__2__Temp__1 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonCand_____sep_____P____id,
+          P.person as __consolidate__target
+  from  PersonCand P;
+
+output view __Consolidate__2__Temp__1;
+
+create view __Consolidate__2__Temp__2 as
+  select  __t1.person as person,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__2__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'LeftToRight';
+
+output view __Consolidate__2__Temp__2;
+
+create view __Subquery__3__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /\+?\(\d{3}\)\d{3}-\d{4}/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as num
+  from Document D;
+
+output view __Subquery__3__Temp;
+
+create view __Union__1__TempOp__0 as
+  select  P.first as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as FirstName_____sep_____P____id
+  from  FirstName P;
+
+output view __Union__1__TempOp__0;
+
+create view __Union__1__TempOp__1 as
+  select  P.last as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as LastName_____sep_____P____id
+  from  LastName P;
+
+output view __Union__1__TempOp__1;
+
+create view __Union__1__TempOp__10 as
+  select  P.name as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as CapsInitialCaps_____sep_____P____id
+  from  CapsInitialCaps P;
+
+output view __Union__1__TempOp__10;
+
+create view __Union__1__TempOp__2 as
+  select  P.name as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as FirstLast_____sep_____P____id
+  from  FirstLast P;
+
+output view __Union__1__TempOp__2;
+
+create view __Union__1__TempOp__3 as
+  select  P.name as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as CapsLast_____sep_____P____id
+  from  CapsLast P;
+
+output view __Union__1__TempOp__3;
+
+create view __Union__1__TempOp__4 as
+  select  P.name as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as FirstCaps_____sep_____P____id
+  from  FirstCaps P;
+
+output view __Union__1__TempOp__4;
+
+create view __Union__1__TempOp__5 as
+  select  P.name as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as SalCaps_____sep_____P____id
+  from  SalCaps P;
+
+output view __Union__1__TempOp__5;
+
+create view __Union__1__TempOp__6 as
+  select  P.name as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as SalCapsCaps_____sep_____P____id
+  from  SalCapsCaps P;
+
+output view __Union__1__TempOp__6;
+
+create view __Union__1__TempOp__7 as
+  select  P.name as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as InitialLast_____sep_____P____id
+  from  InitialLast P;
+
+output view __Union__1__TempOp__7;
+
+create view __Union__1__TempOp__8 as
+  select  P.name as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as InitialFirst_____sep_____P____id
+  from  InitialFirst P;
+
+output view __Union__1__TempOp__8;
+
+create view __Union__1__TempOp__9 as
+  select  P.name as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as FirstInitialLast_____sep_____P____id
+  from  FirstInitialLast P;
+
+output view __Union__1__TempOp__9;
+

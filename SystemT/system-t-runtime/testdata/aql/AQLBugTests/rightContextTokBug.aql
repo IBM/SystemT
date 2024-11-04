@@ -1,0 +1,25 @@
+-----------------------------------------------------------------------------
+-- RightContextTokBug.aql
+--
+-- Test case for RightContextTok where token offset is specified as '0'.
+-----------------------------------------------------------------------------
+require document with columns text Text;
+
+-- Paste your AQL rules here.
+-- Example:
+
+--Extracts numbers of the pattern mentioned in the regex below
+create view PhoneNum as
+extract
+    regex /[0-9]{3}-[0-9]{4}/
+        on D.text as number
+from Document D;
+
+output view PhoneNum;
+
+create view RightTokenOfEntity as
+  select D.number as number,
+  RightContextTok(D.number,0) as zeroTok
+  --if RightContext(D.number,0) is used instead of above line, output is as expected- null string
+  from PhoneNum D;
+output view RightTokenOfEntity;

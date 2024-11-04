@@ -1,0 +1,22 @@
+/**
+* Test case for defect 59027
+* The test case involves creating a dictionary from an optional external table, whose value is not provided at load time.
+* Prior to the fix, the loader was throwing an NPE.
+* The fix involves checking for null entries during load time.
+*/
+module module1;
+
+create external table Verbs
+(No Integer ,Verb Text) 
+allow_empty true;
+
+create dictionary VerbsDict
+from table Verbs
+with entries from Verb
+and language as 'en'
+and case  insensitive;
+
+create view Reaction as extract dictionary 'VerbsDict' on Document.text
+as match from Document;
+
+output view Reaction;

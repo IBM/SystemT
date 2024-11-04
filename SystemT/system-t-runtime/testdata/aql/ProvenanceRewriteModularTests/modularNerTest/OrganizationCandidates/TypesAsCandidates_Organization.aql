@@ -1,0 +1,60 @@
+module OrganizationCandidates;
+
+--- Identify different types of organizations
+create view OrganizationEducational as
+select O.organization as organization, 'Educational' as type, O.reference as reference
+from OrganizationConsolidated O
+where ContainsDict('PositiveCluesForEducationalInstitutions', O.organization)
+  and Not(ContainsDict('PositiveCluesForCommercialOrganizations', O.organization))
+  and Not(ContainsDict('PositiveCluesForMedicalOrganizations', O.organization));
+
+create view OrganizationGovernment as
+select O.organization as organization, 'Government' as type, O.reference as reference
+from OrganizationConsolidated O
+where ContainsDict('PositiveCluesForGovernmentOrganizations', O.organization)
+  and Not(ContainsDict('PositiveCluesForCommercialOrganizations', O.organization))
+  and Not(ContainsDict('PositiveCluesForEducationalInstitutions', O.organization));
+
+create view OrganizationMedical as
+select O.organization as organization, 'Medical' as type, O.reference as reference
+from OrganizationConsolidated O
+where ContainsDict('PositiveCluesForMedicalOrganizations', O.organization)
+  and Not(ContainsDict('PositiveCluesForCommercialOrganizations', O.organization));
+ 
+create view OrganizationSports as
+select O.org as organization, 'Sports' as type, O.org as reference
+from OrgSportsTeamAll O;
+    
+create view OrganizationOthers as
+select O.organization as organization, 'Others' as type, O.reference as reference
+from OrganizationConsolidated O
+where ContainsDict('PositiveCluesForMiscellaneousOrganizations', O.organization)
+  and Not(ContainsDict('PositiveCluesForCommercialOrganizations', O.organization))
+  and Not(ContainsDict('PositiveCluesForMedicalOrganizations', O.organization));
+
+create view OrganizationWithTypes as
+	(select O.organization as organization, O.type as type, O.reference as reference from OrganizationEducational O)
+	union all
+	(select O.organization as organization, O.type as type, O.reference as reference from OrganizationGovernment O)
+	union all
+	(select O.organization as organization, O.type as type, O.reference as reference from OrganizationMedical O)
+	union all
+	(select O.organization as organization, O.type as type, O.reference as reference from OrganizationSports O)
+	union all
+	(select O.organization as organization, O.type as type, O.reference as reference from OrganizationOthers O);
+  
+create view OrganizationCompany as
+	(select O.organization as organization, O.reference as reference from OrganizationConsolidated O)
+	minus
+	(select O.organization as organization, O.reference as reference from OrganizationWithTypes O);
+  
+create view OrganizationWithAttrs as
+	(select O.organization as organization, O.type as type, O.reference as reference from OrganizationWithTypes O)
+	union all
+	(select O.organization as organization, 'Company' as type, O.reference as reference from OrganizationCompany O);
+	
+create view OrganizationFull as
+select O.organization as organization, O.type as type, O.reference as reference
+from OrganizationWithAttrs O
+consolidate on O.organization;
+

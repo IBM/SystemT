@@ -1,0 +1,288 @@
+module PersonCandidates;
+
+
+create view Position as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionaries 'RolesAsFiltersForPerson'
+                   and 'RolesInSport'
+                   and 'RolesInFamily'
+    on D.text as pos
+  from DocumentText D
+  having MatchesRegex(/((\p{Lu}\p{M}*){2}|((\p{Lu}\p{M}*)?(\p{Ll}\p{M}*){1,10}\s*){1,2})/, pos);
+
+output view Position;
+
+create view OfficialCandidates1All as
+  select  C.name as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as OneOrTwoCapPerson_____sep_____C____id,
+          P.__auto__id as Position_____sep_____P____id
+  from  OneOrTwoCapPerson C,
+        Position P
+  where FollowsTok(P.pos, C.name, 0, 1)
+     and MatchesRegex(/\s*[,-]?\s*/, SpanBetween(P.pos, C.name))
+     and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(P.pos, C.name)))
+     and Not(ContainsRegex(/[\r\n\t]/, C.name));
+
+output view OfficialCandidates1All;
+
+create view OfficialCandidates1 as
+  select  Op.person as person,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__343__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__343__TempOp__1 Op,
+        __Minus__343__Temp __t
+  where Equals(Op.person, __t.person);
+
+output view OfficialCandidates1;
+
+create view PersonBeforeWhoClause as
+  select  Op.person as person,
+          AutoID() as __auto__id
+  from  __Base__PersonCandidates__PersonBeforeWhoClause__Temp Op;
+
+output view PersonBeforeWhoClause;
+
+create view PersonAsSubject1 as
+  select  L.name as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as OneOrTwoCapPerson_____sep_____L____id
+  from  OneOrTwoCapPerson L
+  where Not(ContainsRegex(/[\r\n\t]/, L.name))
+     and MatchesRegex(/\s*[,]\s*\d{1,2}\s*[,]\s*.*/, RightContext(L.name, 10));
+
+output view PersonAsSubject1;
+
+create view PersonAsVictims as
+  select  L.name as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as OneOrTwoCapPerson_____sep_____L____id
+  from  OneOrTwoCapPerson L
+  where Not(ContainsRegex(/[\r\n\t]/, L.name))
+     and MatchesRegex(/.*\s*(((death|killing)\s*of)|victim\s*was)\s*/, LeftContext(L.name, 20))
+     and MatchesRegex(/\s*[,.\r\n].*/, RightContext(L.name, 5));
+
+output view PersonAsVictims;
+
+create view PersonAsSpeaker1 as
+  select  L.name as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as OneOrTwoCapPerson_____sep_____L____id
+  from  OneOrTwoCapPerson L
+  where Not(ContainsRegex(/[\r\n\t]/, L.name))
+     and MatchesRegex(/.*\s*([^an]\s*\d{1,2}\s*-?\s*years?\s*-?\s*old)\s+/, LeftContext(L.name, 15))
+     and MatchesRegex(/\s+,?\s*(\p{Ll}\p{M}*){2}\s*.*/, RightContext(L.name, 10))
+     and Not(ContainsDict('WorldNationalities', L.name));
+
+output view PersonAsSpeaker1;
+
+create view PersonAsSpeaker2 as
+  select  L.name as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as OneOrTwoCapPerson_____sep_____L____id
+  from  OneOrTwoCapPerson L
+  where Not(ContainsRegex(/[\r\n\t]/, L.name))
+     and MatchesRegex(/.*[,.]\s*/, LeftContext(L.name, 2))
+     and MatchesRegex(/\s*[,]\s*(said|told|says)\s+.*/, RightContext(L.name, 10));
+
+output view PersonAsSpeaker2;
+
+create view PersonAsSpeaker3 as
+  select  L.name as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as OneOrTwoCapPerson_____sep_____L____id
+  from  OneOrTwoCapPerson L
+  where Not(ContainsRegex(/[\r\n\t]/, L.name))
+     and MatchesRegex(/\s*,\s*an?\s*\d{1,2}\s*-?\s*years?\s*-?\s*old\s+.*/, RightContextTok(L.name, 10));
+
+output view PersonAsSpeaker3;
+
+create view PersonPerson as
+  select  CombineSpans(P1.name, P2.name) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P1.__auto__id as PersonDict_____sep_____P1____id,
+          P2.__auto__id as PersonDict_____sep_____P2____id
+  from  PersonDict P1,
+        PersonDict P2
+  where FollowsTok(P1.name, P2.name, 0, 0)
+     and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(P1.name, P2.name)));
+
+output view PersonPerson;
+
+create view PatternBasedPerson as
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__344__TempOp__0 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__344__TempOp__1 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__344__TempOp__2 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__344__TempOp__3 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__344__TempOp__4 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__344__TempOp__5 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__344__TempOp__6 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__344__TempOp__7 Op);
+
+output view PatternBasedPerson;
+
+create view __Base__PersonCandidates__PersonBeforeWhoClause__Temp as
+  extract pattern <C.name>{1,2}
+  return group 0 as person
+  from  CapsPerson C
+  having  Not(ContainsRegex(/[\r\n\t]/, person))
+     and MatchesRegex(/^\s*,?\s*(\s+(\p{Ll}\p{M}*)+\s+)?(who|whose)\s+.+/, RightContext(person, 10))
+     and MatchesRegex(/\p{Ll}\p{M}*.*/, LeftContextTok(person, 1));
+
+output view __Base__PersonCandidates__PersonBeforeWhoClause__Temp;
+
+create view __Minus__343__Temp as
+  select  __t.person as person
+  from  
+    ((select  Op.person as person
+      from  __Minus__343__TempOp__1 Op)
+    minus
+    (select  Op.person as person
+      from  __Minus__343__TempOp__2 Op)
+    ) __t
+  group by __t.person;
+
+output view __Minus__343__Temp;
+
+create view __Minus__343__TempOp__1 as
+  select  C.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as OfficialCandidates1All_____sep_____C____id
+  from  OfficialCandidates1All C;
+
+output view __Minus__343__TempOp__1;
+
+create view __Minus__343__TempOp__2 as
+  select  C.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as OfficialCandidates1All_____sep_____C____id,
+          H.__auto__id as HeadlineMixedCaps_____sep_____H____id
+  from  OfficialCandidates1All C,
+        HeadlineMixedCaps H
+  where Overlaps(H.headline, C.person);
+
+output view __Minus__343__TempOp__2;
+
+create view __Union__344__TempOp__0 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as OfficialCandidates1_____sep_____P____id
+  from  OfficialCandidates1 P;
+
+output view __Union__344__TempOp__0;
+
+create view __Union__344__TempOp__1 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonBeforeWhoClause_____sep_____P____id
+  from  PersonBeforeWhoClause P;
+
+output view __Union__344__TempOp__1;
+
+create view __Union__344__TempOp__2 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonAsSpeaker1_____sep_____P____id
+  from  PersonAsSpeaker1 P;
+
+output view __Union__344__TempOp__2;
+
+create view __Union__344__TempOp__3 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonAsSpeaker2_____sep_____P____id
+  from  PersonAsSpeaker2 P;
+
+output view __Union__344__TempOp__3;
+
+create view __Union__344__TempOp__4 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonAsSpeaker3_____sep_____P____id
+  from  PersonAsSpeaker3 P;
+
+output view __Union__344__TempOp__4;
+
+create view __Union__344__TempOp__5 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonAsSubject1_____sep_____P____id
+  from  PersonAsSubject1 P;
+
+output view __Union__344__TempOp__5;
+
+create view __Union__344__TempOp__6 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonPerson_____sep_____P____id
+  from  PersonPerson P;
+
+output view __Union__344__TempOp__6;
+
+create view __Union__344__TempOp__7 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonAsVictims_____sep_____P____id
+  from  PersonAsVictims P;
+
+output view __Union__344__TempOp__7;
+

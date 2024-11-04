@@ -1,0 +1,101 @@
+------------------------------------------------------------
+-- sdmPassThruColumnBug.aql
+
+-- Test case for defect# 17828 :  Shared Dictionary Matching  
+-- does not preserve select fields
+------------------------------------------------------------
+require document with columns text Text;
+
+create dictionary OfDict as('of');
+
+create dictionary TheDict as('the');
+
+create dictionary OfTheDict as('of', 'the'); 
+
+create view OfThe1 as
+extract D.text as fulltext,	
+        dictionary 'OfTheDict' on D.text as match
+from Document D;
+
+-- ColumnNode as value in pass thru list
+create view Test as
+extract D1.fulltext as ignored, 
+	        dictionaries 'OfDict' and 'TheDict' 
+	              on D1.match as match
+	from OfThe1 D1;
+	
+output view Test;
+
+-- StringNode as value in pass thru list
+create view Test1 as
+  select * 
+  from (
+    extract 
+      'mQPron' as type,
+      dictionary 'OfDict'
+        on doc.text 
+        as match
+    from Document doc
+  ) word
+  consolidate on word.match
+;
+output view Test1; 
+
+-- StringNode as value in pass thru list
+create view mQPron_en as 
+  select * 
+  from (
+    extract 
+      'mQPron' as category,
+      dictionary 'TheDict'
+        on doc.text 
+        as match
+    from Document doc
+  ) word
+  consolidate on word.match
+;
+output view mQPron_en;
+
+-- IntNode as value in pass thru list
+create view mQPron_int as 
+  select * 
+  from (
+    extract 
+      1 as IntNode,
+      dictionary 'TheDict'
+        on doc.text 
+        as match
+    from Document doc
+  ) word
+  consolidate on word.match
+;
+output view mQPron_int;
+
+-- ScalarFuncNode as value in pass thru list
+create view mQPron_scalarFunc as 
+  select * 
+  from (
+    extract 
+      ToLowerCase('UPPERCASE') as ScalarFunc,
+      dictionary 'TheDict'
+        on doc.text 
+        as match
+    from Document doc
+  ) word
+  consolidate on word.match
+;
+output view mQPron_scalarFunc;
+
+-- Different type of value in pass thru list
+create view mQPron_all as 
+    extract 
+      ToLowerCase('UPPERCASE') as ScalarFunc,
+      1 as IntNode,
+	  'mQPron' as category,      
+      dictionaries 'OfDict' and 'TheDict'
+        on doc.text 
+        as match
+    from Document doc
+  consolidate on match
+;
+output view mQPron_all;

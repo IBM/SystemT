@@ -1,0 +1,165 @@
+--include 'forwardBlock-nooutput.aql';
+--include 'namedentity-nooutput.aql';
+--include 'namedentity.aql';
+--include 'signature.aql';
+
+-- find end of main email body
+
+
+create view RepeatedForwardBlock as
+select R.annot as annot
+from ForwardBlock R, ForwardBlock R1
+where GreaterThan(GetBegin(R.annot),GetBegin(R1.annot));
+
+create view FirstForwardBlock as
+(select R.annot as annot from ForwardBlock R)
+minus
+(select R.annot as annot from RepeatedForwardBlock R);
+
+create view CandidateEnds as
+(select R.match as annot from Regex(/$/,DocScan.text) R)
+--(select GetEnd(DocScan.text) from DocScan D;
+union all
+(select R.annot as annot from FirstForwardBlock R);
+
+create view CandidateEndsToIgnore as
+select R.annot as annot
+from CandidateEnds R, CandidateEnds R1
+where GreaterThan(GetBegin(R.annot),GetBegin(R1.annot));
+
+create view PrimaryEmailEnd as
+(select R.annot as annot from CandidateEnds R)
+minus
+(select R.annot as annot from CandidateEndsToIgnore R);
+
+-- text to evaluate for author's signature
+
+create view ASContext as 
+select R.annot as annot,LeftContext(R.annot,250) as context
+from PrimaryEmailEnd R;
+
+create view ASContextOverlapSig as 
+select C.annot as annot, C.context as context 
+from ASContext C, Signature S
+where Overlaps(C.context,S.block);
+ 
+create view ASContextCandidates as
+(select R.annot as annot, R.context as context from ASContext  R)
+minus
+(select R.annot as annot, R.context as context from ASContextOverlapSig R);
+
+create view ASDisallowed as
+(select R.person  as annot from Person R)
+union all
+(select R.match as annot from Date R)
+union all
+(select R.match as annot from Time R);
+--union all 
+--(select R.block as annot from Signature R);
+
+create view ASContextOverlap as 
+select C.annot as annot, C.context as originalContext, SpanBetween(D.annot,C.annot) as context
+from ASContextCandidates C, ASDisallowed D
+where Contains(C.context,D.annot);
+
+create view ASContextNonOverlap as
+(select R.annot as annot, R.context as context from ASContextCandidates R)
+minus
+(select R.annot as annot, R.originalContext as context from ASContextOverlap R);
+
+create view ASContextOverlapMin as
+select AS.annot as annot, AS.context as context
+from ASContextOverlap AS
+consolidate on AS.context
+using 'NotContainedWithin';
+
+create view ASContextCorrect as
+(select R.annot as annot, R.context as context from ASContextNonOverlap R)
+union all
+(select R.annot as annot, R.context as context from ASContextOverlapMin R);
+
+create view ASEvidence as
+(select R.num  as annot from PhoneNumber R)
+union all
+(select R.loc as annot from Address R)
+union all
+(select R.org as annot from Organization R)
+union all 
+(select R.email as annot from EmailAll R)
+union all 
+(select R.url as annot from Url R);
+
+create view ASEvidenceInScope as
+select R.annot as annot
+from ASEvidence R, ASContextCorrect C
+where Contains(C.context, R.annot)
+and ContainsRegex(/[\n\r]/,RightContext(R.annot,10))
+and ContainsRegex(/[\n\r]/,LeftContext(R.annot,10));
+
+create view ASEvidenceBlock as
+select B.block as annot
+from BlockTok(6,3,5,ASEvidenceInScope.annot) B;
+
+create view ASEvidenceCand1 as
+select AS.annot as annot
+from ASEvidenceBlock AS, PhoneNumber N
+where Contains(AS.annot, N.num);
+
+select AS.annot as block
+into AuthorSignature
+from ASEvidenceCand1 AS
+consolidate on AS.annot
+using 'LeftToRight';
+
+create view AuthorsPhoneOutput2 as
+select DBS.annot as person, N.num as phone, S.block as authorphone
+from AuthorSignature S, PhoneNumber N, DocBeginSpan DBS
+where Contains(S.block, N.num);
+
+create view AuthorsAddressOutput2 as
+select DBS.annot as person, A.loc as address, S.block as authoraddress
+from AuthorSignature S, Address A, DocBeginSpan DBS
+where Contains(S.block, A.loc);
+
+create view AuthorsEmailAddressOutput2 as
+select DBS.annot as person, E.email as email, S.block as authoremail
+from AuthorSignature S, EmailAddress E, DocBeginSpan DBS
+where Contains(S.block, E.email);
+
+
+--Combine author signature output with Author binary relationship
+create view AuthorsPhoneOutputAll as
+(select R.person as person, R.phone as phone, R.authorphone as authorphone from AuthorsPhoneOutput1 R)
+union all 
+(select R.person as person, R.phone as phone, R.authorphone as authorphone from AuthorsPhoneOutput2 R);
+
+ 
+select R.person as person, R.phone as phone, R.authorphone as authorphone 
+into AuthorsPhoneOutput
+from AuthorsPhoneOutputAll R, PrimaryEmailEnd AS
+where Not(GreaterThan(GetEnd(R.authorphone),GetBegin(AS.annot)));
+
+create view AuthorsAddressOutputAll as
+(select R.person as person, R.address as address, R.authoraddress as authoraddress from AuthorsAddressOutput1 R)
+union all 
+(select R.person as person, R.address as address, R.authoraddress as authoraddress from AuthorsAddressOutput2 R);
+ 
+select R.person as person, R.address as address, R.authoraddress as authoraddress 
+into AuthorsAddressOutput
+from AuthorsAddressOutputAll R, PrimaryEmailEnd AS
+where Not(GreaterThan(GetEnd(R.authoraddress),GetBegin(AS.annot))); 
+ 
+create view AuthorsEmailAddressOutputAll as
+(select R.person as person, R.email as email, R.authoremail as authoremail from AuthorsEmailAddressOutput1 R)
+union all 
+(select R.person as person, R.email as email, R.authoremail as authoremail from AuthorsEmailAddressOutput2 R);
+ 
+select R.person as person, R.email as email, R.authoremail as authoremail 
+into AuthorsEmailAddressOutput
+from AuthorsEmailAddressOutputAll R, PrimaryEmailEnd AS
+where Not(GreaterThan(GetEnd(R.authoremail),GetBegin(AS.annot)));
+
+
+select R.annot as annot
+into EndOfPrimaryEmail
+from PrimaryEmailEnd R;

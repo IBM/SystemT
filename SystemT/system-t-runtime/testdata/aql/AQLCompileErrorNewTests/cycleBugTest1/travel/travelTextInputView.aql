@@ -1,0 +1,176 @@
+module travel;
+
+
+-- set travel starting point.  This view should have an external-to-travel filtering done.
+create view travel_startingpoint as
+select P.text as text from Document P;
+
+-- Initial filtering
+-- (1) Eliminate retweets, as retweets are mostly passing around pithy sayings.
+
+create view travel_retweet as
+extract 
+D.text as text,
+regex /RT @/ on D.text as retweet
+from travel_startingpoint D;
+
+-- (2) Eliminate things starting with or ending with a quote, as these are also retweets.
+create view travel_initialQuote as
+extract D.text as text,
+regex /^"/ on between 1 and 1 tokens in D.text as startQuote
+from travel_startingpoint D;
+
+create view travel_finalQuote as 
+extract D.text as text,
+regex /"$/ on between 1 and 1 tokens in D.text as endQuote
+from travel_startingpoint D;
+
+
+-- (4) Eliminate cases where the author is not a traveller; might need to revisit this one
+-- if we start looking for that.
+create dictionary travel_authorNotTraveler_dict as (
+	'welcome'
+	);
+
+create view travel_authorNotTraveler as
+extract D.text as text,
+dictionary 'travel_authorNotTraveler_dict' on D.text as hint
+from travel_startingpoint D;
+
+create view travel_doubleInitCap as
+extract D.text as text, 
+	regex /^[A-Z][a-z]+ [A-Z][a-z]+/ on 
+		--between 2 and 2 tokens in 
+		D.text as possibleName
+from travel_startingpoint D 
+having ContainsDict('travel_http_dict',text) and
+	Not(ContainsDict('travel_personalTweetIndicators_dict',text));
+
+
+--(5) Eliminate cases where the person is living somewhere.
+create dictionary travel_suitcase_dict as 
+('suitcase',
+'bag');
+
+create dictionary travel_nottravel_dict as (
+'move to',
+'live in',
+'lived in',
+'moved to',
+'uni',
+'school' -- iffy...
+);
+
+create view travel_livein as 
+extract D.text as text,
+	dictionary 'travel_nottravel_dict' on D.text as notTravel 
+from  travel_startingpoint D 
+having Not(ContainsDict('travel_suitcase_dict',text));
+
+-- eliminate news articals
+create dictionary travel_newsclues_dict as 
+('headline',
+'headlines',
+'exclusive',
+'in-depth coverage',
+'#NowPlaying',
+'Yahoo! News',
+'FBI',
+'Obama');
+
+create dictionary travel_http_dict as 
+('http');
+
+create dictionary travel_personalTweetIndicators_dict as
+(
+'wow',
+'!',
+':)',
+'(:',
+'<:',
+':>',
+';)',
+'(;',
+':D',
+';D',
+'I',
+'my',
+'we',
+'our'
+);
+
+create dictionary travel_personalImageURL_dict as
+('TwitrPix',
+'Twitgoo',
+'yfrog',
+'Flickr',
+'twic.li',
+'mobypicture',
+'posterous',
+'smugmug',
+'ow.ly',
+'Twitpic',
+'instagram',
+'pic.twitter');
+
+create dictionary travel_gameIndicators_dict as 
+('v',
+'vs',
+'#gameday',
+'win today',
+'wins',
+'win',
+'matchup');
+
+-- Deliberately does not include 'we' and 'our', since we want to exclude team mentions.
+create dictionary travel_notGame_dict as 
+('I',
+'me',
+'my',
+'I\'m',
+'Im');
+
+
+create view travel_news_fromclue as 
+extract D.text as text,
+	dictionary 'travel_newsclues_dict' on D.text as clue
+from travel_startingpoint D
+having ContainsDict('travel_http_dict',text);
+
+create view travel_news_fromhttp as
+extract D.text as text,
+	dictionary 'travel_http_dict' on D.text as clue
+from travel_startingpoint D
+having Not(ContainsDict('travel_personalImageURL_dict',text)) and
+	Not(ContainsDict('travel_personalTweetIndicators_dict',text));
+	
+-- put it all together.
+create view travel_inputView_prefilter as 
+(select D.text  as text from travel_startingpoint D)
+minus 
+(
+(select B.text as text from travel_initialQuote B)
+union all
+(select C.text as text from travel_finalQuote C)
+union all 
+(select D.text as text from travel_retweet D)
+union all 
+(select E.text as text from travel_doubleInitCap E)
+union all
+-- Eliminating for the moment because it excludes valid tweets 4/8/13
+-- (If you are seeing this, and it's more than, say, a month later, and it's still commented out
+-- please delete).
+--(select E.text as text from travel_authorNotTraveler E)
+--union all
+(select F.text as text from travel_livein F)
+union all
+(select G.text as text from travel_news_fromclue G)
+--union all
+--(select H.text as text from travel_news_fromhttp H)
+)
+;
+
+create view travel_inputView as
+select * from  travel_inputView_prefilter P
+where Or(Not(ContainsDict('travel_gameIndicators_dict',P.text)),
+	  ContainsDict('travel_notGame_dict',P.text));

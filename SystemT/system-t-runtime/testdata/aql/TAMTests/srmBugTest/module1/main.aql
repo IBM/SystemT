@@ -1,0 +1,15 @@
+module module1;
+
+-- One regex, on token boundaries
+create view Regex_1 as
+	extract regex /\p{Nd}+\.\p{Nd}+/ on 3 tokens in D.text as match
+	from Document D;
+
+-- Second regex, on token boundaries, to trigger the compiler to create an SRM node
+create view Regex_2 as
+	extract regex /\p{N}+\.\p{N}+/ on 3 tokens in D.text as match
+	from Document D;
+	
+-- To trigger the bug, export both regexes
+export view Regex_1;
+export view Regex_2;

@@ -1,0 +1,70 @@
+------------------------------------------------------------------------------
+-- bufferBug2.aql
+--
+-- Test case for a bug in tuple buffer handling; derived from
+-- lotus/namedentity.aql.
+--
+--
+------------------------------------------------------------------------------
+require document with columns text Text;
+
+
+
+ create view State  as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/lotus/Statelist.dict',  Document.text) D;
+	
+	create view Zipcode as
+	select
+		R.match as match
+	from
+		Regex(/\b[0-9]{5}(\-[0-9]{4})?\b/, Document.text) R;
+	 
+	 
+		
+	create view StreetAddressWithCity as
+	select
+ 		CombineSpans(S.match, cp.match) as match
+	from
+		Zipcode S,
+		Zipcode cp
+ 	where
+		FollowsTok(S.match,cp.match, 0, 5);
+
+	
+ create view StreetAddressWithCityStrongState as
+	select
+ 		CombineSpans(Sawc.match, Sa.match) as match
+	from
+		StreetAddressWithCity Sawc,
+		State Sa
+ 	where
+		FollowsTok(Sawc.match,Sa.match, 0, 1);
+
+create view StreetAddressWithCityOptionalStrongState
+as
+(select S.match as match from StreetAddressWithCity S)
+union all 
+ (select S.match as match from StreetAddressWithCityStrongState S);
+	 	
+
+create view StreetAddressWithCityOptionalStateZipcode as
+	select
+ 		CombineSpans(Sawcos.match, z.match) as match
+	from
+		StreetAddressWithCity Sawcos,
+		Zipcode z
+ 	where
+		FollowsTok(Sawcos.match,z.match, 0, 1);
+
+create view PlaceAll as
+	(select R.match as loc from StreetAddressWithCityOptionalStateZipcode R)
+    union all 
+ 	(select R.match as loc from StreetAddressWithCityStrongState R);
+ 	
+ 	
+select P.loc as loc
+into Place
+from PlaceAll P;

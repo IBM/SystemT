@@ -1,0 +1,174 @@
+-------------------------------------------------------------------------------
+-- URL.aql
+--
+-- URL parsing for W3 local analysis.
+--
+-- Depends on HTML.aql
+--
+-- Produces the following output views:
+-- 		a. BluepediaSpecial: URLs that point to pages in the Bluepedia wiki
+--
+-- Based on Huiayu's original Java implementation.
+-- Author: Fred Reiss <frreiss@us.ibm.com>
+-------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
+-- URL view (internal)
+
+-- Split URLs in hyperlinks into protocol, host, and path.
+-- The path is further split into the actual path to the document and the query string
+create view URL as
+extract 
+	D.label as url,
+	-- Note that the port number is currently a non-capturing group
+	regex /\A([a-zA-Z]{1,5}):\/\/([^\/:]{1,100})(?::\d{1,5})?((\/[^\?]{0,500})\??(.{0,500})?)?/ 
+    on D.label 
+    return 
+        group 1 as proto 
+        and group 2 as host
+		and group 3 as path
+		and group 4 as actualPath
+		and group 5 as query
+from Document D;
+
+-- Temporary output for debugging
+--output view URL;
+
+
+-- Compute the hash code of the url path
+create view UrlPathHash as
+select HashCode(GetText(U.actualPath)) as urlPathHash, U.actualPath as urlPath
+from URL U
+where NotNull(U.actualPath);
+
+
+-- Compute the hash code of the url query
+create view UrlQueryHash as
+select HashCode(GetText(U.query)) as urlPathHash, U.query as urlQuery
+from URL U
+where NotNull(U.query);
+
+
+-------------------------------------------------------------------------------
+-- BluepediaSpecial
+-- Pages in the Bluepedia wiki
+
+-- Servers that host the Bluepedia wiki
+create dictionary BluepediaServers as (
+	'bluepedia.csghl.de.ibm.com',
+	'w3.ibm.com'
+);
+
+
+-- Identify URLs that could contain Bluepedia pages.
+create view BluepediaServerURL as
+select U.url as url, U.host as host, U.path as path
+from URL U
+where 
+	ContainsDict('BluepediaServers', U.host)
+	and NotNull(U.path);
+
+
+-- Identify pages in the Bluepedia wiki, and label the pages by type:
+-- "links" for "what links here" pages, and "category" for category
+-- pages.
+create view BluepediaSpecial as
+(
+	-- Bluepedia "what links here" pages
+	extract 
+		U.url as url, U.host as host, U.path as path, 
+		'links' as label,
+		regex /(?:Special:Whatlinkshere|Spezial:Verweisliste)\/(\w+)/ 
+	    	on U.path 
+	    	return group 1 as target
+	from BluepediaServerURL U
+)
+union all 
+(
+	extract 
+		U.url as url, U.host as host, U.path as path, 
+		'category' as label,
+		regex /Category:(\w+)/ 
+	    	on U.path 
+	    	return group 1 as target
+	from BluepediaServerURL U
+);
+	
+-------------------------------------------------------------------------------
+-- SelfRef
+-- Hyperlinks that point back to the page itself.
+-- We detect self-references by stripping server names and bookmarks (e.g.
+-- "#location") off of URLs and anchor links, then comparing the links in
+-- each document with its URL.
+
+-- Start by parsing anchor links, similar to what we do with URLs.
+create view LinkURLWithSrvr as
+extract 
+	A.target as url,
+	-- Note that port number is a non-capturing group
+	regex /\A([a-zA-Z]{1,5}):\/\/([^\/:]{1,100})(?::\d{1,5})?(\/.{0,500})?/ 
+    on A.target
+    return 
+        group 1 as proto 
+        and group 2 as host
+		and group 3 as path
+from (
+	select A2.target as target 
+	from Anchor A2
+	where NotNull(A2.target) 
+) A;
+
+
+-- Assume that URLs that didn't pass the above regular expression do not
+-- contain a server name.
+create view LinkURLNoSrvr as
+select M.url as url, M.url as path
+from 
+(
+	(
+		select A.target as url 
+		from Anchor A
+		where NotNull(A.target) 
+	) 
+	minus
+	(
+		select L.url as url
+		from LinkURLWithSrvr L
+	)
+) M;
+
+
+-- Merge the two types of URL path together and strip off any part of the path
+-- that is within a page.
+create view LinkPath as
+extract
+	regex /\A([^#]*)(#.*)?\Z/ 
+    on U.path
+    return 
+		group 0 as fullpath
+        and group 1 as docpath
+from 
+(
+	(select L1.path as path from LinkURLWithSrvr L1 where NotNull(L1.path))
+	union all
+	(select L2.path as path from LinkURLNoSrvr L2)
+) U;
+
+-- Normalize document URLs the same way.
+
+create view URLPath as 
+extract
+	regex /\A([^#]*)(#.*)?\Z/ 
+    on S.path
+    return 
+		group 0 as fullpath
+        and group 1 as docpath
+from (select U.path as path from URL U where NotNull(U.path)) S;
+
+-- Now we can look for self-references
+create view SelfRef as
+select U.fullpath as url
+from LinkPath L, URLPath U
+where Equals(GetText(L.docpath), GetText(U.docpath));
+
+

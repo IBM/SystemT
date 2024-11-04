@@ -1,0 +1,42 @@
+-------------------------------------------------------------------------------
+-- Description.aql
+--
+-- Identify static snippet for a page as the content of Meta.Description, if present,
+-- otherwise the first 300 characters of the body tag, truncated to the next word boundary.
+-- If the body tag is not present or empty, then the first 300 characters of the detagged
+-- text, truncated to the next word boundary.
+--
+-- This file produces the contents of the following local analysis outputs:
+--      a. Description
+--
+-- Depends on Detag.aql, HTML.aql 
+--
+-- Author: Laura
+-------------------------------------------------------------------------------
+
+-- ***********************************************************************
+-- ***                        UDF declarations                        ****
+-- ***********************************************************************
+
+
+-- ***********************************************************************
+
+-- Use the first N characters of the detagged content as description for
+-- documents that do not have a meta description tag.
+create view DetaggedContentDescription as
+select GetString(D.content) as content
+from DetaggedContent D,
+	(
+		select case when GreaterThan(M.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from MetaDescription) M
+	) M
+where Equals(M.xsists, 0)
+and NotNull(D.content);
+
+-- Description output
+create view Description as 
+( select GetString(D.content) as content from DetaggedContentDescription D) 
+union all 
+( select GetString(D.content) as content from MetaDescription D);
+
+

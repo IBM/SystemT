@@ -1,0 +1,50 @@
+module emptyTitleTagTest;
+
+-- Test scenario: When an input document contains an empty tag (for ex. <title> </title>), if the empty tag is
+-- annotated via detag statement using the annotate clause, the detagged output or any other views written on top of
+-- the detagged output should have identical span offsets in the output regardless of whether the annotated empty 
+-- tag view is used towards an output view.
+
+-- The BUG was due to an extra white space character that was getting added to account for such empty tags ONLY WHEN
+-- such tags were annotated via the detag statement and being used towards an output view. 
+-- Thus this led to span offsets being off by 1 for every empty tag that was used towards an output view vs. not used towards an output view.
+
+-- The FIX removed this addition of whitespace (as we now map such empty tags to an empty span instead of a whitespace) 
+-- thus ensuring that the offsets are consistent when a) the annotated empty tag gets used
+-- towards any output view b) the annotated empty tag is not used towards an output view.
+   
+-- Sample dictionary to extract keyword "Base Agreement". 
+-- This keyword appears AFTER the empty title tag for the input document. Thus the test scenario applies here.
+-- Outputs of the views "AgreementDict_Extract_EmptyTitleUsed" and "AgreementDict_Extract_EmptyTitleNotUsed" thus should be identical.
+create dictionary AgreementDict as ('Base Agreement');
+
+-------DETAG 1 - TITLE TAG VIEW USED FOR OUTPUT---------------
+detag Document.text as Doc1
+	detect content_type always
+	annotate 
+		element 'title' as Title1;
+	
+-- Extract the dictionary matches 
+create view AgreementDict_Extract_EmptyTitleUsed as
+	extract D1.text as text,
+	dictionary AgreementDict on D1.text as match
+	from Doc1 D1;
+
+-- Title1 view needs to be in the output to test the bug fix
+output view Title1;
+output view AgreementDict_Extract_EmptyTitleUsed;
+
+-------DETAG 2 - TITLE TAG VIEW NOT USED FOR OUTPUT---------------
+detag Document.text as Doc2
+	detect content_type always
+	annotate 
+		element 'title' as Title2;
+
+-- Extract the dictionary matches 
+create view AgreementDict_Extract_EmptyTitleNotUsed as
+	extract D2.text as text,
+	dictionary AgreementDict on D2.text as match
+	from Doc2 D2;
+
+output view AgreementDict_Extract_EmptyTitleNotUsed;
+

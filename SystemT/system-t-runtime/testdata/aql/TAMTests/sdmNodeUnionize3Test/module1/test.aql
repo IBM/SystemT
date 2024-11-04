@@ -1,0 +1,50 @@
+module module1; 
+-- TODO: Add AQL content here 
+
+/**
+Define a dictionary of financial metrics
+Example: gross profit margin, cash flow, diluted earnings per share
+*/
+create dictionary MetricDict
+from file 'dictionaries/metric.dict'
+with language as 'en';
+
+/** Identify mentions of financial metrics
+Example: gross profit margin, cash flow, diluted earnings per share*/
+create view Metric as
+extract dictionary 'MetricDict' 
+on D.text as match
+from Document D;
+
+export view Metric;
+
+/**Identify mentions of numbers with optional decimals
+Example: 7, 49, 11.2
+*/
+create view Number as
+extract regex /\d+(\.\d+)?/ 
+on R.text as match
+from Document R; 
+
+output view Number;
+
+export view Number;
+
+/** Define a dictionary of financial amount units
+Example: million, billion
+*/
+create dictionary UnitDict
+from file 'dictionaries/unit.dict'
+with language as 'en';
+
+export dictionary UnitDict;
+
+/** Indentify mentions of financial amount units
+-- Example: million, billion
+*/
+create view Unit as
+extract dictionary 'UnitDict' 
+on R.text as match
+from Document R; 
+
+export view Unit;

@@ -1,0 +1,1169 @@
+--Date: February 7,2011
+--Author: @Ramiya
+--AIM: To identify tweets which talk about the location of a person
+--DATA: FOR TWITTER DATA
+
+--------------------------------------------------------------------------------
+/**
+--OUTPUT ON TORO1: /home/toro/Ramiya_SocialMedia_Output/Final Outputs Location
+--(2 zip folders: 1 for train and 1 for test set)
+--PATTERNS COVERED (3 output views in all)
+--A) Location explicitly mentioned in the tweets (with/without other user name mentioned as well) 
+	(Output view: LocationTweets_AllPatterns_Output)
+	(Attributes: locationName,locationAddress,userName,URL,tweet)
+	 
+	-1-I'm at pattern tweets having URL  (Foursquare being dominant)
+		a) I' m at/in/@ [place] ([address]) <some text may contain user name> [URL]
+		   EX.: I'm at Mickey's Irish Pub Downtown (206 3rd St, Court Ave, Des Moines) w/ 2 others http://4sq.com/gbsaYR
+	    b) I' m at/in/@ [place] <some text may contain user name> [URL]
+	       EX.: I'm at Abdi Siswa School Bintaro w/ @onelonell http://4sq.com/f6FXGT
+	    
+	-2- <some text containing user name>(@ [locationName] <username>)<some text containing user name>[URL]
+	    EX.: Best chinese food around. (@ Happy Dragon Chinese Restaurant w/ @deadsqwirl) http://4sq.com/e0iMuy 
+	 
+	-3- I'm at/@ [place] [w/|with userName OR URL] 
+		EX.: -I'm @ Starbucks w/ @john34
+		     -I'm @ Starbucks http://4sq.com/f6FFTG
+	 
+--B) Location as user name tweets:- 
+    (Output view: LocationAsUserNameTweets_AllEntities_Output)
+    (Attributes: userName,URL,tweet)
+    
+	-1- I'm at|I'm @|(@  w/|with @[userName] <URL> 
+	    EX.: I'm at w/ @fabregulus http://4sq.com/fSrOLi
+	    
+	-2- Purely contextual pattern with the help of some dictionary clues like going to, lunch, brunch etc. 
+	    and presence of "w/" or "with" identifiers in the tweets
+	    EX.: Doing nothing for the next 4 hours, then going to the bouzoukia with @ekaterini110 :)
+	 
+	 IMP:The following pattern has been accommodated in a separate view
+	 (Output view: LocationAsUserNameTweets_Ambiguous)   
+	 (Attributes: userName,URL,tweet)
+	  
+	-3- I'm (at/@)? @[userName] <URL>  
+	    EX.: I'm @bethanyy_reed's elf's god motherrrr! (:
+	    Here the string @<text> may be an actual place or it may be a user but the tweet on
+        the whole may mean something else resulting in ambiguity
+**/  
+--------------------------------------------------------------------------------
+
+--Keywords for identifying snippets which might
+--convey the location of a person
+--Weak/strong clues
+create dictionary VerbsForLocationDict  
+with case insensitive
+as 
+(
+'am at','am @','m at','m in','am in','am with','m with','m w/','am w/',
+'i\'m at', 'i\'m @', 'i\'m in', 'i\'m with', 'i\'m w/',
+'i checked in',  
+'going to','go to',
+'to attend','will attend','will be attending',
+'to visit','will visit','will be visiting',
+'will reach','will be reaching','will be @','will be at','we are at','we are @','visit','visited'
+--Past Tense
+,'i was in','i was at','we were at','we were in',
+'i was @','we were @','i had gone to','we had gone to',
+'i was with','i was w/',
+
+--------SLANG words
+'me in','me at','goin 2','go 2','goin to','will b attendin','2 visit','will b visitin','will b reachin'
+,'will b @','will b at','we r at','we r @','v were at','v were @','v were in',
+'Enroute','visiting','visitin','going to the','goin to the','goin 2 the','goin to da','goin 2 da',
+'go to the','go 2 the','go to da','go 2 da','m at','m @','we are @'
+,'/4sq.com',
+'attend','attending','attended','attendin','reaching','reach','reached','reachin'
+
+);
+
+--Keywords which indicate reference
+create dictionary ReferenceWordsDict  
+with case insensitive
+as 
+(
+'I','we','all of us','me'
+);
+
+
+--Keywords that will retain the VALID tweets getting filtered out due to
+--absence of a city.dict entry--10th Feb 
+--Some of the stronger keywords from the base dictionary 
+create dictionary VerbsForLocationStrongDict  
+with case insensitive
+as 
+(
+'Enroute','visiting','visited','visitin',
+'going to the','goin to the','goin 2 the','goin to da','goin 2 da',
+'go to the','go 2 the','go to da','go 2 da',
+'m at','m @','we are @','we are at',
+'\'m at', '\'m @'
+,'/4sq.com',
+'attend the','attending the','attended the','attendin the',
+'attendin da','attend da','attended da','attending da'
+,'checked in at'
+
+--Commented out because of false positives-15th Feb
+--'reaching','reach','reachin'
+
+--15th Feb-Added some more keywords
+,'wanna go to','m in','will be reaching','reached','going to watch','s go to','m going to','me in'
+,'will go to','im going to','want to go to','all go to','my visit to','wanna visit','want to visit',
+
+--For past tense
+'i was in','i was at','i was @',
+'we were at','we were in','we were @','v were at','v were @','v were in',
+'i had gone to','we had gone to'
+
+); 
+
+--This view is necessary to get the document text (entire tweet message)
+--as a "span"
+create view AllTweets as
+extract regex /.*/ 
+on D.text as tweet
+from LocationText_Input D;
+
+------------------------------------------------------------------------------------------
+--CODE TO GET THE RIGHT CANDIDATE LOCATION TWEETS
+------------------------------------------------------------------------------------------
+
+------------------------------------------------------------------------------------------------------------------------------------
+--A. PATTERN WHERE ALL THE DICTIONARY CLUES (KEYWORDS AND CITY.dict) ARE PRESENT IN THE TWEETS
+------------------------------------------------------------------------------------------------------------------------------------
+
+--Find out the tweets which contain the dictionary keywords that
+--that are additional clues which talk about person's location
+--CLUE 1: Weak/strong keyword clues
+create view MotionKeywords_InTweets as
+select T.match as key,T.tweet
+from
+(
+extract D.text as tweet,dictionary 'VerbsForLocationDict' 
+on D.text as match
+from Document D
+)T
+;
+
+--Extract the existing city/weak locations dictionaries from the tweets
+--CLUE 2: city.dict entries 
+create view LocationClue_InTweets as
+select T.loc,T.tweet
+from
+(
+extract D.tweet as tweet,dictionaries 'geographic/dictionaries/LocationText_city.dict' --and 'LocationWeakDict'  (leads to false positives) 
+with flags 'Exact'
+on D.tweet as loc
+from AllTweets D
+)T
+;
+
+--Find out all the tweets which have those additional keywords and also
+--have a location from the dictionary
+--1. city.dict entry must be present in the tweet containing the keyword clues
+--2. LOCATION should follow the motion keywords/verbs
+create view  LocationTweets as
+select T.key,T1.loc,T1.tweet
+from MotionKeywords_InTweets T,LocationClue_InTweets T1
+where Contains(T1.tweet,T.key)
+and GreaterThan(GetBegin(T1.loc),GetBegin(T.key))
+consolidate on T1.tweet;
+
+--Find out the tweets which talk about the person who's tweet it is
+--by making sure the snippets contain the right reference keywords
+--CLUE 3: Reference keywords must be present in the tweets
+create view LocationTweets_Filtered as
+select T.key,T.loc,T.tweet as text
+from LocationTweets T
+where ContainsDict('ReferenceWordsDict',T.tweet);
+
+--Find out the tweets which are actually re-tweets (i.e. do not belong to that person)
+--Ex.: RT I'm at Norway.
+create view LocationTweets_Filtered_ReTweets as
+select D.text
+from LocationTweets_Filtered D
+where ContainsRegex(/\bRT\b/,D.text)
+consolidate on D.text;
+
+--Filter out the Retweets as it is not of that person
+--One of the views to be added in the final UNION
+create view LocationTweets_Filtered_SelfTweets as
+(select D.text from LocationTweets_Filtered D)
+minus
+(select D.text from LocationTweets_Filtered_ReTweets D);
+
+
+------------------------------------------------------------------
+--B. PATTERN WHERE city.dict clue is NOT present in the tweets
+  --but the tweet contains other strong clues
+------------------------------------------------------------------
+--Find out the tweets which have location (city.dict) as well as base keyword dictionary
+--entry
+create view Tweets_BothDicts as
+select T.tweet 
+from MotionKeywords_InTweets T,LocationClue_InTweets T1
+where Overlaps(T.tweet,T1.tweet)
+consolidate on T.tweet;
+
+--10th Feb: Find out the tweets which do not have city.dict entries
+--but do have the verb keyword entry (base dict)
+create view CandidateTweets_WithoutDict as
+(select T.tweet as text from MotionKeywords_InTweets T)
+minus
+(select T.tweet as text from Tweets_BothDicts  T);
+
+----Find out the tweets which are actually re-tweets (i.e. do not belong to that person)
+create view CandidateTweets_ReTweets as
+select D.text
+from CandidateTweets_WithoutDict D
+where ContainsRegex(/\bRT\b/,D.text)
+consolidate on D.text;
+
+--Filter out the Retweets as it is not of that person  (these tweets contain
+--the main base dictionary clues but no city.dict clue)
+create view CandidateTweets_SelfTweets as
+(select D.text from CandidateTweets_WithoutDict D)
+minus
+(select D.text from CandidateTweets_ReTweets D);
+
+--Find out the tweets which have a BIT STRONGER keywords
+--for being valid location tweets
+--Goes in the final union
+create view CandidateTweets_Location as
+select D.text
+from CandidateTweets_SelfTweets D
+where ContainsDict('VerbsForLocationStrongDict',D.text)
+consolidate on D.text;
+
+---strong dict output + weak dict output
+--FINAL OUTPUT VIEW-for valid tweets
+create view AllLocationTweets as
+(select D.text as tweet from LocationTweets_Filtered_SelfTweets D)
+union all
+(select D.text as tweet from CandidateTweets_Location D);
+
+/*
+--Find out the tweets which dont satisfy any of the above constraints
+--ONLY HAVE THE BASE DICTIONARY KEYWORDS
+create view OtherTweets as
+(select D.text as tweet from CandidateTweets_SelfTweets D)
+minus
+(select D.tweet from AllLocationTweets D);
+*/
+
+----------------------------------------------------------------------------------------------------------
+---------------ENTITY EXTRACTION RULES FROM THE DESIRED LOCATION TWEETS-----------------------
+----------------------------------------------------------------------------------------------------------
+----------------------------------------------------------------
+--PATTERN 1a
+--Pattern 1a: I'm at/@/in [place] ([address])<text may contain user name>[url]
+----------------------------------------------------------------
+create view LocationTweets_Pattern1a as
+extract T.tweet as tweet,
+regex /I(?:\'m|\s+checked in)\s+(?:at|in|@)(.+)\(@?(.*?)((?:\bw\/|with|\))\s+.*?)(http[:\/a-zA-Z0-9.]+)/
+with flags 'CASE_INSENSITIVE'
+on T.tweet
+return group 1 as place
+      and group 2 as address
+      and group 3 as userNameSpan
+      and group 4 as url
+from AllLocationTweets T;
+
+--Find out the tweets where the address does not contain any valid info
+--or just has "(cont)" in it which means the information is continued in the url next to it
+create view LocationTweets_Pattern1a_FalsePositives as
+select T.tweet,T.place,T.userNameSpan,T.address,T.url
+from LocationTweets_Pattern1a T
+where Or(MatchesRegex(/[\s0-9,-\/.@()]+/,T.address),
+ContainsRegex(/cont/,Chomp(T.address)));
+
+--Find out the tweets which have some text in place attribute from the above false positives
+--These become potential pattern 1b type tweets
+--Ex.: I'm at JOMO SS (67,) http://4sq.com/hLrHgS
+--Even though text in brackets (i.e. address) is meaningless, JOMO SS seems to be a valid place
+create view LocationTweets_Pattern1a_Retain as
+select T.tweet,T.place,T.userNameSpan,T.address,T.url
+from LocationTweets_Pattern1a_FalsePositives T
+where ContainsRegex(/[a-zA-Z]/,Chomp(T.place));
+
+--Filter the above tweets from this pattern to get the correct set of valid tweets for this pattern
+create view LocationTweets_Pattern1a_Correct as
+(select T.tweet,T.place,T.userNameSpan,T.address,T.url from 
+LocationTweets_Pattern1a T)
+minus
+(select T.tweet,T.place,T.userNameSpan,T.address,T.url from
+LocationTweets_Pattern1a_FalsePositives T);
+
+--Find out the tweets where the place attribute has some additional
+--tokens from the bracketed address
+--Ex.: I am at [Santa Monica (east street] (near harry road)) http...
+create view IncorrectPlace_Pattern1a as
+select T.tweet,T.place,T.userNameSpan,T.url,T.address
+from LocationTweets_Pattern1a_Correct T
+where ContainsRegex(/\(/,Chomp(T.place))
+and Not(ContainsRegex(/\)/,Chomp(T.place)))
+consolidate on T.place;
+
+--Now extract the place only upto first opening bracket
+--and combine the remaining tokens with address
+--Ex.: Input: Place:Santa Monica (east street  Address: near harry road
+--After this view
+--Output: Place: Santa Monica, 
+--Output: Address: east street (near harry road) 
+create view CorrectPlace_Pattern1a as
+select T.tweet,T.url,T.correct_place as place,T.userNameSpan,
+CombineSpans(T.address_part,T.address) as address
+from
+(
+	extract T.tweet as tweet,T.url as url,T.userNameSpan as userNameSpan,T.address as address,
+	regex /(.+)\((.+)/
+	on T.place
+	return group 1 as correct_place
+	   	   and group 2 as address_part
+	from IncorrectPlace_Pattern1a T
+)T;
+
+--Union the above tweets
+create view LocationTweets_Pattern1a_Consolidated as
+select T.tweet,T.place,T.url,T.userNameSpan,T.address from
+(
+(select T.tweet,T.place,T.address,T.userNameSpan,T.url from 
+LocationTweets_Pattern1a_Correct T)
+union all
+(select T.tweet,T.place,T.address,T.userNameSpan,T.url from
+CorrectPlace_Pattern1a T)
+)T
+consolidate on T.address;
+
+--@Ramiya-23rd Feb-2011
+--Find out the tweets where the details are present only in the address attribute
+--and not in the place attribute. 
+--IMP:Place attribute is empty/whitespace char.
+--Ex.: I'm at (201,Cheery Street) http...
+create view LocationTweets_Pattern1a_EmptyPlace as
+select T.tweet,T.place,T.url,T.userNameSpan,T.address from
+LocationTweets_Pattern1a_Consolidated T
+where MatchesRegex(/|\s+/,T.place)
+consolidate on T.tweet;
+
+--Find out the tweets where the details are present only in the address attribute
+--and not in the place attribute. 
+--IMP: Place attribute should not contain any alphanumeric characters
+--Ex.: I'm at @ (201,Cheery Street) http...
+create view LocationTweets_Pattern1a_GarbagePlace as
+select T.tweet,T.place,T.url,T.userNameSpan,T.address from
+LocationTweets_Pattern1a_Consolidated T
+where MatchesRegex(/[^a-zA-Z0-9]+/,T.place)
+and Not(MatchesRegex(/|\s+/,T.place))
+consolidate on T.tweet;
+
+--Find out the tweets extracted in pattern 1a tweets which are actually
+--pattern 1b type tweets
+--Ex.: 
+--1. I'm at (201,Cheery Street) http...
+--2. I'm at @ (201,Cheery Street) http...
+--3. I'm at JOMO SS (67,) http://4sq.com/hLrHgS
+create view LocationTweets_Pattern1bCandidates as
+(select T.tweet,T.url,T.userNameSpan,T.address as place
+from LocationTweets_Pattern1a_EmptyPlace T)
+union all
+(select T.tweet,T.url,T.userNameSpan,T.address as place
+from LocationTweets_Pattern1a_GarbagePlace T)
+union all
+(select T.tweet,T.url,T.userNameSpan,T.place
+from LocationTweets_Pattern1a_Retain T)
+;
+
+--Subtract the tweets which are pattern 1b candidates
+--Thus these are the final pattern 1a tweets
+--User name is extracted after taking a union with all other patterns
+create view LocationTweets_Pattern1a_All as
+select T.tweet,T1.place,T1.url,T1.userNameSpan,T1.address
+from
+(
+(select T.tweet from LocationTweets_Pattern1a_Consolidated T)
+minus
+(select T.tweet from LocationTweets_Pattern1bCandidates T)
+)T,LocationTweets_Pattern1a_Consolidated T1
+where Overlaps(T1.tweet,T.tweet);
+
+--Subtract the CANDIDATE Pattern 1a tweets from all location tweets
+--to get the remaining pattern tweets
+create view LocationTweets_OtherPatterns as
+(select T.tweet from AllLocationTweets T)
+minus
+(select T.tweet from LocationTweets_Pattern1a T);
+
+----------------------------------------------------------------
+--PATTERN 1B
+--Pattern 1b: I'm at/@/in [place]<text may contain user name>[url]
+----------------------------------------------------------------
+--Extract 3 entities-place, userNameSpan, and URL
+create view LocationTweets_Pattern1b as
+extract T.tweet as tweet,regex /I'm\s+(?:at|in|@)\s+(.+?)(\s+|\s+(?:w\/|with)(?:.)+)(http[:\/a-zA-Z0-9.]+)/
+with flags 'CASE_INSENSITIVE'
+on T.tweet
+return group 1 as place
+      and group 2 as userNameSpan
+      and group 3 as url
+from LocationTweets_OtherPatterns T;
+
+--Union the tweets obtained from pattern 1a regex which are actually of pattern 1b type (Pattern 1b candidates obtained via Pattern 1a)
+--Here skip the address attribute
+create view LocationTweets_Pattern1b_All as
+(select T.tweet,T.url,T.userNameSpan,T.place
+from LocationTweets_Pattern1b T)
+union all
+(select T.tweet,T.url,T.userNameSpan,T.place
+from LocationTweets_Pattern1bCandidates T);
+
+--Subtract the candidate Pattern 1b tweets from the remaining location tweets other than pattern 1 (a or b)
+--to get the remaining tweet patterns
+create view Remaining_LocationTweets_OtherThanPattern1 as
+(select T.tweet from LocationTweets_OtherPatterns T)
+minus
+(select T.tweet from LocationTweets_Pattern1b T);
+
+-------------------------------------------------------
+--PATTERN 2-<some text> (@ [place]) <some text> [URL]
+--March 03,2011
+-------------------------------------------------------
+--Extract 3 entities-place, userNameSpan, and URL
+create view LocationTweets_Pattern2_Candidates as
+extract T.tweet as tweet,regex /(.+)\(@\s+\(?(.*?)((?:\b[wW]\/|with|\))\s+.*?)(http[:\/a-zA-Z0-9.]+)/
+with flags 'CASE_INSENSITIVE'
+on T.tweet
+return group 1 as userNameSpan1
+      and group 2 as locationSpan
+      and group 3 as userNameSpan2
+      and group 4 as url
+from Remaining_LocationTweets_OtherThanPattern1 T;
+
+--Subtract the candidate Pattern 2 tweets from the remaining location tweets other than pattern 1 & 2
+--to get the remaining tweet patterns
+create view Remaining_LocationTweets_OtherThanPatternsAll as
+(select T.tweet from Remaining_LocationTweets_OtherThanPattern1 T)
+minus
+(select T.tweet from LocationTweets_Pattern2_Candidates T);
+
+--Find out the exact user span for these tweets
+create view LocationTweets_Pattern2_Candidates_WithUserNameInfo_Explicit as
+--Tweets which have username span at the start (just before the place is mentioned)
+(select T.tweet,T.locationSpan,T.url,T.userNameSpan1 as userNameSpan
+from LocationTweets_Pattern2_Candidates T
+where ContainsRegex(/(?:\bw\/|\bwith)\s{0,10}@/,'CASE_INSENSITIVE',T.userNameSpan1))
+union all
+--Tweets which have username span after mention of place
+(select T.tweet,T.locationSpan,T.url,T.userNameSpan2 as userNameSpan
+from LocationTweets_Pattern2_Candidates T
+where ContainsRegex(/(?:\bw\/|\bwith)\s{0,10}@/,'CASE_INSENSITIVE',T.userNameSpan2));
+
+--Find out the tweets which do not have any user name information
+create view LocationTweets_Pattern2_WithoutUserNameInfo as
+select T.tweet,T.locationSpan,T.url,'' as userNameSpan from
+((select T.tweet,T.locationSpan,T.url from 
+LocationTweets_Pattern2_Candidates T)
+minus
+(select T.tweet,T.locationSpan,T.url from 
+LocationTweets_Pattern2_Candidates_WithUserNameInfo_Explicit T)
+)T;
+
+--Add empty string as user name for such tweets and union all the tweets
+--under pattern 2
+create view LocationTweets_Pattern2_All as
+(select T.tweet,T.userNameSpan,T.locationSpan as place,T.url,'' as address 
+from LocationTweets_Pattern2_WithoutUserNameInfo T)
+union all
+(select T.tweet,T.userNameSpan,T.locationSpan as place,T.url,'' as address 
+from LocationTweets_Pattern2_Candidates_WithUserNameInfo_Explicit T);
+
+------------------------------------------------------------------------------------------
+--PATTERN 3-I'm at/@ [place] [w/|with userName OR URL]
+--I.E. URL is not compulsory but either URL or username info HAS TO be present
+--so that we can extract the location explicitly mentioned precisely
+--as we know that it (span) ends before a URL/username is mentioned
+--March 08,2011
+------------------------------------------------------------------------------------------
+--Find out the tweets which have I'm/am at/@ pattern from the remaining tweets
+create view LocationTweets_PatternIamAt as
+select T.tweet as tweet
+from Remaining_LocationTweets_OtherThanPatternsAll T
+where ContainsRegex(/(\bI'm|\bI\s{1,10}am)\s+(?:at|@)/,'CASE_INSENSITIVE',T.tweet);
+
+--Extract the approximate entity spans for this pattern 
+create view LocationTweets_Pattern3IamAt as
+extract T.tweet as tweet,
+regex /(?:\bat|@)\s+([^\s].+)((?:(?:w\s{0,10}\/\s{0,10}[0-9@]|with\s{0,10}[0-9@]).+)|(?:http[:\/a-zA-Z0-9.]+))/
+with flags 'CASE_INSENSITIVE'
+on T.tweet
+return group 1 as place
+      and group 2 as  infoSpan
+from LocationTweets_PatternIamAt T;
+
+--Find out the tweets where the info span is user name info
+create view LocationTweets_Pattern3_UserInfoSpan as
+select T.tweet,T.place,T.infoSpan as userNameSpan,'' as url
+from LocationTweets_Pattern3IamAt T
+where ContainsRegex(/with|w\//,'CASE_INSENSITIVE',T.infoSpan);
+
+--Find out the tweets where the info span is a URL
+create view LocationTweets_Pattern3_URLInfoSpan as
+select T.tweet,T.place,T.infoSpan as url,'' as userNameSpan
+from LocationTweets_Pattern3IamAt T
+where ContainsRegex(/http/,'CASE_INSENSITIVE',T.infoSpan);
+
+--Take a union of all Pattern 3 tweets
+create view LocationTweets_Pattern3_All as
+(select T.tweet,T.userNameSpan,T.place,T.url,'' as address 
+from LocationTweets_Pattern3_UserInfoSpan T)
+union all
+(select T.tweet,T.userNameSpan,T.place,T.url,'' as address 
+from LocationTweets_Pattern3_URLInfoSpan T);
+
+--------------------------------------------------------------------------------------------------------------
+--UNION OF ALL THE PATTERNS
+--User name entity yet to be extracted
+--------------------------------------------------------------------------------------------------------------
+
+--28th Feb-2011-Take a union of patterns 1a,1b,2 and 3
+create view LocationTweets_PatternsAll as
+(select T.tweet,T.url,T.userNameSpan,'' as address,T.place from LocationTweets_Pattern1b_All T)
+union all
+(select T.tweet,T.url,T.userNameSpan,T.address,T.place from LocationTweets_Pattern1a_All T)
+union all
+(select T.tweet,T.url,T.userNameSpan,T.address,T.place from LocationTweets_Pattern2_All T)
+union all
+(select T.tweet,T.url,T.userNameSpan,T.address,T.place from LocationTweets_Pattern3_All T);
+
+--------------------------------------------------------------------
+-----EXTRACTION OF USER NAME ENTITY FOR ALL THE PATTERNS----------
+--Logic same for all the tweet patterns
+--Need to get the string after "@" preceded by a with or w/
+--------------------------------------------------------------------
+
+--Find out the tweets which contain explicit information about "with whom" 
+--the person is at that location
+--Ex.: I am at delhi w/ @Ben http..
+create view LocationTweets_PatternsAll_WithUserInfo as
+select T.tweet,T.url,T.userNameSpan,T.place,T.address
+from LocationTweets_PatternsAll T
+where ContainsRegex(/\b(?:w\/|with)\s{0,20}@[a-zA-Z_0-9]/,'CASE_INSENSITIVE',T.userNameSpan)
+and Not(MatchesRegex(/\)\s+w\/\s+\.+/,Chomp(T.userNameSpan)));
+
+--Subtract the above tweets from all tweets to get the tweets which do not have "with" or "w/" identifiers
+--for these the user name will be an empty string
+create view LocationTweets_PatternsAll_Filtered as
+(select T.tweet,T.url,T.userNameSpan,T.place,T.address from LocationTweets_PatternsAll  T)
+minus
+(select T.tweet,T.url,T.userNameSpan,T.place,T.address from LocationTweets_PatternsAll_WithUserInfo  T);
+
+--Extract the user name(s) followed by the w/ string
+--1. w/ @Ben (Here "Ben" is extracted)
+--2. w/ @Ben @Stella (Here "Ben" and "Stella" is extracted in 2 tuples)
+create view LocationTweets_PatternsAll_ExtractUserName as
+select T.tweet,T.url,T.userNameSpan,T.place,T.address,T.userName
+from
+(
+	extract T.tweet as tweet,T.url as url,T.place as place,T.address as address,T.userNameSpan as userNameSpan,
+	regex /@([a-zA-Z_0-9]{1,15})/
+	on T.userNameSpan
+	return group 1 as userName
+	from LocationTweets_PatternsAll_WithUserInfo T
+)T;
+
+--Find out the usernames which are getting repeated in tweets
+--Retain only 1 span for the final LIST
+--Ex.: w/ @drako (@ El Kabong Grill w/ @drako) http://4sq.com/gaZrRm  
+create view LocationTweets_PatternsAll_ExtractUserName_FindDups as
+select T.tweet,T.url,T.userNameSpan,T.place,T.address,T.userName
+from LocationTweets_PatternsAll_ExtractUserName T,
+LocationTweets_PatternsAll_ExtractUserName T1
+--Text is same
+where Equals(GetText(T.userName),GetText(T1.userName))
+--But spans are not equal
+and Not(Equals(T.userName,T1.userName));
+
+--Retain only 1 occurrence of usernames for above tweets
+create view LocationTweets_PatternsAll_Filtered_UserName as
+((select T.tweet,T.url,T.userNameSpan,T.place,T.address,T.userName
+from LocationTweets_PatternsAll_ExtractUserName T)
+minus
+(select T.tweet,T.url,T.userNameSpan,T.place,T.address,T.userName
+from LocationTweets_PatternsAll_ExtractUserName_FindDups T))
+union all
+(select T.tweet,T.url,T.userNameSpan,T.place,T.address,T.userName
+from LocationTweets_PatternsAll_ExtractUserName_FindDups T
+limit 1);
+
+--Take a union of all the tweets (user information explicit/not present) 
+--Those tweets which do not have user name information have '' as userName
+create view LocationTweets_PatternsAll_AllEntities as
+(select T.tweet,T.url,'' as userName,T.place,T.address from LocationTweets_PatternsAll_Filtered T)
+union all
+(select T.tweet,T.url,T.userName,T.place,T.address from LocationTweets_PatternsAll_Filtered_UserName  T);
+
+--March 7,2011-Change: User names as a SCALAR LIST
+--Add the usernames as a list
+--so for a single userName-> list will have only 1 value
+--Ex.: I'm at Starbucks w/ @Lily http...
+--userName-> Lily
+--and for multiple userNames-> list will hold multiple values
+--Ex.: I'm at Starbucks w/ @Lily @John http...
+--userName-> Lily,John
+create view LocationTweets_PatternsAll_AllEntities_UserNameAsList as
+select T1.tweet,T1.url,T1.place,T1.address,T.userNames as userName
+from
+(select T.tweet,List(GetText(T.userName)) as userNames
+from LocationTweets_PatternsAll_AllEntities T
+group by T.tweet)
+T,LocationTweets_PatternsAll_AllEntities T1
+consolidate on T1.tweet;
+
+------------------------------------------------------------------
+--RULES TO FILTER OUT FALSE POSITIVES & AMBIGUOUS TWEETS
+--from the patterns found
+--March 03-2011
+------------------------------------------------------------------
+--Find out the tweets which have "chat" string in the place
+--Ex. I am in [Video Chat] with..
+--Also tweets where the word followed by "in" is not a location
+--Ex. I am in [love]...
+create view PatternsAllLocationTweets_Ambiguous as
+select T.tweet,T.url,T.userName,T.place,T.address
+from LocationTweets_PatternsAll_AllEntities_UserNameAsList T
+where Or(ContainsRegex(/chat/,'CASE_INSENSITIVE',T.place),
+ContainsRegex(/in\s+love/,'CASE_INSENSITIVE',T.tweet))
+and Not(ContainsRegex(/4sq/,T.url));
+
+--Filter them out
+create view LocationTweets_PatternsAll_AllEntities_Filtered_1 as
+(select T.tweet,T.url,T.userName,T.place,T.address from LocationTweets_PatternsAll_AllEntities_UserNameAsList T)
+minus
+(select T.tweet,T.url,T.userName,T.place,T.address from PatternsAllLocationTweets_Ambiguous T);
+
+--Find out the tweets which have "I'm in" pattern
+--where the word followed by "I'm in" (place attribute)
+--does not start with a capital letter or a number
+--Further URL must not have 4sq in it
+--These are potential false positives for the "I'm in" pattern
+create view PatternsAllLocationTweets_InvalidTweetsWithIamIn as
+select T.tweet,T.url,T.userName,T.address,T.place
+from LocationTweets_PatternsAll_AllEntities_Filtered_1 T
+where ContainsRegex(/I'm\s+in/,T.tweet)
+and Not(ContainsRegex(/4sq/,T.url))
+and Not(MatchesRegex(/[0-9A-Z].+/,Chomp(T.place)));
+
+--Filter them out
+create view LocationTweets_PatternsAll_AllEntities_Filtered_2 as
+(select T.tweet,T.url,T.userName,T.place,T.address 
+from LocationTweets_PatternsAll_AllEntities_Filtered_1 T)
+minus
+(select T.tweet,T.url,T.userName,T.place,T.address 
+from PatternsAllLocationTweets_InvalidTweetsWithIamIn T);
+
+--Find out the tweets which have 
+--"with userName" information in the place attribute 
+--I'm at|@ [w/|with @userName]...
+--VERY IMP-Used later on for identifying tweets which only have user name information-location as user name tweets
+create view PatternsAllLocationTweets_PotentialUserAsLocationTweets as
+select T.tweet,T.url,T.address,T.userName,T.place
+from LocationTweets_PatternsAll_AllEntities_Filtered_2 T
+where Or(ContainsRegex(/(?:(?:I'm\s+)|\()(at|@)\s+(?:w\/|with|@[a-zA-Z_0-9]{1,15})/,'CASE_INSENSITIVE',T.tweet),
+ContainsRegex(/[wW]\//,T.place));
+
+--Filter them out
+create view LocationTweets_PatternsAll_AllEntities_Filtered_3 as
+(select T.tweet,T.url,T.userName,T.place,T.address 
+from LocationTweets_PatternsAll_AllEntities_Filtered_2 T)
+minus
+(select T.tweet,T.url,T.userName,T.place,T.address 
+from PatternsAllLocationTweets_PotentialUserAsLocationTweets T);
+
+------------------------------------------------------------------
+--TRIMMING RULES-Cleaning the individual attributes 
+--March 03-2011
+------------------------------------------------------------------
+------------------------------------------------------------------
+--A. Rules to trim out the unwanted characters from place attribute 
+------------------------------------------------------------------
+
+--Input: #Starbucks
+--Output: Starbucks
+create view LocationTweets_PatternsAll_TrimStartChars_Place as
+extract T.tweet as tweet,T.userName as userName,T.url as url,T.address as address,T.place as place,
+regex /(?:^[^a-zA-Z0-9\s(\[']+)(\b['a-zA-Z0-9].+)/
+on T.place
+return group 1 as cleanPlace
+from LocationTweets_PatternsAll_AllEntities_Filtered_3 T;
+
+create view LocationTweets_PatternsAll_AllEntities_Filtered_4 as
+(
+(select T.tweet,T.url,T.userName,T.place,T.address from LocationTweets_PatternsAll_AllEntities_Filtered_3 T)
+minus
+(select T.tweet,T.url,T.userName,T.place,T.address from LocationTweets_PatternsAll_TrimStartChars_Place T)
+)
+union all
+(select T.tweet,T.url,T.userName,T.cleanPlace as place,T.address from LocationTweets_PatternsAll_TrimStartChars_Place T);
+
+--Input: (Starbucks)
+--Output: Starbucks
+create view LocationTweets_PatternsAll_TrimBrackets_Place as
+extract T.tweet as tweet,T.userName as userName,T.url as url,T.address as address,T.place as place,
+regex /(?:^\()([a-zA-Z0-9].+)(?:\)$)/
+on T.place
+return group 1 as cleanPlace
+from LocationTweets_PatternsAll_AllEntities_Filtered_4 T;
+
+create view LocationTweets_PatternsAll_AllEntities_Filtered_5 as
+(
+(select T.tweet,T.url,T.userName,T.place,T.address from LocationTweets_PatternsAll_AllEntities_Filtered_4 T)
+minus
+(select T.tweet,T.url,T.userName,T.place,T.address from LocationTweets_PatternsAll_TrimBrackets_Place T)
+)
+union all
+(select T.tweet,T.url,T.userName,T.cleanPlace as place,T.address from LocationTweets_PatternsAll_TrimBrackets_Place T);
+
+--Input: Starbucks...
+--Output: Starbucks
+create view LocationTweets_PatternsAll_TrimEndChars_Place as
+extract T.tweet as tweet,T.userName as userName,T.url as url,T.address as address,T.place as place,
+regex /([a-zA-Z0-9].+?)(?:[.!]{2,}|\(\s{0,10}\)|\[pic\]:|@|#|\*|:)$/
+on T.place
+return group 1 as cleanPlace
+from LocationTweets_PatternsAll_AllEntities_Filtered_5 T;
+
+create view LocationTweets_PatternsAll_AllEntities_PlaceTrimmed as
+(
+(select T.tweet,T.url,T.userName,T.place,T.address from LocationTweets_PatternsAll_AllEntities_Filtered_5 T)
+minus
+(select T.tweet,T.url,T.userName,T.place,T.address from LocationTweets_PatternsAll_TrimEndChars_Place T)
+)
+union all
+(select T.tweet,T.url,T.userName,T.cleanPlace as place,T.address from LocationTweets_PatternsAll_TrimEndChars_Place T);
+
+--Find out the tweets where the place attribute contains unwanted characters
+--and essentially only the URL attribute is the clue for the location
+--Ex.: I'm at (2-1-2) http://4sq.com/hwgef8
+create view LocationTweets_PatternsAll_OnlyURL as
+select T.userName,T.place,T.address,T.tweet,T.url 
+from LocationTweets_PatternsAll_AllEntities_PlaceTrimmed T
+where Or(Not(ContainsRegex(/[a-zA-Z0-9]/,T.place)),
+ContainsRegex(/\bpic\b/,T.place));
+
+--Filter out the above tweets
+create view LocationTweets_PatternsAll_AllEntities_Output as
+select T.userName,T.place as locationName,T.address as locationAddress,T.url,T.tweet
+from
+(
+(select T.userName,T.place,T.address,T.tweet,T.url from LocationTweets_PatternsAll_AllEntities_PlaceTrimmed T)
+minus
+(select T.userName,T.place,T.address,T.tweet,T.url from LocationTweets_PatternsAll_OnlyURL T)
+)T;
+
+------------------------------------------
+-----------CONSOLIDATION OF ENTITIES-----
+------------------------------------------
+
+--Find out the tweets which have location NAME partially extracted because of
+--bracketed text in them
+--Ex.: Spa time ^o^ (@ Bunda International Clinic (BIC) Menteng) http://4sq.com/gvQKFi
+--Ideal Location Name:  Bunda International Clinic (BIC) Menteng
+--Actual output: Bunda International Clinic (BIC
+create view PatternsAll_PartialLocationName as
+select T.userName,T.locationName,T.locationAddress,T.url,T.tweet,SpanBetween(T.locationName,T.url) as extendedLocation
+from LocationTweets_PatternsAll_AllEntities_Output T
+where ContainsRegex(/\(/,T.locationName)
+and Not(ContainsRegex(/\)/,T.locationName));
+
+--Add back the missing tokens to the location name for the above cases
+--to get the ideal span
+create view PatternsAll_PartialLocationName_Rectified as
+select T.userName,T.locationName,T.locationAddress,T.url,T.tweet,CombineSpans(T.locationName,T.locspan) as completeLocationName
+from
+(extract T.tweet as tweet,T.userName as userName,T.locationName as locationName,T.url as url,
+T.locationAddress as locationAddress,T.extendedLocation as extendedLocation,
+regex /([^\(]+?)(?:w\/|\)).+/
+with flags 'CASE_INSENSITIVE'
+on T.extendedLocation 
+return group 1 as locspan
+from PatternsAll_PartialLocationName T
+having Not(ContainsRegex(/\(\s{0,10}\)|\bcont\b/,extendedLocation))
+)T;
+
+--Union the above tweets again
+--Consolidate on location name to retain the LONGEST span 
+create view LocationTweets_PatternsAll_AllEntities_Output_LocNameFixed as
+select T.userName,T.locationName,T.locationAddress,T.url,T.tweet
+from(
+(select T.userName,T.locationName,T.locationAddress,T.url,T.tweet
+from LocationTweets_PatternsAll_AllEntities_Output T)
+union all
+(select T.userName,T.completeLocationName as locationName,T.locationAddress,T.url,T.tweet
+from PatternsAll_PartialLocationName_Rectified T)
+)T
+consolidate on T.locationName;
+
+--Find out the tweets which have location ADDRESS partially extracted because of
+--bracketed text in them
+--Ex.: I'm at ABC (@ Bunda International Clinic (BIC) Menteng) http://4sq.com/gvQKFi
+--Ideal Location Address:  Bunda International Clinic (BIC) Menteng
+--Actual output: Bunda International Clinic (BIC
+create view PatternsAll_PartialLocationAddress as
+select T.userName,T.locationName,T.locationAddress,T.url,T.tweet,Chomp(SpanBetween(T.locationAddress,T.url)) as extendedLocation
+from LocationTweets_PatternsAll_AllEntities_Output_LocNameFixed T
+where ContainsRegex(/\(/,T.locationAddress)
+and Not(ContainsRegex(/\)/,T.locationAddress));
+
+--Add back the missing tokens to the location name for the above cases
+--to get the ideal span
+create view PatternsAll_PartialLocationAddress_Rectified as
+select T.userName,T.locationName,T.url,T.tweet,CombineSpans(T.locationAddress,T.locspan) as locationAddress
+from
+(extract T.tweet as tweet,T.userName as userName,T.locationName as locationName,T.url as url,
+T.locationAddress as locationAddress,
+regex /(.*)\)/
+with flags 'CASE_INSENSITIVE'
+on T.extendedLocation 
+return group 1 as locspan
+from PatternsAll_PartialLocationAddress T
+)T;
+
+--Union the above tweets again
+--Consolidate on location address to retain the LONGEST span 
+create view LocationTweets_PatternsAll_AllEntities_Consolidated as
+select T.userName,T.locationName,T.locationAddress,T.url,T.tweet
+from(
+(select T.userName,T.locationName,T.locationAddress,T.url,T.tweet
+from LocationTweets_PatternsAll_AllEntities_Output_LocNameFixed T)
+union all
+(select T.userName,T.locationName,T.locationAddress,T.url,T.tweet
+from PatternsAll_PartialLocationAddress_Rectified T)
+)T
+consolidate on T.locationAddress;
+
+------------------------------------------------------------
+ --Find out the tweets from the above view 
+ --where the locationName attribute consists of contextual clues like
+ --"Home","work" and is not actually a location per se
+------------------------------------------------------------
+--Find out the tweets which have place as a contextual clue
+--Ex.: I'm at Home (3011 Cherry street, Georgia) http...
+--     I'm at Home http...
+--     I'm at Home w/ @Erika http...
+create view LocationTweets_ContextualReferences as
+select T.userName,T.locationName,T.locationAddress,T.url,T.tweet
+from LocationTweets_PatternsAll_AllEntities_Consolidated T
+where MatchesDict('geographic/dictionaries/LocationText_ContextualLocations.dict','IgnoreCase',Chomp(T.locationName));
+
+--Add empty string as location name for the above tweets
+--but make sure that address information is present
+--Ex.: I'm at Home (3011 Cherry street, Georgia) http...
+create view LocationTweets_ContextualReferences_Rectified as
+select T.userName,T.locationAddress,'' as locationName,T.url,T.tweet
+from LocationTweets_ContextualReferences T
+where Not(MatchesRegex(//,Chomp(T.locationAddress)));
+
+--Find out from these tweets having contextual references
+--where the place is contextual, address is null padded
+--but there is user information
+--Thus such tweets can be considered for location as user name pattern
+--Ex.: I'm at home w/ @John http...
+create view PotentialLocationAsUserTweets_FromContextualPattern as
+select T.userName,T.locationName,T.locationAddress,T.url,T.tweet
+from LocationTweets_ContextualReferences T
+where MatchesRegex(//,Chomp(T.locationAddress))
+and ContainsRegex(/w\/|\bwith/,'CASE_INSENSITIVE',T.tweet);
+
+--1. FINAL VIEW FOR TWEETS HAVING LOCATION INFORMATION EXPLICITLY
+create view LocationTweets_AllPatterns_Output as
+select T.userName,T.locationName,T.locationAddress,T.url,T.tweet
+from(
+(
+(select T.userName,T.locationName,T.locationAddress,T.url,T.tweet
+from LocationTweets_PatternsAll_AllEntities_Consolidated T)
+minus
+(select T.userName,T.locationName,T.locationAddress,T.url,T.tweet
+from LocationTweets_ContextualReferences T)
+)
+union all
+(select T.userName,T.locationName,T.locationAddress,T.url,T.tweet
+from LocationTweets_ContextualReferences_Rectified T)
+)T
+;
+
+------------------------------######################------------------------------######################------------------------------######################
+
+------------------------------------------------------------
+--LOCATION AS USERNAME PATTERN-VERY IMPORTANT-March 9,2011
+------------------------------------------------------------
+--Find out the potential tweets which may have the location as a user name (other than the ones obtained through patterns of location tweets
+--where location was mentioned explicitly)
+--Ex.: Going to the mall w/ @jessica and 3 others
+create view LocationTweets_LocAsUserName_Candidate as
+select T.tweet as tweet
+from Remaining_LocationTweets_OtherThanPatternsAll T
+where ContainsRegex(/(?:[wW]\/|with|@)\s+@[a-zA-Z_0-9]/,'CASE_INSENSITIVE',T.tweet);
+
+--Subtract the pattern 3 loc as username tweets from the candidate loc as username tweets
+--to get the remaining loc as usernametweets 
+create view RemainingLocAsUserTweets_Candidate as
+(select T.tweet as tweet 
+from LocationTweets_LocAsUserName_Candidate T)
+minus
+(select T.tweet as tweet
+from LocationTweets_Pattern3_All T);
+
+--Dictionary containing strong keywords for identifying valid
+--location as username tweets
+create dictionary KeywordsForLocAsUserDict  
+with case insensitive
+as 
+(
+'going to the','to go to the','goin to the',
+'dinner','lunch','brunch','breakfast'
+);
+
+--Find out such valid tweets from the candidate set of tweets
+--Ex.: Going to the spa w/ @John @Marie
+--1. The word to the right of the keyword must be a small case (going to spa/movie...)
+--   wherein the location is a contextual reference (thus information can be best obtained from the usernames mentioned)
+--2. The tweet should not be ambiguous like (a person A WANTS to hang out with person B)
+create view LocAsUserTweets_Other as
+select D.tweet,D.match from
+(
+extract D.tweet as tweet,dictionary 'KeywordsForLocAsUserDict'
+on D.tweet as match
+from RemainingLocAsUserTweets_Candidate D
+)D
+where ContainsRegex(/@|[a-z]/,RightContextTok(D.match,2))
+and Not(ContainsRegex(/\bwant|\bwanna/,D.tweet));
+
+----------------11th March-2010---------------------------------------------------------
+--Pattern: I'm @<text> tweets
+--IMP NOTE: Union it right now for extracting the entities and later filter them out in a separate view
+--due to lot of false positives in the pattern
+--Ex.: I'm @oceandayspa w/ 9 others http...
+----------------------------------------------------------------------------------------
+--Subtract the pattern 3 location explicit tweets from the I'm at tweets
+--to get the remaining I'm at tweets
+create view RemainingIamAtTweets as
+(select T.tweet as tweet 
+from LocationTweets_PatternIamAt T)
+minus
+(select T.tweet as tweet
+from LocationTweets_Pattern3_All T);
+
+create view LocAsUserTweets_IamAt as
+select T.tweet as tweet
+from RemainingIamAtTweets T
+where ContainsRegex(/I'm\s{0,10}(?:@\s|at\s)?(?:@[^\s]+)(?:.*)/,T.tweet);
+ 
+--Take a union of the all the location as user name candidate tweets 
+create view LocationAsUserNameTweets_All as
+--Tweets obtained from the tweets having location explicitly mentioned 
+(select T.tweet from PatternsAllLocationTweets_PotentialUserAsLocationTweets T)
+union all 
+--Tweets with contextual pattern
+(select T.tweet from LocAsUserTweets_Other T)
+union all
+--Tweets with I'm @userName pattern-ambiguous one
+(select T.tweet from LocAsUserTweets_IamAt T)
+union all
+--Tweets again obtained from the tweets having location explicitly mentioned
+--but these contain contextual references like home, studio etc.
+(select T.tweet from PotentialLocationAsUserTweets_FromContextualPattern T);
+
+--Extract the user name(s) followed by the w/ string
+--1. w/ @Ben (Here "Ben" is extracted)
+--2. w/ @Ben @Stella (Here "Ben" and "Stella" is extracted in 2 tuples)
+create view LocationAsUserNameTweets_ExtractUserName as
+select T.tweet,T.userName
+from
+(
+	extract T.tweet as tweet,
+	regex /@([a-zA-Z_0-9]{1,15})/
+	on T.tweet
+	return group 0 as userNameSpan 
+	   and group 1 as userName
+	from LocationAsUserNameTweets_All T
+	--having ContainsRegex(/w\/|with|@|at|and|&/,'CASE_INSENSITIVE',LeftContextTok(userNameSpan,3))
+	having ContainsRegex(/w\/|with|@\s|\bat|I'm/,'CASE_INSENSITIVE',CombineSpans(tweet,userNameSpan))
+)T;
+
+--Find out the usernames which are getting repeated in tweets
+--Retain only 1 span for the final LIST
+--Ex.: 
+--ad a great day with @Caitlin_Jedward then hanging out with jessica, xxx tomoz is gunna be gr8 going to the cinema with @Caitlin_Jedward xxx
+create view LocationAsUserNameTweets_ExtractUserName_FindDups as
+select T.tweet,T.userName
+from LocationAsUserNameTweets_ExtractUserName T,
+LocationAsUserNameTweets_ExtractUserName T1
+--Text is same
+where Equals(GetText(T.userName),GetText(T1.userName))
+--But spans are not equal
+and Not(Equals(T.userName,T1.userName));
+
+--Retain only 1 occurrence of usernames for above tweets
+create view LocationAsUserNameTweets_Filtered_UserName as
+((select T.tweet,T.userName
+from LocationAsUserNameTweets_ExtractUserName T)
+minus
+(select T.tweet,T.userName
+from LocationAsUserNameTweets_ExtractUserName_FindDups T))
+union all
+(select T.tweet,T.userName
+from LocationAsUserNameTweets_ExtractUserName_FindDups T
+limit 1);
+
+--Add the usernames as a list
+--so for a single userName-> list will have only 1 value
+--and for multiple userNames-> list will hold multiple values
+create view LocationAsUserNameTweets_UserNameAsList as
+select T1.tweet,T.userNames as userName
+from
+(select T.tweet,List(GetText(T.userName)) as userNames
+from LocationAsUserNameTweets_Filtered_UserName T
+group by T.tweet
+)
+T,LocationAsUserNameTweets_Filtered_UserName T1
+consolidate on T1.tweet;
+
+--Extract the URL if present
+create view LocationAsUserNameTweets_ExtractURL as
+select T.tweet,T.url,T.userName
+from
+(
+	extract T.tweet as tweet,T.userName as userName,
+	regex /(http:\/\/[^\s]+)(?:.*)/
+	on T.tweet 
+	return group 1 as url
+	from LocationAsUserNameTweets_UserNameAsList T
+)T;
+
+--Find out the tweets which do not contain URL explicitly
+create view LocationAsUserNameTweets_NoURL as
+(select T.userName,T.tweet
+from LocationAsUserNameTweets_UserNameAsList T)
+minus
+(select T.userName,T.tweet
+from LocationAsUserNameTweets_ExtractURL T);
+
+--FINAL VIEW FOR LOCATION AS USERNAME TWEETS
+--Take a union-add '' as URL for tweets which do not have URL explicitly mentioned
+create view LocationAsUserNameTweets_AllEntities as
+(select '' as url,T.userName,T.tweet
+from LocationAsUserNameTweets_NoURL T)
+union all
+(select T.url,T.userName,T.tweet
+from LocationAsUserNameTweets_ExtractURL T);
+
+--Filter out the tweets which are ambiguous
+--Ex.: I'm @bethanyy_reed's elf's god motherrrr! (:
+--where the string @<text> may be an actual place or it may be a user but the tweet on
+--the whole means something else
+--3. ONE ADDITIONAL OUTPUT VIEW
+create view LocationAsUserNameTweets_Ambiguous as
+select T.url,T.userName,T.tweet
+from LocationAsUserNameTweets_AllEntities T
+where ContainsRegex(/(?:(?:at|@)\s+@)|(?:m\s{0,10}(?:@\s|at\s)?(?:@[^\s]))/,'CASE_INSENSITIVE',T.tweet)
+and Not(ContainsRegex(/'s\s+(house|place)/,'CASE_INSENSITIVE',T.tweet));
+
+--2. FINAL VIEW FOR LOCATION AS USER NAME TWEETS
+create view LocationAsUserNameTweets_AllEntities_Output as
+select T.url,T.userName,T.tweet
+from
+(
+(select T.url,T.userName,T.tweet
+from LocationAsUserNameTweets_AllEntities T)
+minus
+(select T.url,T.userName,T.tweet
+from LocationAsUserNameTweets_Ambiguous T)
+)T
+;
+
+--- First pattern, where there is no comma separator e.g New York
+create view LocationTweets_AllPatterns_Extract_1 as
+	select T.userName,T.locationName,T.locationAddress,
+	T.locationAddressRefined,T.url,T.tweet from
+	(
+    extract T.userName as userName,T.locationName as locationName,
+        T.locationAddress as locationAddress,T.url as url,T.tweet as tweet,
+	regex /^\s*([^,\d]+)\s*$/
+		with flags 'CASE_INSENSITIVE'
+		on T.locationAddress 
+		return 
+			group 1 as locationAddressRefined
+	from LocationTweets_AllPatterns_Output T
+	)T
+	;
+
+--- Second pattern, where there is a comma separator, but the last two values do not have any numbers, e.g New York, USA
+create view LocationTweets_AllPatterns_Extract_2 as
+	select T.userName,T.locationName,T.locationAddress,
+	T.locationAddressRefined,T.url,T.tweet from
+	(
+    extract T.userName as userName,T.locationName as locationName,
+        T.locationAddress as locationAddress,T.url as url,T.tweet as tweet,
+	regex /(?:,|^)\s*([^,\d]+\s*,\s*[^,\d]+)$/
+		with flags 'CASE_INSENSITIVE'
+		on T.locationAddress 
+		return 
+			group 1 as locationAddressRefined
+	from LocationTweets_AllPatterns_Output T
+	)T
+	;
+	
+--- Third pattern, where there is a comma separator, but the last two values do not have numbers, e.g New York, USA
+create view LocationTweets_AllPatterns_Extract_3 as
+    select T.userName,T.locationName,T.locationAddress,
+        T.locationAddressRefined,T.url,T.tweet from
+	(
+    extract T.userName as userName,T.locationName as locationName,
+        T.locationAddress as locationAddress,T.url as url,T.tweet as tweet,
+	regex /([^,]*\d+[^,]*)\s*,\s*([^,\d]+)$/
+		with flags 'CASE_INSENSITIVE'
+		on T.locationAddress 
+		return 
+			group 2 as locationAddressRefined
+	from LocationTweets_AllPatterns_Output T
+	)T
+	;
+
+create view LocationTweets_AllPatterns_Refined_Output as
+	(
+	select T.userName,T.locationName,T.locationAddress,T.locationAddressRefined, 
+			T.url,T.tweet 
+	from LocationTweets_AllPatterns_Extract_1 T
+	)
+	union all
+	(
+	select T.userName,T.locationName,T.locationAddress,T.locationAddressRefined, 
+			T.url,T.tweet
+	from LocationTweets_AllPatterns_Extract_2 T
+	)
+	union all
+	(
+	select T.userName,T.locationName,T.locationAddress,T.locationAddressRefined, 
+			T.url,T.tweet
+	from LocationTweets_AllPatterns_Extract_3 T
+	)
+	;
+
+------------------------------######################------------------------------######################------------------------------######################
+---LOOKING AT OTHER PATTERNS IN ANY-ON HOLD
+------------------------------######################------------------------------######################------------------------------######################
+
+
+--Subtract the I'm at tweets and the potential user as location name tweets
+--to get the remaining tweets-search for patterns else discard
+create view RemainingCandidateTweets_Location as
+(
+	(select T.tweet as tweet from 
+	Remaining_LocationTweets_OtherThanPatternsAll T)
+	minus
+	(select T.tweet as tweet from 
+	LocationTweets_Pattern3_All T)
+)
+minus
+(select T.tweet as tweet from LocationAsUserNameTweets_All T);
+
+

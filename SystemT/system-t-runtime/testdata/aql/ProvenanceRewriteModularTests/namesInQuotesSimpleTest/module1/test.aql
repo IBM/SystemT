@@ -1,0 +1,57 @@
+/**
+ * Test to verify that entity names enclosed in double quotes are properly rewritten during provenance rewrite.
+ *
+ */
+module module1;
+
+-- A simple view that does not clash with AQL keyword, but enclosed in double quotes
+-- We do not expect the rewritten AQL to contain double quotes around MyView
+ 
+create view "MyView" as
+  select D.text as match
+  from Document D;
+  
+export view "MyView";
+
+-- A simpe view whose name clashes with an AQL keyword. Rewritten AQL should also have double quotes
+
+create view "view" as
+  select D.text as match
+  from Document D;
+  
+export view "view";
+
+
+-- create a dictionary whose name and entries clash with an AQL keyword. In the rewritten AQL, we expect only the dict name to be enclosed in quotes and not the entries.
+create dictionary "dictionary" as
+(
+	'view', 'table'
+);
+
+create view DictMatchView as
+	extract dictionary 'dictionary'
+		on D.text
+		as match
+	from Document D;
+	
+output view DictMatchView;
+
+-- create a table whose name, attr names and entries clash with an AQL keyword.
+-- In the rewritten AQL, we expect both table name and attribute names to be enclosed in quotes.
+-- Table entries that clash with AQL keyword won't be escaped.
+create table "table" ("view" Text, "dictionary" Text) as
+values
+	('PersonView', 'person.dict'),
+	('CityView', 'cities.dict'),
+	('function', 'as');
+	
+create view TableView as
+select * from "table";
+
+output view TableView;
+
+-- create a view whose name does not match with nickname regex
+create view "$PhoneNumber" as
+	select D.text as match
+	from Document D;
+output view "$PhoneNumber";

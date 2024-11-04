@@ -1,0 +1,70 @@
+module aqldump;
+
+-- This AQL contains examples of each extraction specification
+
+create view AllNames as
+  (
+    select
+      F.match as firstName, null as middleName, null as lastName, F.length as length, D.text as text  -- null span for last name
+    from
+      FirstNameWithLength F, Document D
+  )
+  union all
+  (
+    select
+      null as firstName, null as middleName, L.match as lastName, null as length, null as text -- null span for first name and length
+    from
+     LastName L
+  );
+  
+-- Extract regex 
+create view RegexTest as
+extract 
+  regex /ill/ 
+  on A.firstName as match
+from AllNames A;
+
+output view RegexTest;
+
+-- Extract split 
+create view SplitTest as
+extract 
+  split using A.firstName
+  on A.text as match
+from AllNames A;
+
+output view SplitTest;
+
+
+-- Extract blocks 
+create view BlocksTest as
+extract 
+  blocks with count 2 
+  and separation between 0 and 5 tokens 
+  on A.firstName
+  as match
+from AllNames A;
+
+output view BlocksTest;
+
+
+-- Extract POS 
+create view PosTest as
+extract 
+  parts_of_speech 'NNP' and 'NN'
+  with language 'en' on A.firstName as match
+from AllNames A;
+
+output view PosTest;
+
+
+
+
+-- Extract pattern 
+create view PatternTest as
+extract 
+  pattern <F.match> <L.match> 
+  as match
+from FirstNameWithLength F, LastName L;
+
+output view PatternTest;

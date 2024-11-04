@@ -1,0 +1,326 @@
+-- Overview: This section of the AQL is mainly used to disambiguate between US and non-US locations
+ 
+
+-- All US locations mapped to the appropriate abbreviations
+create view Loc_AllCityStateNamesMappedToAbbrv as 
+    (
+    select GetString(D.match) as match, D.prov as prov, D.fullspan as fullspan, 'city' as semantics, D.orig_match as orig_match
+    from Loc_AllNames D
+    where Equals(GetString(D.prov), 'city')
+    )
+    union all
+    (
+    select GetString(D.match) as match, 'state' as prov, D.fullspan as fullspan, 'state' as semantics, D.orig_match as orig_match
+    from  Loc_AllNames D
+    where Equals(GetString(D.prov), 'stateAbbrv')
+    )
+    union all
+    (
+    select GetString(SA.abbrv) as match , D.prov as prov, D.fullspan as fullspan, 'state' as semantics, D.orig_match as orig_match
+    from Loc_AllNames D, Loc_StateToAbbrv SA
+    where Equals(GetString(D.prov), 'state')
+    and equalsIgnoreCaseSmarc(GetString(D.match),GetString(SA.state))
+    );
+
+create view Loc_AllCityStateNamesUpper as
+    select toUpperCase(GetString(D.match)) as city, D.fullspan as fullspan, D.orig_match as orig_match
+    from Loc_AllCityStateNamesMappedToAbbrv D
+    where Equals (GetString(D.prov),'city');
+ 
+ -- GIVEN THE CITY, GET THE STATE FROM MAP   
+create view Loc_CityStateFromMap as
+	select D.city as city, M.state as state, D.fullspan as fullspan, D.orig_match as orig_match
+    from Loc_AllCityStateNamesUpper D, Loc_CityToState M
+    where Equals(GetString(D.city),GetString(M.city));
+	
+ --- COMPARE THE STATE FOUND FROM MAP TO STATE IN INPUT   
+create view Loc_CityState as
+    select M.city as city, M.state as state, M.fullspan as fullspan
+    from  Loc_CityStateFromMap M, Loc_AllCityStateNamesMappedToAbbrv D
+    where equalsIgnoreCaseSmarc(GetString(M.state), GetString(D.match))
+    and Equals(GetString(D.prov), 'state')
+    and Overlaps(D.fullspan, M.fullspan)
+    -- make sure we are not talking about the same match e.g "New York USA" would match city and state
+    and Not(Equals(D.orig_match, M.orig_match)) 
+    consolidate on M.fullspan
+    using 'ExactMatch'; 
+
+-- Entried that are positively just state info    
+create view Loc_StateOnlyRecsFirstFilter as 
+    (
+    select M.fullspan as fullspan
+    from Loc_AllCityStateNamesMappedToAbbrv M
+    where Equals(GetString(M.semantics), 'state')
+    )
+    minus
+    (
+    select  M.fullspan as fullspan
+    from Loc_CityState M
+    );       
+    
+
+        
+-- REFINE FOREIGN ENTRIES TO NOT INCLUDE WHAT IS ALREADY RECOGNIZED AS VALID US CITY STATE or JUST STATE
+create view Loc_ForeignEntriesToFilter as 
+	(
+	select F.*
+	from Loc_ForeignEntriesUnfiltered F,  Loc_CityState D
+	where Overlaps(D.fullspan, F.fullspan)
+	)
+	union all
+	(
+	select F.*
+	from Loc_ForeignEntriesUnfiltered F,  Loc_StateOnlyRecsFirstFilter D
+	where Overlaps(D.fullspan, F.fullspan)
+	);
+	
+-- Entries that are definitely foreign
+create view Loc_ForeignEntries_NoState as
+	(
+	select F.fullspan as fullspan, F.city as city, F.country as country, F.countryISO as countryISO, F.prov as prov, F.orig_match as orig_match
+	from Loc_ForeignEntriesUnfiltered F
+	)
+	minus
+	(
+	select F.fullspan as fullspan, F.city as city, F.country as country, F.countryISO as countryISO, F.prov as prov, F.orig_match as orig_match
+	from  Loc_ForeignEntriesToFilter F
+	);
+
+create view Loc_ForeignEntries as
+    (
+	select F.fullspan as fullspan, F.city as city, GetString(D.state) as state, F.country as country, 
+			F.countryISO as countryISO, F.prov as prov, F.orig_match as orig_match
+	from Loc_ForeignEntries_NoState F, Loc_PopulousNonUSCitiesToCountry D
+	where Equals(toUpperCase(GetString(F.city)), GetString(D.city))
+	and Equals(GetString(F.countryISO), GetString(D.countryISO))
+	consolidate on F.fullspan using 'ContainedWithin'
+	)
+	union all 
+	(
+    select F.fullspan as fullspan, F.city as city, GetString('') as state, F.country as country, 
+            F.countryISO as countryISO, F.prov as prov, F.orig_match as orig_match
+    from Loc_ForeignEntries_NoState F
+    where Equals(GetString('foreigncountrynocity'), GetString(F.prov))
+	)
+	
+	;
+
+-- FILTER OUT THE ENTRIES WHERE CITIES DO NOT MATCH ANY STATE AND ARE PROBABLY FOREIGN, 
+-- AND THE ENTRIES THAT ARE DEFINITELY FOREIGN
+create view Loc_CityOnlyRecsWorldFirstFilter as
+    (
+    select M.fullspan as fullspan
+    from Loc_CityStateFromMap M
+    )
+    minus
+    (
+    select  M.fullspan as fullspan
+    from Loc_CityState M
+    );
+    
+
+ 
+ create view Loc_CityOnlyRecsWorld as
+ 	(
+ 	select M.fullspan as fullspan
+ 	from Loc_CityOnlyRecsWorldFirstFilter M
+ 	)
+ minus
+    (
+    select D.fullspan as fullspan
+    from  Loc_ForeignEntries D   
+    );
+    
+ create view Loc_CityOnlyRecsUnconsolidatedFirstFilter as
+    (
+    select M.fullspan as fullspan
+    from   Loc_CityOnlyRecsWorld M
+    ) 
+    minus
+    (
+    select M.fullspan as fullspan
+    from Loc_PopulousNonUSCities M 
+    );   
+    
+ create view Loc_CityOnlyRecsUnconsolidated as
+    (
+    select M.fullspan as fullspan
+    from   Loc_CityOnlyRecsUnconsolidatedFirstFilter M
+    ) 
+    minus
+    (
+    select M.fullspan as fullspan
+    from  Loc_ForeignEntries M 
+    );  
+
+    
+ 
+    
+ create view Loc_StateOnlyRecs as 
+    (
+    select M.fullspan as fullspan
+    from  Loc_StateOnlyRecsFirstFilter M
+    )
+    minus
+    (
+    select  M.fullspan as fullspan
+    from Loc_ForeignEntries M
+    ); 
+      
+   -- IF A VALID STATE WAS FOUND, BUT CITY/STATE MATCH WAS NOT VALID, LEAVE ONLY THE STATE  
+ create view Loc_CityOnlyRecsNotWrongState as 
+  	(
+    select M.fullspan as fullspan
+    from  Loc_CityOnlyRecsUnconsolidated M
+    ) 
+    minus
+    (   
+    select M.fullspan as fullspan
+    from  Loc_StateOnlyRecs M
+    );  
+    
+create view Loc_CityOnlyRecs as
+    select D.* 
+    from Loc_CityOnlyRecsNotWrongState D
+    consolidate on D.fullspan using 'ExactMatch';
+
+-- Final view where location is a US state       
+create view Loc_StateOnly as
+    select  M.match as state, M.fullspan as fullspan
+    from Loc_AllCityStateNamesMappedToAbbrv M, Loc_StateOnlyRecs R
+    where Overlaps(M.fullspan, R.fullspan)
+    and Equals(GetString(M.semantics), 'state')
+    consolidate on M.fullspan
+    using 'ExactMatch';
+        
+-- Final view where location is a US city
+create view Loc_CityOnly as
+	(
+    select M.city as city, M.state as state, M.fullspan as fullspan
+    from Loc_CityStateFromMap M, Loc_CityOnlyRecs R
+    where Overlaps(M.fullspan, R.fullspan) 
+    consolidate on M.fullspan
+    using 'ExactMatch'
+    )
+    minus 
+    (
+    select M.city as city, M.state as state, M.fullspan as fullspan
+    from Loc_CityStateFromMap M, Loc_CityNamesAmbiguous R
+    where Overlaps(M.fullspan, R.fullspan)
+    and equalsIgnoreCaseSmarc(GetString(M.city), GetString(R.match)) 
+    consolidate on M.fullspan
+    using 'ExactMatch'
+    )
+    
+    
+    ;
+        
+    
+create view Loc_CityORCityState as 
+    (
+    select D.fullspan as fullspan
+    from Loc_CityOnly D
+    )
+    union all
+    (
+    select D.fullspan as fullspan
+    from Loc_CityState D
+    )
+    union all
+    (
+    select D.fullspan as fullspan
+    from Loc_StateOnly D
+    );
+        
+create view Loc_Not_CityStateUnconsolidatedFirstFilter as 
+    (
+    select D.fullspan as fullspan
+    from Loc_AllNames D
+    )
+    minus
+    (
+    select D.fullspan as fullspan
+    from Loc_CityORCityState D
+    );
+    
+create view Loc_Not_CityStateUnconsolidated as 
+    (
+    select D.fullspan as fullspan
+    from  Loc_Not_CityStateUnconsolidatedFirstFilter D
+    )
+    minus
+    (
+    select D.fullspan as fullspan
+    from Loc_ForeignEntries D
+    )
+    ;      
+
+create view Loc_Not_CityState as
+	(
+    select D.*
+    from Loc_Not_CityStateUnconsolidated D
+    consolidate on D.fullspan
+    using 'ExactMatch'
+    )
+    minus 
+    (
+    select D.fullspan
+    from Loc_Abbrv_USCountry D
+    );
+
+-- Remove citystate
+create view Loc_CountryOnlyUS_nocitystate as
+	(
+    select D.fullspan
+    from Loc_Abbrv_USCountry D
+    consolidate on D.fullspan using 'ContainedWithin'
+    )
+    minus
+    (
+    select D.fullspan
+    from Loc_CityState D
+    )
+    ;
+
+-- Remove stateonly as well
+create view Loc_CountryOnlyUS_nocitystateorstate as
+	(
+    select D.fullspan
+    from Loc_CountryOnlyUS_nocitystate D
+    )
+    minus
+    (
+    select D.fullspan
+    from Loc_StateOnly D
+    )
+    ;
+
+--Remove cityonly as well, and we are done.
+create view Loc_CountryOnlyUS as
+	(
+    select D.fullspan
+    from Loc_CountryOnlyUS_nocitystateorstate D
+    )
+    minus
+    (
+    select D.fullspan
+    from Loc_CityOnly D
+    )
+    ;
+    
+    
+ create view Loc_USEntries as 
+    (
+    select D.fullspan as fullspan
+    from  Loc_AllNames D  
+    )
+    minus
+    (
+    select D.fullspan as fullspan
+    from  Loc_ForeignEntries D   
+    );
+   
+create view Loc_USNamesConsolidated as
+    select D.*
+    from Loc_AllNames D, Loc_USEntries US
+    where Overlaps(D.fullspan, US.fullspan); 

@@ -1,0 +1,206 @@
+-----------------------------------------------------
+-- SoftError.aql 
+
+-- For marking the pages that are Errors (File Not Found , This page is migrated)
+
+--Depends on Title.aql and URL.aql
+
+--Author : Krishna Bhavsar
+-----------------------------------------------------
+
+include 'localAnalysis/dicts/SoftError/URLPatternTables.aql';
+include 'localAnalysis/dicts/SoftError/TitlePatternTables.aql';
+include 'localAnalysis/dicts/SoftError/OutputTable.aql';
+
+----------------------------------------------------------------------------------------
+	
+create dictionary TitleContainsDict from table TitleContainsTable
+with entries from value;
+
+create dictionary TitleStartsWithDict from table TitleStartsWithTable
+with entries from value;
+
+create dictionary TitleEndsWithDict from table TitleEndsWithTable
+with entries from value;
+
+create dictionary TitleExactDict from table TitleExactTable
+with entries from value;
+
+create dictionary URLContainsDict from table URLContainsTable
+with entries from value;
+
+create dictionary URLStartsWithDict from table URLStartsWithTable
+with entries from value;
+
+create dictionary URLEndsWithDict from table URLEndsWithTable
+with entries from value;
+
+create dictionary URLExactDict from table URLExactTable
+with entries from value;
+
+--------------------URL and Title Table unions---------------------------------
+	
+create view URLTableAll as
+(select U.* from URLExactTable U)
+union all
+(select U.* from URLStartsWithTable U)
+union all
+(select U.* from URLEndsWithTable U)
+union all
+(select U.* from URLContainsTable U);
+
+create view TitleTableAll as
+(select T.* from TitleContainsTable T)
+union all
+(select T.* from TitleStartsWithTable T)
+union all
+(select T.* from TitleEndsWithTable T)
+union all
+(select T.* from TitleExactTable T);
+
+-------------------------Title Contains pattern-------------------------
+create view TitleContainsSpansWithID as
+select T.match as title, CT.ruleID as ruleID
+from (
+	extract dictionary 'TitleContainsDict' on F.title as match from 
+	FirstTitle F) T, TitleContainsTable CT
+where Equals(GetText(T.match), GetText(CT.value));
+
+--------------------------Title Starts With pattern----------------------
+
+create view TitleStartsWithCand as 
+select T.match as match, ST.ruleID as ruleID
+from (
+	extract dictionary 'TitleStartsWithDict' on F.title as match 
+	from FirstTitle F)T, TitleStartsWithTable ST
+where Equals(GetText(T.match), GetText(ST.value));
+
+create view TitleStartsWithSpansWithID as
+select T.match as title, T.ruleID as ruleID
+from TitleStartsWithCand T, FirstTitle F
+where Equals(GetBegin(T.match),GetBegin(F.title));
+
+--------------------------Title Ends With pattern---------------------------
+create view TitleEndsWithCand as 
+select T.match as match, ST.ruleID as ruleID
+from (
+	extract dictionary 'TitleEndsWithDict' on F.title as match 
+	from FirstTitle F)
+	T, TitleEndsWithTable ST
+where Equals(GetText(T.match),GetText(ST.value));
+
+create view TitleEndsWithSpansWithID as
+select T.match as title, T.ruleID as ruleID
+from TitleEndsWithCand T, FirstTitle F
+where Equals(GetEnd(T.match),GetEnd(F.title));
+
+---------------------------Title Exact pattern--------------------------------
+create view TitleExactSpansWithID as 
+select T.match as title, ET.ruleID as ruleID
+from (
+	select T.title as match from FirstTitle T where MatchesDict('TitleExactDict', 'IgnoreCase', T.title))
+	T, TitleExactTable ET
+where Equals(GetText(T.match),GetText(ET.value));
+
+---------------------------URL Contains Pattern-----------------------------
+
+create view URLContainsSpansWithID as
+select T.match as url, CT.ruleID as ruleID
+from(
+	extract dictionary 'URLContainsDict' on P.url as match 
+	from PageURL P)
+	T, URLContainsTable CT
+where Equals(GetText(T.match), GetText(CT.value));
+
+-----------------------------URL Starts With Pattern-----------------------------
+
+create view URLStartsWithCand as 
+select T.match as url, ST.ruleID as ruleID
+from (
+	extract dictionary 'URLStartsWithDict' on P.url as match 
+	from PageURL P)T, URLStartsWithTable ST
+where Equals(GetText(T.match), GetText(ST.value));
+
+create view URLStartsWithSpansWithID as
+select U.url as url, U.ruleID as ruleID
+from URLStartsWithCand U, PageURL P
+where Equals(GetBegin(U.url),GetBegin(P.url));
+
+------------------------------URL Ends With Pattern-------------------------------
+
+create view URLEndsWithCand as
+select T.match as url, ET.ruleID as ruleID
+from (
+	extract dictionary 'URLEndsWithDict' on P.url as match 
+	from PageURL P)T, URLEndsWithTable ET
+where Equals(GetText(T.match), GetText(ET.value));
+
+create view URLEndsWithSpansWithID as
+select U.url as url, U.ruleID as ruleID
+from URLEndsWithCand U, PageURL P
+where Equals(GetEnd(U.url), GetEnd(P.url));
+
+-------------------------------URL Exact Pattern-------------------------------------
+
+create view URLExactSpansWithID as
+select U.match as url, ET.ruleID as ruleID
+from (
+	select P.url as match from PageURL P
+	where MatchesDict('URLExactDict','IgnoreCase',P.url))U, URLExactTable ET
+where Equals(GetText(U.match), GetText(ET.value));
+
+--------------------------------Title Patterns Union----------------------------------
+
+create view TitlePatternsAllWithID as
+(select T.* from TitleContainsSpansWithID T)
+union all
+(select T.* from TitleStartsWithSpansWithID T)
+union all
+(select T.* from TitleEndsWithSpansWithID T)
+union all
+(select T.* from TitleExactSpansWithID T);
+
+-----------------------------------URL Patterns Union-----------------------------------
+
+create view URLPatternsAllWithID as
+(select U. * from URLContainsSpansWithID U)
+union all
+(select U. * from URLStartsWithSpansWithID U)
+union all
+(select U. * from URLEndsWithSpansWithID U)
+union all
+(select U.* from URLExactSpansWithID U);
+
+
+------------------------Selecting the docs matching rules that contain the first four patterns---------------------------
+create view SoftErrorFourRules as
+select T.title as title_pattern, U.url as url_pattern, T.ruleID as ruleID from TitlePatternsAllWithID T, URLPatternsAllWithID U 
+where Equals (GetText(T.ruleID), GetText(U.ruleID));
+
+--------------------------Processing for the rules containing Anything(*) pattern-----------------------------
+
+create view SoftErrorTitleRuleAny as
+(select T.* from TitlePatternsAllWithID T)
+minus
+(select T.* from TitlePatternsAllWithID T, URLTableAll U where Equals(GetText(T.ruleID),GetText(U.ruleID)));
+
+create view SoftErrorURLRuleAny as
+(select U.* from URLPatternsAllWithID U)
+minus
+(select U.* from URLPatternsAllWithID U, TitleTableAll T where Equals(GetText(U.ruleID), GetText(T.ruleID)));
+
+------------------------------------------------------------------------------------------
+
+create view SoftErrorAllWithoutOutput as
+(select S.ruleID from SoftErrorFourRules S)
+union all
+(select S.ruleID from SoftErrorTitleRuleAny S)
+union all 
+(select S.ruleID from SoftErrorURLRuleAny S);
+
+create view SoftErrorAllWithOutput as
+select S.*, T.out as out from SoftErrorAllWithoutOutput S, SoftErrorOutputTable T
+where Equals(GetText(S.ruleID),GetText(T.ruleID));
+
+create view SoftError as
+select S.* from SoftErrorAllWithOutput S;  

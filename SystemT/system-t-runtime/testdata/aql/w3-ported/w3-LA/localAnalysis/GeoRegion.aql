@@ -1,0 +1,401 @@
+-------------------------------------------------------------------------------
+-- GeoRegion.aql
+--
+-- Collect geography annotations from the features extracted from HTML files
+--
+-- Depends on HTML.aql, URL.aql, GeoPreprocessing.aql
+--
+-- This file produces the contents of the following local analysis result
+-- tables:
+--		b. Region
+--
+-- Based on Huaiyu's original Java implementation.
+-- Author: Laura Chiticariu <chiti@us.ibm.com>
+-------------------------------------------------------------------------------
+
+
+
+-- ****************************************************************************
+-- ***               Phase 2: Filter based on geo dictionaries             ****
+-- ****************************************************************************
+-------------------------------------------------------------------------------
+-- This phase is based on the following flow from 
+-- w3resources\configs\local\subannotators.txt
+
+-- geo_SCRr: Title/_content_ # FirstMainHead/_content_ # MetaDescription/content # URLHost/text # URLPath/text # Seg1/matched # Seg2/matched
+-- geo_CRr: H1/_content_ # H2/_content_ # MetaKeywords/content
+-- geo_c: URLPath/text_3seg # URLHost/content_2lett # MetaLanguage/content_2lett # MetaRegion/content_2lett
+
+-- Seg1/matched : geo_SCRr 
+-- Seg2/matched: geo_SCRr 
+-- FirstMainHead/_content_: geo_SCRr  
+-- Title/_content_: geo_SCRr 
+-- H1/_content_ : geo_CRr: 
+-- H2/_content_ : geo_CRr: 
+-- MetaCountry/content_2lett: geo_c
+-- MetaLanguage/content_2lett : geo_c
+-- URLPath/text_3seg: geo_c
+-- URLPath/text : geo_SCRr 
+-- MetaKeywords/content: geo_CRr: 
+-- MetaDescription/content: geo_SCRr  
+-- URLHost/text : geo_SCRr 
+-- URLHost/content_2lett : geo_c
+
+
+
+
+
+
+-- ***********************************************************************
+-- ***                          REGION                                ****
+-- ***********************************************************************
+
+
+-- Seg1/matched : geo_Rr
+-- Seg2/matched: geo_Rr
+-- FirstMainHead/_content_: geo_Rr  
+-- Title/_content_: geo_Rr 
+-- H1/_content_ : geo_Rr 
+-- H2/_content_ : geo_Rr 
+-- URLPath/text : geo_Rr 
+-- MetaKeywords/content: geo_Rr 
+-- MetaDescription/content: geo_Rr  
+-- URLHost/text : geo_Rr
+
+-- High-quality region annotation
+create view Region_HQURLPath_All as
+select GetText(G.region) as match, ConstructEvidence('HQURLPath', GetString(G.region)) as evidence
+from GeoHQ G
+where Not(Equals('', GetText(G.region)));
+
+-- Restrict to maximum 6 items
+create view Region_HQURLPath as
+select R.* 
+from Region_HQURLPath_All R, (select Count(*) as cnt from Region_HQURLPath_All) C
+where Not(GreaterThan(C.cnt,6));
+
+
+create view Region_Seg1_All as
+select GetText(T.match) as match, ConstructEvidence(GetString('Seg1'), GetString(T.match)) as evidence
+from (extract dictionaries 'GeoRegionNameDict' on T.seg as match from Seg1 T having Not(MatchesDict('geo/region_invalid.dict', match)) consolidate on match) T;
+
+-- Restrict to maximum 6 items
+create view Region_Seg1 as
+select R.* 
+from Region_Seg1_All R, (select Count(*) as cnt from Region_Seg1_All) C
+where Not(GreaterThan(C.cnt,6));
+
+
+create view Region_Seg2_FirstMain_All as
+(
+	select GetText(T.match) as match, ConstructEvidence(GetString('Seg2'), GetString(T.match)) as evidence
+	from (extract dictionaries 'GeoRegionNameDict' on T.seg as match from Seg2 T having Not(MatchesDict('geo/region_invalid.dict', match)) consolidate on match) T
+)
+union all
+(
+	select GetText(FM.match) as match, ConstructEvidence(GetString('FirstMainHead'), GetString(FM.match)) as evidence
+	from (extract dictionaries 'GeoRegionNameDict' on FM.content as match from FirstMainFinal FM having Not(MatchesDict('geo/region_invalid.dict', match)) consolidate on match) FM
+);
+
+-- Restrict to maximum 6 items
+create view Region_Seg2_FirstMain as
+select R.* 
+from Region_Seg2_FirstMain_All R, (select Count(*) as cnt from Region_Seg2_FirstMain_All) C
+where Not(GreaterThan(C.cnt,6));
+
+
+create view Region_Title_H1_All as
+(
+	select GetText(T.match) as match, ConstructEvidence(GetString('Title'), GetString(T.match)) as evidence
+	from (extract dictionaries 'GeoRegionNameDict' on T.content as match from TitleFinal T having Not(MatchesDict('geo/region_invalid.dict', match)) consolidate on match) T
+)
+union all
+(
+	select GetText(H.match) as match, ConstructEvidence(GetString('H1'), GetString(H.match)) as evidence
+	from (extract dictionaries 'GeoRegionNameDict' on H.match as match from H1 H having Not(MatchesDict('geo/region_invalid.dict', match)) consolidate on match) H
+);
+
+-- Restrict to maximum 6 items
+create view Region_Title_H1 as
+select R.* 
+from Region_Title_H1_All R, (select Count(*) as cnt from Region_Title_H1_All) C
+where Not(GreaterThan(C.cnt,6));
+
+
+create view Region_H2_All as
+	select GetText(H.match) as match, ConstructEvidence(GetString('H2'), GetString(H.match)) as evidence
+	from (extract dictionaries 'GeoRegionNameDict' on H.match as match from H2 H having Not(MatchesDict('geo/region_invalid.dict', match)) consolidate on match) H;
+
+-- Restrict to maximum 6 items
+create view Region_H2 as
+select R.* 
+from Region_H2_All R, (select Count(*) as cnt from Region_H2_All) C
+where Not(GreaterThan(C.cnt,6));
+
+
+create view Region_URLPath_All as
+	select GetText(U.match) as match, ConstructEvidence(GetString('URLPath'), GetString(U.match)) as evidence
+	from ( extract dictionaries 'GeoRegionNameDict' on U.actualPath as match from PageURL U having Not(MatchesDict('geo/region_invalid.dict', match)) consolidate on match) U;
+
+-- Restrict to maximum 6 items
+create view Region_URLPath as
+select R.* 
+from Region_URLPath_All R, (select Count(*) as cnt from Region_URLPath_All) C
+where Not(GreaterThan(C.cnt,6));
+
+
+create view Region_MetaKeywords_MetaDescription_All as
+(
+	select GetText(D.match) as match, ConstructEvidence(GetString('MetaDescription'), GetString(D.match)) as evidence
+	from (extract dictionaries 'GeoRegionNameDict' on D.content as match from MetaDescription D having Not(MatchesDict('geo/region_invalid.dict', match)) consolidate on match) D
+)
+union all
+(
+	select GetText(K.match) as match, ConstructEvidence(GetString('MetaKeywords'), GetString(K.match)) as evidence
+	from (extract dictionaries 'GeoRegionNameDict' on K.content as match from MetaKeywords K having Not(MatchesDict('geo/region_invalid.dict', match)) consolidate on match) K
+);
+
+
+-- Restrict to maximum 6 items
+create view Region_MetaKeywords_MetaDescription as
+select R.* 
+from Region_MetaKeywords_MetaDescription_All R, (select Count(*) as cnt from Region_MetaKeywords_MetaDescription_All) C
+where Not(GreaterThan(C.cnt,6));
+
+
+create view Region_URLHost_All as
+	select GetText(U.match) as match, ConstructEvidence(GetString('URLHost'), GetString(U.match)) as evidence
+	from (extract dictionaries 'GeoRegionNameDict' on U.host as match from PageURL U having Not(MatchesDict('geo/region_invalid.dict', match)) consolidate on match) U;
+
+-- Restrict to maximum 6 items
+create view Region_URLHost as
+select R.* 
+from Region_URLHost_All R, (select Count(*) as cnt from Region_URLHost_All) C
+where Not(GreaterThan(C.cnt,6));
+
+-- ***********************************************************************
+-- ***             REGION - priority rules                           ****
+-- ***********************************************************************
+
+-- Region0 = HQURLPath > Seg1
+create view Region0_ as
+select R2.*
+from Region_Seg1 R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Region_HQURLPath) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Region0 as (select * from Region_HQURLPath) union all (select * from Region0_);
+
+
+-- Region1 = HQURLPath > Seg1 > Seg2_FirstMain
+create view Region1_ as
+select R2.*
+from Region_Seg2_FirstMain R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Region0) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Region1 as (select * from Region0) union all (select * from Region1_);
+
+-- Region2 = HQURLPath > Seg1 > Seg2_FirstMain > Title_H1
+create view Region2_ as
+select R2.*
+from Region_Title_H1 R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Region1) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Region2 as (select * from Region1) union all (select * from Region2_);
+
+
+-- Region3 = HQURLPath > Seg1 > Seg2_FirstMain > Title_H1 > H2
+create view Region3_ as
+select R2.*
+from Region_H2 R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Region2) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Region3 as (select * from Region2) union all (select * from Region3_); 
+
+
+-- Region4 = HQURLPath > Seg1 > Seg2_FirstMain > Title_H1 > H2 > URLPath
+create view Region4_ as
+select R2.*
+from Region_URLPath R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Region3) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Region4 as (select * from Region3) union all (select * from Region4_);
+
+
+-- Region5 = HQURLPath > Seg1 > Seg2_FirstMain > Title_H1 > H2 > URLPath > MetaKeyword_MetaDescription
+create view Region5_ as
+select R2.*
+from Region_MetaKeywords_MetaDescription R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Region4) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Region5 as (select * from Region4) union all (select * from Region5_);
+
+
+-- Region6 = HQURLPath > Seg1 > Seg2_FirstMain > Title_H1 > H2 > URLPath > MetaKeyword_MetaDescription > URLHost
+create view Region6_ as
+select R2.*
+from Region_URLHost R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Region5) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Region6 as (select * from Region5) union all (select * from Region6_);
+
+-- Deduplicate region annotations and their evidence
+create view RegionFinal as
+select GetText(C.match) as match, GetText(C.evidence) as evidence
+from
+(
+	select toUpperCase(C.match) as match, C.evidence as evidence
+	from Region6 C
+) C
+group by GetText(C.match), GetText(C.evidence);
+
+-- Normalize region annotations
+create view RegionWithCode as
+select C.match as match, M.code as code
+from RegionFinal C, RegionMapping M
+where Equals(GetText(C.match), GetText(M.name));
+
+-- Some region annotations might not have a corresponding code
+create view RegionNoCode as
+(select C.match as match from RegionFinal C)
+minus
+(select C.match as match from RegionWithCode C);
+
+-- all region annotations with code or without code
+create view RegionNormalized as
+(select C.code as match from RegionWithCode C)
+union all
+(select C.match as match from RegionNoCode C);
+
+
+-- ***********************************************************************
+-- ***             REGION - final output                             ****
+-- ***********************************************************************
+
+-- All the evidence for Region
+create view RegionEvidenceAll as
+select C.id as id, GetText(C.evidence) as evidence
+from
+(
+	(select 1 as id, C.evidence as evidence from Region_HQURLPath C)
+	union all
+	(select 1 as id, C.evidence as evidence from Region_Seg1 C)
+	union all
+	(select 1 as id, C.evidence as evidence from Region_Seg2_FirstMain C)
+	union all
+	(select 1 as id, C.evidence as evidence from Region_Title_H1 C)
+	union all
+	(select 1 as id, C.evidence as evidence from Region_H2 C)
+	union all
+	(select 1 as id, C.evidence as evidence from Region_URLPath C)
+	union all
+	(select 1 as id, C.evidence as evidence from Region_MetaKeywords_MetaDescription C)
+	union all
+	(select 1 as id, C.evidence as evidence from Region_URLHost C)
+) C
+--remove duplicates and sort evidence
+group by C.id, GetText(C.evidence)
+order by GetText(C.evidence);
+
+-- Aggregate all the evidence from normal path
+create view RegionEvidence as
+select ListJoin(C.evidence, ';') as evidence
+from
+(
+	select C.id, List(C.evidence) as evidence 
+	from RegionEvidenceAll C
+	group by C.id
+) C;
+
+-- Union the evidence of Global with the normal path values
+create view RegionEvidenceWithGlobal as
+select C.id as id, C.evidence as evidence
+from
+(
+	(select * from RegionEvidenceGlobal)
+	union all
+	(select * from RegionEvidenceAll) 
+)C
+--remove duplicates and sort evidence
+group by C.id, C.evidence
+order by C.evidence;
+
+-- Aggregate all evidences
+create view RegionEvidenceFinal as
+select ListJoin(C.evidence, ';') as evidence
+from
+(
+	select C.id, List(C.evidence) as evidence 
+	from RegionEvidenceWithGlobal C
+	group by C.id
+) C;
+
+-- Union the Regions from normal path and Global
+create view RegionNormalizedWithGlobal as
+select C.match as match from
+(
+	(select R.match as match from RegionNormalized R)
+	union all
+	(select R.match as match from RegionGlobalFinal R)
+)C;
+
+-- Aggregate all region annotations
+create view RegionAgg as 
+select ListJoin(C.match, ';') as region
+from
+(
+	select C.id, List(C.match) as match 
+	from (select 1 as id, GetText(C.match) as match from RegionNormalizedWithGlobal C group by GetText(C.match)) C
+	group by C.id
+) C;
+
+-- Attach the evidence
+create view RegionWithEvidence as 
+select C.region, E.evidence
+from RegionAgg C, RegionEvidenceFinal E;
+
+
+-- Create some dumb values for pages with no region annotations
+create view RegionMissing as
+select 'N/A' as region, '' as evidence
+from 
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from RegionWithEvidence) S
+	) R1
+where Equals(R1.xsists, 0);
+
+-- Final output contains region annotations with evidence, 
+-- or empty strings when no region annots have been discovered
+
+create view GeoRegion as 
+(select * from RegionWithEvidence)
+	union all
+(select * from RegionMissing);

@@ -1,0 +1,107 @@
+------------------------------------------------------------
+------------------------------------------------------------
+
+create view PersonDisDict as
+extract
+	--dictionary 'disambiguation/person.dict'
+	dictionary 'disambiguation/disambg_per_en.dict'
+	on D.text
+	as name
+from Doc D
+having MatchesRegex(/\p{Lu}.*/, name);
+
+ 
+create view OrgDisDict as
+extract
+        --dictionary 'disambiguation/organization.dict'
+        dictionary 'disambiguation/disambg_org_en.dict'
+        on D.text
+        as organization
+from Doc D;
+
+create view LocDisDict as
+extract
+        --dictionary 'disambiguation/location.dict'
+        dictionary 'disambiguation/disambg_loc_en.dict'
+        on D.text
+        as loc
+from Doc D;
+
+------------------------------------------------------------
+------------------------------------------------------------
+create view NEDisDict as
+	(select P.name as match, 'person' as type from PersonDisDict P)
+	union all
+	(select O.organization as match, 'org' as type from OrgDisDict O)
+	union all
+	(select L.loc as match, 'loc' as type from LocDisDict L);
+
+create view POLEntities as
+	(select P.person as match from PersonMixed P)
+	union all
+	(select O.organization as match from OrganizationMixed O)
+	union all
+	(select L.loc as match from LocationMixed L);
+
+------------------------------------------------------------
+------------------------------------------------------------
+create view NEDisAlready as
+select P1.*
+from NEDisDict P1,
+	 POLEntities P2
+where Overlaps(P1.match, P2.match);
+
+create view NEDisDictOnly as
+	(select P.* from NEDisDict P)
+	minus
+	(select P.* from NEDisAlready P);	
+	
+create view SingleTokNEDisDictOnly as
+select P.*
+from NEDisDictOnly P
+where Not(MatchesRegex(/(\p{Lu}\p{M}*|(,|in)).*\s+/, LeftContextTok(P.match, 1)))
+  and Not(MatchesRegex(/\s+(\p{Lu}\p{M}*.*|,)/, RightContextTok(P.match, 1)));  
+  
+------------------------------------------------------------
+------------------------------------------------------------
+create view PersonMixedAll as
+	(select P.person as person, P.first as first, P.middle as middle, P.last as last, P.reference as reference from PersonMixed P)
+	union all
+	(select P.match as person, '' as first, '' as middle, '' as last, P.match as reference
+	 from SingleTokNEDisDictOnly P
+	 where Equals(GetText(P.type), 'person'));
+	
+create view Person_ as
+select P.person as name, P.first as first, P.middle as middle, P.last as last, P.reference as reference
+from PersonMixedAll P
+consolidate on P.person; 
+------------------------------------------------------------
+------------------------------------------------------------
+
+create view OrgMixedAll as
+	(select P.* from OrganizationMixed P)
+	union all
+	(select P.match as organization, '' as type
+	 from SingleTokNEDisDictOnly P
+	 where Equals(GetText(P.type), 'org'));
+	
+create view Organization_ as
+select P.organization as organization, P.type as type, P.organization as reference 
+from OrgMixedAll P
+consolidate on P.organization; 
+------------------------------------------------------------
+------------------------------------------------------------
+
+create view LocMixedAll as
+	(select P.* from LocationMixed P)
+	union all
+	(select P.match as loc
+	 from SingleTokNEDisDictOnly P
+	 where Equals(GetText(P.type), 'loc'));
+	
+create view Location_ as
+select P.loc as loc
+from LocMixedAll P
+consolidate on P.loc; 
+------------------------------------------------------------
+------------------------------------------------------------

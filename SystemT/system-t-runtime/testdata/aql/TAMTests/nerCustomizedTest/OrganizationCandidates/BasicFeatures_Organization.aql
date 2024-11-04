@@ -1,0 +1,407 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module OrganizationCandidates;
+
+require document with columns
+text Text;
+
+
+create view OrgGovSuffix as
+	extract 
+		dictionary 'SuffixesForGovernmentOrganizations'
+		with flags 'Exact'
+		on D.text as match
+	from DocumentText D;
+	
+ create view OrgGovPrefix as
+	extract 
+		dictionary 'PrefixesForGovernmentOrganizations'
+		with flags 'Exact'
+		on D.text as match
+	from DocumentText D;
+
+create view OrgNewspaperSuffix as
+	extract 
+		dictionary 'SuffixesForNewspaperOrganizations'
+		with flags 'Exact'
+		on D.text as match
+	from DocumentText D;
+
+create view OrgMediaSuffix as
+	extract 
+		dictionary 'SuffixesForMediaAndEntertainmentOrganizations'
+		with flags 'Exact'
+		on D.text as match
+	from DocumentText D;
+
+ create view OrgClueStIndCaps as
+	( select D.match as match 
+		from (extract dictionary 'SuffixesForGroupsOfOrganizations' 
+			with flags 'Exact' on D.text as match from DocumentText D) D )
+	union all
+	( select D.match as match 
+		from (extract dictionary 'SuffixesForEducationalOrganizations' 
+			with flags 'Exact' on D.text as match from DocumentText D) D )
+	union all
+	( select D.match as match from OrgGovSuffix D )
+	union all
+	( select D.match as match 
+		from (extract dictionary 'SuffixesForMedicalOrganizations' 
+			with flags 'Exact' on D.text as match from DocumentText D) D )
+	union all
+	( select D.match as match from OrgMediaSuffix D )
+	union all
+	( select D.match as match 
+		from (extract dictionary 'SuffixesForOtherOrganizations' 
+			with flags 'Exact' on D.text as match from DocumentText D) D )
+	union all
+	( select D.match as match 
+		from (extract dictionary 'SuffixesForGroupsOfMiscellaneousOrganizations' 
+			with flags 'Exact' on D.text as match from DocumentText D) D );
+		
+create view OrgClueStIndPrefixCaps as
+	( select D.match as match 
+		from (extract dictionary 'PrefixesForGroupsOfOrganizations' 
+			with flags 'Exact' on D.text as match from DocumentText D) D )
+	union all
+	( select D.match as match 
+		from (extract dictionary 'PrefixesForEducationalOrganizations' 
+			with flags 'Exact' on D.text as match from DocumentText D) D )
+	union all
+	( select D.match as match from OrgGovPrefix D )
+	union all
+	( select D.match as match 
+		from (extract dictionary 'PrefixesForMedicalOrganizations' 
+			with flags 'Exact' on D.text as match from DocumentText D) D )
+	union all
+	( select D.match as match 
+		from (extract dictionary 'PrefixesForOtherOrganizations' 
+			with flags 'Exact' on D.text as match from DocumentText D) D )
+	union all
+	( select D.match as match 
+		from (extract dictionary 'PrefixesForGroupsOfMiscellaneousOrganizations' 
+			with flags 'Exact' on D.text as match from DocumentText D) D );
+
+create view OrgFullCase1 as
+extract
+    dictionaries
+        'WorldGovernmentOrganizations' and
+    	'UniversitiesInUSA'
+        on D.text   
+        as match     
+        from DocumentText D
+        having MatchesRegex(/\p{Lu}\p{M}*.+/, match);
+        
+-- capture abbreviations
+create view OrgFullCase2 as
+extract
+    dictionaries
+            'WorldCommercialOrganizationsAbbreviations'
+	    and 'WorldCommercialOrganizationsAbbreviationsAndExpanded' 
+	    and 'WorldGovernmentOrganizationsAbbreviations'
+	    and 'MediaAndEntertainmentOrganizations'
+	    and 'NewspaperOrganizations'
+    with flags 'Exact'
+    on D.text   
+    as match     
+    from DocumentText D;  
+    
+ create view OrganizationFortune1000_2000_2008_Case as
+	select
+		D.match as match
+	from
+		(extract dictionary 'PopularWorldOrganizationsAbbreviationsAndExpandedShort' 
+			with flags 'Exact'
+			on D.text as match 
+			from DocumentText D) D;
+		
+		
+create view OrganizationFortune1000_2000_2008 as
+	extract dictionary 'PopularWorldOrganizationsAbbreviationsAndExpandedLong'
+		on D.text as match
+	from DocumentText D
+	-- enforce Caps letter or digit at the beginning
+	having MatchesRegex(/[\p{Lu}\p{M}*\d].+/, match);
+	
+
+create view OrganizationFortune1000_2000_2008_NoCase as
+	extract dictionary 'PopularWorldOrganizations'
+		on D.text as match
+	from DocumentText D;
+		
+    
+ create view OrgFullNoCase as
+	(select
+		D.match as match
+	from
+		(extract dictionary 'WorldCommercialOrganizations' on D.text as match from DocumentText D) D)
+	union all
+	(select
+		D.match as match
+	from
+		(extract dictionary 'TerroristOrganizations' on D.text as match from DocumentText D) D)
+		union all
+	(select
+		D.match as match
+	from
+		(extract dictionary 'RegionalMediaAndEntertainmentOrganizations' on D.text as match from DocumentText D) D)
+	union all
+	(select
+		D.match as match
+	from
+		OrganizationFortune1000_2000_2008 D)
+	union all
+	(select
+		D.match as match
+	from
+		OrganizationFortune1000_2000_2008_NoCase D);
+		
+		
+create view StockEx as
+extract dictionary 'TypesOfFinancialExchanges' 
+	on D.text as match 
+from DocumentText D
+having MatchesRegex(/\p{Lu}\p{M}*.+/, SubSpanTok(match,0,1));				    
+    	
+
+create view OrgConj as
+	select
+		D.match as match
+	from
+		(extract 
+			dictionary 'ConjunctionsAll' 
+			on D.text as match 
+			from DocumentText D
+		) D;
+		
+		
+ create view OrgPrep as
+	select
+		D.match as match
+	from
+		(extract 
+			dictionary 'PrepositionsInEnglish' 
+			on D.text as match 
+			from DocumentText D
+		) D;
+		
+		
+ create view CapsOrg as 
+	select
+		R.match as match
+	from
+		-- Allow matches such as 'the Children's Hospital of Pittsburgh' 
+		-- Allow unicode matches
+		-- Avoid capture partial organization name such as '[Univ. of Michigan College] of Engineering'
+	    -- switch to faster regex math
+	   (extract regex /\p{Lu}\p{M}*([\p{Ll}\p{Lo}]\p{M}*|[\&\.'\-\,])+/
+			on between 1 and 6 tokens in D.text
+			as match from DocumentText D) R;
+
+ 
+create view AllCapsOrg as
+	select 
+		R.match as match
+	from 
+	-- to capture ABC
+	-- allow matches for B&B, BB&T
+	-- all matches for StreetSmart
+	-- to capture CabCabCab
+	(extract regex /(\p{Lu}\p{M}*){1,2}((\s*&\s*)?(\p{Lu}\p{M}*)+|([\p{Ll}\p{Lo}]\p{M}*)+((\p{Lu}\p{M}*)([\p{Ll}\p{Lo}]\p{M}*)+){1,2})/ 
+		on between 1 and 3 tokens in D.text as match from DocumentText D) R;
+	
+
+create view AnyCapsOrg as
+	(select O.match as match from AllCapsOrg O)
+	union all
+	(select O.match as match from CapsOrg O);
+	
+create view OrgToAvoid as
+select D.match as match
+from (extract dictionary 'FiltersForOrganizationInEnglish' on D.text as match from DocumentText D) D;
+ 
+  	create view DotComAnchor as
+	select
+		D.match as anchor
+	from
+	(extract dictionary 'WebDomainSuffixesForOrganization' on D.text as match from DocumentText D) D;
+	
+	create view DotComContext as
+    select LeftContextTok(R.anchor,4) as lc, R.anchor as anchor
+    from   DotComAnchor R;
+ 
+	create view DotComLC as
+    select  R.match  as match 
+    from (extract regex /\p{L}\p{M}*[\w\&\-]+$/
+			on between 1 and 25 tokens in D.text
+			as match from DocumentText D) R
+    where Not(MatchesRegex(/[\.@]/, LeftContextTok(R.match,1)));
+    
+ -- to capture organizations with partnerships
+ create view OrgCluePartnershipSuffix as
+ 	select
+ 		D.match as match
+ 	from
+ 		(extract dictionary 'SuffixesForCommercialOrganizations' with flags 'Exact' on D.text as match from DocumentText D) D;	
+ 
+ create view OrgClueStSuffixCapsCand as
+	(select
+		D.match as match
+	from
+		(extract dictionary 'GlobalSuffixesForOrganizations' with flags 'Exact' on D.text as match from DocumentText D) D)
+	union all
+ 	(select O.match as match from OrgCluePartnershipSuffix O);
+ 	
+ create view OrgClueStSuffixAuxCaps as
+ select D.match as match
+ from (extract dictionary 'AuxiliarySuffixesForOrganizations' on D.text as match from DocumentText D) D
+ where MatchesRegex(/\p{Lu}\p{M}*.*/, D.match);
+ 
+ create view OrgClueStIndSuffixWeakCaps as
+ select D.match as match
+ from (extract dictionary 'ProfessionBasedSuffixesForOrganizations' on D.text as match from DocumentText D) D
+ where MatchesRegex(/\p{Lu}\p{M}*.*/, D.match);
+
+-- Extend OrgClueStSuffixCaps to the left with Country, Continent and auxiliary suffixes
+-- E.g., International Co, (Holdings) Co, (Canada) Co, Europe Co
+
+create view OrgNewspaper as
+extract dictionary 'PopularGlobalNewspapersByCirculation'
+               and 'PopularNationalNewspapersByCirculation'
+               and 'PopularUSANewspapersByCirculation'
+	on D.text as match
+from DocumentText D
+having MatchesRegex(/(al-)?\p{Lu}\p{M}*.+/, match);
+
+
+-- Customization 5: general sports orgs
+create view OrgSportsGeneralCase as
+extract 
+	    dictionary 'WorldSportsAssociationsAbbreviations'
+	    with flags 'Exact'
+        on D.text as match
+from DocumentText D;
+
+create view OrgSportsGeneral as
+extract 
+	    dictionary 'WorldSportsAssociations'
+        on D.text as match
+from DocumentText D
+having MatchesRegex(/\p{Lu}\p{M}*.*/, match);
+
+create view OrgPublisher as
+extract dictionary 'WorldPublishingHouses'
+	on D.text as match
+from DocumentText D
+having MatchesRegex(/\p{Lu}\p{M}*.+/, match);
+
+create view OrgAirline as
+extract dictionary 'WorldAirlineOrganizations'
+	with flags 'Exact'
+	on D.text as match
+from DocumentText D;
+
+create view OrgTerrorist as
+	extract
+		dictionaries 'WorldTerroristOrganizations'
+		on D.text
+		as match
+		from DocumentText D
+		having MatchesRegex(/(al[ -]?)?\p{Lu}\p{M}*.+/, match);
+		
+create view OrgIslamicMovement as
+	extract
+		dictionaries 'WorldIslamicFundamentalists'
+		         and 'WorldParamilitaryOrganizations'
+		with flags 'Exact'
+		on D.text
+		as match
+		from DocumentText D;	
+		
+create view OrgNewsAgency as
+	extract
+		dictionary 'WorldNewsAgencies'
+		with flags 'Exact'
+		on D.text
+		as match
+		from DocumentText D;	
+		
+create view OrgPoliticalParty as
+	extract
+		dictionary 'WorldPoliticalOrganizations'
+		on D.text
+		as match
+		from DocumentText D
+		having MatchesRegex(/\p{Lu}\p{M}*.+/, match);	
+
+create view OrgByCountry as
+	extract
+		dictionaries 'CommercialOrganizationsInRussiaAbbreviationsAndExpanded'
+		         and 'BanksInRussiaAbbreviationsAndExpanded'
+		         and 'CommercialOrganizationsInSpainAbbreviationsAndExpanded'
+		         and 'BanksInSpain'
+		         and 'CommercialOrganizationsInHongKong'
+		         and 'CommercialOrganizationsInChinaAbbreviationsAndExpanded'
+		         and 'CommercialOrganizationsInSouthKorea'
+		         and 'CommercialOrganizationsInJapanAbbreviationsAndExpanded'
+		on D.text
+		as match
+		from DocumentText D
+	    having MatchesRegex(/\p{Lu}\p{M}*.+/, match);
+
+
+create view SoccerTeam as
+extract 
+	    dictionary 'WorldSoccerClubs'
+               and 'USASoccerClubs' 
+        on D.text as org
+from DocumentText D
+having MatchesRegex(/[\p{Lu}\p{M}*\d].+/, org)
+consolidate on org;
+
+
+create view BaseballTeam as
+extract 
+	    dictionary 'USABaseballClubs'
+        on D.text as org
+from DocumentText D
+having MatchesRegex(/[\p{Lu}\p{M}*\d].+/, org)
+consolidate on org;
+
+create view BasketballTeam as
+extract 
+	    dictionary 'USABasketballClubs'
+        on D.text as org
+from DocumentText D
+having MatchesRegex(/[\p{Lu}\p{M}*\d].+/, org)
+consolidate on org;
+
+create view HockeyTeam as
+extract 
+	    dictionary 'USAHockeyClubs'
+        on D.text as org
+from DocumentText D
+having MatchesRegex(/[\p{Lu}\p{M}*\d].+/, org)
+consolidate on org;
+
+create view AmericanFootballTeam as
+extract 
+	    dictionary 'USAFootballClubs'
+        on D.text as org
+from DocumentText D
+having MatchesRegex(/[\p{Lu}\p{M}*\d].+/, org)
+consolidate on org;

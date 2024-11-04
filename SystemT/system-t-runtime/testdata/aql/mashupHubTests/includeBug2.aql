@@ -1,0 +1,31 @@
+---------------------------------------
+-- includeBug2.aql
+--
+-- A bug in include processing that turned up during the development
+-- of the MashupHub annotators.
+--
+-- The bug turned out to involve not detecting when an input file is
+-- not in the right encoding.
+---------------------------------------
+
+-- Start by creating stubs for views that will be referenced later.
+create view The as 
+extract regex /the/ on 1 token in D.text as the
+from Document D;
+
+create view CompanyInfoShort as
+	select '' as exchange, '' as ticker, '' as companyname, '' as rule,
+		T.the as match
+	from The T;
+	
+create view CompanyInfoLong as
+	select '' as exchange, '' as ticker, '' as companyname, '' as rule,
+		T.the as match
+	from The T;
+
+
+-- Then include the problem files.
+include 'includeBug2/preprocess.aql';
+include 'includeBug2/merger.aql';
+
+output view MergerWithStatusShort;

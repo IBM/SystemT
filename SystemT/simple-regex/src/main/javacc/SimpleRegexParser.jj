@@ -1,0 +1,539 @@
+// Parser for AQL files; to compile, run
+//    javacc -STATIC=false AOGParser.jj
+// from this directory.
+
+options {
+	STATIC = false;	
+//	JDK_VERSION = "5.0";
+	DEBUG_PARSER = false;
+	DEBUG_TOKEN_MANAGER = false;
+}
+
+PARSER_BEGIN(SimpleRegexParser)
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+package com.ibm.systemt.regex.parse;
+ 
+import java.io.*;
+
+
+/**
+ * Main entry point for the Avatar Operator Graph file parser.
+ * 
+ * NOTE: This class is GENERATED from SimpleRegexParser.jj!!!
+ */
+@SuppressWarnings("all")
+public class SimpleRegexParser  {
+		
+	/** Convenience constructor for reading from a string 
+		(the usual case). */
+	public SimpleRegexParser(String s, int flags)throws IOException {
+		this(new StringReader(s));
+		this.flags = flags;
+	}
+	
+	/** Regular expression matching flags, as in Java regular expressions. */
+	int flags;
+	
+}
+
+PARSER_END(SimpleRegexParser)
+
+//
+// LEXER
+//
+
+
+TOKEN :
+{
+		//////////////////////////////////////////////////////////////////////
+	// Regex control structures
+
+	  <OPEN_PAREN 	: "(">
+	| <CLOSE_PAREN 	: ")">
+	| <OPEN_CURLY	: "{">
+	| <CLOSE_CURLY	: "}">
+	| <OPEN_SQUARE	: "[">
+	| <CLOSE_SQUARE	: "]">
+	
+	| <BAR 			: "|">
+	| <COMMA		: ",">
+	| <MINUS		: "-">
+	
+	| <QUESTION		: "?">
+	| <STAR			: "*">
+	| <PLUS			: "+">
+	
+	// Standard character classes
+	| <DOT			: ".">
+	| <DIGIT 		: "\\d">
+	| <NON_DIGIT	: "\\D">
+	| <WHITESPACE	: "\\s">
+	| <NON_WHITESPACE	: "\\S">
+	| <WORD			: "\\w">
+	| <NONWORD		: "\\W">
+
+	
+	// Unicode character classes
+	| <UNICODE_ESC	: "\\p">
+	
+	// Escaped special characters
+	| <NEWLINE 		: "\\n">
+	| <RETURN 		: "\\r">
+	| <TAB			: "\\t">
+	| <FORMFEED		: "\\f">
+	| <BELL			: "\\a">
+	| <ESCAPE		: "\\e">
+	
+	
+	///////////////////////////////////////////////////////////////////////
+	// Escaped character sequences
+	| <OCTAL_ESC	: "\\0" (["0"-"9"]){1,3}>
+	| <HEX_ESC		: "\\x" (["0"-"9", "a"-"f", "A"-"F"]){2}>
+	| <LONG_HEX_ESC	: "\\u" (["0"-"9", "a"-"f", "A"-"F"]){4}>
+	| <CONTROL_CHAR	: "\\c" ["0"-"9", "a"-"z", "A"-"Z"]>
+
+	// Single-character lookahead/lookbehind escapes
+	| <WORD_BOUNDARY		: "\\b">
+	| <NON_WORD_BOUNDARY	: "\\B">
+	| <BEGINNING			: "\\A">
+	| <PREV_MATCH_END		: "\\G">
+	| <END_NO_TERMINATOR	: "\\Z">
+	| <END					: "\\z">
+	
+	| <BEGIN_QUOTE			: "\\Q">
+	| <END_QUOTE			: "\\E">
+	
+	| <NONCAPTURING			: "(?:">
+	| <INDEP_NONCAPTURING	: "(?>">
+	
+	| <POS_LOOKAHEAD		: "(?=">
+	| <POS_LOOKBEHIND		: "(?<=">
+	| <NEG_LOOKAHEAD		: "(?!">
+	| <NEG_LOOKBEHIND		: "(?<!">
+	
+	
+	
+	// Note that the following are currently allowed after a backslash, 
+	// but are rejected otherwise.
+	| <CARET		: "^">
+	| <DOLLAR		: "$">
+	// END UNSUPPORTED FEATURES
+	///////////////////////////////////////////////////////////////////////
+	
+	
+	// Escaped normal characters
+	| <BACKSLASH	: "\\">
+	
+	// A positive integer
+	| <NUMBER : (["0"-"9"])>
+	
+	
+	
+	// Everything else becomes a single-character atom.
+	| <CHAR_ATOM : ~[]>
+} 
+ 
+//
+// PARSER
+// 
+
+// Main entry point for parsing.
+Node Input() :
+{
+	NodeBoundaryCond beforeBoundCond = null, afterBoundCond = null;
+	Node ret;
+}
+{
+	// Check for conditions on the previous or next char (e.g. '\b')
+	( beforeBoundCond = BoundaryCond() )?
+	( 
+		ret = Regex()
+	)
+	( afterBoundCond = BoundaryCond() )?
+	<EOF>
+	{
+		 ret.setBoundConds(beforeBoundCond, afterBoundCond);
+		 return ret; 
+	}
+}
+
+// Single-character lookbehind codes that we allow before a regex
+NodeBoundaryCond BoundaryCond() :
+{
+	Token t;
+}
+{
+	<WORD_BOUNDARY> 		{ return NodeBoundaryCond.WORD_BOUNDARY; }
+	| <NON_WORD_BOUNDARY>	{ return NodeBoundaryCond.NON_WORD_BOUNDARY; }
+	| <BEGINNING>			{ return NodeBoundaryCond.BEGINNING; }
+	| <PREV_MATCH_END>		{ return NodeBoundaryCond.PREV_MATCH_END; }
+	| <END_NO_TERMINATOR>	{ return NodeBoundaryCond.END_NO_TERMINATOR; }
+	| <END>					{ return NodeBoundaryCond.END; }
+	| t = <CARET>			{ return NodeBoundaryCond.CARET; }
+	| t = <DOLLAR>			{ return NodeBoundaryCond.DOLLAR; }
+}
+
+Node Regex() :
+{
+	Node ret;
+}
+{
+	ret = Alt()
+	{ return ret; }
+}
+
+
+// Alternation
+Node Alt() : 
+{
+	NodeAlt ret = new NodeAlt();
+	Node cur;
+}
+{
+	cur = Seq() { ret.add(cur); }
+	(<BAR>  cur = Seq() { ret.add(cur); } )*
+	{ // Don't bother with single-element sequences.
+		if (1 == ret.size()) {
+			return ret.get(0);
+		} else {
+			return ret; 
+		}
+	}
+}
+
+// Concatenation
+Node Seq() :
+{
+	NodeSeq ret = new NodeSeq();
+	Node cur;
+}
+{
+	( cur = Atom() { ret.add(cur); } )+
+	{ 
+		// Don't bother with single-element sequences.
+		if (1 == ret.size()) {
+			return ret.get(0);
+		} else {
+			return ret; 
+		}
+	}
+}
+
+Node Atom() : 
+{
+	NodeAtom ret;
+	int min, max;
+}
+{
+	// The atom itself
+	(
+		ret = CharAtom() 
+		| ret = HexEscAtom()
+		| ret = OctalEscAtom()
+		| ret = UnicodeAtom()
+		| ret = SpecialEsc()
+		| ret = EscCharAtom()
+		| ret = Paren()
+		| ret = CharClass()
+	) 
+	// Optional quantifier
+	( LOOKAHEAD( <OPEN_CURLY> min = IntLiteral() <COMMA> )
+		<OPEN_CURLY> min = IntLiteral() <COMMA> max = IntLiteral() <CLOSE_CURLY>
+			{ return new NodeQuant(ret, min, max); }
+		| <OPEN_CURLY>  min = IntLiteral() <CLOSE_CURLY>
+			{ return new NodeQuant(ret, min); }
+		| <QUESTION>
+			{ return new NodeQuant(ret, NodeQuant.QuantType.OPTIONAL); }
+		| <STAR>
+		 	{ return new NodeQuant(ret, NodeQuant.QuantType.STAR); }
+		| <PLUS>
+		 	{ return new NodeQuant(ret, NodeQuant.QuantType.PLUS); }
+	)?
+	{ return ret; }
+}
+
+// A parenthesized regex
+NodeAtom.Paren Paren() :
+{
+	Node child;
+	boolean isCapturing = false;
+}
+{
+	(	  <OPEN_PAREN> { isCapturing = true; } | < NONCAPTURING >
+	)
+	child = Regex()
+	<CLOSE_PAREN>
+	{ return new NodeAtom.Paren(child, isCapturing); }
+}
+
+// A character class expression
+NodeCharClass CharClass() :
+{
+	NodeCharClass ret = new NodeCharClass(flags);
+	NodeChar c;
+	NodeChar.Char first, last;
+	Token t;
+}
+{
+	<OPEN_SQUARE>
+	(
+	  	// Caret symbol at the beginning of a character class expression
+	  	// negates it.
+	    <CARET> { ret.setNegated(true); }	)?
+	(
+		// Character range
+		LOOKAHEAD(CharClassRangeElem() <MINUS> CharClassRangeElem())
+		first = CharClassRangeElem() <MINUS> last = CharClassRangeElem()
+		{ ret.addRange(first, last); }
+		
+		// Single character
+		| c = CharClassRangeElem()
+		{ ret.addChar(c); }
+		| c = UnicodeAtom()
+		{ ret.addChar(c); }
+		| c = HexEscAtom()
+		{ ret.addChar(c); }
+		| c = OctalEscAtom()
+		{ ret.addChar(c); }
+		| c = CharClass()
+		{ ret.addChar(c); }
+		| c = SpecialEscWithBackslash()
+		{ ret.addChar(c); }
+		// SPECIAL CASE: A hyphen by itself; assume it's a character.
+		| t = <MINUS>
+		{ ret.addChar(new NodeChar.Char(t, flags)); }
+		// END SPECIAL CASE
+		// SPECIAL CASE: A dollar sign by itself; assume it's a character.
+		| t = <DOLLAR>
+		{ ret.addChar(new NodeChar.Char(t, flags)); }
+		// END SPECIAL CASE
+	)+
+	<CLOSE_SQUARE>
+	{ return ret; }
+}
+
+
+// A single character in a character class range expression
+NodeChar.Char CharClassRangeElem() :
+{
+	NodeChar.Char ret;
+}
+{	
+	(
+		ret = CharClassAtom()
+		| ret = EscCharAtom()
+	)
+	{ return ret; }	
+}
+
+// A hex escape code
+NodeChar.HexEscChar HexEscAtom() : 
+{
+	Token t;
+}
+{
+	t = <HEX_ESC> 
+	{ return new NodeChar.HexEscChar(t, flags); }
+	| t = <LONG_HEX_ESC>
+	{ return new NodeChar.HexEscChar(t, flags); }
+}
+
+// An octal escape code
+NodeChar.OctalEscChar OctalEscAtom() : 
+{
+	Token t;
+}
+{
+	t = <OCTAL_ESC> 
+	{ return new NodeChar.OctalEscChar(t, flags); }
+}
+
+// A unicode character set code
+NodeChar.Unicode UnicodeAtom() :
+{
+	StringBuilder sb = new StringBuilder();
+	Token t;
+}
+{
+	<UNICODE_ESC> <OPEN_CURLY> 
+	( t = AtomChar() { sb.append(t.image); } )+
+	<CLOSE_CURLY>
+	{ return new NodeChar.Unicode(sb.toString(), flags); }
+}
+
+// A special escape code
+NodeSpecialEsc SpecialEsc() :
+{
+	NodeSpecialEsc ret;
+	Token t;
+}
+{
+	( 
+		ret = SpecialEscWithBackslash() { return ret; }
+		| t = <DOT>			{ return new NodeSpecialEsc(t.image, flags); }
+	)
+}
+
+// A special escape code that starts with a backslash (valid inside a 
+// character class description)
+NodeSpecialEsc SpecialEscWithBackslash() :
+{
+	Token t;
+}
+{
+	( 
+		t = <NEWLINE> 			{ return NodeSpecialEsc.NEWLINE; }
+		| t = <RETURN> 			{ return NodeSpecialEsc.RETURN; }
+		| t = <TAB>				{ return NodeSpecialEsc.TAB; }
+		| t = <WHITESPACE>		{ return NodeSpecialEsc.WHITESPACE; }
+		| t = <DIGIT>			{ return NodeSpecialEsc.DIGIT; }
+		
+		| t = <WORD>			{ return new NodeSpecialEsc(t.image, flags); }
+		| t = <NONWORD>			{ return new NodeSpecialEsc(t.image, flags); }
+		| t = <NON_WHITESPACE>	{ return new NodeSpecialEsc(t.image, flags); }
+	)
+}
+
+// A single-character atomic regex.
+NodeChar.Char CharAtom() :
+{
+	Token t;
+}
+{
+	t = AtomChar()
+	{ return new NodeChar.Char(t, flags); }
+}
+
+// A single escaped character.
+NodeChar.EscChar EscCharAtom() : 
+{
+	Token t;
+}
+{
+	<BACKSLASH> t = AnyChar()
+	{ return new NodeChar.EscChar(t, flags); }
+}
+
+// A hex escape like \x22 or \x1234
+
+// A single un-escaped character in the context of a character class expression
+NodeChar.Char CharClassAtom() :
+{
+	Token t;
+}
+{
+	t = CharClassChar()
+	{ return new NodeChar.Char(t, flags); }
+}
+	
+// Decode integers.
+int IntLiteral() :
+{
+	Token t;
+	StringBuilder sb = new StringBuilder();
+}
+{
+	(t = <NUMBER> { sb.append(t.image); } )+
+	
+	{ return Integer.valueOf(sb.toString()); }
+}
+
+// Any character that could be an atom, if it is escaped.
+Token AnyChar() :
+{
+	Token t;
+}
+{
+	(
+		t = <CHAR_ATOM>
+		
+		| t = <OPEN_PAREN>
+		| t = <CLOSE_PAREN>
+		| t = <OPEN_CURLY>
+		| t = <CLOSE_CURLY>
+		| t = <OPEN_SQUARE>
+		| t = <CLOSE_SQUARE>
+		
+		| t = <BAR>
+		| t = <COMMA>
+		| t = <MINUS>
+		
+		| t = <QUESTION>
+		| t = <STAR>
+		| t = <PLUS>
+		
+		| t = <DOT>
+		
+		| t = <CARET>
+		| t = <DOLLAR>
+		
+		| t = <NUMBER>
+		| t = <BACKSLASH> 
+
+		
+	)
+	{ return t; }
+}
+
+// Any character that can appear unescaped as part of a character class expression
+Token CharClassChar() :
+{
+	Token t;
+}
+{
+	(
+		t = <CHAR_ATOM>
+		
+		| t = <OPEN_PAREN>
+		| t = <CLOSE_PAREN>
+		| t = <OPEN_CURLY>
+		| t = <CLOSE_CURLY>
+		
+		| t = <BAR>
+		| t = <COMMA>
+		
+		| t = <QUESTION>
+		| t = <STAR>
+		| t = <PLUS>
+		
+		// A dot in a character class descriptor means \.
+		| t = <DOT>
+		
+		| t = <NUMBER>
+
+		
+	)
+	{ return t; }
+}
+
+// Any character that can appear unescaped as an atom
+Token AtomChar() :
+{
+	Token t;
+}
+{
+	(
+		t = <CHAR_ATOM>
+		| t = <COMMA>
+		| t = <MINUS>
+		
+		| t = <NUMBER>
+	)
+	{ return t; }
+}
+
+

@@ -1,0 +1,1708 @@
+
+
+-- ==================== Requirements ===================
+
+-- status: ANNOUNCED - references to a completed alliance (e.g. �announced�, �confirm�)
+
+
+
+--status: CANCELLED - references an indication of cancellation of a alliance (e.g. �failure�, �terminated�)
+
+
+
+-- status: PLANNED - references to a future alliance (e.g, �will�, �plan�)
+
+
+        
+-- status: POSTPONED - references an indication of the delay of a alliance (e.g. �postponed�, �detailed�)
+
+
+
+-- status: UPDATED - references a update of a alliance transaction (e.g. �updates�)
+
+               
+-- status: KNOWN - references to a past alliance (e.g. �previous alliance�)
+-- status: RUMORED - references a possible alliance that has not yet confirmed (e.g., �would�, �could�, �shouldn�t�)
+
+
+
+
+create view AllianceClueBetween as
+select S.clue as clue from
+(
+  extract dictionary 'alliance/alliancecluebetween.dict'
+  on D.text as clue
+  from Doc D
+) S
+consolidate on S.clue;
+
+create view AllianceClueBefore as
+select S.clue as clue from
+(
+  extract dictionary 'alliance/alliancecluebefore.dict'
+  on D.text as clue
+  from Doc D
+) S
+consolidate on S.clue;
+
+-- weaker pattern
+create view AllianceClueAfterTemp as
+select S.clue as clue from
+(
+  extract dictionary 'alliance/allianceclueafter.dict'
+  on D.text as clue
+  from Doc D
+) S
+where Not(MatchesDict('alliance/filterclueright.dict', RightContextTok(S.clue,1)))
+consolidate on S.clue;
+
+
+-- find after clues contained within a between or before clue
+create view AllianceClueAfterOverlapsBetweenBeforeShort as
+( select A.clue as clue from AllianceClueAfterTemp A, AllianceClueBetween B where Contains(B.clue, A.clue) )
+union all
+( select A.clue as clue from AllianceClueAfterTemp A, AllianceClueBefore B where Contains(B.clue, A.clue) );
+
+
+create view AllianceClueAfter as
+( select A.clue as clue from AllianceClueAfterTemp A )
+minus
+( select A.clue as clue from AllianceClueAfterOverlapsBetweenBeforeShort A );
+
+
+
+
+-- collect all clues, for debugging purposes
+create view AllianceClueAll as
+(select 'before' as type, M.clue as clue from AllianceClueBefore M)
+union all
+(select 'between' as type, M.clue as clue from AllianceClueBetween M)
+union all
+(select 'after' as type, M.clue as clue from AllianceClueAfter M);
+
+
+
+
+
+-- ================ALLIANCE rules for SHORT ANNOUNCEMENT========================
+  
+
+-- Match statements of the form "X forms alliance with Y"
+create view AllianceClueBetween2CompNames as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 SpanBetween(C1.match, C2.match) as betweencontext,
+  		 RightContext(C2.match, 20) as aftercontext,
+  		 CombineSpans(C1.match, C2.match) as match
+  from CompanyInfoShort C1, CompanyInfoShort C2, AllianceClueBetween M
+  where FollowsTok(C1.match, M.clue, 0, 5) and
+  	    FollowsTok(M.clue, C2.match, 0, 4) and
+  	    Not(Equals(GetText(C1.companyname), GetText(C2.companyname)));
+  	    
+-- make sure the match is within the same announcement
+create view AllianceClueBetween2CompNamesShortTemp as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, A.match) as aftercontext,
+  	   M.match as match
+from AllianceClueBetween2CompNames M, ShortText A
+where Contains(A.match, M.match);
+
+-- make sure the context does not contain a 3rd company name
+create view AllianceClueBetween2CompNamesShortBadMatch as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.betweencontext as betweencontext, 
+  	   M.aftercontext as aftercontext,
+  	   M.match as match
+from AllianceClueBetween2CompNamesShortTemp M, CompanyInfoShort C
+where Contains(M.betweencontext, C.match);
+
+--discard the bad matches
+create view AllianceClueBetween2CompNamesShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from AllianceClueBetween2CompNamesShortTemp M
+)
+minus
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from AllianceClueBetween2CompNamesShortBadMatch M
+);
+
+
+-- Match statements of the form "X forms alliance with Y and Z"
+create view AllianceClueBetween3CompNames as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 C3.exchange as exchange3, C3.ticker as ticker3, C3.companyname as company3,
+  		 SpanBetween(C1.match, C2.match) as betweencontext,
+  		 RightContext(C3.match, 20) as aftercontext,
+  		 CombineSpans(C1.match, C3.match) as match
+  from CompanyInfoShort C1, CompanyInfoShort C2, CompanyInfoShort C3, AllianceClueBetween M
+  where FollowsTok(C1.match, M.clue, 0, 5) and
+  	    FollowsTok(M.clue, C2.match, 0, 4) and
+  	    FollowsTok(C2.match, C3.match, 1, 2) and
+  	    ContainsDict('conjunction.dict', SpanBetween(C2.match, C3.match)) and
+  	    Not(Equals(GetText(C1.companyname), GetText(C2.companyname))) and
+  	    Not(Equals(GetText(C2.companyname), GetText(C3.companyname))) and
+  	    Not(Equals(GetText(C1.companyname), GetText(C3.companyname)));
+  	    
+-- make sure the match is within the same announcement
+create view AllianceClueBetween3CompNamesShortTemp as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, A.match) as aftercontext,
+  	   M.match as match
+from AllianceClueBetween3CompNames M, ShortText A
+where Contains(A.match, M.match);
+
+create view AllianceClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	   M.betweencontext as betweencontext, 
+	   M.aftercontext as aftercontext,
+	   M.match as match
+from
+(
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,		  
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.betweencontext as betweencontext, 
+		  	   M.aftercontext as aftercontext,
+		  	   M.match as match
+		from AllianceClueBetween3CompNamesShortTemp M
+	)
+	union all
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   '' as exchange3, '' as ticker3, '' as company3,
+		  	   M.betweencontext as betweencontext, 
+		  	   M.aftercontext as aftercontext,
+		  	   M.match as match
+		from AllianceClueBetween2CompNamesShort M
+	) 
+) M
+consolidate on M.match;
+
+  	    
+-- Match statements of the form "X and Y alliance"
+create view AllianceClueAfterCompNames as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 SpanBetween(C1.match, C2.match) as intercompanycontext,
+  		 SpanBetween(C2.match, M.clue) as betweencontext,
+  		 RightContext(M.clue, 20) as aftercontext,
+  		 CombineSpans(C1.match, M.clue) as match
+  from CompanyInfoShort C1, CompanyInfoShort C2, AllianceClueAfter M
+  where FollowsTok(C1.match, C2.match, 0, 5) and
+  	    FollowsTok(C2.match, M.clue, 0, 6) and
+  	    Not(Equals(GetText(C1.companyname), GetText(C2.companyname)));
+  	    
+-- make sure the match is within the same announcement
+create view AllianceClueAfterCompNamesShortTemp as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.intercompanycontext as intercompanycontext,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, A.match) as aftercontext,
+  	   M.match as match
+from AllianceClueAfterCompNames M, ShortText A
+where Contains(A.match, M.match);
+
+-- make sure the context does not contain a 3rd company name
+create view AllianceClueAfterCompNamesShortBadMatch as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.betweencontext as betweencontext, 
+  	   M.aftercontext as aftercontext,
+  	   M.match as match
+from AllianceClueAfterCompNamesShortTemp M, CompanyInfoShort C
+where Or( Contains(M.betweencontext, C.match),
+          Contains(M.intercompanycontext, C.match) 
+         );
+
+--discard the bad matches
+create view AllianceClueAfterCompNamesShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from AllianceClueAfterCompNamesShortTemp M
+)
+minus
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from AllianceClueAfterCompNamesShortBadMatch M
+);
+  	    
+-- CANCELLED clues
+create view AllianceCancelledClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'cancelled' as status,
+  	   M.match as match
+from AllianceClueBetweenCompNamesShort M
+where Or(ContainsDict('alliance/cancelledclue.dict', M.betweencontext),
+	  ContainsDict('alliance/cancelledclue.dict', M.aftercontext));
+
+	  
+create view AllianceCancelledClueAfterCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'cancelled' as status,
+  	   M.match as match
+from AllianceClueAfterCompNamesShort M
+where Or(ContainsDict('alliance/cancelledclue.dict', M.betweencontext),
+	  ContainsDict('alliance/cancelledclue.dict', M.aftercontext));
+	  
+create view AllianceCancelledShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AllianceCancelledClueBetweenCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.status as status, M.match as match
+	from AllianceCancelledClueAfterCompNamesShort M
+);
+
+	  
+-- ANNOUNCED clues  
+create view AllianceAnnouncedClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'announced' as status,
+  	   M.match as match
+from AllianceClueBetweenCompNamesShort M
+where Or(ContainsDict('alliance/announcedclue.dict', M.betweencontext),
+	  ContainsDict('alliance/announcedclue.dict', M.aftercontext));
+
+	  
+create view AllianceAnnouncedClueAfterCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'announced' as status,
+  	   M.match as match
+from AllianceClueAfterCompNamesShort M
+where Or(ContainsDict('alliance/announcedclue.dict', M.match),
+	  ContainsDict('alliance/announcedclue.dict', M.aftercontext));
+
+	  
+create view AllianceAnnouncedShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AllianceAnnouncedClueBetweenCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.status as status, M.match as match
+	from AllianceAnnouncedClueAfterCompNamesShort M
+);	  
+	  
+-- PLANNED clues  
+create view AlliancePlannedClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'planned' as status,
+  	   M.match as match
+from AllianceClueBetweenCompNamesShort M
+where Or(ContainsDict('alliance/plannedclue.dict', M.betweencontext),
+	  ContainsDict('alliance/plannedclue.dict', M.aftercontext));
+
+	  
+create view AlliancePlannedClueAfterCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'planned' as status,
+  	   M.match as match
+from AllianceClueAfterCompNamesShort M
+where Or(ContainsDict('alliance/plannedclue.dict', M.match),
+	  ContainsDict('alliance/plannedclue.dict', M.aftercontext));	
+	  
+
+create view AlliancePlannedShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AlliancePlannedClueBetweenCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.status as status, M.match as match
+	from AlliancePlannedClueAfterCompNamesShort M
+);	  
+	  
+	  
+-- POSTPONED clues  
+create view AlliancePostponedClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'postponed' as status,
+  	   M.match as match
+from AllianceClueBetweenCompNamesShort M
+where Or(ContainsDict('alliance/postponedclue.dict', M.betweencontext),
+	  ContainsDict('alliance/postponedclue.dict', M.aftercontext));
+
+	  
+create view AlliancePostponedClueAfterCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'postponed' as status,
+  	   M.match as match
+from AllianceClueAfterCompNamesShort M
+where Or(ContainsDict('alliance/postponedclue.dict', M.betweencontext),
+	  ContainsDict('alliance/postponedclue.dict', M.aftercontext));
+	  
+
+create view AlliancePostponedShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AlliancePostponedClueBetweenCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.status as status, M.match as match
+	from AlliancePostponedClueAfterCompNamesShort M
+);	  
+	  
+	  
+-- UPDATED clues  
+create view AllianceUpdatedClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'updated' as status,
+  	   M.match as match
+from AllianceClueBetweenCompNamesShort M
+where Or(ContainsDict('alliance/updatedclue.dict', M.betweencontext),
+	  ContainsDict('alliance/updatedclue.dict', M.aftercontext));
+
+	  
+create view AllianceUpdatedClueAfterCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'updated' as status,
+  	   M.match as match
+from AllianceClueAfterCompNamesShort M
+where Or(ContainsDict('alliance/updatedclue.dict', M.match),
+	  ContainsDict('alliance/updatedclue.dict', M.aftercontext)); 
+	  
+
+create view AllianceUpdatedShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AllianceUpdatedClueBetweenCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.status as status, M.match as match
+	from AllianceUpdatedClueAfterCompNamesShort M
+);	
+
+
+-- RUMORED clues  
+create view AllianceRumoredClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'rumored' as status,
+  	   M.match as match
+from AllianceClueBetweenCompNamesShort M
+where Or(ContainsDict('alliance/rumoredclue.dict', M.betweencontext),
+	  ContainsDict('alliance/rumoredclue.dict', M.aftercontext));
+
+	  
+create view AllianceRumoredClueAfterCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'rumored' as status,
+  	   M.match as match
+from AllianceClueAfterCompNamesShort M
+where Or(ContainsDict('alliance/rumoredclue.dict', M.match),
+	  ContainsDict('alliance/rumoredclue.dict', M.aftercontext)); 
+	  
+
+create view AllianceRumoredShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AllianceRumoredClueBetweenCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.status as status, M.match as match
+	from AllianceRumoredClueAfterCompNamesShort M
+);
+
+
+
+--Alliances with known status
+
+create view AllianceKnownStatusShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AllianceCancelledShort M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AllianceAnnouncedShort M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AlliancePlannedShort M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AlliancePostponedShort M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AllianceUpdatedShort M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AllianceRumoredShort M
+);
+
+
+--all alliances with no status info
+create view AllianceAllShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.match as match
+	from AllianceClueBetweenCompNamesShort M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.match as match
+	from AllianceClueAfterCompNamesShort M
+);
+
+
+-- Alliances with unknown status
+create view AllianceUnknownStatusShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	   	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		   M.match as match
+	from AllianceAllShort M
+)
+minus
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		   M.match as match
+	from AllianceKnownStatusShort M
+);  
+
+
+
+--all alliances with status info
+create view AllianceWithStatusShortAll as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	   M.status as status, M.match as match
+from
+(
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.status as status, M.match as match
+		from AllianceKnownStatusShort M
+	)
+	union all
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   '' as status, M.match as match
+		from AllianceUnknownStatusShort M
+	)
+) M
+order by GetBegin(M.match);
+
+--find partially overlapping matches
+create view AllianceWithStatusShortWithPartialOverlapTemp as
+select A1.exchange1 as exchange1_A1, A1.ticker1 as ticker1_A1, A1.company1 as company1_A1, 
+	   A1.exchange2 as exchange2_A1, A1.ticker2 as ticker2_A1, A1.company2 as company2_A1,
+	   A1.exchange3 as exchange3_A1, A1.ticker3 as ticker3_A1, A1.company3 as company3_A1,
+	   A1.status as status_A1, A1.match as match_A1,
+	   A2.exchange1 as exchange1_A2, A2.ticker1 as ticker1_A2, A2.company1 as company1_A2, 
+	   A2.exchange2 as exchange2_A2, A2.ticker2 as ticker2_A2, A2.company2 as company2_A2,
+	   A2.exchange3 as exchange3_A2, A2.ticker3 as ticker3_A2, A2.company3 as company3_A2,
+	   A2.status as status_A2, A2.match as match_A2
+from AllianceWithStatusShortAll A1, AllianceWithStatusShortAll A2
+where Overlaps(A1.match, A2.match) and
+	  Not(Contains(A1.match, A2.match)) and
+	  Not(Contains(A2.match, A1.match));
+	  
+
+create view AllianceWithStatusShortWithPartialOverlap as
+(
+select A.exchange1_A1 as exchange1, A.ticker1_A1 as ticker1, A.company1_A1 as company1, 
+	   A.exchange2_A1 as exchange2, A.ticker2_A1 as ticker2, A.company2_A1 as company2,
+	   A.exchange3_A1 as exchange3, A.ticker3_A1 as ticker3, A.company3_A1 as company3,
+	   A.status_A1 as status, A.match_A1 as match
+from AllianceWithStatusShortWithPartialOverlapTemp A
+)
+union all
+(
+select A.exchange1_A2 as exchange1, A.ticker1_A2 as ticker1, A.company1_A2 as company1, 
+	   A.exchange2_A2 as exchange2, A.ticker2_A2 as ticker2, A.company2_A2 as company2,
+	   A.exchange3_A2 as exchange3, A.ticker3_A2 as ticker3, A.company3_A2 as company3,
+	   A.status_A2 as status, A.match_A2 as match
+from AllianceWithStatusShortWithPartialOverlapTemp A
+);
+
+
+--remove partially overlapping matches
+create view AllianceWithStatusShort as
+select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+	   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+	   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+	   A.status as status, A.match as match
+from
+(
+	(
+	select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+		   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+		   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+		   A.status as status, A.match as match
+	from AllianceWithStatusShortAll A
+	)
+	minus
+	(
+	select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+		   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+		   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+		   A.status as status, A.match as match
+	from AllianceWithStatusShortWithPartialOverlap A
+	) 
+) A
+consolidate on A.match;
+
+
+create view ShortTextWithAlliance as
+select T.match as match
+from ShortText T, AllianceWithStatusShort A
+where Contains(T.match, A.match);
+
+create view AllianceMissedShort as
+( select T.match as match from ShortText T, AllianceClueAll J where Contains(T.match, J.clue) )
+minus
+( select T.match as match from ShortTextWithAlliance T );
+
+
+
+-- ================General ALLIANCE rules for the body of text =========================
+
+ 
+ 
+-- Match statements of the form "X forms alliance with Y"
+
+ 
+create view AllianceClueBetween2CompNamesLongInitial as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 SpanBetween(C1.match, C2.match) as betweencontext,
+  		 RightContext(C2.match, 50) as aftercontext,
+  		 CombineSpans(C1.match, C2.match) as match
+  from CompanyInfoLong C1, CompanyInfoLong C2, AllianceClueBetween M
+  where FollowsTok(C1.match, M.clue, 0, 20) and
+  	    FollowsTok(M.clue, C2.match, 0, 4) and
+  	    --Not(Equals(GetText(C1.companyname), GetText(C2.companyname))) and
+  	    Not(ContainsText(C1.companyname, C2.companyname)) and Not(ContainsText(C2.companyname, C1.companyname)) and
+  	    Not(Contains(C1.match, M.clue)) and Not(Contains(C2.match, M.clue));
+  	    
+-- make sure the match is within the same sentence
+create view AllianceClueBetween2CompNamesLongTemp as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   '' as exchange3, '' as ticker3, '' as company3,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, S.match) as aftercontext,
+  	   M.match as match
+from AllianceClueBetween2CompNamesLongInitial M, LongText S
+where Contains(S.match, M.match);
+
+
+-- make sure the context does not contain a 3rd company name
+create view AllianceClueBetween2CompNamesLongBadMatch as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.betweencontext as betweencontext, 
+  	   M.aftercontext as aftercontext,
+  	   M.match as match
+from AllianceClueBetween2CompNamesLongTemp M, CompanyInfoLong C
+where Contains(M.betweencontext, C.match);
+
+--discard the bad matches
+create view AllianceClueBetween2CompNamesLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from AllianceClueBetween2CompNamesLongTemp M
+)
+minus
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from AllianceClueBetween2CompNamesLongBadMatch M
+);
+
+
+-- Match statements of the form "X forms alliance with Y and Z"
+create view AllianceClueBetween3CompNamesLongInitial as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 C3.exchange as exchange3, C3.ticker as ticker3, C3.companyname as company3,
+  		 SpanBetween(C1.match, C2.match) as betweencontext,
+  		 RightContext(C3.match, 50) as aftercontext,
+  		 CombineSpans(C1.match, C3.match) as match
+  from CompanyInfoLong C1, CompanyInfoLong C2, CompanyInfoLong C3, AllianceClueBetween M
+  where FollowsTok(C1.match, M.clue, 0, 20) and
+  	    FollowsTok(M.clue, C2.match, 0, 4) and
+  	    FollowsTok(C2.match, C3.match, 1, 3) and
+  	    --Not(Equals(GetText(C1.companyname), GetText(C2.companyname))) and
+  	    --Not(Equals(GetText(C2.companyname), GetText(C3.companyname))) and
+  	    --Not(Equals(GetText(C1.companyname), GetText(C3.companyname))) and
+  	    Not(ContainsText(C1.companyname, C2.companyname)) and Not(ContainsText(C2.companyname, C1.companyname)) and
+  	    Not(ContainsText(C2.companyname, C3.companyname)) and Not(ContainsText(C3.companyname, C2.companyname)) and
+  	    Not(ContainsText(C1.companyname, C3.companyname)) and Not(ContainsText(C3.companyname, C1.companyname));
+  	    
+-- make sure the match is within the same announcement
+create view AllianceClueBetween3CompNamesLongTemp as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, A.match) as aftercontext,
+  	   M.match as match
+from AllianceClueBetween3CompNamesLongInitial  M, LongText A
+where Contains(A.match, M.match);
+
+create view AllianceClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	   M.betweencontext as betweencontext, 
+	   M.aftercontext as aftercontext,
+	   M.match as match
+from
+(
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,		  
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.betweencontext as betweencontext, 
+		  	   M.aftercontext as aftercontext,
+		  	   M.match as match
+		from AllianceClueBetween3CompNamesLongTemp M
+	)
+	union all
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   '' as exchange3, '' as ticker3, '' as company3,
+		  	   M.betweencontext as betweencontext, 
+		  	   M.aftercontext as aftercontext,
+		  	   M.match as match
+		from AllianceClueBetween2CompNamesLong M
+	) 
+) M
+consolidate on M.match;
+
+
+    
+-- Match statements of the form "X and Y alliance"
+
+  
+create view AllianceClueAfterCompNamesLongInitial as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 SpanBetween(C1.match, C2.match) as intercompanycontext,
+  		 SpanBetween(C2.match, M.clue) as betweencontext,
+  		 RightContext(M.clue, 50) as aftercontext,
+  		 CombineSpans(C1.match, M.clue) as match
+  from CompanyInfoLong C1, CompanyInfoLong C2, AllianceClueAfter M
+  where FollowsTok(C1.match, C2.match, 1, 20) and
+  	    FollowsTok(C2.match, M.clue, 0, 20) and
+  	    --Not(Equals(GetText(C1.companyname), GetText(C2.companyname))) and
+  	    Not(ContainsText(C1.companyname, C2.companyname)) and Not(ContainsText(C2.companyname, C1.companyname)) and
+  	    Not(Contains(C1.match, M.clue)) and Not(Contains(C2.match, M.clue));
+  	    
+-- make sure the match is within the same sentence
+create view AllianceClueAfterCompNamesLongTemp as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   '' as exchange3, '' as ticker3, '' as company3,
+  	   M.intercompanycontext as intercompanycontext,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, S.match) as aftercontext,
+  	   M.match as match
+from AllianceClueAfterCompNamesLongInitial M, LongText S
+where Contains(S.match, M.match);
+
+
+
+-- make sure the context does not contain a 3rd company name
+create view AllianceClueAfterCompNamesLongBadMatch as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   M.betweencontext as betweencontext, 
+  	   M.aftercontext as aftercontext,
+  	   M.match as match
+from AllianceClueAfterCompNamesLongTemp M, CompanyInfoLong C
+where Or( Contains(M.betweencontext, C.match),
+          Contains(M.intercompanycontext, C.match) 
+         );
+
+--discard the bad matches
+create view AllianceClueAfterCompNamesLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from AllianceClueAfterCompNamesLongTemp M
+)
+minus
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from AllianceClueAfterCompNamesLongBadMatch M
+);
+
+
+-- Match statements of the form "alliance of X and Y"
+
+
+
+
+-- rule for alliance between 2 companies
+create view AllianceClueBefore2CompNamesTmp as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 LeftContext(M.clue, 50) as beforecontext,
+  		 SpanBetween(M.clue, C2.match) as betweencontext,
+  		 RightContext(C2.match, 70) as aftercontext,
+  		 CombineSpans(M.clue, C2.match) as match
+  from CompanyInfoLong C1, CompanyInfoLong C2, AllianceClueBefore M
+  where FollowsTok(M.clue, C1.match, 0, 10) and
+  	    FollowsTok(C1.match, C2.match, 0, 5) and
+  	    --Not(Equals(GetText(C1.companyname), GetText(C2.companyname))) and
+  	    Not(ContainsText(C1.companyname, C2.companyname)) and Not(ContainsText(C2.companyname, C1.companyname)) and
+  	    Not(Contains(C1.match, M.clue)) and Not(Contains(C2.match, M.clue));
+  	    
+-- make sure the match is within the same sentence
+create view AllianceClueBefore2CompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   '' as exchange3, '' as ticker3, '' as company3,
+  	   SpanIntersection(M.beforecontext, S.match) as beforecontext,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, S.match) as aftercontext,
+  	   M.match as match
+from AllianceClueBefore2CompNamesTmp M, LongText S
+where Contains(S.match, M.match);
+
+-- rule for alliance between 3 companies
+create view AllianceClueBefore3CompNamesTmp as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 C3.exchange as exchange3, C3.ticker as ticker3, C3.companyname as company3,
+  		 LeftContext(M.clue, 50) as beforecontext,
+  		 SpanBetween(M.clue, C3.match) as betweencontext,
+  		 RightContext(C3.match, 70) as aftercontext,
+  		 CombineSpans(M.clue, C3.match) as match
+  from CompanyInfoLong C1, CompanyInfoLong C2, CompanyInfoLong C3, AllianceClueBefore M
+  where FollowsTok(M.clue, C1.match, 0, 10) and
+  	    FollowsTok(C1.match, C2.match, 0, 5) and
+  	    FollowsTok(C2.match, C3.match, 0, 5) and
+  	    Not(Equals(GetText(C1.companyname), GetText(C2.companyname))) and
+  	    Not(Equals(GetText(C2.companyname), GetText(C3.companyname))) and
+  	    Not(Equals(GetText(C1.companyname), GetText(C3.companyname))) and
+  	    Not(Contains(C1.match, M.clue)) and Not(Contains(C2.match, M.clue)) and Not(Contains(C3.match, M.clue));
+  	    
+-- make sure the match is within the same sentence
+create view AllianceClueBefore3CompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   SpanIntersection(M.beforecontext, S.match) as beforecontext,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, S.match) as aftercontext,
+  	   M.match as match
+from AllianceClueBefore3CompNamesTmp M, LongText S
+where Contains(S.match, M.match);
+
+--consolidate the matches for 2 and 3 companies
+create view AllianceClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	   M.beforecontext as beforecontext,
+	   M.betweencontext as betweencontext, 
+	   M.aftercontext as aftercontext,
+	   M.match as match
+from
+(
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.beforecontext as beforecontext,
+		  	   M.betweencontext as betweencontext, 
+		  	   M.aftercontext as aftercontext,
+		  	   M.match as match
+		from AllianceClueBefore3CompNamesLong M
+	)
+	union all
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.beforecontext as beforecontext,
+		  	   M.betweencontext as betweencontext, 
+		  	   M.aftercontext as aftercontext,
+		  	   M.match as match
+		from AllianceClueBefore2CompNamesLong M
+	)
+) M
+consolidate on M.match;
+
+
+-- CANCELLED clues
+create view AllianceCancelledClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'cancelled' as status,
+  	   M.match as match
+from AllianceClueBetweenCompNamesLong M
+where Or(ContainsDict('alliance/cancelledclue.dict', M.betweencontext),
+	  ContainsDict('alliance/cancelledclue.dict', M.aftercontext));
+
+	  
+create view AllianceCancelledClueAfterCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'cancelled' as status,
+  	   M.match as match
+from AllianceClueAfterCompNamesLong M
+where Or(ContainsDict('alliance/cancelledclue.dict', M.betweencontext),
+	  ContainsDict('alliance/cancelledclue.dict', M.aftercontext));
+	  
+	  
+create view AllianceCancelledClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'cancelled' as status,
+  	   M.match as match
+from AllianceClueBeforeCompNamesLong M
+where Or(ContainsDict('alliance/cancelledclue.dict', M.betweencontext),
+	     ContainsDict('alliance/cancelledclue.dict', M.aftercontext),
+	     ContainsDict('alliance/cancelledclue.dict', M.beforecontext));
+	  
+create view AllianceCancelledLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AllianceCancelledClueBetweenCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AllianceCancelledClueAfterCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AllianceCancelledClueBeforeCompNamesLong M
+);
+
+	  
+-- ANNOUNCED clues  
+create view AllianceAnnouncedClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'announced' as status,
+  	   M.match as match
+from AllianceClueBetweenCompNamesLong M
+where Or(ContainsDict('alliance/announcedclue.dict', M.betweencontext),
+	  ContainsDict('alliance/announcedclue.dict', M.aftercontext));
+
+	  
+create view AllianceAnnouncedClueAfterCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'announced' as status,
+  	   M.match as match
+from AllianceClueAfterCompNamesLong M
+where Or(ContainsDict('alliance/announcedclue.dict', M.match),
+	  ContainsDict('alliance/announcedclue.dict', M.aftercontext));
+	  
+
+create view AllianceAnnouncedClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'announced' as status,
+  	   M.match as match
+from AllianceClueBeforeCompNamesLong M
+where Or(ContainsDict('alliance/announcedclue.dict', M.betweencontext),
+	     ContainsDict('alliance/announcedclue.dict', M.aftercontext),
+	     ContainsDict('alliance/announcedclue.dict', M.beforecontext));	  
+
+	  
+create view AllianceAnnouncedLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	       M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AllianceAnnouncedClueBetweenCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	       M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AllianceAnnouncedClueAfterCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AllianceAnnouncedClueBeforeCompNamesLong M
+);	  
+	  
+-- PLANNED clues  
+create view AlliancePlannedClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'planned' as status,
+  	   M.match as match
+from AllianceClueBetweenCompNamesLong M
+where Or(ContainsDict('alliance/plannedclue.dict', M.betweencontext),
+	  ContainsDict('alliance/plannedclue.dict', M.aftercontext));
+
+	  
+create view AlliancePlannedClueAfterCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'planned' as status,
+  	   M.match as match
+from AllianceClueAfterCompNamesLong M
+where Or(ContainsDict('alliance/plannedclue.dict', M.match),
+	  ContainsDict('alliance/plannedclue.dict', M.aftercontext));	
+
+	  
+create view AlliancePlannedClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'planned' as status,
+  	   M.match as match
+from AllianceClueBeforeCompNamesLong M
+where Or(ContainsDict('alliance/plannedclue.dict', M.betweencontext),
+	     ContainsDict('alliance/plannedclue.dict', M.aftercontext),
+	     ContainsDict('alliance/plannedclue.dict', M.beforecontext));	 
+	     
+
+create view AlliancePlannedLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AlliancePlannedClueBetweenCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AlliancePlannedClueAfterCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AlliancePlannedClueBeforeCompNamesLong M
+);	  
+	  
+	  
+-- POSTPONED clues  
+create view AlliancePostponedClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'postponed' as status,
+  	   M.match as match
+from AllianceClueBetweenCompNamesLong M
+where Or(ContainsDict('alliance/postponedclue.dict', M.betweencontext),
+	  ContainsDict('alliance/postponedclue.dict', M.aftercontext));
+
+	  
+create view AlliancePostponedClueAfterCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'postponed' as status,
+  	   M.match as match
+from AllianceClueAfterCompNamesLong M
+where Or(ContainsDict('alliance/postponedclue.dict', M.betweencontext),
+	  ContainsDict('alliance/postponedclue.dict', M.aftercontext));
+	  
+	  
+create view AlliancePostponedClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'postponed' as status,
+  	   M.match as match
+from AllianceClueBeforeCompNamesLong M
+where Or(ContainsDict('alliance/postponedclue.dict', M.betweencontext),
+	     ContainsDict('alliance/postponedclue.dict', M.aftercontext),
+	     ContainsDict('alliance/postponedclue.dict', M.beforecontext));	
+	  
+
+create view AlliancePostponedLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AlliancePostponedClueBetweenCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AlliancePostponedClueAfterCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AlliancePostponedClueBeforeCompNamesLong M
+);	  
+	  
+	  
+-- UPDATED clues  
+create view AllianceUpdatedClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'updated' as status,
+  	   M.match as match
+from AllianceClueBetweenCompNamesLong M
+where Or(ContainsDict('alliance/updatedclue.dict', M.betweencontext),
+	  ContainsDict('alliance/updatedclue.dict', M.aftercontext));
+
+	  
+create view AllianceUpdatedClueAfterCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'updated' as status,
+  	   M.match as match
+from AllianceClueAfterCompNamesLong M
+where Or(ContainsDict('alliance/updatedclue.dict', M.match),
+	  ContainsDict('alliance/updatedclue.dict', M.aftercontext)); 
+	  
+
+create view AllianceUpdatedClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'updated' as status,
+  	   M.match as match
+from AllianceClueBeforeCompNamesLong M
+where Or(ContainsDict('alliance/updatedclue.dict', M.betweencontext),
+	     ContainsDict('alliance/updatedclue.dict', M.aftercontext),
+	     ContainsDict('alliance/updatedclue.dict', M.beforecontext));		  
+	  
+	  
+create view AllianceUpdatedLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AllianceUpdatedClueBetweenCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AllianceUpdatedClueAfterCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AllianceUpdatedClueBeforeCompNamesLong M
+);		  
+
+
+-- Rumored clues  
+create view AllianceRumoredClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'rumored' as status,
+  	   M.match as match
+from AllianceClueBetweenCompNamesLong M
+where Or(ContainsDict('alliance/rumoredclue.dict', M.betweencontext),
+	  ContainsDict('alliance/rumoredclue.dict', M.aftercontext));
+
+	  
+create view AllianceRumoredClueAfterCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'rumored' as status,
+  	   M.match as match
+from AllianceClueAfterCompNamesLong M
+where Or(ContainsDict('alliance/rumoredclue.dict', M.match),
+	  ContainsDict('alliance/rumoredclue.dict', M.aftercontext)); 
+	  
+
+create view AllianceRumoredClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'rumored' as status,
+  	   M.match as match
+from AllianceClueBeforeCompNamesLong M
+where Or(ContainsDict('alliance/rumoredclue.dict', M.betweencontext),
+	     ContainsDict('alliance/rumoredclue.dict', M.aftercontext),
+	     ContainsDict('alliance/rumoredclue.dict', M.beforecontext));		  
+	  
+	  
+create view AllianceRumoredLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AllianceRumoredClueBetweenCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AllianceRumoredClueAfterCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AllianceRumoredClueBeforeCompNamesLong M
+);
+
+
+--Alliances with known status
+
+create view AllianceKnownStatusLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AllianceCancelledLong M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AllianceAnnouncedLong M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AlliancePlannedLong M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AlliancePostponedLong M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AllianceUpdatedLong M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from AllianceRumoredLong M
+);
+
+
+--all alliances with no status info
+create view AllianceAllLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.match as match
+from
+(
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.match as match
+		from AllianceClueBetweenCompNamesLong M
+	)
+	union all
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.match as match
+		from AllianceClueAfterCompNamesLong M
+	)
+	union all
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.match as match
+		from AllianceClueBeforeCompNamesLong M
+	)
+) M
+consolidate on M.match;
+
+
+-- Alliances with unknown status
+create view AllianceUnknownStatusLong as
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		   	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+			   M.match as match
+		from AllianceAllLong M
+	)
+	minus
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+			   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+			   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+			   M.match as match
+		from AllianceKnownStatusLong M
+	);  
+
+
+
+--all alliances with status info
+create view AllianceWithStatusLongAll as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+from
+(
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.status as status, M.match as match
+		from AllianceKnownStatusLong M
+	)
+	union all
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   '' as status, M.match as match
+		from AllianceUnknownStatusLong M
+	)
+) M
+--consolidate on M.match
+order by GetBegin(M.match);
+
+
+--find partially overlapping matches
+create view AllianceWithStatusLongWithPartialOverlapTemp as
+select A1.exchange1 as exchange1_A1, A1.ticker1 as ticker1_A1, A1.company1 as company1_A1, 
+	   A1.exchange2 as exchange2_A1, A1.ticker2 as ticker2_A1, A1.company2 as company2_A1,
+	   A1.exchange3 as exchange3_A1, A1.ticker3 as ticker3_A1, A1.company3 as company3_A1,
+	   A1.status as status_A1, A1.match as match_A1,
+	   A2.exchange1 as exchange1_A2, A2.ticker1 as ticker1_A2, A2.company1 as company1_A2, 
+	   A2.exchange2 as exchange2_A2, A2.ticker2 as ticker2_A2, A2.company2 as company2_A2,
+	   A2.exchange3 as exchange3_A2, A2.ticker3 as ticker3_A2, A2.company3 as company3_A2,
+	   A2.status as status_A2, A2.match as match_A2
+from AllianceWithStatusLongAll A1, AllianceWithStatusLongAll A2
+where Overlaps(A1.match, A2.match) and
+	  Not(Contains(A1.match, A2.match)) and
+	  Not(Contains(A2.match, A1.match));
+	  
+
+create view AllianceWithStatusLongWithPartialOverlap as
+(
+select A.exchange1_A1 as exchange1, A.ticker1_A1 as ticker1, A.company1_A1 as company1, 
+	   A.exchange2_A1 as exchange2, A.ticker2_A1 as ticker2, A.company2_A1 as company2,
+	   A.exchange3_A1 as exchange3, A.ticker3_A1 as ticker3, A.company3_A1 as company3,
+	   A.status_A1 as status, A.match_A1 as match
+from AllianceWithStatusLongWithPartialOverlapTemp A
+)
+union all
+(
+select A.exchange1_A2 as exchange1, A.ticker1_A2 as ticker1, A.company1_A2 as company1, 
+	   A.exchange2_A2 as exchange2, A.ticker2_A2 as ticker2, A.company2_A2 as company2,
+	   A.exchange3_A2 as exchange3, A.ticker3_A2 as ticker3, A.company3_A2 as company3,
+	   A.status_A2 as status, A.match_A2 as match
+from AllianceWithStatusLongWithPartialOverlapTemp A
+);
+
+
+-- find matches containing a ';' and remove them if the sentence is part of a bigger paragraph 
+create view AllianceWithStatusLongWithSemiColumn as
+select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+	  	   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+	  	   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+	  	   A.status as status, A.match as match
+from AllianceWithStatusLongAll A, ParagraphSentence S
+where Contains(S.match, A.match) and
+      ContainsRegex(/;/, A.match);
+      
+      
+--find matches containing a person name
+create view AllianceWithStatusLongOverlapPerson as
+select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+	  	   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+	  	   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+	  	   A.status as status, A.match as match
+from AllianceWithStatusLongAll A, Person_ P
+where Contains(A.match, P.reference) and
+      Not(Overlaps(CombineSpans(A.company1, A.ticker1),P.reference)) and
+      Not(Overlaps(CombineSpans(A.company2, A.ticker2),P.reference)) and
+      Not(Overlaps(CombineSpans(A.company3, A.ticker3),P.reference));
+
+--find matches overlapping with address
+create view AllianceWithStatusLongOverlapAddress as
+select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+	  	   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+	  	   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+	  	   A.status as status, A.match as match
+from AllianceWithStatusLongAll A, AddressFinal P
+where Overlaps(A.match, P.reference);
+
+
+--remove partially overlapping matches and ';'
+create view AllianceWithStatusLong as
+select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+	   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+	   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+	   A.status as status, A.match as match
+from
+(
+	(
+	select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+		   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+		   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+		   A.status as status, A.match as match
+	from AllianceWithStatusLongAll A
+	)
+	minus
+	(
+		(
+			select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+				   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+				   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+				   A.status as status, A.match as match
+			from AllianceWithStatusLongWithPartialOverlap A
+		)
+		union all
+		(
+			select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+				   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+				   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+				   A.status as status, A.match as match
+			from AllianceWithStatusLongWithSemiColumn A
+		)
+		union all
+		(
+			select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+				   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+				   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+				   A.status as status, A.match as match
+			from AllianceWithStatusLongOverlapPerson A
+		)
+		union all
+		(
+			select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+				   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+				   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+				   A.status as status, A.match as match
+			from AllianceWithStatusLongOverlapAddress A
+		)
+	)
+) A
+consolidate on A.match;
+
+
+create view LongTextWithAlliance as
+select T.match as match
+from LongText T, AllianceWithStatusLong A
+where Contains(T.match, A.match);
+
+create view AllianceMissedLong as
+( select T.match as match from LongText T, AllianceClueAll J where Contains(T.match, J.clue))
+minus
+( select T.match as match from LongTextWithAlliance T );
+
+
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Output section <<<<<<<<<<<<<<<<
+-- ===========================================================================		
+
+/*
+
+output view AllianceClueBetween;
+output view AllianceClueAfter;
+output view AllianceClueBefore;
+output view AllianceClueAll;
+
+output view AllianceClueBetween2CompNames;
+output view AllianceClueBetween2CompNamesShortTemp;
+output view AllianceClueBetween2CompNamesShortBadMatch;
+output view AllianceClueBetween2CompNamesShort;
+output view AllianceClueBetween3CompNames;
+output view AllianceClueBetween3CompNamesShortTemp;
+output view AllianceClueBetweenCompNamesShort;
+
+output view AllianceClueAfterCompNamesShort;
+output view AllianceClueAfterCompNamesShortBadMatch;
+
+output view AllianceCancelledClueBetweenCompNamesShort;
+output view AllianceCancelledClueAfterCompNamesShort;
+output view AllianceAnnouncedClueBetweenCompNamesShort;
+output view AllianceAnnouncedClueAfterCompNamesShort;
+output view AlliancePlannedClueBetweenCompNamesShort;
+output view AlliancePlannedClueAfterCompNamesShort;
+output view AlliancePostponedClueBetweenCompNamesShort;
+output view AlliancePostponedClueAfterCompNamesShort;
+output view AllianceUpdatedClueBetweenCompNamesShort;
+output view AllianceUpdatedClueAfterCompNamesShort;
+output view AllianceRumoredClueBetweenCompNamesShort;
+output view AllianceRumoredClueAfterCompNamesShort;
+
+
+output view AllianceAllShort;
+output view AllianceKnownStatusShort;
+output view AllianceUnknownStatusShort;
+output view AllianceWithStatusShortAll;
+output view AllianceWithStatusShortWithPartialOverlapTemp;
+output view AllianceWithStatusShortWithPartialOverlap;
+output view AllianceWithStatusShort;
+output view AllianceMissedShort;
+
+
+
+
+
+output view AllianceClueBetween2CompNamesLongInitial;
+output view AllianceClueBetween2CompNamesLongTemp;
+output view AllianceClueBetween2CompNamesLongBadMatch;
+output view AllianceClueBetween2CompNamesLong;
+output view AllianceClueBetween3CompNamesLongInitial;
+output view AllianceClueBetween3CompNamesLongTemp;
+output view AllianceClueBetweenCompNamesLong;
+
+output view AllianceClueAfterCompNamesLongInitial;
+output view AllianceClueAfterCompNamesLongTemp;
+output view AllianceClueAfterCompNamesLong;
+
+output view AllianceClueBefore2CompNamesTmp;
+output view AllianceClueBefore2CompNamesLong;
+output view AllianceClueBefore3CompNamesTmp;
+output view AllianceClueBefore3CompNamesLong;
+output view AllianceClueBeforeCompNamesLong;
+
+
+output view AllianceCancelledClueBetweenCompNamesLong;
+output view AllianceCancelledClueAfterCompNamesLong;
+output view AllianceCancelledClueBeforeCompNamesLong;
+output view AllianceAnnouncedClueBetweenCompNamesLong;
+output view AllianceAnnouncedClueAfterCompNamesLong;
+output view AllianceAnnouncedClueBeforeCompNamesLong;
+output view AlliancePlannedClueBetweenCompNamesLong;
+output view AlliancePlannedClueAfterCompNamesLong;
+output view AlliancePlannedClueBeforeCompNamesLong;
+output view AlliancePostponedClueBetweenCompNamesLong;
+output view AlliancePostponedClueAfterCompNamesLong;
+output view AlliancePostponedClueBeforeCompNamesLong;
+output view AllianceUpdatedClueBetweenCompNamesLong;
+output view AllianceUpdatedClueAfterCompNamesLong;
+output view AllianceUpdatedClueBeforeCompNamesLong;
+output view AllianceRumoredClueAfterCompNamesLong;
+output view AllianceRumoredClueBeforeCompNamesLong;
+output view AllianceAllLong;
+output view AllianceKnownStatusLong;
+output view AllianceUnknownStatusLong;
+
+output view AllianceWithStatusLongAll;
+output view AllianceWithStatusLongWithPartialOverlap;
+output view AllianceWithStatusLongOverlapPerson;
+output view AllianceWithStatusLongOverlapAddress;
+output view AllianceWithStatusLong;
+
+output view AllianceMissedLong;
+*/
+
+

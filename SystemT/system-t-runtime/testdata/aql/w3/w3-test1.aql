@@ -1,0 +1,37 @@
+-------------------------------------------------------------------------------
+-- w3-test1.aql
+--
+-- AQL file for investigating patterns of usage for country and language
+-- in titles of ibm.com web-pages
+-------------------------------------------------------------------------------
+
+-- For the test collection, the title is the entire document
+create view FirstTitle as
+select D.text as title
+from Document D;
+
+
+-- Split the title in multiple segments
+create view SplitTitle as
+(
+	extract 
+		E.title as title,
+		split using E.delim on E.title as elem
+	from 
+	(
+		extract
+			T.title as title, 
+			regex /\s*\|\s*|\s*[-:]\s+/ on T.title as delim
+		from FirstTitle T
+	) E
+)
+union all
+(
+	select T.title as title, T.title as elem 
+	from FirstTitle T 
+	where Not(ContainsRegex(/\s*\|\s*|\s*[-:]\s+/, T.title))
+);
+
+
+--output view FirstTitle;
+output view SplitTitle;

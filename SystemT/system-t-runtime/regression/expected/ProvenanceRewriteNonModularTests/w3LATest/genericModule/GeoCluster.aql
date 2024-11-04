@@ -1,0 +1,808 @@
+module genericModule;
+
+
+create function GenerateGeoHash(
+  left_context ScalarList  ,right_context ScalarList  ,separator String)
+return Integer
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UDF!GenerateGeoHash'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create function Negation(
+  hash_value Integer)
+return Integer
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UDF!Negation'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create function CreateList(
+  url_host String  ,path String  ,L ScalarList)
+return ScalarList like L
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UDF!CreateList'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create dictionary "GeoClusterCountryNameDict" from table "GeoNameToRankTable"
+with entries from countryName
+and case insensitive;
+
+create dictionary "GeoClusterCountryCodeDict" from table "GeoCodeToRankTable"
+with entries from countryCode
+and case insensitive;
+
+create view GeoNameToRankTableNormalized as
+  select  toLowerCase(G.countryName) as countryName,
+          G.rank as rank,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as GeoNameToRankTable_____sep_____G____id
+  from  GeoNameToRankTable G;
+
+output view GeoNameToRankTableNormalized;
+
+create view GeoCodeToRankTableNormalized as
+  select  toLowerCase(G.countryCode) as countryCode,
+          G.rank as rank,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as GeoCodeToRankTable_____sep_____G____id
+  from  GeoCodeToRankTable G;
+
+output view GeoCodeToRankTableNormalized;
+
+create view TitleWithOutPunctuations as
+  select  NormalizeWhitespace(ReplacePunctuation(GetString(T.content), ' ')) as title,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as TitleFinal_____sep_____T____id
+  from  TitleFinal T;
+
+output view TitleWithOutPunctuations;
+
+create view TitleWithGeoClueCand as
+  extract T.title as title,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    T.__auto__id as TitleWithOutPunctuations_____sep_____T____id,
+    dictionary 'GeoClusterCountryNameDict'
+    on T.title as geo_clue
+  from TitleWithOutPunctuations T
+  consolidate on geo_clue using 'ContainedWithin';
+
+output view TitleWithGeoClueCand;
+
+create view TitleWithGeoClueTemp as
+  select  T.title as title,
+          T.geo_clue as geo_clue,
+          GetLength(T.geo_clue) as len,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as TitleWithGeoClueCand_____sep_____T____id
+  from  TitleWithGeoClueCand T;
+
+output view TitleWithGeoClueTemp;
+
+create view TitleWithGeoClueSorted as
+  select  Op.len1 as len1,
+          AutoID() as __auto__id
+  from  __Base__TitleWithGeoClueSorted__Temp Op;
+
+output view TitleWithGeoClueSorted;
+
+create view TitleWithGeoClue as
+  select  T.title as title,
+          T.geo_clue as geo_clue,
+          T.len as len,
+          U.len1 as len1,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as TitleWithGeoClueTemp_____sep_____T____id,
+          U.__auto__id as TitleWithGeoClueSorted_____sep_____U____id
+  from  TitleWithGeoClueTemp T,
+        TitleWithGeoClueSorted U
+  where Equals(T.len, U.len1)
+  limit 1;
+
+output view TitleWithGeoClue;
+
+create view TitleWithGeoClueAndContext as
+  select  T.title as title,
+          T.geo_clue as geo_clue,
+          GetString(SpanBetween(LeftContext(T.title, 0), LeftContext(T.geo_clue, 0))) as lc,
+          GetString(SpanBetween(RightContext(T.geo_clue, 0), RightContext(T.title, 0))) as rc,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as TitleWithGeoClue_____sep_____T____id
+  from  TitleWithGeoClue T;
+
+output view TitleWithGeoClueAndContext;
+
+create view TitleWithGeoClueAndContextGrouped as
+  select  Op.lc as lc,
+          Op.rc as rc,
+          Op.geo_clue as geo_clue,
+          AutoID() as __auto__id
+  from  __Base__TitleWithGeoClueAndContextGrouped__Temp Op;
+
+output view TitleWithGeoClueAndContextGrouped;
+
+create view GeoClusterFromTitle as
+  select  GenerateGeoHash(T.lc, T.rc, ' | ') as geo_hash,
+          G.rank as geo_rank,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as TitleWithGeoClueAndContextGrouped_____sep_____T____id,
+          G.__auto__id as GeoNameToRankTableNormalized_____sep_____G____id
+  from  TitleWithGeoClueAndContextGrouped T,
+        GeoNameToRankTableNormalized G
+  where Equals(GetText(T.geo_clue), GetText(G.countryName))
+  limit 1;
+
+output view GeoClusterFromTitle;
+
+create view TitleGeoCluster as
+  select  GT.geo_rank as geo_rank,
+          GT.geo_hash as geo_hash,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          GT.__auto__id as GeoClusterFromTitle_____sep_____GT____id
+  from  GeoClusterFromTitle GT;
+
+output view TitleGeoCluster;
+
+create view TitleWithoutGeoCluster as
+  select  Op.geo_hash as geo_hash,
+          Op.geo_rank as geo_rank,
+          AutoID() as __auto__id
+  from  __Base__TitleWithoutGeoCluster__Temp Op;
+
+output view TitleWithoutGeoCluster;
+
+create view URLForGeoClusterCand as
+  select  G.geo_hash as geo_hash,
+          G.geo_rank as geo_rank,
+          U.proto as proto,
+          U.host as host,
+          U.port as port,
+          U.actualPath as actualPath,
+          U.query as query,
+          U.fragment as fragment,
+          U.url as url,
+          U.urlid as urlid,
+          U.page as page,
+          U.anchortext as anchortext,
+          U.normUrl as normUrl,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          G.__auto__id as TitleWithoutGeoCluster_____sep_____G____id,
+          U.__auto__id as PageURL_____sep_____U____id
+  from  TitleWithoutGeoCluster G,
+        PageURL U
+  where ContainsRegex(/ibm.com\z/, U.host);
+
+output view URLForGeoClusterCand;
+
+create view DedupPathWithOutPunctuations as
+  select  CH._host_1 as _host_1,
+          NormalizeWhitespace(ReplacePunctuation(GetString(DP.deduppath), ' ')) as deduppathNoPunctuation,
+          DP.deduppath as deduppath,
+          DP.urlid as urlid,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          DP.__auto__id as UrlPathHash_____sep_____DP____id,
+          CH.__auto__id as createHostFinal_____sep_____CH____id,
+          S.__auto__id as URLForGeoClusterCand_____sep_____S____id
+  from  UrlPathHash DP,
+        createHostFinal CH,
+        URLForGeoClusterCand S
+  where Equals(DP.page, 1)
+     and Equals(DP.urlid, CH.urlid);
+
+output view DedupPathWithOutPunctuations;
+
+create view DedupPathwithGeoName as
+  select  DP._host_1 as _host_1,
+          DP.deduppathNoPunctuation as deduppathNoPunctuation,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          DP.__auto__id as DedupPathWithOutPunctuations_____sep_____DP____id
+  from  DedupPathWithOutPunctuations DP
+  where ContainsDict('GeoClusterCountryNameDict', DP.deduppathNoPunctuation);
+
+output view DedupPathwithGeoName;
+
+create view DedupPathwithOutGeoName as
+  select  DP._host_1 as _host_1,
+          DP.deduppath as deduppath,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          DP.__auto__id as DedupPathWithOutPunctuations_____sep_____DP____id
+  from  DedupPathWithOutPunctuations DP
+  where Not(ContainsDict('GeoClusterCountryNameDict', DP.deduppathNoPunctuation));
+
+output view DedupPathwithOutGeoName;
+
+create view UrlWithGeoClueCand as
+  extract T._host_1 as url_host,
+    T.deduppathNoPunctuation as deduppathNoPunctuation,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    T.__auto__id as DedupPathwithGeoName_____sep_____T____id,
+    dictionary 'GeoClusterCountryNameDict'
+    on T.deduppathNoPunctuation as geo_clue
+  from DedupPathwithGeoName T
+  consolidate on geo_clue using 'ContainedWithin';
+
+output view UrlWithGeoClueCand;
+
+create view UrlWithGeoClueTemp as
+  select  T.url_host as url_host,
+          T.deduppathNoPunctuation as deduppathNoPunctuation,
+          T.geo_clue as geo_clue,
+          GetLength(T.geo_clue) as len,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as UrlWithGeoClueCand_____sep_____T____id
+  from  UrlWithGeoClueCand T;
+
+output view UrlWithGeoClueTemp;
+
+create view UrlWithGeoClueSorted as
+  select  Op.len1 as len1,
+          AutoID() as __auto__id
+  from  __Base__UrlWithGeoClueSorted__Temp Op;
+
+output view UrlWithGeoClueSorted;
+
+create view UrlWithGeoClue as
+  select  S.url_host as url_host,
+          S.deduppathNoPunctuation as deduppathNoPunctuation,
+          S.geo_clue as geo_clue,
+          S.len as len,
+          U.len1 as len1,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as UrlWithGeoClueTemp_____sep_____S____id,
+          U.__auto__id as UrlWithGeoClueSorted_____sep_____U____id
+  from  UrlWithGeoClueTemp S,
+        UrlWithGeoClueSorted U
+  where Equals(S.len, U.len1)
+  limit 1;
+
+output view UrlWithGeoClue;
+
+create view UrlWithGeoClueAndContext as
+  select  U.url_host as url_host,
+          U.deduppathNoPunctuation as deduppathNoPunctuation,
+          U.geo_clue as geo_clue,
+          GetString(SpanBetween(LeftContext(U.deduppathNoPunctuation, 0), LeftContext(U.geo_clue, 0))) as lc,
+          GetString(SpanBetween(RightContext(U.geo_clue, 0), RightContext(U.deduppathNoPunctuation, 0))) as rc,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as UrlWithGeoClue_____sep_____U____id
+  from  UrlWithGeoClue U;
+
+output view UrlWithGeoClueAndContext;
+
+create view ListForPathAndHost as
+  select  CreateList(GetString(U.url_host), GetString(U.lc), TL.list) as lc,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as UrlWithGeoClueAndContext_____sep_____U____id,
+          TL.__auto__id as TempViewForList_____sep_____TL____id
+  from  UrlWithGeoClueAndContext U,
+        TempViewForList TL;
+
+output view ListForPathAndHost;
+
+create view UrlWithGeoClueAndContextGrouped as
+  select  Op.lc as lc,
+          Op.rc as rc,
+          Op.deduppathNoPunctuation as deduppathNoPunctuation,
+          Op.geo_clue as geo_clue,
+          AutoID() as __auto__id
+  from  __Base__UrlWithGeoClueAndContextGrouped__Temp Op;
+
+output view UrlWithGeoClueAndContextGrouped;
+
+create view GeoClusterFromUrl as
+  select  GenerateGeoHash(U.lc, U.rc, ' | ') as geo_hash,
+          G.rank as geo_rank,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as UrlWithGeoClueAndContextGrouped_____sep_____U____id,
+          G.__auto__id as GeoNameToRankTableNormalized_____sep_____G____id
+  from  UrlWithGeoClueAndContextGrouped U,
+        GeoNameToRankTableNormalized G
+  where Equals(GetText(U.geo_clue), GetText(G.countryName));
+
+output view GeoClusterFromUrl;
+
+create view UrlGeoClusterWithGeo as
+  select  Negation(U.geo_hash) as geo_hash,
+          U.geo_rank as geo_rank,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as GeoClusterFromUrl_____sep_____U____id
+  from  GeoClusterFromUrl U;
+
+output view UrlGeoClusterWithGeo;
+
+create view UrlNullCluster as
+  select  0 as geo_hash,
+          -1 as geo_rank,
+          DP._host_1 as _host_1,
+          DP.deduppath as deduppath,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          DP.__auto__id as DedupPathwithOutGeoName_____sep_____DP____id
+  from  DedupPathwithOutGeoName DP
+  where Not(MatchesRegex(/\/(?:hr|software|data|services|siteserv|tools\/it|tools|assets|gbs|ibm|travel)?(\/.*)?/, DP.deduppath));
+
+output view UrlNullCluster;
+
+create view Remaining as
+  select  Op._host_1 as _host_1,
+          Op.deduppath as deduppath,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__19__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__19__TempOp__1 Op,
+        __Minus__19__Temp __t
+  where Equals(Op._host_1, __t._host_1)
+     and Equals(Op.deduppath, __t.deduppath);
+
+output view Remaining;
+
+create view GlobalClusterPath as
+  extract DP._host_1 as _host_1,
+    DP.deduppath as deduppath,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    DP.__auto__id as Remaining_____sep_____DP____id,
+    regex /\/(?:hr|software|data|services|siteserv|tools\/it|tools|assets|gbs|ibm|travel)?(\/.*)?/
+    with flags 'DOTALL'
+    on DP.deduppath
+    return group 1 as url_path
+  from Remaining DP
+  limit 1;
+
+output view GlobalClusterPath;
+
+create view GlobalCluster as
+  select  0 as geo_hash,
+          0 as geo_rank,
+          DP._host_1 as _host_1,
+          DP.deduppath as deduppath,
+          DP.url_path as url_path,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          DP.__auto__id as GlobalClusterPath_____sep_____DP____id
+  from  GlobalClusterPath DP
+  where Not(NotNull(DP.url_path));
+
+output view GlobalCluster;
+
+create view UrlForSegment as
+  select  Op._host_1 as _host_1,
+          Op.deduppath as deduppath,
+          Op.url_path as url_path,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__20__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__20__TempOp__1 Op,
+        __Minus__20__Temp __t
+  where Equals(Op._host_1, __t._host_1)
+     and Equals(Op.deduppath, __t.deduppath)
+     and Equals(Op.url_path, __t.url_path);
+
+output view UrlForSegment;
+
+create view UrlGeoClusterPath as
+  select  toLowerCase(U.url_path) as url_path,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as UrlForSegment_____sep_____U____id
+  from  UrlForSegment U;
+
+output view UrlGeoClusterPath;
+
+create view UrlSegmentPattern as
+  select  Op.url_path as url_path,
+          Op.segments as segments,
+          AutoID() as __auto__id
+  from  __Base__UrlSegmentPattern__Temp Op;
+
+output view UrlSegmentPattern;
+
+create view UrlGeoClusterCountryCode as
+  select  0 as geo_hash,
+          G.rank as geo_rank,
+          U.url_path as url_path,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as UrlSegmentPattern_____sep_____U____id,
+          G.__auto__id as GeoCodeToRankTableNormalized_____sep_____G____id
+  from  UrlSegmentPattern U,
+        GeoCodeToRankTableNormalized G
+  where Equals(GetText(U.segments), GetText(G.countryCode))
+  limit 1;
+
+output view UrlGeoClusterCountryCode;
+
+create view UrlGeoClusterCountryCodeRemaining as
+  select  Op.url_path as url_path,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__21__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__21__TempOp__1 Op,
+        __Minus__21__Temp __t
+  where Equals(Op.url_path, __t.url_path);
+
+output view UrlGeoClusterCountryCodeRemaining;
+
+create view UrlGeoClusterCountryCodeWithRankZero as
+  select  0 as geo_hash,
+          0 as geo_rank,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          url.__auto__id as UrlGeoClusterCountryCodeRemaining_____sep_____url____id
+  from  UrlGeoClusterCountryCodeRemaining url
+  limit 1;
+
+output view UrlGeoClusterCountryCodeWithRankZero;
+
+create view UrlGeoCluster as
+  (select  Op.geo_rank as geo_rank,
+            Op.geo_hash as geo_hash,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__22__TempOp__0 Op)
+  union all
+  (select  Op.geo_rank as geo_rank,
+            Op.geo_hash as geo_hash,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__22__TempOp__1 Op)
+  union all
+  (select  Op.geo_rank as geo_rank,
+            Op.geo_hash as geo_hash,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__22__TempOp__2 Op)
+  union all
+  (select  Op.geo_rank as geo_rank,
+            Op.geo_hash as geo_hash,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__22__TempOp__3 Op)
+  union all
+  (select  Op.geo_rank as geo_rank,
+            Op.geo_hash as geo_hash,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__22__TempOp__4 Op);
+
+output view UrlGeoCluster;
+
+create view GeoClusterAll as
+  (select  Op.geo_rank as geo_rank,
+            Op.geo_hash as geo_hash,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__23__TempOp__0 Op)
+  union all
+  (select  Op.geo_rank as geo_rank,
+            Op.geo_hash as geo_hash,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__23__TempOp__1 Op);
+
+output view GeoClusterAll;
+
+create view GeoCluster as
+  select  Op.geo_rank as geo_rank,
+          Op.geo_hash as geo_hash,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__24__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__24__TempOp__1 Op,
+        __Minus__24__Temp __t
+  where Equals(Op.geo_rank, __t.geo_rank)
+     and Equals(Op.geo_hash, __t.geo_hash);
+
+output view GeoCluster;
+
+create view __Base__TitleWithGeoClueAndContextGrouped__Temp as
+  select  List(GetString(T.lc)) as lc,
+          List(GetString(T.rc)) as rc,
+          toLowerCase(T.geo_clue) as geo_clue
+  from  TitleWithGeoClueAndContext T
+  group by T.geo_clue;
+
+output view __Base__TitleWithGeoClueAndContextGrouped__Temp;
+
+create view __Base__TitleWithGeoClueSorted__Temp as
+  select  Max(GetLength(T.geo_clue)) as len1
+  from  TitleWithGeoClueCand T;
+
+output view __Base__TitleWithGeoClueSorted__Temp;
+
+create view __Base__TitleWithoutGeoCluster__Temp as
+  select  0 as geo_hash,
+          -1 as geo_rank
+  from  
+    (select  Count(*) as geo_count
+    from  TitleGeoCluster T
+    ) T
+  where Equals(T.geo_count, 0);
+
+output view __Base__TitleWithoutGeoCluster__Temp;
+
+create view __Base__UrlSegmentPattern__Temp as
+  extract B.url_path as url_path,
+    split using B.boundary
+    on B.url_path as segments
+  from 
+(extract DP.url_path as url_path,
+  regex /\//
+  with flags 'DOTALL'
+  on DP.url_path
+  return group 0 as boundary
+from UrlGeoClusterPath DP
+) B;
+
+output view __Base__UrlSegmentPattern__Temp;
+
+create view __Base__UrlWithGeoClueAndContextGrouped__Temp as
+  select  TL.lc as lc,
+          List(GetString(U.rc)) as rc,
+          U.deduppathNoPunctuation as deduppathNoPunctuation,
+          toLowerCase(U.geo_clue) as geo_clue
+  from  UrlWithGeoClueAndContext U,
+        ListForPathAndHost TL
+  group by U.deduppathNoPunctuation, U.geo_clue, TL.lc;
+
+output view __Base__UrlWithGeoClueAndContextGrouped__Temp;
+
+create view __Base__UrlWithGeoClueSorted__Temp as
+  select  Max(GetLength(U.geo_clue)) as len1
+  from  UrlWithGeoClueCand U;
+
+output view __Base__UrlWithGeoClueSorted__Temp;
+
+create view __Minus__19__Temp as
+  select  __t._host_1 as _host_1,
+          __t.deduppath as deduppath
+  from  
+    ((select  Op._host_1 as _host_1,
+              Op.deduppath as deduppath
+      from  __Minus__19__TempOp__1 Op)
+    minus
+    (select  Op._host_1 as _host_1,
+              Op.deduppath as deduppath
+      from  __Minus__19__TempOp__2 Op)
+    ) __t
+  group by __t._host_1, __t.deduppath;
+
+output view __Minus__19__Temp;
+
+create view __Minus__19__TempOp__1 as
+  select  DP._host_1 as _host_1,
+          DP.deduppath as deduppath,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          DP.__auto__id as DedupPathwithOutGeoName_____sep_____DP____id
+  from  DedupPathwithOutGeoName DP;
+
+output view __Minus__19__TempOp__1;
+
+create view __Minus__19__TempOp__2 as
+  select  DP._host_1 as _host_1,
+          DP.deduppath as deduppath,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          DP.__auto__id as UrlNullCluster_____sep_____DP____id
+  from  UrlNullCluster DP;
+
+output view __Minus__19__TempOp__2;
+
+create view __Minus__20__Temp as
+  select  __t._host_1 as _host_1,
+          __t.deduppath as deduppath,
+          __t.url_path as url_path
+  from  
+    ((select  Op._host_1 as _host_1,
+              Op.deduppath as deduppath,
+              Op.url_path as url_path
+      from  __Minus__20__TempOp__1 Op)
+    minus
+    (select  Op._host_1 as _host_1,
+              Op.deduppath as deduppath,
+              Op.url_path as url_path
+      from  __Minus__20__TempOp__2 Op)
+    ) __t
+  group by __t._host_1, __t.deduppath, __t.url_path;
+
+output view __Minus__20__Temp;
+
+create view __Minus__20__TempOp__1 as
+  select  DP._host_1 as _host_1,
+          DP.deduppath as deduppath,
+          DP.url_path as url_path,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          DP.__auto__id as GlobalClusterPath_____sep_____DP____id
+  from  GlobalClusterPath DP;
+
+output view __Minus__20__TempOp__1;
+
+create view __Minus__20__TempOp__2 as
+  select  DP._host_1 as _host_1,
+          DP.deduppath as deduppath,
+          DP.url_path as url_path,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          DP.__auto__id as GlobalCluster_____sep_____DP____id
+  from  GlobalCluster DP;
+
+output view __Minus__20__TempOp__2;
+
+create view __Minus__21__Temp as
+  select  __t.url_path as url_path
+  from  
+    ((select  Op.url_path as url_path
+      from  __Minus__21__TempOp__1 Op)
+    minus
+    (select  Op.url_path as url_path
+      from  __Minus__21__TempOp__2 Op)
+    ) __t
+  group by __t.url_path;
+
+output view __Minus__21__Temp;
+
+create view __Minus__21__TempOp__1 as
+  select  U.url_path as url_path,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as UrlSegmentPattern_____sep_____U____id
+  from  UrlSegmentPattern U;
+
+output view __Minus__21__TempOp__1;
+
+create view __Minus__21__TempOp__2 as
+  select  url.url_path as url_path,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          url.__auto__id as UrlGeoClusterCountryCode_____sep_____url____id
+  from  UrlGeoClusterCountryCode url;
+
+output view __Minus__21__TempOp__2;
+
+create view __Minus__24__Temp as
+  select  __t.geo_rank as geo_rank,
+          __t.geo_hash as geo_hash
+  from  
+    ((select  Op.geo_rank as geo_rank,
+              Op.geo_hash as geo_hash
+      from  __Minus__24__TempOp__1 Op)
+    minus
+    (select  Op.geo_rank as geo_rank,
+              Op.geo_hash as geo_hash
+      from  __Minus__24__TempOp__2 Op)
+    ) __t
+  group by __t.geo_rank, __t.geo_hash;
+
+output view __Minus__24__Temp;
+
+create view __Minus__24__TempOp__1 as
+  select  GeoClusterAll.geo_rank as geo_rank,
+          GeoClusterAll.geo_hash as geo_hash,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          GeoClusterAll.__auto__id as GeoClusterAll_____sep_____GeoClusterAll____id
+  from  GeoClusterAll GeoClusterAll;
+
+output view __Minus__24__TempOp__1;
+
+create view __Minus__24__TempOp__2 as
+  select  G.geo_rank as geo_rank,
+          G.geo_hash as geo_hash,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          G.__auto__id as GeoClusterAll_____sep_____G____id,
+          S.__auto__id as SkipDocument_____sep_____S____id
+  from  GeoClusterAll G,
+        SkipDocument S;
+
+output view __Minus__24__TempOp__2;
+
+create view __Union__22__TempOp__0 as
+  select  U.geo_rank as geo_rank,
+          U.geo_hash as geo_hash,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as UrlGeoClusterWithGeo_____sep_____U____id
+  from  UrlGeoClusterWithGeo U;
+
+output view __Union__22__TempOp__0;
+
+create view __Union__22__TempOp__1 as
+  select  U.geo_rank as geo_rank,
+          U.geo_hash as geo_hash,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as UrlNullCluster_____sep_____U____id
+  from  UrlNullCluster U;
+
+output view __Union__22__TempOp__1;
+
+create view __Union__22__TempOp__2 as
+  select  U.geo_rank as geo_rank,
+          U.geo_hash as geo_hash,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as UrlGeoClusterCountryCode_____sep_____U____id
+  from  UrlGeoClusterCountryCode U;
+
+output view __Union__22__TempOp__2;
+
+create view __Union__22__TempOp__3 as
+  select  U.geo_rank as geo_rank,
+          U.geo_hash as geo_hash,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as GlobalCluster_____sep_____U____id
+  from  GlobalCluster U;
+
+output view __Union__22__TempOp__3;
+
+create view __Union__22__TempOp__4 as
+  select  U.geo_rank as geo_rank,
+          U.geo_hash as geo_hash,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as UrlGeoClusterCountryCodeWithRankZero_____sep_____U____id
+  from  UrlGeoClusterCountryCodeWithRankZero U;
+
+output view __Union__22__TempOp__4;
+
+create view __Union__23__TempOp__0 as
+  select  TitleGeoCluster.geo_rank as geo_rank,
+          TitleGeoCluster.geo_hash as geo_hash,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          TitleGeoCluster.__auto__id as TitleGeoCluster_____sep_____TitleGeoCluster____id
+  from  TitleGeoCluster TitleGeoCluster;
+
+output view __Union__23__TempOp__0;
+
+create view __Union__23__TempOp__1 as
+  select  UrlGeoCluster.geo_rank as geo_rank,
+          UrlGeoCluster.geo_hash as geo_hash,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          UrlGeoCluster.__auto__id as UrlGeoCluster_____sep_____UrlGeoCluster____id
+  from  UrlGeoCluster UrlGeoCluster;
+
+output view __Union__23__TempOp__1;
+

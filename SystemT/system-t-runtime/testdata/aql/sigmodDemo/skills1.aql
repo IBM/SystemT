@@ -1,0 +1,142 @@
+-----------------------------------------------------------------------------
+-- skills.aql
+--
+-- AQL annotator to find information about job skills for programming jobs.
+-----------------------------------------------------------------------------
+
+-- Detag the top-level XML: strip out tags, but retain information 
+-- about selected tags.
+detag Document.text as DetaggedDoc
+	annotate 
+		element 'br' as BR,
+		element 'description' as Description,
+	
+		-- Header items
+		element 'title' as Header_Title,
+		element 'link' as Header_Link,
+		
+		-- Footer items	
+		element 'dc:source' as Footer_Source,
+		element 'dc:title' as Footer_Title;
+		
+-- Group together the header and footer items for filtering purposes.
+create view HeadersAndFooters as
+(select * from Header_Title) union all (select * from Header_Link)
+union all (select * from Footer_Source) union all (select * from Footer_Title);
+
+-----------------------------------------------------------------------------
+-- Define dictionaries
+
+-- Names of skills having to do with software development
+create dictionary SkillsDict from file 'skills.dict';
+create dictionary SkillsDict_ExactCase with case exact as ( 'C', '.NET' );
+
+-- Phrases that, when they come BEFORE a skill, indicate that the applicant
+-- should have the indicated skill. 
+create dictionary ShouldHaveSkillDict_Before 
+from file 'shouldHaveSkill_before.dict';
+
+-- Phrases that, when they come AFTER a skill, indicate that the applicant
+-- should have the indicated skill. 
+create dictionary ShouldHaveSkillDict_After
+from file 'shouldHaveSkill_after.dict';
+
+-- Dictionary of common abbreviations
+create dictionary AbbrevDict from file 'abbreviations.dict' with case exact;
+
+-----------------------------------------------------------------------------
+-- BASIC FEATURES
+
+-- Various skills that an applicant might have
+create view SkillName as
+extract dictionaries 
+		SkillsDict and SkillsDict_ExactCase
+	on D.text as name
+from DetaggedDoc D
+consolidate on name;
+
+-- Phrases that, when they come before a skill, indicate that the applicant
+-- should have the skill.
+create view ShouldHaveSkill_Before as
+extract dictionary ShouldHaveSkillDict_Before on D.text as phrase
+from DetaggedDoc D
+consolidate on phrase;
+
+-- Phrases that, when they come after a skill, indicate that the applicant
+-- should have the skill.
+create view ShouldHaveSkill_After as
+extract dictionary ShouldHaveSkillDict_After on D.text as phrase
+from DetaggedDoc D
+consolidate on phrase;
+
+-----------------------------------------------------------------------------
+-- COMPOSITE FEATURES
+
+-- Phrases like "good understanding of Windows CE" and "knowledge of C++"
+create view NeedSkill1 as
+select S.name as skill, CombineSpans(B.phrase, S.name) as phrase
+from SkillName S, ShouldHaveSkill_Before B
+where FollowsTok(B.phrase, S.name, 0, 15);
+
+-- Phrases like "debugging skills" and "ARM assembly experience"
+create view NeedSkill2 as
+select S.name as skill, CombineSpans(S.name, A.phrase) as phrase
+from SkillName S, ShouldHaveSkill_After A
+where FollowsTok(S.name, A.phrase, 0, 10);
+
+create view NeedSkill_All as
+(select * from NeedSkill1)
+union all (select * from NeedSkill2);
+
+-----------------------------------------------------------------------------
+-- Consolidation and subtraction
+
+-- Identify skill relationships that span lines or sentences.
+-- These are most likely false positives.
+create view NeedSkill_SpansLines as
+select N.*
+from NeedSkill_All N, BR B
+where Contains(N.phrase, B.match);
+
+-- Sentence boundaries that can be identified from the actual text.
+create view SentenceBound as
+extract 
+    regex /(([\.\?!]+\s)|(\n\s*\n))/ on D.text as boundary
+from DetaggedDoc D
+-- Filter the candidate boundaries.
+having Not(ContainsDict('AbbrevDict', 
+           CombineSpans(LeftContextTok(boundary, 1), boundary)));
+
+create view NeedSkill_SpansSentences as
+select N.*
+from NeedSkill_All N, SentenceBound B
+where Contains(N.phrase, B.boundary);
+
+-- Identify skill relationships that were found in header or footer 
+-- sections of the Craigslist posting.
+-- These are most likely false positives.
+create view NeedSkill_InHeaderOrFooter as
+select N.*
+from NeedSkill_All N, HeadersAndFooters H
+where Overlaps(H.match, N.phrase);
+
+create view NeedSkill_FalsePositives as
+(select * from NeedSkill_SpansLines)
+union all (select * from NeedSkill_SpansSentences)
+union all (select * from NeedSkill_InHeaderOrFooter N)
+;
+
+-- Remove false positives to generate the final output type.
+create view NeedSkill_Final as
+(select * from NeedSkill_All) 
+minus
+(select * from NeedSkill_FalsePositives);
+
+-- Filter out duplicates so that MashupHub doesn't have to.
+-- Note that Min() applied to a Span column returns the first Span.
+create view NeedSkill_Dedup as
+select Min(N.skill) as skill, Min(N.phrase) as phrase
+from NeedSkill_Final N
+group by GetText(N.skill);
+
+output view NeedSkill_Dedup;

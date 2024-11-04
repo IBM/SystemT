@@ -1,0 +1,62 @@
+module was;
+
+
+create view Methodname_base as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /[\w-_\$]+/
+    with flags 'DOTALL'
+    on between 1 and 1 tokens in D.text
+    return group 0 as match
+  from Document D;
+
+output view Methodname_base;
+
+create view Methodname_interim as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as Methodname_base_____sep_____C____id
+  from  Methodname_base C
+  where MatchesRegex(/\s/, LeftContext(C.match, 1))
+     and MatchesRegex(/\s/, RightContext(C.match, 1));
+
+output view Methodname_interim;
+
+create view Methodname_ws as
+  select  methodnameI.match as methodname_ws,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          classname_wsF.__auto__id as Classname_ws_____sep_____classname_wsF____id,
+          methodnameI.__auto__id as Methodname_interim_____sep_____methodnameI____id
+  from  Classname_ws classname_wsF,
+        Methodname_interim methodnameI
+  where FollowsTok(classname_wsF.classname_ws, methodnameI.match, 0, 0);
+
+output view Methodname_ws;
+
+create view Methodname_wsOutputInterim as
+  select  D.methodname_ws as methodname_ws_Span,
+          GetText(D.methodname_ws) as methodname_ws_Text,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as Methodname_ws_____sep_____D____id
+  from  Methodname_ws D;
+
+output view Methodname_wsOutputInterim;
+
+create view MethodnameWSOutput as
+  select  D.methodname_ws_Span as span,
+          D.methodname_ws_Text as text,
+          GetString('MethodnameWS') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as Methodname_wsOutputInterim_____sep_____D____id
+  from  Methodname_wsOutputInterim D;
+
+output view MethodnameWSOutput;
+
+export view was.MethodnameWSOutput;
+
+

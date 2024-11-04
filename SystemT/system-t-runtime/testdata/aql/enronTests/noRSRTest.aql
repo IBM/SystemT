@@ -1,0 +1,37 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- noRSRTest.aql
+--
+-- Some regexes that didn't have RSR applied to them, and the RSR-compatible
+-- versions of them.
+-------------------------------------------------------------------------------
+
+
+create view InternetEmailAll as
+    select R.match as match
+    from RegexTok(/([-a-zA-Z0-9!#$%*+'=?^_`{|}~.\x26]+)@([a-zA-Z0-9._-]+[a-zA-Z]{2,4})/, 56, Document.text) R; --'
+
+create view InternetEmailAll2 as
+extract regex /([-a-zA-Z0-9!#$%*+'=?\^_`{|}~.&]+)@([a-zA-Z0-9._-]+[a-zA-Z]{2,4})/ --'
+on between 1 and 56 tokens in D.text as email
+from Document D;
+    
+create view boundaries as 
+  extract regex /\.|\!|\?\"|:|\n\s*|\r\s*|¿|¡|^/ --"
+  on D.text
+  as boundary
+  from Document D;
+  
+create view boundaries2 as 
+  extract regexes 
+  	/\.|\!|\?\"|:|\n\s*|\r\s*|¿|¡/ --"
+  	and /^(?=.)/
+  on D.text
+  as boundary
+  from Document D;
+
+output view InternetEmailAll;
+output view InternetEmailAll2;
+output view boundaries;
+output view boundaries2;

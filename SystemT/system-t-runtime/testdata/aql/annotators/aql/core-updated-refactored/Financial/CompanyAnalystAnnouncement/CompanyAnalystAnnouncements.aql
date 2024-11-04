@@ -1,0 +1,156 @@
+create view CurrencySymbol as
+extract
+	-- Sudarshan regex doubt : 10/13/2011 - can I change the following regex to \p{Sc} ? (currency symbols unicode equivalent)
+  regex /[$\p{InCurrencySymbols}]/
+        on D.text as match
+from Doc D;
+
+create view CurrencySymbolSuffix as
+  --extract dictionary 'companyanalystannouncement/currencysuffix.dict'
+  extract dictionary 'companyanalystannouncement/fin_announce_curr_suffix_en.dict'
+  on D.text as match
+  from Doc D;
+
+create view Number as
+extract
+	-- Sudarshan regex : 10/13/2011 - backreference on line 16
+  regex /\d+(,\d{2,3})*(\.\d+)?/
+        on D.text as match
+from Doc D;
+
+create view CurrencyAmount1 as
+  select CombineSpans(CS.match,N.match) as amount
+  from CurrencySymbol CS, Number N
+  where FollowsTok(CS.match,N.match,0,0);
+
+create view CurrencyAmount2 as
+  select CombineSpans(N.match,CS.match) as amount
+  from CurrencySymbolSuffix CS, Number N
+  where FollowsTok(N.match,CS.match,0,0);
+
+create view CurrencyAmount as
+  (select R.amount as amount from CurrencyAmount1 R)
+  union all
+  (select R.amount as amount from CurrencyAmount2 R);
+  
+create view Denomination as
+  --extract dictionary 'companyanalystannouncement/denomination.dict'
+  extract dictionary 'companyanalystannouncement/fin_announce_curr_denom_en.dict'
+  on D.text as match
+  from Doc D;
+
+create view CurrencyAmountWithDenomination as
+  select CombineSpans(CA.amount,D.match) as amount
+  from CurrencyAmount CA, Denomination D
+  where FollowsTok(CA.amount,D.match,0,1) and MatchesRegex(/\W*/,SpanBetween(CA.amount,D.match));
+
+create view CurrencyAmountOptionalDenominationCandidates as
+  (select R.amount as amount from CurrencyAmount R)
+  union all
+  (select R.amount as amount from CurrencyAmountWithDenomination R);
+
+create view CurrencyAmountOptionalDenomination as
+  select R.amount as amount
+  from CurrencyAmountOptionalDenominationCandidates R
+  consolidate on R.amount;
+
+create view CurrencyAmountRange as
+  select CombineSpans(CA1.amount,CA2.amount) as amountrange
+  from CurrencyAmountOptionalDenomination CA1, CurrencyAmountOptionalDenomination CA2
+  -- Sudarshan regex : 10/13/2011 - backreference on line 59
+  where FollowsTok(CA1.amount, CA2.amount,1,1) and MatchesRegex(/[ ]*(-|to)[ ]*/,SpanBetween(CA1.amount,CA2.amount));
+
+create view CurrencyAmountOptionalRangeCandidates as
+  (select R.amount as amountrange from CurrencyAmountOptionalDenomination R)
+  union all
+  (select R.amountrange as amountrange from CurrencyAmountRange R);
+
+create view CurrencyAmountOptionalRange as
+  select R.amountrange as amountrange
+  from CurrencyAmountOptionalRangeCandidates R
+  consolidate on R.amountrange;
+  
+create view CurrencyAmountOptionalRangePairCandidates as
+  select R1.amountrange as amountrange1, R2.amountrange as amountrange2, CombineSpans(R1.amountrange,R2.amountrange) as amountrange
+  from CurrencyAmountOptionalRangeCandidates R1, CurrencyAmountOptionalRangeCandidates R2 
+  where    FollowsTok(R1.amountrange, R2.amountrange, 0,1) and ContainsRegex(/\bto\b/,SpanBetween(R1.amountrange,R2.amountrange))
+  and ContainsRegex(/\bfrom\b/,LeftContextTok(R1.amountrange,3));
+ 
+create view CurrencyAmountOptionalRangePairAll as
+  (select R.amountrange as amountrange1, '' as amountrange2, R.amountrange as amountrange from CurrencyAmountOptionalRange R)
+  union all
+  (select R.amountrange1 as amountrange1, R.amountrange2 as amountrange2, R.amountrange as amountrange from CurrencyAmountOptionalRangePairCandidates R);
+  
+  create view CurrencyAmountOptionalRangePair as
+  select R.amountrange1 as amountrange1, R.amountrange2 as amountrange2, R.amountrange as amountrange
+  from CurrencyAmountOptionalRangePairAll R
+  consolidate on R.amountrange;
+  
+--  output view CurrencyAmountOptionalRangePair;
+  
+create view FinancialMetric as
+  --extract dictionary 'companyanalystannouncement/financialmetrics.dict'
+  extract dictionary 'companyanalystannouncement/fin_announce_metrics_en.dict'
+  on D.text as metric
+  from Doc D;
+
+create view PeriodPrefix1 as
+  extract
+  	-- Sudarshan regex : 10/13/2011 - backreference on lines 97, 103 and 119
+    regex /(FY\d{2,4})/
+  on D.text as period
+  from Doc D;
+  
+create view PeriodPrefix2 as
+  extract
+    regex /(Q[1-4])/
+  on D.text as period
+  from Doc D;
+
+create view PeriodPrefixAll as
+(select P.period as year, '' as quarter, P.period as period from PeriodPrefix1 P)
+union all
+(select '' as year, P.period as quarter, P.period as period from PeriodPrefix2 P);
+ 
+create view PeriodPrefix as
+select P.year as year, P.quarter as quarter, P.period as period
+from PeriodPrefixAll P
+consolidate on P.period;
+
+create view PeriodSuffix as
+  extract 
+    regex /([Qq]uarter)|([Yy]ear)/
+  on D.text as period
+  from Doc D;
+
+create view FinancialMetricWithPeriod1 as
+  select P.year as year, P.quarter as quarter, P.period as period, FM.metric as metric, CombineSpans(P.period,FM.metric) as match
+  from PeriodPrefix P, FinancialMetric FM
+  where FollowsTok(P.period,FM.metric,0,1);
+
+ create view FinancialMetricWithPeriod2 as
+  select '' as year, '' as quarter, P.period as period, FM.metric as metric, CombineSpans(FM.metric,P.period) as match
+  from PeriodSuffix P, FinancialMetric FM
+  where FollowsTok(FM.metric,P.period,0,1);
+
+create view FinancialMetricWithPeriod3 as
+  select '' as year, '' as quarter, P.period as period, FM.metric as metric, CombineSpans(FM.metric,P.period) as match
+  from PeriodSuffix P, FinancialMetric FM
+  where FollowsTok(FM.metric,P.period,0,5) and MatchesRegex(/\W*(((for)?\W*(the)?)|(came in at))\W*/,SpanBetween(FM.metric,P.period));
+
+create view FinancialMetricWithPeriod as
+ (select R.year as year, R.quarter as quarter, R.period as period, R.metric as metric, R.match as match from FinancialMetricWithPeriod1 R)
+  union all
+  (select R.year as year, R.quarter as quarter, R.period as period, R.metric as metric, R.match as match from FinancialMetricWithPeriod2 R)
+  union all
+  (select R.year as year, R.quarter as quarter, R.period as period, R.metric as metric, R.match as match from FinancialMetricWithPeriod3 R);
+  
+create view FinancialMetricOptionalPeriodCandidates as
+  (select R.year as year, R.quarter as quarter, R.period as period, R.metric as metric, R.match as match from FinancialMetricWithPeriod R)
+  union all
+  (select LeftContext(R.metric,0) as year, LeftContext(R.metric,0) as quarter, LeftContext(R.metric,0) as period, R.metric as metric, R.metric as match from FinancialMetric R);
+
+create view FinancialMetricOptionalPeriod as
+  select R.year as year, R.quarter as quarter, R.period as period, R.metric as metric, R.match as match
+  from FinancialMetricOptionalPeriodCandidates R
+  consolidate on R.match;

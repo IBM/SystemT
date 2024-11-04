@@ -1,0 +1,25 @@
+module exportView;
+
+create view PhoneNumber as
+select P.num as number, LeftContextTok(P.num, 3) as lc
+from
+(
+extract 
+    regexes /\+?\([1-9]\d{2}\)\d{3}-\d{4}/ and /\+?[Xx]\.?\d{4,5}/
+    on D.text as num
+from Document D
+) P;
+
+export view PhoneNumber;
+
+create view JustNumber as
+select GetText(P.number) as numberString
+from PhoneNumber P;
+
+export view JustNumber;
+
+-- create and export external view
+create external view TestExtView(id Integer, address Text, name Text)   
+external_name 'testExtViewAlias';
+
+export view TestExtView;

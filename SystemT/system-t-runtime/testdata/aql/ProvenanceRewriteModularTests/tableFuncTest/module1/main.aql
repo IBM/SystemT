@@ -1,0 +1,36 @@
+module module1;
+
+require document with columns text Text;
+
+/** This is basically the first half of locatorTest.aql
+-- Declare a simple table function that "zips together" two input tables
+**/
+create function MyTableFunc( 
+    firstArg table( spanValue Span) as locator,
+    secondArg table( spanVal Span, strVal Text ) as locator
+)
+return table( outSpan1 Span, outSpan2 Span, outStr Text)
+external_name 'tableFnTestsUDFs.jar:com.ibm.test.udfs.TableConsumingTableFunc!eval'
+language java
+not deterministic
+called on null input;
+
+-- First input to the table function
+create view FirstInputView as
+extract regex /\d+/ on 1 token in D.text as match
+from Document D;
+
+-- Second input to the table function
+create view SecondInputView as
+select S.match as spanCol, 'Dummy string' as textCol
+from 
+    (extract regex /[A-Z][a-z]+/ on 1 token in D.text as match
+    from Document D) S;
+
+-- The table function
+create view TabFuncOutput2 as 
+select * 
+from MyTableFunc(FirstInputView, SecondInputView) T;
+
+output view TabFuncOutput2;
+

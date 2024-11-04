@@ -1,0 +1,90 @@
+-----------------------------------------------------------------
+-- GeoRegionGlobal.aql
+-- 
+-- Collect 'Global' geography annotations for pages.
+-- Rule 1: /global/ in PageUrl
+-- Rule 2: URLHome.name=global
+-- Rule 3: TitleHome.name=global
+-- Rule 4: TitleHome contains 'Global' and the <Home_Clue>
+-- Rule 5: Any title segment = global
+-- Author : Krishna Bhanvasr
+------------------------------------------------------------------
+
+-- Dictionary containing 'global' keyword
+create dictionary GlobalDict as (
+	'global'
+);
+
+-- Rule 1: /global/ in PageUrl
+create view Region_Global_PageUrl as
+select 'GLOBAL' as match, 'URL:GLOBAL' as evidence
+from PageURL P where
+ContainsRegex(/\/global\//,'CASE_INSENSITIVE',P.url);
+
+-- RRule 2: URLHome.name=global
+create view Region_Global_URLHome as
+select 'GLOBAL' as match, 'URLHome:GLOBAL' as evidence
+from URLHome H 
+where MatchesDict('GlobalDict', H.name_text);
+
+-- Rule 3: TitleHome.name=global
+create view Region_Global_TitleHome as
+select 'GLOBAL' as match, 'TitleHome.name:GLOBAL' as evidence
+from TitleHome T 
+where MatchesDict('GlobalDict', T.name_text);
+
+-- Rule 5: Any title segment = global
+create view Region_Global_TitleSeg as
+select 'GLOBAL' as match, 'TitleSeg:GLOBAL' as evidence
+from TitleSeg TS 
+where MatchesDict('GlobalDict', TS.elem);
+
+-- Identify the title segment containing 'Global' in TitleHome output
+create view TitleHomeInTitleSegGlobal as
+select TS.elem as match from
+(
+	select T.name as match from HomepageFirstClean T where Equals('TitleHome', GetText(T.type)) and ContainsDict('GlobalDict', T.name)
+)T, TitleSeg TS
+where Contains(TS.elem, T.match);
+
+-- Rule 4: TitleHome contains 'Global' and the <Home_Clue>
+create view Region_Global_TitleHomeTitleSeg as
+extract  
+	    'TitleHome.name:GLOBAL' as evidence,
+		 dictionaries 'homepage/skipHomeHead.dict' and 'homepage/skipHomeTail.dict' on TH.match as match
+		 from TitleHomeInTitleSegGlobal TH;
+
+
+-- Consolidate region evidence from all possible Global paths
+create view RegionEvidenceGlobal as
+select C.id as id, C.evidence as evidence from
+(
+	(select 1 as id, C.evidence as evidence from Region_Global_PageUrl C)
+	union all
+	(select 1 as id, C.evidence as evidence from Region_Global_URLHome C)
+	union all
+	(select 1 as id, C.evidence as evidence from Region_Global_TitleHome C)
+	union all
+	(select 1 as id, C.evidence as evidence from Region_Global_TitleSeg C)
+	union all
+	(select 1 as id, C.evidence as evidence from Region_Global_TitleHomeTitleSeg C)
+)C 
+-- Remove duplicates
+consolidate on C.evidence;
+
+-- Consolidate the Region value from all possible Global region paths
+create view RegionGlobalFinal as
+select C.match as match from
+(
+	(select R.match as match from Region_Global_PageUrl R)
+	union all
+	(select R.match as match from Region_Global_URLHome R) 
+	union all
+	(select R.match as match from Region_Global_TitleHome R)
+	union all
+	(select R.match as match from Region_Global_TitleSeg R)
+	union all
+	(select R.match as match from Region_Global_TitleHomeTitleSeg R)
+)C
+-- Remove duplicates
+consolidate on C.match;

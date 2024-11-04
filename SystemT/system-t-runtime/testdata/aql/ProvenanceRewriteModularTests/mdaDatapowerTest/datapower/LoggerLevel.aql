@@ -1,0 +1,92 @@
+module datapower;
+
+-- Dictionary of log levels in a log
+create dictionary loggerLevel_base with case exact as 
+(
+'info','debug','notice','warning','error', 'warn'
+);
+
+-- Find all matches of the severity dictionary.
+create view loggerLevelUnfiltered as
+extract
+	dictionary 'loggerLevel_base' on D.text as loggerLevel
+from Document D;
+
+create view loggerLevel as
+    select D.loggerLevel as span, GetText(D.loggerLevel) as text
+    from loggerLevelUnfiltered D
+    where MatchesRegex(/\[/,LeftContext(D.loggerLevel,1))
+    and MatchesRegex(/\]/, RightContext(D.loggerLevel, 1));
+
+create view LoggerLevelOutput as 
+select D.span, D.text, GetString('LoggerLevel') as field_type
+from loggerLevel D;
+
+export view LoggerLevelOutput;
+
+create view loggerApp_base as 
+    extract regex /[a-zA-Z]+/ on 1 token in D.text as match
+    from Document D;
+    	
+create view loggerAppUnfiltered as 
+    select C.match as span
+    from loggerApp_base C
+    where MatchesRegex(/\[/, LeftContext(C.match, 1))
+    and MatchesRegex(/\]/, RightContext(C.match, 1));
+
+create view loggerAppFiltered_1 as
+(
+select C.span
+from loggerAppUnfiltered C
+)
+minus
+(
+select D.span
+from loggerLevel D
+);
+
+create view LoggerAppFiltered as
+select 
+	loggerApp.span
+	
+from 
+	loggerLevel level,
+	loggerAppFiltered_1 loggerApp
+where 
+	Follows(loggerApp.span, level.span, 0, 2);
+	
+create view LoggerAppOutput as 
+select D.span, GetString(D.span) as text, GetString('LoggerApp') as field_type
+from LoggerAppFiltered D;
+
+export view LoggerAppOutput;
+    
+
+create view loggerDomainFiltered_1 as
+(
+select C.span
+from loggerAppFiltered_1 C
+)
+minus
+(
+select D.span
+from LoggerAppFiltered D
+);
+
+   
+create view LoggerDomainFiltered as
+select 
+	loggerDomainFilt1.span
+from 
+	LoggerAppFiltered loggerApp,
+	loggerDomainFiltered_1 loggerDomainFilt1
+where 
+	Follows(loggerDomainFilt1.span, loggerApp.span, 0, 2);    
+
+
+create view LoggerDomainOutput as 
+select D.span, GetString(D.span) as text, GetString('LoggerDomain') as field_type
+from LoggerDomainFiltered D;
+    
+export view LoggerDomainOutput;
+

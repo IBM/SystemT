@@ -1,0 +1,109 @@
+$Document = DocScan(
+  (
+    "text" => "Text",
+    "label" => "Text"
+  )
+);
+CreateDict(
+    "name" => "FirstNameInline",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false",
+    "lemma_match" => "false"
+);
+
+CreateDict(
+    "name" => "firstnames.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false",
+    "lemma_match" => "false"
+);
+
+$FirstName =
+Select(
+  MatchesRegex(
+    RegexConst(
+      /\A[A-Z][a-z]*\Z/,
+      "JavaRegex"
+    ),
+    GetCol(
+      "name"
+    )
+  ),
+  Project(
+    (
+      "@@genericModule@@FirstName@@__auto__id" => "__auto__id",
+      "@@genericModule@@FirstName@@__stmt__type" => "__stmt__type",
+      "@@genericModule@@FirstName@@Document_____sep_____D____id" => "Document_____sep_____D____id",
+      "name" => "name"
+    ),
+    ApplyFunc(
+      IntConst(
+        -1
+      ) => "@@genericModule@@FirstName@@Document_____sep_____D____id",
+      ApplyFunc(
+        StringConst(
+          "STMT_TYPE_EXTRACT_DICT"
+        ) => "@@genericModule@@FirstName@@__stmt__type",
+        ApplyFunc(
+          AutoID()
+ => "@@genericModule@@FirstName@@__auto__id",
+          Dictionary("firstnames.dict" => "Default" , "D.text", "name",
+            Project(
+              (
+                "text" => "D.text"
+              ),
+              $Document
+            )
+          )
+        )
+      )
+    )
+  )
+);
+
+$FirstName1 =
+Select(
+  MatchesRegex(
+    RegexConst(
+      /\A[A-Z][a-z]*\Z/,
+      "JavaRegex"
+    ),
+    GetCol(
+      "name"
+    )
+  ),
+  Project(
+    (
+      "@@genericModule@@FirstName1@@__auto__id" => "__auto__id",
+      "@@genericModule@@FirstName1@@__stmt__type" => "__stmt__type",
+      "@@genericModule@@FirstName1@@Document_____sep_____D____id" => "Document_____sep_____D____id",
+      "name" => "name"
+    ),
+    ApplyFunc(
+      IntConst(
+        -1
+      ) => "@@genericModule@@FirstName1@@Document_____sep_____D____id",
+      ApplyFunc(
+        StringConst(
+          "STMT_TYPE_EXTRACT_DICT"
+        ) => "@@genericModule@@FirstName1@@__stmt__type",
+        ApplyFunc(
+          AutoID()
+ => "@@genericModule@@FirstName1@@__auto__id",
+          Dictionary("FirstNameInline" => "Default" , "D.text", "name",
+            Project(
+              (
+                "text" => "D.text"
+              ),
+              $Document
+            )
+          )
+        )
+      )
+    )
+  )
+);
+
+Output: $FirstName, $FirstName1;

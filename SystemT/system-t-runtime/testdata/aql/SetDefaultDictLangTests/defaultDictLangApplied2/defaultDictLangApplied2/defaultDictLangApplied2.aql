@@ -1,0 +1,33 @@
+-- Test to assert, if the system default dictionary language set is used for implicitly declared dictionaries and
+-- dictionaries declares without explicit language clause.
+
+module defaultDictLangApplied2;
+
+-- inline dictionary declared without explicit language matching clause
+create dictionary testDictInline 
+as
+(
+	'firstEntry','secondEntry'
+);
+
+-- dictionary coming from file without explicit language matching clause
+create dictionary testDictFromFile
+from file 'the.dict';
+
+create table testTable(firstCol Text) as values
+	('firstEntry'),
+	('secondEntry');
+
+-- dictionary coming from table without explicit language matching clause
+create dictionary testDictFromTable
+from table testTable
+with entries from firstCol;
+
+-- this view declares dictionary implicitly
+create view testView as
+extract dictionary 'the.dict' 
+on D.text as match
+from Document D;
+
+output view testView;
+

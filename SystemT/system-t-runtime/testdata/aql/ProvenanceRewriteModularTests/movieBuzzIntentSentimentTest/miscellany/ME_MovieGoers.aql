@@ -1,0 +1,398 @@
+module miscellany;
+
+import view ME_NonRetweetPost from module postCategory as ME_NonRetweetPost;
+
+-- created by Kris Hildrum (hildrum@us.ibm.com)
+
+-- copied and pasted from PostCategory; couldn't get it to work right locally.
+
+/** Would like to eliminate stuff in title case.  But how?  
+eg: "Taking the Kids to a Movie this Holiday? You Better Watch Out... @DMBileski http://t.co/Ui8xQVzC"
+-- How to eliminate stuff in title case?
+create dictionary ME_MG_lowerInTitle as 
+('to',
+'a',
+'this',
+'the',
+'these');
+
+create view ME_MG_lowerInTitle as 
+extract dictionary 'ME_MG_lowerInTitle' on D.text as word
+from ME_NonRetweetPost D;
+
+create view ME_MG_uppercase as
+extract regex /[A-Z][a-z]+/ on D.text as word
+from ME_NonRetweetPost D;
+
+create view ME_MG_titlecase as
+extract pattern <ME_MG_lowerInTitle.word>| <ME_MG_uppercase.word>
+**/
+
+/*
+create view ME_MG_basicTweet as 
+select * from ME_NonRetweetPost;
+*/
+
+
+create view ME_MG_directedTweet as 
+select *
+from ME_NonRetweetPost
+where ContainsRegex(/@[A-Za-z0-9_].* you /,ME_NonRetweetPost.text);
+
+
+create dictionary ME_MG_you as ('you','your');
+
+create view ME_MG_basicTweet as 
+(select * from ME_NonRetweetPost where
+Not(ContainsDict('ME_MG_you',ME_NonRetweetPost.text)))
+union all
+(select * from ME_MG_directedTweet);
+
+
+
+-- find ads
+
+
+-- All of these work of non-reteweet posts; this is because most of the retweets
+-- are jokes, or (eg, dating an ex is liking buying a ticket for a movie you'e already seen)
+-- or promoting movies (celebrity X says "go see my movie", and everyone retweets it)
+-- 
+-- haven't seen any that indicate the tweeter wants to go to the movie
+
+----------------------------------- movie and ticket
+
+create dictionary ME_MG_movieWords as (
+'movie',
+'flick',
+'film',
+'movies');
+
+create dictionary ME_MG_ticketSyn as (
+'ticket',
+'tickets',
+'tix');
+
+create dictionary ME_MG_purchaseWords as (
+'bought',
+'buy',
+'got',
+'purchase',
+'purchased');
+
+create dictionary ME_MG_otherTicketWords as (
+'sold out');
+
+-- mentions of movies
+create view ME_MG_movieMentions as 
+extract dictionary 'ME_MG_movieWords' on D.text as movieWord
+from ME_MG_basicTweet D;
+
+create view ME_MG_purchaseMentions as
+extract dictionary 'ME_MG_purchaseWords' on D.text as purchaseWord
+from ME_MG_basicTweet D;
+
+create view ME_MG_ticketSyn as 
+extract dictionary 'ME_MG_ticketSyn' on D.text as ticketSyn
+from ME_MG_basicTweet D;
+
+create view ME_MG_ticketMentions as
+(
+extract dictionary 'ME_MG_otherTicketWords' on D.text as ticketWord
+from ME_MG_basicTweet D
+)
+union all
+(extract pattern <P.purchaseWord> <Token>{0,1} <T.ticketSyn> as ticketWord
+from ME_MG_ticketSyn T, ME_MG_purchaseMentions P);
+
+-- If we have a tweet mentioning both "movie" and  a ticket purchase, it
+-- seems likely we can believe the person when out to a movie,
+-- since you don't buy tickets for DVDs.
+
+create view ME_MG_movieTicketDup as 
+(select D.text as text,
+	M.movieWord as movieWord,
+	T.ticketWord as ticketWord,
+	CombineSpans(M.movieWord,T.ticketWord) as keyPhrase
+from ME_MG_ticketMentions T, ME_MG_movieMentions M, ME_MG_basicTweet D
+where Follows(M.movieWord, T.ticketWord, 0, 140))
+union all
+(select D.text as text, 
+	M.movieWord as movieWord,
+	T.ticketWord as ticketWord,
+	CombineSpans(T.ticketWord,M.movieWord) as keyPhrase
+from ME_MG_ticketMentions T, ME_MG_movieMentions M, ME_MG_basicTweet D
+where Follows(T.ticketWord, M.movieWord, 0, 140));
+
+create view ME_MG_movieTicket as 
+select 
+	M.text as text,
+	M.keyPhrase as keyPhrase
+from ME_MG_movieTicketDup M 
+consolidate on M.text;
+
+--output view ME_MG_movieTicket;
+
+--- Now look for indications that we are "at the theater".
+
+create dictionary ME_MG_notAMC as (
+'WalkingDead_AMC',
+'BreakingBad_AMC',
+'amc_x323');
+
+create dictionary ME_MG_movieTheater as (
+'AMC', -- watch for confusion with all my children and peoples' twitter ids.
+'Cinaplex');
+
+create dictionary ME_MG_genericTheater as (
+'theater',
+'theatre',
+'Regal');
+
+create dictionary ME_MG_movieIfInTheater as 
+('preview',
+	 'movie',
+	 'film',
+	 'flick',
+	 'is playing',
+	 'movies',
+	 'films',
+	 'cinema');
+	 
+	 
+
+create view ME_MG_theaterWordDup as 
+-- movie-theathher specific word, but exclude "all my children"
+(extract D.text as text, dictionary 'ME_MG_movieTheater' on D.text as theaterWord from ME_MG_basicTweet D
+having 
+--ContainsRegex(/\b[Aa][Mm][Cc]\b/,text) and 
+Not(ContainsRegex(/#AMC\b/,text)) and Not(ContainsDict('ME_MG_notAMC',text)))
+union all
+--theater word + check for movie word
+(extract D.text as text, dictionary 'ME_MG_genericTheater' on D.text as theaterWord
+	from ME_MG_basicTweet D
+	having ContainsDict('ME_MG_movieIfInTheater',text));
+
+create view ME_MG_theaterWord as 
+select T.text as text, T.theaterWord as theaterWord
+from ME_MG_theaterWordDup T
+consolidate on T.theaterWord using 'ContainedWithin';
+
+create dictionary ME_MG_atDict as ('at', 'in','@');
+
+create view ME_MG_atWord as 
+extract dictionary 'ME_MG_atDict' on D.text as atWord
+from ME_MG_basicTweet D;
+
+create view ME_MG_atTheater as
+extract pattern <A.atWord> <Token>{0,2} <T.theaterWord> as keyPhrase
+from ME_MG_atWord A, ME_MG_theaterWord T;
+--union all
+--(extract pattern '@' <Token>{0,2} (<T.theaterWord>) as keyPhrase
+--from ME_MG_theaterWord T);
+
+
+--output view ME_MG_atTheater;
+
+---
+---------------------------------------- go to see
+
+-- maybe should extract as a pattern
+-- <goword> <out>? <see>?
+-- In any case, these prhases indicate that you're you are going somewhere or 
+-- went some where.  
+-- phrases like "going to" is handled differently because it's it can either
+-- be a future tense or an indication that one is leaving the house.
+create dictionary ME_MG_gotoseePhrase as (
+'going out 2 see',
+'going out to see',
+'going out 2 c',
+'going out to c',
+'go to see',
+'go and see',
+'go out and see',
+'to go see',
+'hit', 
+'gooo see',
+'gooo c',
+'go see',
+'go c',
+'go 2',
+'go 2 see',
+'go out 2 see',
+'go out to see',
+'go catch',
+'went to see',
+'went to',
+'went to see',
+'heading out',
+'going out',
+'go to',
+'goin to see');
+
+-- Now, create the "going to see" variants.
+
+create dictionary ME_MG_twitterSpeakGoing as (
+'goin', 'going');
+
+create dictionary ME_MG_twitterSpeakTo as (
+'2','to');
+
+create dictionary ME_MG_twitterSpeakSee as (
+'see',
+'c',
+'saw','watch');
+
+-- Not all definite articles, but these introduce a movie description
+-- "dat K.Hart movie"
+-- "the Sherlock movie"
+create dictionary ME_MG_twitterSpeakDefArticle as (
+'dat',
+'that',
+'the',
+'this');
+
+create dictionary ME_MG_twitterSpeakTake as (
+'take',
+'took',
+'taking');
+
+-- Now find all the mentions of our going, take, to, etc words. 
+create view ME_MG_goingTwitter as
+extract dictionary 'ME_MG_twitterSpeakGoing' on D.text as going
+from ME_MG_basicTweet D;
+
+create view ME_MG_takeTwitter as
+extract dictionary 'ME_MG_twitterSpeakTake' on D.text as take
+from ME_MG_basicTweet D;
+
+create view ME_MG_ToTwitter as 
+extract dictionary 'ME_MG_twitterSpeakTo' on D.text as to
+from ME_MG_basicTweet D;
+
+create view ME_MG_SeeTwitter as
+extract dictionary 'ME_MG_twitterSpeakSee' on D.text as see
+from ME_MG_basicTweet D;
+
+create view ME_MG_TheTwitter as 
+extract dictionary 'ME_MG_twitterSpeakDefArticle' on D.text as the
+from ME_MG_basicTweet D;
+
+create view ME_MG_seeingPhrase as 
+extract dictionary 'ME_MG_gotoseePhrase'  on D.text as seeingPhrase
+from ME_MG_basicTweet D;
+
+create view ME_MG_goToSee_3d as
+(extract pattern <S.see> <Token>{1,5} '3d' as keyPhrase
+from  ME_MG_SeeTwitter S)
+union all
+(extract pattern <S.seeingPhrase> <Token>{1,5} '3d' as keyPhrase
+from ME_MG_seeingPhrase S);
+
+--simple going to see statement
+--eg, go see a movie, go see that movie, go see the movie
+create view ME_MG_goToSee_basic as
+(extract 
+pattern <S.seeingPhrase> 'a' <M.movieWord> as keyPhrase
+from ME_MG_seeingPhrase S, ME_MG_movieMentions M)
+union all
+(extract pattern <S.seeingPhrase> <A.the> <M.movieWord> as keyPhrase
+from ME_MG_seeingPhrase S, ME_MG_movieMentions M,ME_MG_TheTwitter A);
+
+-- go to see a movie with a descriptive phrase
+-- go see the SHERLOCK movie, go see that Kevin Hart movie
+create view ME_MG_goToSee_descPhrase as 
+extract 
+pattern <S.seeingPhrase> <A.the> <Token>{1,5} <M.movieWord> as keyPhrase
+from ME_MG_seeingPhrase S, ME_MG_movieMentions M,ME_MG_TheTwitter A;
+
+-- rule here is because "going" is tricky in a way that "go" is not. 
+-- here "new" is the clue that it's in a theater.
+-- see the new ___ movie
+--- see a new movie
+create view ME_MG_goToSee_new as 
+extract 
+pattern <S.see> <Token> 'new' <Token>{0,5} <M.movieWord> as keyPhrase
+from ME_MG_SeeTwitter S, ME_MG_movieMentions M;
+
+-- Go with a movie as a direct object (no "see"--if there's a see, it could be a DVD)
+-- "going to a movie", "I want to go to the movie", etc
+create view ME_MG_goToSee_going as 
+(extract 
+pattern <G.going> <T.to> 'a' <M.movieWord> as keyPhrase
+from ME_MG_goingTwitter G, ME_MG_ToTwitter T, ME_MG_movieMentions M)
+union all
+(extract
+pattern <G.going> <T.to> <A.the> <Token>{0,4} <M.movieWord> as keyPhrase
+from ME_MG_goingTwitter G, ME_MG_ToTwitter T, ME_MG_movieMentions M, ME_MG_TheTwitter A);
+
+-- take my X to {a,the,__ ___ ___) movie 
+create view ME_MG_goToSee_take as 
+extract 
+pattern <T.take> <Token>{1,2} 'to' <Token>{0,5} <M.movieWord> as keyPhrase 
+from   ME_MG_movieMentions M, ME_MG_takeTwitter T;
+
+create view ME_MG_goToSeeRaw as
+-- go see the/a/that movie
+(select 'goToSee_basic' as prov, M.keyPhrase as keyPhrase from
+ME_MG_goToSee_basic M)
+union all
+(select 'goToSee_desc' as prov, M.keyPhrase as keyPhrase from
+ME_MG_goToSee_descPhrase M)
+union all 
+(select 'goToSee_new' as prov, M.keyPhrase as keyPhrase from
+ME_MG_goToSee_new M)
+union all
+(select 'goToSee_going' as prov, M.keyPhrase as keyPhrase from
+ME_MG_goToSee_going M)
+union all
+(select 'goToSee_take' as prov, M.keyPhrase as keyPhrase from
+ME_MG_goToSee_take M)
+union all
+(select 'goToSee_3D' as prov, M.keyPhrase from 
+ME_MG_goToSee_3d M);
+
+create view ME_MG_goToSee as
+select S.prov as prov, S.keyPhrase as keyPhrase
+from ME_MG_goToSeeRaw S
+--where Not(ContainsRegex(/[.!?] /,S.keyPhrase))
+consolidate on S.keyPhrase using 'LeftToRight';
+
+--output view ME_MG_goToSee;
+
+-- other views currently aren't good enough to be output
+create view ME_MG_movieGoersWithDup as
+(select M.prov as prov, M.keyPhrase as keyPhrase from 
+ ME_MG_goToSee  M)
+union all 
+(select 'atTheater' as prov, M.keyPhrase as keyPhrase from
+ME_MG_atTheater M)
+union all 
+(select 'movieTicket' as prov, M.keyPhrase as keyPhrase
+from ME_MG_movieTicket M);
+
+/*
+create view ME_MG_movieGoersWithDup as
+select 'goToSee' as prov, M.keyPhrase as keyPhrase from 
+ ME_MG_goToSee M;
+*/
+create view ME_MovieGoers as
+select M.prov as prov, M.keyPhrase as keyPhrase
+from ME_MG_movieGoersWithDup M
+consolidate on M.keyPhrase using 'LeftToRight';
+
+--output view ME_MovieGoers;
+
+-- This approach didn't work out.
+
+create view ME_MG_titlePotential as 
+extract regex /[A-Z][a-z]+ [A-Z][a-z]+/ on D.text as titleStart 
+from ME_MG_basicTweet D;
+
+create view ME_MG_goToSeeTitle as 
+extract pattern <S.seeingPhrase> <T.titleStart> as keyPhrase
+from ME_MG_seeingPhrase S, ME_MG_titlePotential T;
+
+--output view goToSeeTitle;
+
+
+ 

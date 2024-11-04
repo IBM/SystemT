@@ -1,0 +1,348 @@
+module Address;
+
+
+import view Dates from module Date as Dates
+;
+
+
+import view Times from module Time as Times
+;
+
+
+import view PhoneNumCons from module PhoneNumber as PhoneNumCons
+;
+
+
+create view GermanAddressAll as
+  select  GSA.match as streetaddress,
+          GCZ.city as city,
+          GCZ.zipcode as zipcode,
+          CombineSpans(GSA.match, GCZ.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          GCZ.__auto__id as GermanCityZipcode_____sep_____GCZ____id,
+          GSA.__auto__id as GermanStreetAddress_____sep_____GSA____id
+  from  GermanCityZipcode GCZ,
+        GermanStreetAddress GSA
+  where FollowsTok(GSA.match, GCZ.match, 0, 3)
+     and MatchesRegex(/\W*([Gg]ermany|Deutsch\s*[Ll]and)?.{0,5}\W*/, SpanBetween(GSA.match, GCZ.match));
+
+output view GermanAddressAll;
+
+create view GermanAddress as
+  select  GAA.streetaddress as streetaddress,
+          GAA.city as city,
+          GAA.zipcode as zipcode,
+          GAA.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          GAA.__auto__id as GermanAddressAll_____sep_____GAA____id
+  from  GermanAddressAll GAA;
+
+output view GermanAddress;
+
+create view USAddressAll as
+  (select  Op.number as number,
+            Op.streetname as streetname,
+            Op.secondaryUnit as secondaryUnit,
+            Op.city as city,
+            Op.state as state,
+            Op.zipcode as zipcode,
+            Op.loc as loc,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__159__TempOp__0 Op)
+  union all
+  (select  Op.number as number,
+            Op.streetname as streetname,
+            Op.secondaryUnit as secondaryUnit,
+            Op.city as city,
+            Op.state as state,
+            Op.zipcode as zipcode,
+            Op.loc as loc,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__159__TempOp__1 Op);
+
+output view USAddressAll;
+
+create view USAddress as
+  select  __t2.number as number,
+          __t2.streetname as streetname,
+          __t2.secondaryUnit as secondaryUnit,
+          __t2.city as city,
+          __t2.state as state,
+          __t2.zipcode as zipcode,
+          __t2.loc as loc,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__160__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__160__Temp__1 __t1,
+        __Consolidate__160__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.number, __t2.streetname, __t2.secondaryUnit, __t2.city, __t2.state, __t2.zipcode, __t2.loc;
+
+output view USAddress;
+
+create view AddressAll as
+  (select  Op.address as address,
+            Op.city as city,
+            Op.stateorprovince as stateorprovince,
+            Op.zip as zip,
+            Op.loc as loc,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__161__TempOp__0 Op)
+  union all
+  (select  Op.address as address,
+            Op.city as city,
+            Op.stateorprovince as stateorprovince,
+            Op.zip as zip,
+            Op.loc as loc,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__161__TempOp__1 Op);
+
+output view AddressAll;
+
+create view WrongAddress as
+  (select  Op.address as address,
+            Op.city as city,
+            Op.stateorprovince as stateorprovince,
+            Op.zip as zip,
+            Op.loc as loc,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__162__TempOp__0 Op)
+  union all
+  (select  Op.address as address,
+            Op.city as city,
+            Op.stateorprovince as stateorprovince,
+            Op.zip as zip,
+            Op.loc as loc,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__162__TempOp__1 Op)
+  union all
+  (select  Op.address as address,
+            Op.city as city,
+            Op.stateorprovince as stateorprovince,
+            Op.zip as zip,
+            Op.loc as loc,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__162__TempOp__2 Op);
+
+output view WrongAddress;
+
+create view AddressFinal as
+  select  Op.address as address,
+          Op.city as city,
+          Op.stateorprovince as stateorprovince,
+          Op.zip as zip,
+          Op.reference as reference,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__163__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__163__TempOp__1 Op,
+        __Minus__163__Temp __t
+  where Equals(Op.address, __t.address)
+     and Equals(Op.city, __t.city)
+     and Equals(Op.stateorprovince, __t.stateorprovince)
+     and Equals(Op.zip, __t.zip)
+     and Equals(Op.reference, __t.reference);
+
+output view AddressFinal;
+
+create view __Consolidate__160__Temp__1 as
+  select  S.number as number,
+          S.streetname as streetname,
+          S.secondaryUnit as secondaryUnit,
+          S.city as city,
+          S.state as state,
+          S.zipcode as zipcode,
+          S.loc as loc,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as USAddressAll_____sep_____S____id,
+          S.loc as __consolidate__target
+  from  USAddressAll S;
+
+output view __Consolidate__160__Temp__1;
+
+create view __Consolidate__160__Temp__2 as
+  select  __t1.number as number,
+          __t1.streetname as streetname,
+          __t1.secondaryUnit as secondaryUnit,
+          __t1.city as city,
+          __t1.state as state,
+          __t1.zipcode as zipcode,
+          __t1.loc as loc,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__160__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__160__Temp__2;
+
+create view __Minus__163__Temp as
+  select  __t.address as address,
+          __t.city as city,
+          __t.stateorprovince as stateorprovince,
+          __t.zip as zip,
+          __t.reference as reference
+  from  
+    ((select  Op.address as address,
+              Op.city as city,
+              Op.stateorprovince as stateorprovince,
+              Op.zip as zip,
+              Op.reference as reference
+      from  __Minus__163__TempOp__1 Op)
+    minus
+    (select  Op.address as address,
+              Op.city as city,
+              Op.stateorprovince as stateorprovince,
+              Op.zip as zip,
+              Op.reference as reference
+      from  __Minus__163__TempOp__2 Op)
+    ) __t
+  group by __t.address, __t.city, __t.stateorprovince, __t.zip, __t.reference;
+
+output view __Minus__163__Temp;
+
+create view __Minus__163__TempOp__1 as
+  select  A.address as address,
+          A.city as city,
+          A.stateorprovince as stateorprovince,
+          A.zip as zip,
+          A.loc as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          A.__auto__id as AddressAll_____sep_____A____id
+  from  AddressAll A;
+
+output view __Minus__163__TempOp__1;
+
+create view __Minus__163__TempOp__2 as
+  select  WA.address as address,
+          WA.city as city,
+          WA.stateorprovince as stateorprovince,
+          WA.zip as zip,
+          WA.loc as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          WA.__auto__id as WrongAddress_____sep_____WA____id
+  from  WrongAddress WA;
+
+output view __Minus__163__TempOp__2;
+
+create view __Union__159__TempOp__0 as
+  select  R.number as number,
+          R.streetname as streetname,
+          R.secondaryUnit as secondaryUnit,
+          R.city as city,
+          R.state as state,
+          R.zipcode as zipcode,
+          R.loc as loc,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as USAddressWeakCandidatesRemoved_____sep_____R____id
+  from  USAddressWeakCandidatesRemoved R;
+
+output view __Union__159__TempOp__0;
+
+create view __Union__159__TempOp__1 as
+  select  R.number as number,
+          R.streetname as streetname,
+          R.secondaryUnit as secondaryUnit,
+          R.city as city,
+          R.state as state,
+          R.zipcode as zipcode,
+          R.loc as loc,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as USAddressCandidateStrong_____sep_____R____id
+  from  USAddressCandidateStrong R;
+
+output view __Union__159__TempOp__1;
+
+create view __Union__161__TempOp__0 as
+  select  CombineSpans(S.number, S.streetname) as address,
+          S.city as city,
+          S.state as stateorprovince,
+          S.zipcode as zip,
+          S.loc as loc,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as USAddress_____sep_____S____id
+  from  USAddress S;
+
+output view __Union__161__TempOp__0;
+
+create view __Union__161__TempOp__1 as
+  select  S.streetaddress as address,
+          S.city as city,
+          RightContext(S.city, 0) as stateorprovince,
+          S.zipcode as zip,
+          S.match as loc,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as GermanAddress_____sep_____S____id
+  from  GermanAddress S;
+
+output view __Union__161__TempOp__1;
+
+create view __Union__162__TempOp__0 as
+  select  A.address as address,
+          A.city as city,
+          A.stateorprovince as stateorprovince,
+          A.zip as zip,
+          A.loc as loc,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          A.__auto__id as AddressAll_____sep_____A____id,
+          D.__auto__id as Dates_____sep_____D____id
+  from  AddressAll A,
+        Dates D
+  where Overlaps(D.match, A.loc);
+
+output view __Union__162__TempOp__0;
+
+create view __Union__162__TempOp__1 as
+  select  A.address as address,
+          A.city as city,
+          A.stateorprovince as stateorprovince,
+          A.zip as zip,
+          A.loc as loc,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          A.__auto__id as AddressAll_____sep_____A____id,
+          T.__auto__id as Times_____sep_____T____id
+  from  AddressAll A,
+        Times T
+  where Overlaps(T.match, A.loc);
+
+output view __Union__162__TempOp__1;
+
+create view __Union__162__TempOp__2 as
+  select  A.address as address,
+          A.city as city,
+          A.stateorprovince as stateorprovince,
+          A.zip as zip,
+          A.loc as loc,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          A.__auto__id as AddressAll_____sep_____A____id,
+          T.__auto__id as PhoneNumCons_____sep_____T____id
+  from  AddressAll A,
+        PhoneNumCons T
+  where Overlaps(T.num, A.loc);
+
+output view __Union__162__TempOp__2;
+

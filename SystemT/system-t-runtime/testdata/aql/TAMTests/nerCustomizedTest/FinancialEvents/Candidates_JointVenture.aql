@@ -1,0 +1,1627 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module FinancialEvents;
+
+-- ==================== Requirements ===================
+
+-- status: ANNOUNCED - references to a completed jointventure (e.g. �announced�, �confirm�)
+
+--status: CANCELLED - references an indication of cancellation of a jointventure (e.g. �failure�, �terminated�)
+
+-- status: PLANNED - references to a future jointventure (e.g, �will�, �plan�)
+        
+-- status: POSTPONED - references an indication of the delay of a jointventure (e.g. �postponed�, �detailed�)
+
+-- status: UPDATED - references a update of a jointventure transaction (e.g. �updates�)
+               
+-- status: KNOWN - references to a past jointventure (e.g. �previous jointventure�)
+
+-- status: RUMORED - references a possible jointventure that has not yet confirmed (e.g., �would�, �could�, �shouldn�t�)
+
+---------------------------------------------------------------------------------
+
+create view JointVentureClueBetween as
+select S.clue as clue from
+(
+  extract dictionary 'PositiveCluesBetweenOrganizationsInJointVentureEvents'
+  on D.text as clue
+  from DocumentText D
+) S
+consolidate on S.clue;
+
+
+create view JointVentureClueBefore as
+select S.clue as clue from
+(
+  extract dictionary 'PositiveCluesInLeftContextOfOrganizationsInJointVentureEvents'
+  on D.text as clue
+  from DocumentText D
+) S
+consolidate on S.clue;
+
+-- weaker pattern
+create view JointVentureClueAfterTemp as
+select S.clue as clue from
+(
+  extract dictionary 'PositiveCluesInRightContextOfOrganizationsInJointVentureEvents'
+  on D.text as clue
+  from DocumentText D
+) S
+where Not(MatchesDict('FiltersInLeftContextForJointVentureEvents', RightContextTok(S.clue,1)))
+consolidate on S.clue;
+
+
+
+-- find after clues contained within a between or before clue
+create view JointVentureClueAfterOverlapsBetweenBeforeShort as
+( select A.clue as clue from JointVentureClueAfterTemp A, JointVentureClueBetween B  where Contains(B.clue, A.clue) )
+union all
+( select A.clue as clue from JointVentureClueAfterTemp A, JointVentureClueBefore B  where Contains(B.clue, A.clue) );
+
+
+create view JointVentureClueAfter as
+( select A.clue as clue from JointVentureClueAfterTemp A )
+minus
+( select A.clue as clue from JointVentureClueAfterOverlapsBetweenBeforeShort A );
+
+
+-- collect all clues, for debugging purposes
+create view JointVentureClueAll as
+(select 'before' as type, M.clue as clue from JointVentureClueBefore M)
+union all
+(select 'between' as type, M.clue as clue from JointVentureClueBetween M)
+union all
+(select 'after' as type, M.clue as clue from JointVentureClueAfter M);
+
+
+
+
+
+-- ================JOINT VENTURE rules for SHORT ANNOUNCEMENT========================
+  
+
+-- Match statements of the form "X forms joint venture with Y"
+create view JointVentureClueBetween2CompNames as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 SpanBetween(C1.match, C2.match) as betweencontext,
+  		 RightContext(C2.match, 20) as aftercontext,
+  		 CombineSpans(C1.match, C2.match) as match
+  from CompanyInfoShort C1, CompanyInfoShort C2, JointVentureClueBetween M
+  where FollowsTok(C1.match, M.clue, 0, 5) and
+  	    FollowsTok(M.clue, C2.match, 0, 4) and
+  	    Not(Equals(GetText(C1.companyname), GetText(C2.companyname)));
+  	    
+-- make sure the match is within the same announcement
+create view JointVentureClueBetween2CompNamesShortTemp as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, A.match) as aftercontext,
+  	   M.match as match
+from JointVentureClueBetween2CompNames M, ShortText A
+where Contains(A.match, M.match);
+
+-- make sure the context does not contain a 3rd company name
+create view JointVentureClueBetween2CompNamesShortBadMatch as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.betweencontext as betweencontext, 
+  	   M.aftercontext as aftercontext,
+  	   M.match as match
+from JointVentureClueBetween2CompNamesShortTemp M, CompanyInfoShort C
+where Contains(M.betweencontext, C.match);
+
+--discard the bad matches
+create view JointVentureClueBetween2CompNamesShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from JointVentureClueBetween2CompNamesShortTemp M
+)
+minus
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from JointVentureClueBetween2CompNamesShortBadMatch M
+);
+
+
+-- Match statements of the form "X forms joint venture with Y and Z"
+create view JointVentureClueBetween3CompNames as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 C3.exchange as exchange3, C3.ticker as ticker3, C3.companyname as company3,
+  		 SpanBetween(C1.match, C2.match) as betweencontext,
+  		 RightContext(C3.match, 20) as aftercontext,
+  		 CombineSpans(C1.match, C3.match) as match
+  from CompanyInfoShort C1, CompanyInfoShort C2, CompanyInfoShort C3, JointVentureClueBetween M
+  where FollowsTok(C1.match, M.clue, 0, 5) and
+  	    FollowsTok(M.clue, C2.match, 0, 4) and
+  	    FollowsTok(C2.match, C3.match, 1, 2) and
+  	    --ContainsDict('conjunction.dict', SpanBetween(C2.match, C3.match)) and
+  	    ContainsDict('ConjunctionsInEnglish', SpanBetween(C2.match, C3.match)) and
+  	    Not(Equals(GetText(C1.companyname), GetText(C2.companyname))) and
+  	    Not(Equals(GetText(C2.companyname), GetText(C3.companyname))) and
+  	    Not(Equals(GetText(C1.companyname), GetText(C3.companyname)));
+  	    
+-- make sure the match is within the same announcement
+create view JointVentureClueBetween3CompNamesShortTemp as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, A.match) as aftercontext,
+  	   M.match as match
+from JointVentureClueBetween3CompNames M, ShortText A
+where Contains(A.match, M.match);
+
+create view JointVentureClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	   M.betweencontext as betweencontext, 
+	   M.aftercontext as aftercontext,
+	   M.match as match
+from
+(
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,		  
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.betweencontext as betweencontext, 
+		  	   M.aftercontext as aftercontext,
+		  	   M.match as match
+		from JointVentureClueBetween3CompNamesShortTemp M
+	)
+	union all
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   '' as exchange3, '' as ticker3, '' as company3,
+		  	   M.betweencontext as betweencontext, 
+		  	   M.aftercontext as aftercontext,
+		  	   M.match as match
+		from JointVentureClueBetween2CompNamesShort M
+	) 
+) M
+consolidate on M.match;
+
+  	    
+-- Match statements of the form "X and Y jointventure"
+create view JointVentureClueAfterCompNames as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 SpanBetween(C1.match, C2.match) as intercompanycontext,
+  		 SpanBetween(C2.match, M.clue) as betweencontext,
+  		 RightContext(M.clue, 20) as aftercontext,
+  		 CombineSpans(C1.match, M.clue) as match
+  from CompanyInfoShort C1, CompanyInfoShort C2, JointVentureClueAfter M
+  where FollowsTok(C1.match, C2.match, 0, 5) and
+  	    FollowsTok(C2.match, M.clue, 0, 6) and
+  	    Not(Equals(GetText(C1.companyname), GetText(C2.companyname)));
+  	    
+-- make sure the match is within the same announcement
+create view JointVentureClueAfterCompNamesShortTemp as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.intercompanycontext as intercompanycontext,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, A.match) as aftercontext,
+  	   M.match as match
+from JointVentureClueAfterCompNames M, ShortText A
+where Contains(A.match, M.match);
+
+-- make sure the context does not contain a 3rd company name
+create view JointVentureClueAfterCompNamesShortBadMatch as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.betweencontext as betweencontext, 
+  	   M.aftercontext as aftercontext,
+  	   M.match as match
+from JointVentureClueAfterCompNamesShortTemp M, CompanyInfoShort C
+where Or( Contains(M.betweencontext, C.match),
+          Contains(M.intercompanycontext, C.match) 
+         );
+
+--discard the bad matches
+create view JointVentureClueAfterCompNamesShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from JointVentureClueAfterCompNamesShortTemp M
+)
+minus
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from JointVentureClueAfterCompNamesShortBadMatch M
+);
+  	    
+-- CANCELLED clues
+create view JointVentureCancelledClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'cancelled' as status,
+  	   M.match as match
+from JointVentureClueBetweenCompNamesShort M
+where Or(ContainsDict('PositiveCluesForJointVentureCancellations', M.betweencontext),
+	  ContainsDict('PositiveCluesForJointVentureCancellations', M.aftercontext));
+
+	  
+create view JointVentureCancelledClueAfterCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'cancelled' as status,
+  	   M.match as match
+from JointVentureClueAfterCompNamesShort M
+where Or(ContainsDict('PositiveCluesForJointVentureCancellations', M.betweencontext),
+	  ContainsDict('PositiveCluesForJointVentureCancellations', M.aftercontext));
+	  
+create view JointVentureCancelledShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureCancelledClueBetweenCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureCancelledClueAfterCompNamesShort M
+);
+
+	  
+-- ANNOUNCED clues  
+create view JointVentureAnnouncedClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'announced' as status,
+  	   M.match as match
+from JointVentureClueBetweenCompNamesShort M
+where Or(ContainsDict('PositiveCluesForJointVentureAnnouncements', M.betweencontext),
+	  ContainsDict('PositiveCluesForJointVentureAnnouncements', M.aftercontext))
+	  and Not(ContainsDict('PositiveCluesForJointVentureCancellations', M.betweencontext))
+	  and Not(ContainsDict('PositiveCluesForJointVentureCancellations', M.aftercontext));
+	
+	  
+create view JointVentureAnnouncedClueAfterCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'announced' as status,
+  	   M.match as match
+from JointVentureClueAfterCompNamesShort M
+where Or(ContainsDict('PositiveCluesForJointVentureAnnouncements', M.match),
+	  ContainsDict('PositiveCluesForJointVentureAnnouncements', M.aftercontext))
+	  and Not(ContainsDict('PositiveCluesForJointVentureCancellations', M.match))
+	  and Not(ContainsDict('PositiveCluesForJointVentureCancellations', M.aftercontext));
+
+	  
+create view JointVentureAnnouncedShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureAnnouncedClueBetweenCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureAnnouncedClueAfterCompNamesShort M
+);	  
+	  
+-- PLANNED clues  
+create view JointVenturePlannedClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'planned' as status,
+  	   M.match as match
+from JointVentureClueBetweenCompNamesShort M
+where Or(ContainsDict('PositiveCluesForJointVenturePlans', M.betweencontext),
+	  ContainsDict('PositiveCluesForJointVenturePlans', M.aftercontext));
+
+	  
+create view JointVenturePlannedClueAfterCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'planned' as status,
+  	   M.match as match
+from JointVentureClueAfterCompNamesShort M
+where Or(ContainsDict('PositiveCluesForJointVenturePlans', M.match),
+	  ContainsDict('PositiveCluesForJointVenturePlans', M.aftercontext));	
+	  
+
+create view JointVenturePlannedShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVenturePlannedClueBetweenCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.status as status, M.match as match
+	from JointVenturePlannedClueAfterCompNamesShort M
+);	  
+	  
+	  
+-- POSTPONED clues  
+create view JointVenturePostponedClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'postponed' as status,
+  	   M.match as match
+from JointVentureClueBetweenCompNamesShort M
+where Or(ContainsDict('PositiveCluesForJointVenturePostponement', M.betweencontext),
+	  ContainsDict('PositiveCluesForJointVenturePostponement', M.aftercontext));
+
+	  
+create view JointVenturePostponedClueAfterCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'postponed' as status,
+  	   M.match as match
+from JointVentureClueAfterCompNamesShort M
+where Or(ContainsDict('PositiveCluesForJointVenturePostponement', M.betweencontext),
+	  ContainsDict('PositiveCluesForJointVenturePostponement', M.aftercontext));
+	  
+
+create view JointVenturePostponedShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVenturePostponedClueBetweenCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.status as status, M.match as match
+	from JointVenturePostponedClueAfterCompNamesShort M
+);	  
+	  
+	  
+-- UPDATED clues  
+create view JointVentureUpdatedClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'updated' as status,
+  	   M.match as match
+from JointVentureClueBetweenCompNamesShort M
+where Or(ContainsDict('PositiveCluesForJointVentureUpdates', M.betweencontext),
+	  ContainsDict('PositiveCluesForJointVentureUpdates', M.aftercontext));
+
+	  
+create view JointVentureUpdatedClueAfterCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'updated' as status,
+  	   M.match as match
+from JointVentureClueAfterCompNamesShort M
+where Or(ContainsDict('PositiveCluesForJointVentureUpdates', M.match),
+	  ContainsDict('PositiveCluesForJointVentureUpdates', M.aftercontext)); 
+
+create view JointVentureUpdatedShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureUpdatedClueBetweenCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureUpdatedClueAfterCompNamesShort M
+);	
+
+
+-- RUMORED clues  
+create view JointVentureRumoredClueBetweenCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'rumored' as status,
+  	   M.match as match
+from JointVentureClueBetweenCompNamesShort M
+where Or(ContainsDict('PositiveCluesForJointVentureRumors', M.betweencontext),
+	  ContainsDict('PositiveCluesForJointVentureRumors', M.aftercontext));
+
+	  
+create view JointVentureRumoredClueAfterCompNamesShort as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   'rumored' as status,
+  	   M.match as match
+from JointVentureClueAfterCompNamesShort M
+where Or(ContainsDict('PositiveCluesForJointVentureRumors', M.match),
+	  ContainsDict('PositiveCluesForJointVentureRumors', M.aftercontext)); 
+	  
+
+create view JointVentureRumoredShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureRumoredClueBetweenCompNamesShort M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureRumoredClueAfterCompNamesShort M
+);	
+
+
+
+--JointVentures with known status
+
+create view JointVentureKnownStatusShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureCancelledShort M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureAnnouncedShort M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVenturePlannedShort M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVenturePostponedShort M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureUpdatedShort M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureRumoredShort M
+);
+
+
+--all jointventures with no status info
+create view JointVentureAllShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.match as match
+	from JointVentureClueBetweenCompNamesShort M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   '' as exchange3, '' as ticker3, '' as company3,
+	  	   M.match as match
+	from JointVentureClueAfterCompNamesShort M
+);
+
+
+-- JointVentures with unknown status
+create view JointVentureUnknownStatusShort as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	   	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		   M.match as match
+	from JointVentureAllShort M
+)
+minus
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		   M.match as match
+	from JointVentureKnownStatusShort M
+);  
+
+
+
+--all jointventures with status info
+create view JointVentureWithStatusShortAll as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	   M.status as status, M.match as match
+from
+(
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.status as status, M.match as match
+		from JointVentureKnownStatusShort M
+	)
+	union all
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   '' as status, M.match as match
+		from JointVentureUnknownStatusShort M
+	)
+) M
+order by GetBegin(M.match);
+
+--find partially overlapping matches
+create view JointVentureWithStatusShortWithPartialOverlapTemp as
+select A1.exchange1 as exchange1_A1, A1.ticker1 as ticker1_A1, A1.company1 as company1_A1, 
+	   A1.exchange2 as exchange2_A1, A1.ticker2 as ticker2_A1, A1.company2 as company2_A1,
+	   A1.exchange3 as exchange3_A1, A1.ticker3 as ticker3_A1, A1.company3 as company3_A1,
+	   A1.status as status_A1, A1.match as match_A1,
+	   A2.exchange1 as exchange1_A2, A2.ticker1 as ticker1_A2, A2.company1 as company1_A2, 
+	   A2.exchange2 as exchange2_A2, A2.ticker2 as ticker2_A2, A2.company2 as company2_A2,
+	   A2.exchange3 as exchange3_A2, A2.ticker3 as ticker3_A2, A2.company3 as company3_A2,
+	   A2.status as status_A2, A2.match as match_A2
+from JointVentureWithStatusShortAll A1, JointVentureWithStatusShortAll A2
+where Overlaps(A1.match, A2.match) and
+	  Not(Contains(A1.match, A2.match)) and
+	  Not(Contains(A2.match, A1.match));
+	  
+
+create view JointVentureWithStatusShortWithPartialOverlap as
+(
+select A.exchange1_A1 as exchange1, A.ticker1_A1 as ticker1, A.company1_A1 as company1, 
+	   A.exchange2_A1 as exchange2, A.ticker2_A1 as ticker2, A.company2_A1 as company2,
+	   A.exchange3_A1 as exchange3, A.ticker3_A1 as ticker3, A.company3_A1 as company3,
+	   A.status_A1 as status, A.match_A1 as match
+from JointVentureWithStatusShortWithPartialOverlapTemp A
+)
+union all
+(
+select A.exchange1_A2 as exchange1, A.ticker1_A2 as ticker1, A.company1_A2 as company1, 
+	   A.exchange2_A2 as exchange2, A.ticker2_A2 as ticker2, A.company2_A2 as company2,
+	   A.exchange3_A2 as exchange3, A.ticker3_A2 as ticker3, A.company3_A2 as company3,
+	   A.status_A2 as status, A.match_A2 as match
+from JointVentureWithStatusShortWithPartialOverlapTemp A
+);
+
+
+--remove partially overlapping matches
+create view JointVentureWithStatusShort as
+select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+	   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+	   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+	   A.status as status, A.match as match
+from
+(
+	(
+	select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+		   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+		   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+		   A.status as status, A.match as match
+	from JointVentureWithStatusShortAll A
+	)
+	minus
+	(
+	select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+		   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+		   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+		   A.status as status, A.match as match
+	from JointVentureWithStatusShortWithPartialOverlap A
+	) 
+) A
+consolidate on A.match;
+
+
+create view ShortTextWithJointVenture as
+select T.match as match
+from ShortText T, JointVentureWithStatusShort A
+where Contains(T.match, A.match);
+
+create view JointVentureMissedShort as
+( select T.match as match from ShortText T, JointVentureClueAll J where Contains(T.match, J.clue) )
+minus
+( select T.match as match from ShortTextWithJointVenture T );
+
+
+
+-- ================General JOINT VENTURE rules for the body of text =========================
+
+ 
+ 
+-- Match statements of the form "X forms joint venture with Y"
+
+ 
+create view JointVentureClueBetween2CompNamesLongInitial as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 SpanBetween(C1.match, C2.match) as betweencontext,
+  		 RightContext(C2.match, 50) as aftercontext,
+  		 CombineSpans(C1.match, C2.match) as match
+  from CompanyInfoLong C1, CompanyInfoLong C2, JointVentureClueBetween M
+  where FollowsTok(C1.match, M.clue, 0, 20) and
+  	    FollowsTok(M.clue, C2.match, 0, 4) and
+  	    --Not(Equals(GetText(C1.companyname), GetText(C2.companyname))) and
+  	    Not(ContainsText(C1.companyname, C2.companyname)) and Not(ContainsText(C2.companyname, C1.companyname)) and
+  	    Not(Contains(C1.match, M.clue)) and Not(Contains(C2.match, M.clue));
+  	    
+-- make sure the match is within the same sentence
+create view JointVentureClueBetween2CompNamesLongTemp as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   '' as exchange3, '' as ticker3, '' as company3,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, S.match) as aftercontext,
+  	   M.match as match
+from JointVentureClueBetween2CompNamesLongInitial M, LongText S
+where Contains(S.match, M.match);
+
+
+-- make sure the context does not contain a 3rd company name
+create view JointVentureClueBetween2CompNamesLongBadMatch as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.betweencontext as betweencontext, 
+  	   M.aftercontext as aftercontext,
+  	   M.match as match
+from JointVentureClueBetween2CompNamesLongTemp M, CompanyInfoLong C
+where Contains(M.betweencontext, C.match);
+
+--discard the bad matches
+create view JointVentureClueBetween2CompNamesLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from JointVentureClueBetween2CompNamesLongTemp M
+)
+minus
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from JointVentureClueBetween2CompNamesLongBadMatch M
+);
+
+
+-- Match statements of the form "X forms joint venture with Y and Z"
+create view JointVentureClueBetween3CompNamesLongInitial as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 C3.exchange as exchange3, C3.ticker as ticker3, C3.companyname as company3,
+  		 SpanBetween(C1.match, C2.match) as betweencontext,
+  		 RightContext(C3.match, 50) as aftercontext,
+  		 CombineSpans(C1.match, C3.match) as match
+  from CompanyInfoLong C1, CompanyInfoLong C2, CompanyInfoLong C3, JointVentureClueBetween M
+  where FollowsTok(C1.match, M.clue, 0, 20) and
+  	    FollowsTok(M.clue, C2.match, 0, 4) and
+  	    FollowsTok(C2.match, C3.match, 0, 3) and
+  	    --Not(Equals(GetText(C1.companyname), GetText(C2.companyname))) and
+  	    --Not(Equals(GetText(C2.companyname), GetText(C3.companyname))) and
+  	    --Not(Equals(GetText(C1.companyname), GetText(C3.companyname))) and
+  	    Not(ContainsText(C1.companyname, C2.companyname)) and Not(ContainsText(C2.companyname, C1.companyname)) and
+  	    Not(ContainsText(C2.companyname, C3.companyname)) and Not(ContainsText(C3.companyname, C2.companyname)) and
+  	    Not(ContainsText(C1.companyname, C3.companyname)) and Not(ContainsText(C3.companyname, C1.companyname));
+  	    
+-- make sure the match is within the same announcement
+create view JointVentureClueBetween3CompNamesLongTemp as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, A.match) as aftercontext,
+  	   M.match as match
+from JointVentureClueBetween3CompNamesLongInitial  M, LongText A
+where Contains(A.match, M.match);
+
+create view JointVentureClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	   M.betweencontext as betweencontext, 
+	   M.aftercontext as aftercontext,
+	   M.match as match
+from
+(
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,		  
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.betweencontext as betweencontext, 
+		  	   M.aftercontext as aftercontext,
+		  	   M.match as match
+		from JointVentureClueBetween3CompNamesLongTemp M
+	)
+	union all
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   '' as exchange3, '' as ticker3, '' as company3,
+		  	   M.betweencontext as betweencontext, 
+		  	   M.aftercontext as aftercontext,
+		  	   M.match as match
+		from JointVentureClueBetween2CompNamesLong M
+	) 
+) M
+consolidate on M.match;
+
+
+    
+-- Match statements of the form "X and Y jointventure"
+
+  
+create view JointVentureClueAfterCompNamesLongInitial as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 SpanBetween(C1.match, C2.match) as intercompanycontext,
+  		 SpanBetween(C2.match, M.clue) as betweencontext,
+  		 RightContext(M.clue, 50) as aftercontext,
+  		 CombineSpans(C1.match, M.clue) as match
+  from CompanyInfoLong C1, CompanyInfoLong C2, JointVentureClueAfter M
+  where FollowsTok(C1.match, C2.match, 1, 20) and
+  	    FollowsTok(C2.match, M.clue, 0, 20) and
+  	    --Not(Equals(GetText(C1.companyname), GetText(C2.companyname))) and
+  	    Not(ContainsText(C1.companyname, C2.companyname)) and Not(ContainsText(C2.companyname, C1.companyname)) and
+  	    Not(Contains(C1.match, M.clue)) and Not(Contains(C2.match, M.clue));
+  	    
+-- make sure the match is within the same sentence
+create view JointVentureClueAfterCompNamesLongTemp as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   '' as exchange3, '' as ticker3, '' as company3,
+  	   M.intercompanycontext as intercompanycontext,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, S.match) as aftercontext,
+  	   M.match as match
+from JointVentureClueAfterCompNamesLongInitial M, LongText S
+where Contains(S.match, M.match);
+
+
+
+-- make sure the context does not contain a 3rd company name
+create view JointVentureClueAfterCompNamesLongBadMatch as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   M.betweencontext as betweencontext, 
+  	   M.aftercontext as aftercontext,
+  	   M.match as match
+from JointVentureClueAfterCompNamesLongTemp M, CompanyInfoLong C
+where Or( Contains(M.betweencontext, C.match),
+          Contains(M.intercompanycontext, C.match) 
+         );
+
+--discard the bad matches
+create view JointVentureClueAfterCompNamesLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from JointVentureClueAfterCompNamesLongTemp M
+)
+minus
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.betweencontext as betweencontext, 
+	  	   M.aftercontext as aftercontext,
+	  	   M.match as match
+	from JointVentureClueAfterCompNamesLongBadMatch M
+);
+
+
+-- Match statements of the form "jointventure of X and Y"
+
+
+
+
+-- rule for jointventure between 2 companies
+create view JointVentureClueBefore2CompNamesTmp as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 LeftContext(M.clue, 50) as beforecontext,
+  		 SpanBetween(M.clue, C2.match) as betweencontext,
+  		 RightContext(C2.match, 70) as aftercontext,
+  		 CombineSpans(M.clue, C2.match) as match
+  from CompanyInfoLong C1, CompanyInfoLong C2, JointVentureClueBefore M
+  where FollowsTok(M.clue, C1.match, 0, 10) and
+  	    FollowsTok(C1.match, C2.match, 0, 5) and
+  	    --Not(Equals(GetText(C1.companyname), GetText(C2.companyname))) and
+  	    Not(ContainsText(C1.companyname, C2.companyname)) and Not(ContainsText(C2.companyname, C1.companyname)) and
+  	    Not(Contains(C1.match, M.clue)) and Not(Contains(C2.match, M.clue));
+  	    
+-- make sure the match is within the same sentence
+create view JointVentureClueBefore2CompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   '' as exchange3, '' as ticker3, '' as company3,
+  	   SpanIntersection(M.beforecontext, S.match) as beforecontext,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, S.match) as aftercontext,
+  	   M.match as match
+from JointVentureClueBefore2CompNamesTmp M, LongText S
+where Contains(S.match, M.match);
+
+-- rule for jointventure between 3 companies
+create view JointVentureClueBefore3CompNamesTmp as
+  select C1.exchange as exchange1, C1.ticker as ticker1, C1.companyname as company1, 
+  		 C2.exchange as exchange2, C2.ticker as ticker2, C2.companyname as company2,
+  		 C3.exchange as exchange3, C3.ticker as ticker3, C3.companyname as company3,
+  		 LeftContext(M.clue, 50) as beforecontext,
+  		 SpanBetween(M.clue, C3.match) as betweencontext,
+  		 RightContext(C3.match, 70) as aftercontext,
+  		 CombineSpans(M.clue, C3.match) as match
+  from CompanyInfoLong C1, CompanyInfoLong C2, CompanyInfoLong C3, JointVentureClueBefore M
+  where FollowsTok(M.clue, C1.match, 0, 10) and
+  	    FollowsTok(C1.match, C2.match, 0, 5) and
+  	    FollowsTok(C2.match, C3.match, 0, 5) and
+  	    --Not(Equals(GetText(C1.companyname), GetText(C2.companyname))) and
+  	    --Not(Equals(GetText(C2.companyname), GetText(C3.companyname))) and
+  	    --Not(Equals(GetText(C1.companyname), GetText(C3.companyname))) and
+  	    Not(ContainsText(C1.companyname, C2.companyname)) and Not(ContainsText(C2.companyname, C1.companyname)) and
+  	    Not(ContainsText(C2.companyname, C3.companyname)) and Not(ContainsText(C3.companyname, C2.companyname)) and
+  	    Not(ContainsText(C1.companyname, C3.companyname)) and Not(ContainsText(C3.companyname, C1.companyname)) and
+  	    Not(Contains(C1.match, M.clue)) and Not(Contains(C2.match, M.clue)) and Not(Contains(C3.match, M.clue));
+  	    
+-- make sure the match is within the same sentence
+create view JointVentureClueBefore3CompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   SpanIntersection(M.beforecontext, S.match) as beforecontext,
+  	   M.betweencontext as betweencontext, 
+  	   SpanIntersection(M.aftercontext, S.match) as aftercontext,
+  	   M.match as match
+from JointVentureClueBefore3CompNamesTmp M, LongText S
+where Contains(S.match, M.match);
+
+--consolidate the matches for 2 and 3 companies
+create view JointVentureClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	   M.beforecontext as beforecontext,
+	   M.betweencontext as betweencontext, 
+	   M.aftercontext as aftercontext,
+	   M.match as match
+from
+(
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.beforecontext as beforecontext,
+		  	   M.betweencontext as betweencontext, 
+		  	   M.aftercontext as aftercontext,
+		  	   M.match as match
+		from JointVentureClueBefore3CompNamesLong M
+	)
+	union all
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.beforecontext as beforecontext,
+		  	   M.betweencontext as betweencontext, 
+		  	   M.aftercontext as aftercontext,
+		  	   M.match as match
+		from JointVentureClueBefore2CompNamesLong M
+	)
+) M
+consolidate on M.match;
+
+
+-- CANCELLED clues
+create view JointVentureCancelledClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'cancelled' as status,
+  	   M.match as match
+from JointVentureClueBetweenCompNamesLong M
+where Or(ContainsDict('PositiveCluesForJointVentureCancellations', M.betweencontext),
+	  ContainsDict('PositiveCluesForJointVentureCancellations', M.aftercontext));
+
+	  
+create view JointVentureCancelledClueAfterCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'cancelled' as status,
+  	   M.match as match
+from JointVentureClueAfterCompNamesLong M
+where Or(ContainsDict('PositiveCluesForJointVentureCancellations', M.match),
+	  ContainsDict('PositiveCluesForJointVentureCancellations', M.aftercontext));
+	  
+	  
+create view JointVentureCancelledClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'cancelled' as status,
+  	   M.match as match
+from JointVentureClueBeforeCompNamesLong M
+where Or(ContainsDict('PositiveCluesForJointVentureCancellations', M.betweencontext),
+	     ContainsDict('PositiveCluesForJointVentureCancellations', M.aftercontext),
+	     ContainsDict('PositiveCluesForJointVentureCancellations', M.beforecontext));
+
+	  
+create view JointVentureCancelledLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureCancelledClueBetweenCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureCancelledClueAfterCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureCancelledClueBeforeCompNamesLong M
+);
+
+	  
+-- ANNOUNCED clues  
+create view JointVentureAnnouncedClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'announced' as status,
+  	   M.match as match
+from JointVentureClueBetweenCompNamesLong M
+where Or(ContainsDict('PositiveCluesForJointVentureAnnouncements', M.betweencontext),
+	  ContainsDict('PositiveCluesForJointVentureAnnouncements', M.aftercontext))
+	  and Not(ContainsDict('PositiveCluesForJointVentureCancellations', M.betweencontext))
+	  and Not(ContainsDict('PositiveCluesForJointVentureCancellations', M.aftercontext));
+
+	  
+create view JointVentureAnnouncedClueAfterCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'announced' as status,
+  	   M.match as match
+from JointVentureClueAfterCompNamesLong M
+where Or(ContainsDict('PositiveCluesForJointVentureAnnouncements', M.match),
+	  ContainsDict('PositiveCluesForJointVentureAnnouncements', M.aftercontext))	  
+	  and Not(ContainsDict('PositiveCluesForJointVentureCancellations', M.match))
+	  and Not(ContainsDict('PositiveCluesForJointVentureCancellations', M.aftercontext));
+	  
+
+create view JointVentureAnnouncedClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'announced' as status,
+  	   M.match as match
+from JointVentureClueBeforeCompNamesLong M
+where Or(ContainsDict('PositiveCluesForJointVentureAnnouncements', M.betweencontext),
+	     ContainsDict('PositiveCluesForJointVentureAnnouncements', M.aftercontext),
+	     ContainsDict('PositiveCluesForJointVentureAnnouncements', M.beforecontext))
+	  and Not(ContainsDict('PositiveCluesForJointVentureCancellations', M.betweencontext))
+	  and Not(ContainsDict('PositiveCluesForJointVentureCancellations', M.aftercontext))
+	  and Not(ContainsDict('PositiveCluesForJointVentureCancellations', M.beforecontext));	  
+
+	  
+create view JointVentureAnnouncedLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	       M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureAnnouncedClueBetweenCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	       M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureAnnouncedClueAfterCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureAnnouncedClueBeforeCompNamesLong M
+);	  
+	  
+-- PLANNED clues  
+create view JointVenturePlannedClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'planned' as status,
+  	   M.match as match
+from JointVentureClueBetweenCompNamesLong M
+where Or(ContainsDict('PositiveCluesForJointVenturePlans', M.betweencontext),
+	  ContainsDict('PositiveCluesForJointVenturePlans', M.aftercontext));
+
+	  
+create view JointVenturePlannedClueAfterCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'planned' as status,
+  	   M.match as match
+from JointVentureClueAfterCompNamesLong M
+where Or(ContainsDict('PositiveCluesForJointVenturePlans', M.match),
+	  ContainsDict('PositiveCluesForJointVenturePlans', M.aftercontext));	
+
+	  
+create view JointVenturePlannedClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'planned' as status,
+  	   M.match as match
+from JointVentureClueBeforeCompNamesLong M
+where Or(ContainsDict('PositiveCluesForJointVenturePlans', M.betweencontext),
+	     ContainsDict('PositiveCluesForJointVenturePlans', M.aftercontext),
+	     ContainsDict('PositiveCluesForJointVenturePlans', M.beforecontext));	 
+	     
+
+create view JointVenturePlannedLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVenturePlannedClueBetweenCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVenturePlannedClueAfterCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVenturePlannedClueBeforeCompNamesLong M
+);	  
+	  
+	  
+-- POSTPONED clues  
+create view JointVenturePostponedClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'postponed' as status,
+  	   M.match as match
+from JointVentureClueBetweenCompNamesLong M
+where Or(ContainsDict('PositiveCluesForJointVenturePostponement', M.betweencontext),
+	  ContainsDict('PositiveCluesForJointVenturePostponement', M.aftercontext));
+
+	  
+create view JointVenturePostponedClueAfterCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'postponed' as status,
+  	   M.match as match
+from JointVentureClueAfterCompNamesLong M
+where Or(ContainsDict('PositiveCluesForJointVenturePostponement', M.betweencontext),
+	  ContainsDict('PositiveCluesForJointVenturePostponement', M.aftercontext));
+	  
+	  
+create view JointVenturePostponedClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'postponed' as status,
+  	   M.match as match
+from JointVentureClueBeforeCompNamesLong M
+where Or(ContainsDict('PositiveCluesForJointVenturePostponement', M.betweencontext),
+	     ContainsDict('PositiveCluesForJointVenturePostponement', M.aftercontext),
+	     ContainsDict('PositiveCluesForJointVenturePostponement', M.beforecontext));	
+	  
+
+create view JointVenturePostponedLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVenturePostponedClueBetweenCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVenturePostponedClueAfterCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVenturePostponedClueBeforeCompNamesLong M
+);	  
+	  
+	  
+-- UPDATED clues  
+create view JointVentureUpdatedClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'updated' as status,
+  	   M.match as match
+from JointVentureClueBetweenCompNamesLong M
+where Or(ContainsDict('PositiveCluesForJointVentureUpdates', M.betweencontext),
+	  ContainsDict('PositiveCluesForJointVentureUpdates', M.aftercontext));
+
+	  
+create view JointVentureUpdatedClueAfterCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'updated' as status,
+  	   M.match as match
+from JointVentureClueAfterCompNamesLong M
+where Or(ContainsDict('PositiveCluesForJointVentureUpdates', M.match),
+	  ContainsDict('PositiveCluesForJointVentureUpdates', M.aftercontext));	  
+
+create view JointVentureUpdatedClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'updated' as status,
+  	   M.match as match
+from JointVentureClueBeforeCompNamesLong M
+where Or(ContainsDict('PositiveCluesForJointVentureUpdates', M.betweencontext),
+	     ContainsDict('PositiveCluesForJointVentureUpdates', M.aftercontext),
+	     ContainsDict('PositiveCluesForJointVentureUpdates', M.beforecontext));		  
+	  
+	  
+create view JointVentureUpdatedLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureUpdatedClueBetweenCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureUpdatedClueAfterCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureUpdatedClueBeforeCompNamesLong M
+);		
+
+
+-- Rumored clues  
+create view JointVentureRumoredClueBetweenCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'rumored' as status,
+  	   M.match as match
+from JointVentureClueBetweenCompNamesLong M
+where Or(ContainsDict('PositiveCluesForJointVentureRumors', M.betweencontext),
+	  ContainsDict('PositiveCluesForJointVentureRumors', M.aftercontext));
+
+	  
+create view JointVentureRumoredClueAfterCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'rumored' as status,
+  	   M.match as match
+from JointVentureClueAfterCompNamesLong M
+where Or(ContainsDict('PositiveCluesForJointVentureRumors', M.match),
+	  ContainsDict('PositiveCluesForJointVentureRumors', M.aftercontext)); 
+	  
+
+create view JointVentureRumoredClueBeforeCompNamesLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+  	   'rumored' as status,
+  	   M.match as match
+from JointVentureClueBeforeCompNamesLong M
+where Or(ContainsDict('PositiveCluesForJointVentureRumors', M.betweencontext),
+	     ContainsDict('PositiveCluesForJointVentureRumors', M.aftercontext),
+	     ContainsDict('PositiveCluesForJointVentureRumors', M.beforecontext));		  
+	  
+	  
+create view JointVentureRumoredLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureRumoredClueBetweenCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureRumoredClueAfterCompNamesLong M
+)
+union all 
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+  	   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureRumoredClueBeforeCompNamesLong M
+);
+
+
+
+--JointVentures with known status
+
+create view JointVentureKnownStatusLong as
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureCancelledLong M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureAnnouncedLong M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVenturePlannedLong M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVenturePostponedLong M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureUpdatedLong M
+)
+union all
+(
+	select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+	from JointVentureRumoredLong M
+);
+
+
+--all jointventures with no status info
+create view JointVentureAllLong as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.match as match
+from
+(
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.match as match
+		from JointVentureClueBetweenCompNamesLong M
+	)
+	union all
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.match as match
+		from JointVentureClueAfterCompNamesLong M
+	)
+	union all
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.match as match
+		from JointVentureClueBeforeCompNamesLong M
+	)
+) M
+consolidate on M.match;
+
+
+-- JointVentures with unknown status
+create view JointVentureUnknownStatusLong as
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		   	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		   	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+			   M.match as match
+		from JointVentureAllLong M
+	)
+	minus
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+			   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+			   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+			   M.match as match
+		from JointVentureKnownStatusLong M
+	);  
+
+
+
+--all jointventures with status info
+create view JointVentureWithStatusLongAll as
+select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+	  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+	  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+	  	   M.status as status, M.match as match
+from
+(
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   M.status as status, M.match as match
+		from JointVentureKnownStatusLong M
+	)
+	union all
+	(
+		select M.exchange1 as exchange1, M.ticker1 as ticker1, M.company1 as company1, 
+		  	   M.exchange2 as exchange2, M.ticker2 as ticker2, M.company2 as company2,
+		  	   M.exchange3 as exchange3, M.ticker3 as ticker3, M.company3 as company3,
+		  	   '' as status, M.match as match
+		from JointVentureUnknownStatusLong M
+	)
+) M
+--consolidate on M.match
+order by GetBegin(M.match);
+
+
+--find partially overlapping matches
+create view JointVentureWithStatusLongWithPartialOverlapTemp as
+select A1.exchange1 as exchange1_A1, A1.ticker1 as ticker1_A1, A1.company1 as company1_A1, 
+	   A1.exchange2 as exchange2_A1, A1.ticker2 as ticker2_A1, A1.company2 as company2_A1,
+	   A1.exchange3 as exchange3_A1, A1.ticker3 as ticker3_A1, A1.company3 as company3_A1,
+	   A1.status as status_A1, A1.match as match_A1,
+	   A2.exchange1 as exchange1_A2, A2.ticker1 as ticker1_A2, A2.company1 as company1_A2, 
+	   A2.exchange2 as exchange2_A2, A2.ticker2 as ticker2_A2, A2.company2 as company2_A2,
+	   A2.exchange3 as exchange3_A2, A2.ticker3 as ticker3_A2, A2.company3 as company3_A2,
+	   A2.status as status_A2, A2.match as match_A2
+from JointVentureWithStatusLongAll A1, JointVentureWithStatusLongAll A2
+where Overlaps(A1.match, A2.match) and
+	  Not(Contains(A1.match, A2.match)) and
+	  Not(Contains(A2.match, A1.match));
+	  
+
+create view JointVentureWithStatusLongWithPartialOverlap as
+(
+select A.exchange1_A1 as exchange1, A.ticker1_A1 as ticker1, A.company1_A1 as company1, 
+	   A.exchange2_A1 as exchange2, A.ticker2_A1 as ticker2, A.company2_A1 as company2,
+	   A.exchange3_A1 as exchange3, A.ticker3_A1 as ticker3, A.company3_A1 as company3,
+	   A.status_A1 as status, A.match_A1 as match
+from JointVentureWithStatusLongWithPartialOverlapTemp A
+)
+union all
+(
+select A.exchange1_A2 as exchange1, A.ticker1_A2 as ticker1, A.company1_A2 as company1, 
+	   A.exchange2_A2 as exchange2, A.ticker2_A2 as ticker2, A.company2_A2 as company2,
+	   A.exchange3_A2 as exchange3, A.ticker3_A2 as ticker3, A.company3_A2 as company3,
+	   A.status_A2 as status, A.match_A2 as match
+from JointVentureWithStatusLongWithPartialOverlapTemp A
+);
+
+-- find matches containing a ';' and remove them if the sentence is part of a bigger paragraph 
+create view JointVentureWithStatusLongWithSemiColumn as
+select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+	  	   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+	  	   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+	  	   A.status as status, A.match as match
+from JointVentureWithStatusLongAll A, ParagraphSentence S
+where Contains(S.match, A.match) and
+      ContainsRegex(/;/, A.match);
+
+
+--find matches containing a person name
+create view JointVentureWithStatusLongOverlapPerson as
+select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+	  	   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+	  	   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+	  	   A.status as status, A.match as match
+from JointVentureWithStatusLongAll A, Person_ P
+where Contains(A.match, P.reference) and
+      Not(Overlaps(CombineSpans(A.company1, A.ticker1),P.reference)) and
+      Not(Overlaps(CombineSpans(A.company2, A.ticker2),P.reference)) and
+      Not(Overlaps(CombineSpans(A.company3, A.ticker3),P.reference));
+
+--find matches overlapping with address
+create view JointVentureWithStatusLongOverlapAddress as
+select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+	  	   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+	  	   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+	  	   A.status as status, A.match as match
+from JointVentureWithStatusLongAll A, AddressFinal P
+where Overlaps(A.match, P.reference);
+
+
+--remove partially overlapping matches and ';'
+create view JointVentureWithStatusLong as
+select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+	   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+	   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+	   A.status as status, A.match as match
+from
+(
+	(
+	select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+		   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+		   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+		   A.status as status, A.match as match
+	from JointVentureWithStatusLongAll A
+	)
+	minus
+	(
+		(
+			select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+				   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+				   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+				   A.status as status, A.match as match
+			from JointVentureWithStatusLongWithPartialOverlap A
+		) 
+		union all 
+		(
+			select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+				   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+				   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+				   A.status as status, A.match as match
+			from JointVentureWithStatusLongWithSemiColumn A
+		)
+		union all
+		(
+			select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+				   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+				   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+				   A.status as status, A.match as match
+			from JointVentureWithStatusLongOverlapPerson A
+		) 
+		union all 
+		(
+			select A.exchange1 as exchange1, A.ticker1 as ticker1, A.company1 as company1, 
+				   A.exchange2 as exchange2, A.ticker2 as ticker2, A.company2 as company2,
+				   A.exchange3 as exchange3, A.ticker3 as ticker3, A.company3 as company3,
+				   A.status as status, A.match as match
+			from JointVentureWithStatusLongOverlapAddress A
+		)
+	)
+) A
+consolidate on A.match;
+
+
+create view LongTextWithJointVenture as
+select T.match as match
+from LongText T, JointVentureWithStatusLong A
+where Contains(T.match, A.match);
+
+create view JointVentureMissedLong as
+( select T.match as match from LongText T, JointVentureClueAll J where Contains(T.match, J.clue))
+minus
+( select T.match as match from LongTextWithJointVenture T );

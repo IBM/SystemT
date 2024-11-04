@@ -1,0 +1,38 @@
+module LocationCandidates;
+
+-- Filters using modules Region, Person, Organization and filters created above
+	
+create view RegionInvalid2 as
+select R.match as match
+from   RegionCandidate R,
+	   OrganizationFull O 
+where  Contains(O.organization, R.match)
+  and  Not(Equals(O.organization, R.match));   
+
+create view RegionInvalid3 as
+select R.match as match
+from   RegionCandidate R,
+	   OrganizationFull O 
+where  Overlaps(O.organization, R.match)
+  and  Not(Contains(O.organization, R.match));  
+ 
+create view RegionInvalid4 as
+select R.match as match
+from   RegionCandidate R,
+	   CityStateCountryValid O 
+where  Contains(O.loc, R.match);
+
+create view RegionInvalid as
+	(select R.match as match from RegionInvalid1 R)
+	union all 
+	(select R.match as match from RegionInvalid2 R)
+	union all 
+	(select R.match as match from RegionInvalid3 R)
+	union all
+	(select R.match as match from RegionInvalid4 R);
+
+create view RegionValid as
+	(select R.match as match from RegionCandidate R)
+	minus
+	(select R.match as match from RegionInvalid R);
+	

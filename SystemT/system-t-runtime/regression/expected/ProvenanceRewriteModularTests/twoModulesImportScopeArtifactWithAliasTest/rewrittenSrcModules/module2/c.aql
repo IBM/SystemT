@@ -1,0 +1,37 @@
+module module2;
+
+
+create view PersonCopy as
+  select  C.match as match,
+          CombineSpans(F.match, C.match) as name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          F.__auto__id as First_____sep_____F____id,
+          -1 as CapsWord_____sep_____C____id
+  from  First F,
+        CapsWord C
+  where FollowsTok(F.match, C.match, 0, 0);
+
+output view PersonCopy;
+
+create view PersonWithGenderCopy as
+  select  N.name as name,
+          N.gender as gender,
+          CombineSpans(F.match, C.match) as fullName,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          F.__auto__id as First_____sep_____F____id,
+          -1 as CapsWord_____sep_____C____id,
+          -1 as NameTable_____sep_____N____id
+  from  First F,
+        CapsWord C,
+        NameTable N
+  where FollowsTok(F.match, C.match, 0, 0)
+     and Equals(GetString(N.name), GetString(F.match));
+
+output view PersonWithGenderCopy;
+
+
+
+
+

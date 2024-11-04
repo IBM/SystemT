@@ -1,0 +1,33 @@
+require document with columns text Text;
+
+-- Tests for GreaterThan() support when passing Integer columns as arguments
+
+create dictionary CommonWords as (
+	'a', 'the', 'of', 'of a', 'of the'
+);
+
+-- Find pairs of common words within 20 tokens of each other.
+create view WordPairs_Unsorted as
+select D1.match as first, D2.match as second, 
+	CombineSpans(D1.match, D2.match) as annot
+from Dictionary('CommonWords', Document.text) D1,
+	Dictionary('CommonWords', Document.text) D2
+where FollowsTok(D1.match, D2.match, 0, 20);
+
+
+create view WordPairs_Aggs as
+select W.first as first,
+        1 as firstcnt,
+        Count(W.second) as secondcnt
+from WordPairs_Unsorted W
+group by W.first
+order by GetText(W.first);
+
+
+create view WordPairs_Count as
+  select W.*
+  from WordPairs_Aggs W
+  where GreaterThan(W.secondcnt, W.firstcnt);
+ 
+--output view WordPairs_Aggs;  
+output view WordPairs_Count;

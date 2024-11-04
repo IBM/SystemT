@@ -1,0 +1,38 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- flagsTest1.aql
+--
+-- Used for testing flag support in Regex match
+
+create view Names as
+extract dictionary 'dictionaries/first.dict'
+	on D.text as match
+from Document D;
+
+output view Names;
+
+-- Find first names, using an exhaustive dictionary.
+create view FirstName1 as
+select D.match as name
+from Names D
+--Dictionary('dictionaries/first.dict', Document.text) D
+where MatchesRegex(/\A[A-Z][a-z]*\Z/, D.match);
+
+output view FirstName1;
+
+-- Find first names, using an exhaustive dictionary.
+create view FirstName2 as
+select D.match as name
+from Dictionary('dictionaries/first.dict', Document.text) D
+where MatchesRegex(/\A[A-Z][a-z]*\Z/, 'CASE_INSENSITIVE', D.match);
+
+output view FirstName2;
+
+-- Find first names, using an exhaustive dictionary.
+create view FirstName3 as
+select D.match as name
+from Dictionary('dictionaries/first.dict', Document.text) D
+where MatchesRegex(/\A[A-Z][a-z]*.\Z/, 'CASE_INSENSITIVE|DOTALL', D.match);
+
+output view FirstName3;

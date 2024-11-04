@@ -1,0 +1,32 @@
+module Country;
+
+import view CountryCandidate from module CommonFeatures as CountryCandidate;
+import view OrganizationFull from module Organization_Candidates as OrganizationFull;
+import view RelaxedCapsPlace from module Linguistics as RelaxedCapsPlace;
+
+-- consolidate the country matches first
+create view CountryCandidateConsolidated as
+select C.match as match
+from CountryCandidate C
+consolidate on C.match;
+
+create view CapsPlaceAndCountry as
+	(select CP.* from RelaxedCapsPlace CP)
+	union all
+	(select C.* from CountryCandidate C);
+
+create view CountryCandidateInvalid as
+select C.match as match
+from   CountryCandidate C,
+	   OrganizationFull O 
+where  Overlaps(O.organization, C.match); 
+
+create view CountryCandidateValidAll as
+	(select C.match as match from CountryCandidate C)
+	minus
+	(select C.match as match from CountryCandidateInvalid C);
+
+create view CountryCandidateValid as
+select C.*
+from CountryCandidateValidAll C
+consolidate on C.match;

@@ -1,0 +1,634 @@
+-- ****************************************************************************
+--
+-- Created By : Fred Reiss (frreiss@us.ibm.com)
+-- 
+-- Annotator type : Built-in
+-- 
+-- Purpose : Extract names from text
+-- Examples :
+--			Mr. Rogers
+--			Fred Rogers
+--			Fred Q. Rogers, Esq.
+--
+-- ****************************************************************************
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Dictionary defintions section <<<<<<<<<<<<<<<<
+-- ===========================================================================
+
+-- ------------------------------------------
+-- Dictionary Name: TitlesDict
+-- Contents: Various titles for people
+-- Original Name:  INITIAL
+-- ------------------------------------------
+create dictionary TitlesDict as
+(
+	"rev.", "col.", "reverend", "prof.", "professor.", 
+	"lady", "miss.", "mrs.", "mrs", "mr.", "pt.", "ms.",
+	"messrs.", "dr.", "master.", "marquis", "monsieur",
+	"ds", "junior", "di", "Dear", "Name:"
+);
+
+-- ------------------------------------------
+-- Dictionary Name: FilterPersonDict
+-- Contents: Words that are often capitalized but are NOT names.
+-- Original Name:  FLT:PERSON
+-- ------------------------------------------
+create dictionary FilterPersonDict as
+(
+	"Travel", "Fellow", "Sir", "IBMer", "Researcher", "All",
+	"Friends", "Friend", "Colleague", "Colleagues", "Managers",
+	"Customer", "Users", "User", "Valued", "Executive", "Chairs"
+);
+
+-- ---------------------------------------------------------------------------
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Common expression defintions section <<<<<<<<<<<<<<<
+-- ===========================================================================
+
+-- ------------------------------------------
+-- View Name: sentence (Sentence is reserved word)
+-- View Purpose: finds senteneces
+-- ------------------------------------------
+create view sentence as
+extract 
+    split using B.boundary 
+        retain right split point
+        on B.text
+        as sentence
+from (
+    extract 
+        D.text as text,
+        regex /(?:(?:[\;\.\?!]+\s)|(\n\s*\n))/ on D.text as boundary 
+        from Document D
+    having Not(ContainsDict('dictionaries/abbreviations.dict', 
+    CombineSpans(LeftContextTok(boundary, 1), boundary)))
+) B;
+		
+-- ------------------------------------------
+-- Expression Name: CapsPerson
+-- Expression Purpose: Finds capitalized words composed entirely of letters.
+-- Also filters out matches of a "stopwords" dictionary.
+-- 
+-- Example matches: Fred, Joe, Enron, Xasasdfaerqgh
+--					
+-- Migrated from:
+--		<definition name=CAPSPERSON>
+--			\p{Upper}\p{Lower}[\p{Alpha}]{1,20}
+--		</definition>
+--
+-- and
+-- <rule annotation=FLT:CAPSPER id=1>
+-- <internal>
+-- <token attribute={etc}FLT:PERSON{etc}>CAPSPERSON</token>
+-- </internal>
+-- </rule>
+-- ------------------------------------------
+create view CapsPerson as
+	select
+		R.match as name
+	from
+		Regex(/\b\p{Upper}\p{Lower}[\p{Alpha}]{1,20}\b/, DocScan.text) R
+	where
+		Not(ContainsDict("FilterPersonDict", R.match));
+
+-- ------------------------------------------
+-- Expression Name: FirstName
+-- Expression Purpose: Finds capitalized words that are in the 
+-- "first names" dictionary.
+-- 
+-- Example matches: Fred, Joe
+-- Migrated from:
+--		<token attribute={etc}PERSON:ST:FNAME{etc}>CAPSPERSON</token>
+-- ------------------------------------------
+create view FirstName as
+	select
+		D.match as name
+	from
+		Dictionary("dictionaries/strictfirst.dict", DocScan.text) D
+	where 
+		MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{1,20}/, D.match);		
+
+-- ------------------------------------------
+-- Expression Name: LastName
+-- Expression Purpose: Finds capitalized words that are in the 
+-- "last names" dictionary.
+-- 
+-- Example matches: Fred, Joe
+-- Migrated from:
+--		<token attribute={etc}PERSON:ST:FNAME{etc}>CAPSPERSON</token>
+-- ------------------------------------------
+create view LastName as
+	select
+		D.match as name
+	from
+		Dictionary("dictionaries/strictlast.dict", DocScan.text) D
+	where 
+		MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{1,20}/, D.match);		
+			
+-- ------------------------------------------
+-- Expression Name: FirstOrLastName
+-- Expression Purpose: Finds capitalized words that are in the 
+-- "first or last names" dictionary.
+-- 
+-- Example matches: Fred, Joe
+-- Migrated from:
+--		<token attribute={etc}PERSON{etc}>CAPSPERSON</token>
+-- ------------------------------------------
+create view FirstOrLastName as
+	select
+		D.match as name
+	from
+		Dictionary("dictionaries/names.dict", DocScan.text) D
+	where 
+		MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{1,20}/, D.match);		
+
+-- ------------------------------------------
+-- Expression Name: Initials
+-- Expression Purpose: Finds initials, separated by periods.
+-- 
+-- Example matches: J.P., M.Q.L.Z.W.
+--					
+-- Migrated from:
+--		<definition name=INITIALWORD>([\p{Upper}]\.){1,5}</definition>
+-- ------------------------------------------
+create view Initials as
+	select
+		R.match as initials
+	from
+		Regex(/\b([\p{Upper}]\.){1,5}/, DocScan.text) R;
+
+-- ---------------------------------------------------------------------------
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Rule definitions section <<<<<<<<<<<<<<<<
+-- ===========================================================================
+
+-- ------------------------------------------
+-- Rule Name: PersonRule_1
+-- Looks for names like Mr. Vladimir E. Putin, and extracts the
+-- "Vladimir E. Putin" part.
+-- ------------------------------------------
+-- Original rule:
+-- <rule annotation=Person id=1>
+-- <token attribute={etc}INITIAL{etc}>CANYWORD</token>
+-- <internal>
+-- <token attribute={etc}>CAPSPERSON</token>
+-- <token attribute={etc}>INITIALWORD</token>
+-- <token attribute={etc}>CAPSPERSON</token>
+-- </internal>
+-- </rule>
+create view PersonRule_1 as
+	select
+		-- Note how we exclude the title from the combined span.
+		CombineSpans(first.name, last.name) as person
+	from
+		Dictionary("TitlesDict", DocScan.text) title,
+		CapsPerson first,
+		Initials middle,
+		CapsPerson last, 
+		sentence S
+	where
+		FollowsTok(title.match, first.name, 0, 0)
+		and FollowsTok(first.name, middle.initials, 0, 0)
+		and FollowsTok(middle.initials, last.name, 0, 0)
+		-- Just check the first and last guys for sentence containment.
+		and Contains(S.sentence, title.match)
+		and Contains(S.sentence, last.name);
+		
+-- ------------------------------------------
+-- Rule Name: PersonRule_1a
+-- Looks for names like Mr. Vladimir Putin.
+-- ------------------------------------------
+-- Original rule:
+-- <rule annotation=Person id=1a>
+-- <token attribute={etc}INITIAL{etc}>CANYWORD</token>
+-- <internal>
+-- <token attribute={etc}>CAPSPERSON</token>{1,3}
+-- </internal>
+-- </rule>
+
+create view PersonRule_1a as
+select
+	name.block as person
+from
+	Dictionary("TitlesDict", DocScan.text) title,
+	BlockTok( 0, 1, 3, CapsPerson.name) name,
+	sentence S
+where
+	FollowsTok(title.match, name.block, 0, 0)
+	and Contains(S.sentence, title.match)
+	and Contains(S.sentence, name.block);
+	
+
+-- Old version in 3 parts.
+/*
+create view PersonRule_1a as
+(
+	select
+		CombineSpans(title.match, last.name) as person
+	from
+		Dictionary("TitlesDict", DocScan.text) title,
+		CapsPerson last,
+		sentence S
+	where
+		FollowsTok(title.match, last.name, 0, 0)
+		and Contains(S.sentence, title.match)
+		and Contains(S.sentence, last.name)
+)
+union all
+(
+	select
+		CombineSpans(title.match, last.name) as person
+	from
+		Dictionary("TitlesDict", DocScan.text) title,
+		CapsPerson first,
+		CapsPerson last,
+		sentence S
+	where
+		FollowsTok(title.match, first.name, 0, 0)
+		and FollowsTok(first.name, last.name, 0, 0)
+		and Contains(S.sentence, title.match)
+		and Contains(S.sentence, last.name)
+)
+union all
+(
+	select
+		CombineSpans(title.match, last.name) as person
+	from
+		Dictionary("TitlesDict", DocScan.text) title,
+		CapsPerson first,
+		CapsPerson middle,
+		CapsPerson last,
+		sentence S
+	where
+		FollowsTok(title.match, first.name, 0, 0)
+		and FollowsTok(first.name, middle.name, 0, 0)
+		and FollowsTok(middle.name, last.name, 0, 0)
+		and Contains(S.sentence, title.match)
+		and Contains(S.sentence, last.name)
+);
+*/
+
+-- ------------------------------------------
+-- Rule Name: PersonRule_2
+-- Looks for names like B.M. Thomas David, where Thomas 
+-- occurs in some person dictionary
+-- ------------------------------------------
+-- Original rule:
+-- <rule annotation=Person id=2>
+-- <internal>
+-- <token attribute={etc}>INITIALWORD</token>
+-- <token attribute={etc}PERSON{etc}>CAPSPERSON</token>
+-- <token attribute={etc}>CAPSPERSON</token>
+-- </internal>
+-- </rule>
+create view PersonRule_2 as
+	select
+		CombineSpans(I.initials, last.name) as person
+	from
+		Initials I,
+		FirstOrLastName first,
+		CapsPerson last,
+		sentence S
+	where
+		FollowsTok(I.initials, first.name, 0, 0)
+		and FollowsTok(first.name, last.name, 0, 0)
+		and Contains(S.sentence, I.initials)
+		and Contains(S.sentence, first.name)
+		and Contains(S.sentence, last.name);
+
+-- ------------------------------------------
+-- Rule Name: PersonRule_2a
+-- Looks for names like B.M. Thomas David, where *David*
+-- occurs in some person dictionary
+-- ------------------------------------------
+-- Original rule:
+-- <rule annotation=Person id=2a>
+-- <internal>
+-- <token attribute={etc}>INITIALWORD</token>
+-- <token attribute={etc}>CAPSPERSON</token>
+-- <token attribute={etc}PERSON{etc}>CAPSPERSON</token>
+-- </internal>
+-- </rule>
+create view PersonRule_2a as
+	select
+		CombineSpans(I.initials, last.name) as person
+	from
+		Initials I,
+		CapsPerson first,
+		FirstOrLastName last,
+		sentence S
+	where
+		FollowsTok(I.initials, first.name, 0, 0)
+		and FollowsTok(first.name, last.name, 0, 0)
+		and Contains(S.sentence, I.initials)
+		and Contains(S.sentence, first.name)
+		and Contains(S.sentence, last.name);
+		
+	
+-- ------------------------------------------
+-- Rule Name: PersonRule_3
+-- Looks for names like Thomas B.M. David, where both first and last names
+-- are in the "first or last names" dictionary.
+-- ------------------------------------------
+-- Original rule:
+-- <rule annotation=Person id=3>
+-- <internal>
+-- <token attribute={etc}PERSON{etc}>CAPSPERSON</token>
+-- <token attribute={etc}>INITIALWORD</token>
+-- <token attribute={etc}PERSON{etc}>CAPSPERSON</token>
+-- </internal>
+-- </rule>
+create view PersonRule_3 as
+	select
+		CombineSpans(first.name, last.name) as person
+	from
+		FirstOrLastName first,
+		Initials middle,
+		FirstOrLastName last,
+		sentence S
+	where
+		FollowsTok(first.name, middle.initials, 0, 0)
+		and FollowsTok(middle.initials, last.name, 0, 0)
+		and Contains(S.sentence, first.name)
+		and Contains(S.sentence, middle.initials)
+		and Contains(S.sentence, last.name);	
+		
+-- ------------------------------------------
+-- Rule Name: PersonRule_3r1
+-- Relaxation of rule 3: Only requires the first name to be in a dictionary,
+-- but requires it to be in the *first* names dict.
+-- ------------------------------------------
+-- Original rule:
+-- <rule annotation=Person id=3r1>
+-- <internal>
+-- <token attribute={etc}PERSON:ST:FNAME{etc}>CAPSPERSON</token>
+-- <token attribute={etc}>INITIALWORD</token>
+-- <token attribute={etc}>CAPSPERSON</token>
+-- </internal>
+-- </rule>
+create view PersonRule_3r1 as
+	select
+		CombineSpans(first.name, last.name) as person
+	from
+		FirstName first,
+		Initials middle,
+		CapsPerson last,
+		sentence S
+	where
+		FollowsTok(first.name, middle.initials, 0, 0)
+		and FollowsTok(middle.initials, last.name, 0, 0)
+		and Contains(S.sentence, first.name)
+		and Contains(S.sentence, middle.initials)
+		and Contains(S.sentence, last.name);		
+
+-- ------------------------------------------
+-- Rule Name: PersonRule_3r2
+-- Relaxation of rule 3: Only requires the last name to be in a dictionary,
+-- but requires it to be in the *last* names dict.
+-- ------------------------------------------
+-- Original rule:
+-- <rule annotation=Person id=3r2>
+-- <internal>
+-- <token attribute={etc}>CAPSPERSON</token>
+-- <token attribute={etc}>INITIALWORD</token>
+-- <token attribute={etc}PERSON:ST:LNAME{etc}>CAPSPERSON</token>
+-- </internal>
+-- </rule>
+create view PersonRule_3r2 as
+	select
+		CombineSpans(first.name, last.name) as person
+	from
+		CapsPerson first,
+		Initials middle,
+		LastName last,
+		sentence S
+	where
+		FollowsTok(first.name, middle.initials, 0, 0)
+		and FollowsTok(middle.initials, last.name, 0, 0)
+		and Contains(S.sentence, first.name)
+		and Contains(S.sentence, middle.initials)
+		and Contains(S.sentence, last.name);				
+
+	
+-- ------------------------------------------
+-- Rule Name: PersonRule_4
+-- Looks for names like David Thomas, where both first and last names
+-- are in the appropriate name dictionaries.
+-- ------------------------------------------
+-- Original rule:
+-- <rule annotation=Person id=4>
+-- <internal>
+-- <token attribute={etc}PERSON:ST:FNAME{etc}>CAPSPERSON</token>
+-- <token attribute={etc}PERSON:ST:LNAME{etc}>CAPSPERSON</token>
+-- </internal>
+-- </rule>
+create view PersonRule_4 as
+	select
+		CombineSpans(first.name, last.name) as person
+	from
+		FirstName first,
+		LastName last,
+		sentence S
+	where
+		FollowsTok(first.name, last.name, 0, 0)
+		and Contains(S.sentence, first.name)
+		and Contains(S.sentence, last.name);	
+
+-- ------------------------------------------
+-- Rule Name: PersonRule_4a
+-- Looks for names like "Thomas, David", where both first and last names
+-- are in the "first or last names" dictionary.
+-- ------------------------------------------
+-- Original rule:
+-- <rule annotation=Person id=4a>
+-- <internal>
+-- <token attribute={etc}PERSON:ST:LNAME{etc}>CAPSPERSON</token>
+-- <token attribute={etc}>\,</token>
+-- <token attribute={etc}PERSON:ST:FNAME{etc}>CAPSPERSON</token>
+-- </internal>
+-- </rule>
+create view PersonRule_4a as
+	select
+		CombineSpans(last.name, first.name) as person
+	from
+		FirstOrLastName last,
+		Regex(/,/, DocScan.text) comma,
+		FirstOrLastName first,
+		sentence S
+	where
+		FollowsTok(last.name, comma.match, 0, 0)
+		and FollowsTok(comma.match, first.name, 0, 0)
+		and Contains(S.sentence, last.name)
+		and Contains(S.sentence, comma.match)
+		and Contains(S.sentence, first.name);	
+
+-- ------------------------------------------
+-- Rule Name: PersonRule_4r1
+-- Relaxed version of rule 4.
+-- Looks for names like "David Thomas", and only requires the *first* name
+-- to be in the *first* names dictionary.
+-- ------------------------------------------
+-- Original rule:
+-- <rule annotation=Person id=4r1>
+-- <internal>
+-- <token attribute={etc}PERSON:ST:FNAME{etc}>CAPSPERSON</token>
+-- <token attribute={etc}>CAPSPERSON</token>
+-- </internal>
+-- </rule>
+create view PersonRule_4r1 as
+	select
+		CombineSpans(first.name, last.name) as person
+	from
+		FirstName first,
+		CapsPerson last,
+		sentence S
+	where
+		FollowsTok(first.name, last.name, 0, 0)
+		and Contains(S.sentence, first.name)
+		and Contains(S.sentence, last.name);	
+
+-- ------------------------------------------
+-- Rule Name: PersonRule_4r2
+-- Relaxed version of rule 4.
+-- Looks for names like "David Thomas", and only requires the *last* name
+-- to be in the *last* names dictionary.
+-- ------------------------------------------
+-- Original rule:
+-- <rule annotation=Person id=4r2>
+-- <token attribute={etc}>ANYWORD</token>
+-- <internal>
+-- <token attribute={etc}>CAPSPERSON</token>
+-- <token attribute={etc}PERSON:ST:LNAME{etc}>CAPSPERSON</token>
+-- </internal>
+-- </rule>
+create view PersonRule_4r2 as
+	select
+		CombineSpans(first.name, last.name) as person
+	from
+		CapsPerson first,
+		LastName last,
+		sentence S
+	where
+		FollowsTok(first.name, last.name, 0, 0)
+		and Contains(S.sentence, first.name)
+		and Contains(S.sentence, last.name);	
+
+-- ------------------------------------------
+-- Rule Name: PersonRule_5
+-- Looks for names like "Thomas" and "D. Thomas", where "Thomas" is in 
+-- the "*first* names" dictionary.
+-- ------------------------------------------
+-- Original rule:
+-- <rule annotation=Person id=5>
+-- <internal>
+-- <token attribute={etc}>INITIALWORD</token>?
+-- <token attribute={etc}PERSON:ST:FNAME{etc}>CAPSPERSON</token>
+-- </internal>
+-- </rule>
+
+-- Find the matches with the optional initials.
+create view PersonRule_5_init as
+	select
+		CombineSpans(first.initials, nick.name) as person
+	from
+		Initials first,
+		FirstName nick,
+		sentence S
+	where
+		FollowsTok(first.initials, nick.name, 0, 0)
+		and Contains(S.sentence, first.initials)
+		and Contains(S.sentence, nick.name);
+		
+-- Union the two cases of the rule together.
+create view PersonRule_5 as
+(select I.person as person from PersonRule_5_init I)
+union all
+(select first.name as person from FirstName first);
+
+-- ------------------------------------------
+-- Rule Name: PersonRule_6
+-- Looks for names like "Thomas" and "D. Thomas", where "Thomas" is in 
+-- the "*last* names" dictionary.
+-- ------------------------------------------
+-- Original rule:
+-- <rule annotation=Person id=6>
+-- <internal>
+-- <token attribute={etc}>INITIALWORD</token>?
+-- <token attribute={etc}PERSON:ST:LNAME{etc}>CAPSPERSON</token>
+-- </internal>
+-- </rule>
+
+-- Find the matches with the optional initials.
+create view PersonRule_6_init as
+	select
+		CombineSpans(first.initials, last.name) as person
+	from
+		Initials first,
+		LastName last,
+		sentence S
+	where
+		FollowsTok(first.initials, last.name, 0, 0)
+		and Contains(S.sentence, first.initials)
+		and Contains(S.sentence, last.name);	
+		
+-- Union the two cases of the rule together.
+create view PersonRule_6 as
+(select I.person as person from PersonRule_6_init I)
+union all
+(select last.name as person from LastName last);
+		
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Aggregation/Consolidation section <<<<<<<<<<<<<<<<
+-- ===========================================================================
+
+-- Merge all the different rules.
+create view PersonAll
+as
+	(select P.person as person from PersonRule_1 P)
+union all 
+	(select P.person as person from PersonRule_1a P)
+union all 
+	(select P.person as person from PersonRule_2 P)
+union all 
+	(select P.person as person from PersonRule_2a P)
+union all 
+	(select P.person as person from PersonRule_3 P)
+union all 
+	(select P.person as person from PersonRule_3r1 P)
+union all 
+	(select P.person as person from PersonRule_3r2 P)
+union all 
+	(select P.person as person from PersonRule_4 P)	
+union all 
+	(select P.person as person from PersonRule_4a P)	
+union all 
+	(select P.person as person from PersonRule_4r1 P)		
+union all 
+	(select P.person as person from PersonRule_4r2 P)	
+union all 
+	(select P.person as person from PersonRule_5 P)		
+union all 
+	(select P.person as person from PersonRule_6 P);
+	
+-- ------------------------------------------
+-- Consolidation:
+-- For now, we just remove annotations that are completely
+-- contained within other annotations.
+create view PersonCons as
+select C.person as person
+from Consolidate(PersonAll.person) C;
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Output section <<<<<<<<<<<<<<<<
+-- ===========================================================================		
+-- Output
+select P.person as person
+into Person
+from PersonCons P;
+
+select P.person as person
+into Person1a
+from PersonRule_1a P;

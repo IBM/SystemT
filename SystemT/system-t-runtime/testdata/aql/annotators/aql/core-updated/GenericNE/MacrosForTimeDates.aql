@@ -1,0 +1,40 @@
+create view TwoDigitsInterval as
+select
+	R.match as match
+from
+    RegexTok(/((0)|(1)|(2)|(3))?[\d]( )*[\-]( )*((0)|(1)|(2)|(3))?[\d]/, 5, Doc.text) R;
+
+create view WKDay as
+	select
+		D.match as match
+	from
+		Dictionary('wkday.dict', Doc.text) D;
+		
+create view TimeZoneDict as
+	select
+		D.match as match
+	from
+		Dictionary('timeZone.dict', Doc.text) D;
+		
+-- Yunyao: added on 06/14/2011
+--  To allow timezone in parathesis with option hour information
+--  E.g. "20:30 (GMT)" or "17:30(GMT+1)"
+create view TimeZoneAll as
+	(select T.* from TimeZoneDict T)
+	union all
+	(select CombineSpans(LeftContextTok(T.match, 1), RightContextTok(T.match, 1)) as match
+	 from TimeZoneDict T
+	 where MatchesRegex(/\(/, LeftContextTok(T.match, 1))
+	   and MatchesRegex(/\)/, RightContextTok(T.match, 1)))
+	union all
+	(select CombineSpans(LeftContextTok(T.match, 1), RightContextTok(T.match, 3)) as match
+	 from TimeZoneDict T
+	 where MatchesRegex(/\(/, LeftContextTok(T.match, 1))
+	   and MatchesRegex(/[+]\d\)/, RightContextTok(T.match, 3)));
+
+create view TimeZone as
+select T.*
+from TimeZoneAll T
+consolidate on T.match;
+	 	
+

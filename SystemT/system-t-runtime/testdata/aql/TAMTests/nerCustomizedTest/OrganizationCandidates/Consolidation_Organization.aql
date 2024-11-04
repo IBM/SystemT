@@ -1,0 +1,309 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module OrganizationCandidates;
+
+-- For now, we just remove annotations that are completely
+-- contained within other annotations.
+
+create view OrgSentence1 as
+(
+	select OA.org as org	 
+	from OrgAllNoNewLine OA
+	where
+           Not(ContainsDict('FiltersForOrganizationAll', 'Exact', OA.org))
+        and Not(ContainsDict('FilterWordsInGerman', OA.org))
+		and Not(ContainsDict('FilterWordsPerDomain', OA.org))      
+)
+minus
+(
+	select OA.org as org	 
+	from SentenceBoundary S, OrgAll OA
+	where Contains(OA.org, S.boundary)
+);
+
+-- avoid matching long company suffixes such as "Company, Inc." 
+create view OrgSentence as
+	(select O.org as org from OrgSentence1 O)
+	minus 
+	(select O.match as org from OrgClueStSuffixCaps O);
+
+-- Filter out address candidates from organization candidates
+create view UrlEmailPlace as 
+select R.reference as match 
+from AddressFinal R;
+
+create view OrgInHeadline as
+select O.org as org
+from OrgSentence O, HeadlineMixedCaps H
+where Contains(H.headline, O.org);
+			
+create view OrgInHeadlineInvalid1 as
+select O.org as org
+from OrgInHeadline O
+where ContainsDicts(
+  			'HeadlineNegativeCluesAsFiltersForOrganization',
+			'AdverbsInEnglish', 
+			'VerbsInEnglish', 
+			'AuxiliaryVerbsInEnglish',
+			'PronounsInEnglish',
+			O.org);
+			
+create view OrgInHeadlineInvalid2 as
+select O.org as org
+from OrgInHeadline O
+where Or(
+		MatchesRegex(/-/, LeftContext(O.org,0)),
+		MatchesRegex(/-/, RightContext(O.org,0)),
+		ContainsRegex(/ing\s/, O.org)
+		);
+		
+create view OrgInHeadlineInvalidCand as
+(select OP.org as org from OrgInHeadlineInvalid1 OP)
+union all
+(select OP.org as org from OrgInHeadlineInvalid2 OP);
+
+-- Allow matches that span the entire headline
+create view OrgInHeadlineInvalid as
+select O.org 
+from OrgInHeadlineInvalidCand O
+where Not(ContainsRegex(/[\n\r]/, LeftContextTok(O.org, 1)))
+  and Not(ContainsRegex(/[\n\r]/, RightContextTok(O.org, 1)));
+
+
+create view OrgInHeadlineValid as
+(select O.org from OrgSentence O, HeadlineMixedCaps H where Contains(H.headline, O.org))
+minus
+(select O.org from OrgInHeadlineInvalid O);
+
+
+create view OrgWithinUrlEmailPlace as
+select O.org as org
+from OrgSentence O, UrlEmailPlace UEP
+where Contains (UEP.match, O.org);
+
+
+create view OrgOverlapTime as
+select O.org as org
+from OrgSentence O, Times t
+where Overlaps(t.match, O.org);
+
+-- to avoid partial matches such as
+-- United [States Holocaust Memorial Museum] 
+-- U.[S. Department of Education]
+create view OrgOverlapNotContainedCountry as
+select O.org as org
+from OrgSentence O, CountryCandidate C
+where Overlaps(O.org, C.match)
+  and Not(Contains(O.org, C.match));
+  
+-- to avoid matches such as 
+-- Germany's Daimler Benz Aerospace
+-- Britain's Office of Fair Trading
+-- South Korea's Samsung Aerospace Industries
+create view CountryOrg as
+select O.org as org
+from OrgSentence O, CountryCandidate C
+where Contains(O.org, C.match)
+  and Equals(GetBegin(O.org), GetBegin(C.match))
+  and ContainsRegex(/['[\u0093\u0094\u2018\u2019\u0022\u0027\u00AB\u00BB\u201A\u201B\u201C\u201D\u201E\u301D\u301E\u301F]]\s*[Ss]/, RightContextTok(C.match, 2));
+ 
+-- remove final dot from match of the form "<Org> ."
+create view OrgWithSpaceDot as
+select O.org as invalidorg, Chomp(SpanBetween(LeftContext(O.org,0), O.finaldot)) as validorg
+from
+(
+	extract O.org as org,
+		regex /\s+\.\z/ on O.org as finaldot
+	from OrgSentence O
+) O;
+
+create view InvalidOrg as
+	(select OP.org as org from OrgWithinUrlEmailPlace OP)
+	union all
+	(select OP.org as org from OrgOverlapTime OP)
+	union all
+	(select OP.org as org from OrgOverlapNotContainedCountry OP)
+	union all
+	(select CO.org as org from CountryOrg CO)
+	union all
+	(select OP.org as org from OrgInHeadlineInvalid OP)
+	union all
+	(select OP.invalidorg as org from OrgWithSpaceDot OP);
+	
+create view ValidOrg as 
+(
+	(select O.org as org from OrgSentence O)
+	union all
+	(select O.validorg as org from OrgWithSpaceDot O)
+)
+minus
+(select OP.org as org from InvalidOrg OP);
+ 
+create view ValidOrgConsolidated as
+select C.org as org
+from ValidOrg C
+consolidate on C.org;
+
+create view FinalOrgExpanded1 as
+select CombineSpans(CO.match, C.org) as org
+from ValidOrgConsolidated C,
+	 AnyCapsOrg CO
+where ContainsDict('SuffixesForCommercialOrganizations', C.org)
+ and FollowsTok(CO.match, C.org, 0, 2)
+ --avoid line break or tab and allow the missing of '&' if the extension is the beginning of a line 
+ and MatchesRegex(/([ ]*,?[ ]*&[ ]*)|(^[ ]*,?[ ]*&?[ ]*)/, SpanBetween(CO.match, C.org));
+ 
+ 
+-- to allow expansion with strong suffix/type 
+create view FinalOrgExpanded2 as
+select CombineSpans(C.org, CL.match) as org
+from ValidOrgConsolidated C,
+	 OrgClueStCaps CL
+where FollowsTok(C.org, CL.match,  0, 2)
+-- avoid line break or tab and allow the missing of '&' if the extension is the beginning of a line 
+ and MatchesRegex(/([ ]*,?[ ]*&[ ]*)|(^[ ]*,?[ ]*&?[ ]*)/, SpanBetween(C.org, CL.match));
+
+-- to allow expansion for organization to the left with &
+create view FinalOrgExpanded3 as
+select CombineSpans(CO.match, C.org) as org
+from ValidOrgConsolidated C,
+	 AnyCapsOrg CO
+where FollowsTok(CO.match, C.org, 1, 1)
+ and MatchesRegex(/([ ]*&[ ]*)|(^[ ]*&?[ ]*)/, SpanBetween(CO.match, C.org));
+ 
+-- to allow expansion for governmental organization to the left with Nationality
+create view ValidOrgGovConsolidated as
+select O.*
+from ValidOrgConsolidated O
+where ContainsDicts('SuffixesForGovernmentOrganizations', 'PrefixesForGovernmentOrganizations', O.org);
+
+create view NationalityAndOrgGov as
+extract 
+	pattern <N.match> <O.org> as org
+from Nationalities N, ValidOrgGovConsolidated O;
+
+-- to allow expansion for governmental organization to the left with Country
+create view CountryAndOrgGov as
+extract 
+	pattern <C.match> <O.org> as org
+from CountryCandidate C, ValidOrgGovConsolidated O;
+
+create view FinalOrgAll as
+	(select O.org as org from ValidOrgConsolidated O)
+	union all
+	(select O.org as org from FinalOrgExpanded1 O)
+	union all
+	(select O.org as org from FinalOrgExpanded2 O)
+	union all
+	(select O.org as org from FinalOrgExpanded3 O)
+	union all
+	(select O.org as org from NationalityAndOrgGov O)
+	union all
+	(select O.org as org from CountryAndOrgGov O)
+	union all
+	(select O.match as org from OrgWithinNotesEmail1 O)
+	union all
+	(select O.match as org from OrgWithinNotesEmail2 O)
+	;
+
+create view FinalOrgConsolidated as
+select C.org as org
+from FinalOrgAll C
+consolidate on C.org;
+
+-- Union together strong orgs and Orgs identified using formal text clues
+create view FinalOrgConsolidatedWithFormal as
+(select * from FinalOrgConsolidated)
+union all
+(select * from OrgFormal);
+
+
+-- Obtain additional candidates for abbreviation by stripping off org suffixes
+create view OrgWithoutSuffix as
+select R.org as org, SpanBetween(LeftContext(R.org,0), R.suffix) as match
+from
+(
+	extract R.org as org,
+			dictionary 'GlobalSuffixesForOrganizations' on R.org as suffix
+	from FinalOrgConsolidatedWithFormal R
+	having Equals(GetEnd(org), GetEnd(suffix))
+) R;
+
+create view OrgCandForAbbreviation as
+(select O.match as org from OrgWithoutSuffix O)
+union all
+(select O.org as org from FinalOrgConsolidatedWithFormal O);
+
+create view OrgAbbrvCand as
+select O.org, getAbbreviation(O.org) as abbreviation 
+from OrgCandForAbbreviation O;
+
+
+create view OrgAbbrvCandNotNull as
+select *
+from OrgAbbrvCand A
+where NotNull(A.abbreviation);
+
+-- retain only abbreviations of length two or more
+create view OrgAbbrv as
+select GetText(A.abbreviation) as abbreviation
+from OrgAbbrvCandNotNull A
+where GreaterThan(GetLength(A.abbreviation), 1)
+group by GetText(A.abbreviation);
+
+create view OrgAbbrvMatch as
+select CW.match as org
+from AnyCapsOrg CW, OrgAbbrv A
+where Equals(GetText(CW.match), GetText(A.abbreviation));
+
+create view OrgAbbrvFilter as
+(select O.org from OrgAbbrvMatch O, UrlEmailPlace UEP where Contains (UEP.match, O.org))
+union all
+(select O.org from OrgAbbrvMatch O where MatchesDict('FiltersForOrganizationAbbreviations', 'Exact', O.org))
+union all
+(select O.org from OrgAbbrvMatch O where MatchesDict('EducationalQualifications', 'Exact', O.org) 
+and MatchesDict('PositiveCluesForEducationalQualificationsToRight', RightContextTok(O.org, 1)))
+union all
+(select O.org from OrgAbbrvMatch O where MatchesDict('StatesOfUSAAbbreviations', 'Exact', O.org))
+;
+
+create view FinalOrgAbbrv as
+(select O.org from OrgAbbrvMatch O)
+minus
+(select O.org from OrgAbbrvFilter O);
+
+
+create view FinalOrgConsolidatedWithoutDots as
+(select O.org as org from FinalOrgConsolidatedWithFormal O)
+union all
+(select O.org as org from FinalOrgAbbrv O);
+
+
+create view UrlEmailPlaceOrg as 
+     (select R.reference as match from AddressFinal R)
+     union all
+     (select R.org as match from FinalOrgConsolidatedWithoutDots R)
+     union all
+     (select R.match as match from CitiesAll R)
+     union all
+     (select F.facility as match from Facility F);
+     
+create view OrganizationConsolidated as
+select O.org as organization, '' as type, O.org as reference
+from FinalOrgConsolidatedWithoutDots O
+consolidate on O.org
+using 'LeftToRight';

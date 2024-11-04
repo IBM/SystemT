@@ -1,0 +1,121 @@
+module genericModule;
+
+
+create function Canonicalize_Anchor_Text(
+  t String)
+return Text
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!Canonicalize_Anchor_Text'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create function GetIsNullFragment(
+  t String)
+return Integer
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!GetIsNullFragment'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create view AnchorNormURL as
+  select  N.normalizedURL as normalizedURL,
+          Canonicalize_Anchor_Text(GetString(N.anchortext)) as anchortext,
+          N.urlid as urlid,
+          U.page as page,
+          U.url as url,
+          U.fragment as fragment,
+          U.anchorurl as anchorurl,
+          N.anchortext as detaggedAnchorTextSpan,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          N.__auto__id as NormMoreNormDedupForLinkURLs_____sep_____N____id,
+          U.__auto__id as AllURLs_____sep_____U____id
+  from  NormMoreNormDedupForLinkURLs N,
+        AllURLs U
+  where Equals(N.urlid, U.urlid)
+     and NotNull(N.anchortext);
+
+output view AnchorNormURL;
+
+create view AnchorNormURLAfterSkip as
+  select  N.normalizedURL as normalizedURL,
+          N.anchortext as anchortext,
+          N.urlid as urlid,
+          N.page as page,
+          N.url as url,
+          N.fragment as fragment,
+          N.anchorurl as anchorurl,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          N.__auto__id as AnchorNormURL_____sep_____N____id,
+          A.__auto__id as Anchor_____sep_____A____id
+  from  AnchorNormURL N,
+        Anchor A
+  where Equals(N.detaggedAnchorTextSpan, A.match);
+
+output view AnchorNormURLAfterSkip;
+
+create view SelfRefAllWithFragmentsWithoutGroup as
+  select  L.anchorurl as url,
+          L.anchortext as anchortext,
+          L.detaggedAnchorTextSpan as detaggedAnchorTextSpan,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as AnchorNormURL_____sep_____L____id,
+          U.__auto__id as NormMoreNormDedup_____sep_____U____id
+  from  AnchorNormURL L,
+        NormMoreNormDedup U
+  where Equals(GetText(U.normalizedURL), GetText(L.normalizedURL));
+
+output view SelfRefAllWithFragmentsWithoutGroup;
+
+create view SelfRefAllWithFragments as
+  select  Op.url as url,
+          Op.content as content,
+          Op.detaggedAnchorTextSpan as detaggedAnchorTextSpan,
+          AutoID() as __auto__id
+  from  __Base__SelfRefAllWithFragments__Temp Op;
+
+output view SelfRefAllWithFragments;
+
+create view SelfRefAllWithNullFragment as
+  select  N.url as url,
+          N.content as content,
+          N.detaggedAnchorTextSpan as detaggedAnchorTextSpan,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          N.__auto__id as SelfRefAllWithFragments_____sep_____N____id
+  from  SelfRefAllWithFragments N
+  where Equals(GetIsNullFragment(N.url), 1);
+
+output view SelfRefAllWithNullFragment;
+
+create view SelfRef as
+  select  S.url as url,
+          S.content as content,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as SelfRefAllWithNullFragment_____sep_____S____id,
+          A.__auto__id as Anchor_____sep_____A____id
+  from  SelfRefAllWithNullFragment S,
+        Anchor A
+  where Equals(S.detaggedAnchorTextSpan, A.match);
+
+output view SelfRef;
+
+create view __Base__SelfRefAllWithFragments__Temp as
+  select  GetString(L.url) as url,
+          L.anchortext as content,
+          L.detaggedAnchorTextSpan as detaggedAnchorTextSpan
+  from  SelfRefAllWithFragmentsWithoutGroup L
+  group by L.url, L.anchortext, L.detaggedAnchorTextSpan
+  limit 1;
+
+output view __Base__SelfRefAllWithFragments__Temp;
+

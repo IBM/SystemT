@@ -1,0 +1,329 @@
+---------------------------------------
+-- Declarations for GeoCluster UDFs
+---------------------------------------
+--UDF for computing the geo_hash value
+create function GenerateGeoHash(left_context ScalarList, right_context ScalarList, separator String)
+return Integer
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UDF!GenerateGeoHash'
+language java
+deterministic
+return null on null input;
+
+--UDF for adding negative sign
+create function Negation(hash_value Integer)
+return Integer
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UDF!Negation'
+language java
+deterministic
+return null on null input;
+
+--UDF for creating a List containing host and path from URL
+create function CreateList(url_host String,path String,L ScalarList)
+return ScalarList like L
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UDF!CreateList'
+language java
+deterministic
+return null on null input;
+
+---------------------------------------
+-- Dictionaries of Geo clues
+---------------------------------------
+create dictionary GeoClusterCountryNameDict
+from table GeoNameToRankTable
+with entries from countryName;
+
+create dictionary GeoClusterCountryCodeDict
+from table GeoCodeToRankTable
+with entries from countryCode;
+
+---------------------------------------
+-- Normalize original Geo clues tables
+---------------------------------------
+create view GeoNameToRankTableNormalized as
+select toLowerCase(G.countryName) as countryName, G.rank as rank
+from GeoNameToRankTable G;
+
+create view GeoCodeToRankTableNormalized as
+select toLowerCase(G.countryCode) as countryCode, G.rank as rank
+from GeoCodeToRankTable G;
+
+---------------------------------------
+-- Compute the geo_hash and geo_rank 
+-- for titles with geo information
+---------------------------------------
+
+--Remove the Punctuations from the title so that we have a normalized geo clue that
+--can be matched with the normalized value in GeoNameToRankTableNormalized for obtaining
+--the rank.
+-- Laura 8/10: Also make sure we use the detagged title, not the original (raw) title.
+
+create view TitleWithOutPunctuations as
+select
+	NormalizeWhitespace(ReplacePunctuation(GetString(T.content), ' ')) as title
+from TitleFinal T;
+
+-- Extract the clues from the title
+create view TitleWithGeoClueCand as
+extract T.title as title,
+		dictionary 'GeoClusterCountryNameDict' on T.title as geo_clue
+from TitleWithOutPunctuations T
+consolidate on geo_clue;
+
+--Take the length of geo_clue
+create view TitleWithGeoClueTemp as
+select T.title as title, T.geo_clue as geo_clue, GetLength(T.geo_clue) as len
+from TitleWithGeoClueCand T ;
+
+--Take the max lenth of geo_clue
+create view TitleWithGeoClueSorted as
+select Max(GetLength(T.geo_clue)) as len1
+from TitleWithGeoClueCand T;
+
+--Retain first clue which has maximum len
+create view TitleWithGeoClue as
+select *
+from TitleWithGeoClueTemp T, TitleWithGeoClueSorted U
+where Equals(T.len,U.len1)
+limit 1;
+--consolidate on T.geo_clue using 'RetainLast';
+
+-- Obtain the Left and Right context around the geo clue
+-- and convert them to String
+create view TitleWithGeoClueAndContext as
+select T.title as title, T.geo_clue as geo_clue,
+	GetString(SpanBetween(LeftContext(T.title,0), LeftContext(T.geo_clue,0))) as lc,
+	GetString(SpanBetween(RightContext(T.geo_clue,0), RightContext(T.title,0))) as rc
+from TitleWithGeoClue T;
+
+-- Group the left and right contexts in separate lists
+-- so that they can be passed to the GenerateGeoHash() UDF
+create view TitleWithGeoClueAndContextGrouped as
+select List(GetString(T.lc)) as lc, List(GetString(T.rc)) as rc, toLowerCase(T.geo_clue) as geo_clue
+from TitleWithGeoClueAndContext T
+group by T.geo_clue;
+
+-- Compute the hash and the rank from geo clues in title 
+create view GeoClusterFromTitle as
+select GenerateGeoHash(T.lc, T.rc, ' | ') as geo_hash, G.rank as geo_rank--,T.title
+from TitleWithGeoClueAndContextGrouped T, GeoNameToRankTableNormalized G
+where Equals(GetText(T.geo_clue), GetText(G.countryName))
+limit 1;
+
+create view TitleGeoCluster as
+select GT.geo_rank as geo_rank,GT.geo_hash as geo_hash
+from GeoClusterFromTitle GT;
+
+
+---------------------------------------
+-- If we did not find a GeoCluster from TITLE,
+-- look for geo info in URL, but only if it is IBM host
+---------------------------------------
+
+-- Titles without geo information
+create view TitleWithoutGeoCluster as
+select 0 as geo_hash, -1 as geo_rank
+from (select Count(*) as geo_count from TitleGeoCluster T) T
+where Equals(T.geo_count, 0);
+
+-- Candidate URLs for GeoCluster (only if no TITLE cluster, and URL is IBM host)
+create view URLForGeoClusterCand as
+select *
+from TitleWithoutGeoCluster G, PageURL U
+where ContainsRegex(/ibm.com\z/, U.host);
+
+--Removing the punctuations from Deduppath
+--Also keep the original deduppath with punctuations for matching with the
+--url_path_prefix_pattern regex to check for global cluster
+create view DedupPathWithOutPunctuations as
+select CH._host_1 as _host_1, 
+       NormalizeWhitespace(ReplacePunctuation(GetString(DP.deduppath), ' ')) as deduppathNoPunctuation,
+       DP.deduppath as deduppath,
+       DP.urlid as urlid
+from UrlPathHash DP, createHostFinal CH, URLForGeoClusterCand S
+where Equals(DP.page,1) and Equals(DP.urlid,CH.urlid) ;
+
+-- Separating deduppath which has Country Name
+create view DedupPathwithGeoName as
+select DP._host_1 as _host_1, DP.deduppathNoPunctuation as deduppathNoPunctuation
+from DedupPathWithOutPunctuations DP
+where ContainsDict('GeoClusterCountryNameDict',DP.deduppathNoPunctuation);
+
+-- Separating deduppath which has not Country Name
+-- Keep the original deduppath (to be used for matching with the regex to check for global cluster)
+create view DedupPathwithOutGeoName as
+select DP._host_1 as _host_1, DP.deduppath as deduppath
+from DedupPathWithOutPunctuations DP
+where Not(ContainsDict('GeoClusterCountryNameDict',DP.deduppathNoPunctuation));
+
+
+-- Extract the clues from URL
+create view UrlWithGeoClueCand as
+extract 
+		T._host_1 as url_host,T.deduppathNoPunctuation as deduppathNoPunctuation,
+		dictionary 'GeoClusterCountryNameDict'on T.deduppathNoPunctuation as geo_clue
+		-- Laura 9/9: this does not run due to the known bug - need to implement the workaround
+		-- [#135966] Shared Dictionary Matching does not preserve select fields
+		--dictionaries 'GeoClusterCountryNameDict' and 'GeoClusterCountryCodeDict'on T.deduppath as geo_clue
+		from DedupPathwithGeoName T
+		consolidate on geo_clue;
+		
+--find Length of the geo_clue
+create view UrlWithGeoClueTemp as
+select T.url_host as url_host, T.deduppathNoPunctuation as deduppathNoPunctuation, T.geo_clue as geo_clue, GetLength(T.geo_clue) as len
+from UrlWithGeoClueCand T;
+
+--find maximum length of the clue
+create view UrlWithGeoClueSorted as
+select Max(GetLength(U.geo_clue)) as len1
+from UrlWithGeoClueCand U ;
+
+--Retain first clue where length matches
+create view UrlWithGeoClue as
+select *
+from UrlWithGeoClueTemp S, UrlWithGeoClueSorted U
+where Equals(S.len,U.len1)
+limit 1;
+--consolidate on S.geo_clue using 'RetainLast';
+
+-- Obtain the Left and Right context around the geo clue
+-- and convert them to String
+create view UrlWithGeoClueAndContext as
+select U.url_host as url_host,U.deduppathNoPunctuation as deduppathNoPunctuation, U.geo_clue as geo_clue,
+	GetString(SpanBetween(LeftContext(U.deduppathNoPunctuation,0), LeftContext(U.geo_clue,0))) as lc,
+	GetString(SpanBetween(RightContext(U.geo_clue,0), RightContext(U.deduppathNoPunctuation,0))) as rc
+from UrlWithGeoClue U;
+
+--List for path and host combined
+--for Java code
+--List<String> left = Arrays.asList(new String[] {url_host, url_path.substring(0, longest_annot.begin())});
+create view ListForPathAndHost as
+select CreateList(GetString(U.url_host),GetString(U.lc),TL.list) as lc
+from UrlWithGeoClueAndContext U,TempViewForList TL ;
+
+-- Group the left and right contexts in separate lists
+-- so that they can be passed to the GenerateGeoHash() UDF
+create view UrlWithGeoClueAndContextGrouped as
+select TL.lc as lc,
+List(GetString(U.rc)) as rc, U.deduppathNoPunctuation as deduppathNoPunctuation, toLowerCase(U.geo_clue) as geo_clue
+from UrlWithGeoClueAndContext U,ListForPathAndHost TL
+group by U.deduppathNoPunctuation, U.geo_clue,TL.lc;
+
+-- Compute the hash and the rank from geo clues in URL
+create view GeoClusterFromUrl as
+select GenerateGeoHash(U.lc, U.rc, ' | ') as geo_hash, G.rank as geo_rank
+from UrlWithGeoClueAndContextGrouped U, GeoNameToRankTableNormalized G
+where Equals(GetText(U.geo_clue), GetText(G.countryName));
+
+
+---------------------------------------
+--Negative sign to geo_hash value
+---------------------------------------
+create view UrlGeoClusterWithGeo as
+select Negation(U.geo_hash) as geo_hash, U.geo_rank as geo_rank
+from GeoClusterFromUrl U ;
+
+--Null cluster for URL which do not match url_path_prefix_pattern
+create view UrlNullCluster as
+select 0 as geo_hash, -1 as geo_rank, DP._host_1 as _host_1, DP.deduppath as deduppath
+from  DedupPathwithOutGeoName DP
+where Not(MatchesRegex(/\/(?:hr|software|data|services|siteserv|tools\/it|tools|assets|gbs|ibm|travel)?(\/.*)?/,DP.deduppath));
+
+--subtracting the urls with null cluster from urls which may contain country code
+create view Remaining as
+(select DP._host_1 as _host_1, DP.deduppath as deduppath from DedupPathwithOutGeoName DP)
+minus
+(select DP._host_1 as _host_1, DP.deduppath as deduppath from UrlNullCluster DP);
+
+--finding the path from group 1 of url_path_prefix_pattern
+create view GlobalClusterPath as
+extract 		
+	DP._host_1 as _host_1,
+	DP.deduppath as deduppath,
+    regex /\/(?:hr|software|data|services|siteserv|tools\/it|tools|assets|gbs|ibm|travel)?(\/.*)?/ 
+    	on DP.deduppath 
+        return group 1 as url_path 
+from Remaining DP
+limit 1; 
+				
+--finding the Global Clusters from Null Paths
+create view GlobalCluster as 
+select 0 as geo_hash,0 as geo_rank ,DP._host_1 as _host_1,DP.deduppath as deduppath,DP.url_path as url_path
+from GlobalClusterPath DP
+where Not(NotNull(DP.url_path));
+
+--subtracting the Global Clusters from URLs which do not have Null Paths.
+create view UrlForSegment as
+(select DP._host_1 as _host_1,DP.deduppath as deduppath,DP.url_path as url_path from GlobalClusterPath DP)
+minus
+(select DP._host_1 as _host_1,DP.deduppath as deduppath,DP.url_path as url_path from GlobalCluster DP) ;
+
+--converting url_path to toLowercase
+create view UrlGeoClusterPath as
+select toLowerCase(U.url_path) as url_path
+from UrlForSegment U;
+
+--Split the url_path using url_segment_pattern	
+--Retain B.url_path as url_path for further subtraction
+create view UrlSegmentPattern as
+extract
+	B.url_path as url_path,
+    split using B.boundary
+        on B.url_path
+        as segments
+from (
+    extract
+        DP.url_path as url_path,
+        regex /\// on DP.url_path as boundary
+        from UrlGeoClusterPath DP
+) B;
+
+--find rank values for all URLs which match the country code from GeoCodeToRankTableNormalized
+create view UrlGeoClusterCountryCode as
+select 0 as geo_hash, G.rank as geo_rank, U.url_path
+from UrlSegmentPattern U, GeoCodeToRankTableNormalized G
+where Equals(GetText(U.segments), GetText(G.countryCode))
+limit 1;
+
+--subtracting the paths where the country code exists and obtain the paths where there is no country code(Rank 0)
+create view UrlGeoClusterCountryCodeRemaining as
+(select U.url_path as url_path from UrlSegmentPattern U )
+minus
+(select url.url_path as url_path from UrlGeoClusterCountryCode url);
+
+--The urls with Rank zero become Global Clusters
+create view UrlGeoClusterCountryCodeWithRankZero as
+select 0 as geo_hash, 0 as geo_rank
+from  UrlGeoClusterCountryCodeRemaining url
+limit 1;
+
+--combining the values of URL geocluster
+create view UrlGeoCluster as
+(select U.geo_rank as geo_rank, U.geo_hash as geo_hash from UrlGeoClusterWithGeo U)
+union all
+(select U.geo_rank as geo_rank, U.geo_hash as geo_hash from UrlNullCluster U)
+union all
+(select U.geo_rank as geo_rank, U.geo_hash as geo_hash from UrlGeoClusterCountryCode U)
+union all
+(select U.geo_rank as geo_rank, U.geo_hash as geo_hash from GlobalCluster U)
+union all
+(select U.geo_rank as geo_rank, U.geo_hash as geo_hash from UrlGeoClusterCountryCodeWithRankZero U);
+
+
+---------------------------------------
+--Negative sign to geo_hash value
+---------------------------------------
+
+--combining URL geocluster with Title geocluster
+create view GeoClusterAll as
+(select * from TitleGeoCluster)
+union all
+(select * from UrlGeoCluster);
+
+-- Remove GeoCluster if SkipDocument annotation is present
+create view GeoCluster as
+(select * from GeoClusterAll)
+minus
+(select G.* from GeoClusterAll G, SkipDocument S);
+
+
+

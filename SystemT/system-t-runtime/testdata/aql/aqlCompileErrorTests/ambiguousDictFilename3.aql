@@ -1,0 +1,21 @@
+-------------------------------------------------------------------------------
+-- ambigeousDictFilename3.aql
+
+-- Test for a defect# 14246
+-- No compile ambiguity error when multiple dictionary file with same name are
+-- in data path and the same file is just referenced by name in function call
+-- ContainsDict
+-------------------------------------------------------------------------------
+
+create view CapsWord as
+  extract
+      regex /[A-Z][a-z]+/ on 1 token in D.text as match
+  from Document D;
+
+create view FirstName as
+select CW.match as firstname
+from CapsWord CW
+where ContainsDict('strictFirst.dict', CW.match);
+
+output view FirstName;
+

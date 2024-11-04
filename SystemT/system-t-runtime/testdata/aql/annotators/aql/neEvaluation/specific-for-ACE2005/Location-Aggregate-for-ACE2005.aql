@@ -1,0 +1,140 @@
+-- create individual locations based on the definition of the standard datasets (i.e. do not merge "state, country" etc)
+-- Yunyao: updated on 01/18/2010 to avoid passing through empty annotations
+create view LocationAll as
+	--(select A.address as loc from MapLocation A where Not(MatchesRegex(//, A.address)))
+	--union all
+	--(select C.city as loc from MapLocation C where Not(MatchesRegex(//, C.city)))
+	--union all
+	--(select C.county as loc from MapLocation C where Not(MatchesRegex(//, C.county)))
+	-- union all
+	--(select C.stateorprovince as loc from MapLocation C where Not(MatchesRegex(//, C.stateorprovince)))
+	--union all
+	--(select C.country as loc from MapLocation C where Not(MatchesRegex(//, C.country)))
+	-- union all
+	--(select C.continent as loc from MapLocation C where Not(MatchesRegex(//, C.continent)))
+	--union all
+	(select C.match as loc from RegionValid  C where Not(MatchesRegex(//, C.match)))
+	union all
+	(select C.match as loc from WaterBody C)
+	union all
+	(select C.match as loc from Land C)
+	union all
+	(select C.match as loc from PatternBasedLocation C)
+	------------------------------------------------
+	--union all
+	--(select C.loc as loc from AdditionaLocationCandidate C where Not(MatchesRegex(//, C.loc)))
+	union all
+	(extract dictionaries 'location/ace2005/ace2005missingLocation.dict' on D.text as loc from Doc D)
+	;
+	---------------------------------------------------
+
+--output view LocationAll;
+--output view RegionValid;
+
+create view GPECandidates as
+	(select C.city as loc from MapLocation C where Not(MatchesRegex(//, C.city)))
+	union all
+	(select C.county as loc from MapLocation C where Not(MatchesRegex(//, C.county)))
+	union all
+	(select C.stateorprovince as loc from MapLocation C where Not(MatchesRegex(//, C.stateorprovince)))
+	union all
+	(select C.country as loc from MapLocation C where Not(MatchesRegex(//, C.country)))
+	union all
+	(select C.continent as loc from MapLocation C where Not(MatchesRegex(//, C.continent)));
+
+
+
+------------------------------------------------
+-- Additional customization - remove invalid candidate 
+------------------------------------------------
+create dictionary CorrectContextClueDict as
+(
+    'Olympics', 'Olympic', 'champion', 'President', 'Financial Secretary', 'Producer', 'Finance Minister',
+    'Consulate-General','District Judge', 'Congressman','Treasuries','Speaker', 'TV', 'Assistant Secretary', 
+    'CHAMP', 'Opens', 'Gov', 'Governor', 'Press Secretary', 'Democrat', 'Republican', 'money', 'Ambassador',
+    'Army', 'Senator', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+);
+
+
+create view LocationInvalid as
+(select L.loc as loc 
+from LocationAll L,
+	 AdditionaLocationInvalid W
+where Equals(L.loc, W.loc))
+--union all
+--(select L.*
+--from LocationAll L
+--where MatchesDict('direction.dict', LeftContextTok(L.loc, 1)))
+union all
+(select L.*
+from LocationAll L
+where MatchesRegex(/\s*[A-Z]+.*/, RightContextTok(L.loc, 1))
+  and Not(ContainsDict('CorrectContextClueDict', 'Exact', RightContextTok(L.loc, 2))))
+union all
+(select L.* from LocationAll L where MatchesRegex(/\s*area/, RightContextTok(L.loc, 1)));
+  
+ 
+--output view LocationInvalid;
+--------------------------------------------	
+
+	---------------------------------------------------
+	-- Customization for ACE2005
+	-- Laura: added on 11/20/2009
+	
+	create dictionary IntlBranch as(
+		'International'
+	);
+	
+	create view RegionalBranch as
+		(select C.match from CountryCandidate C)
+		union all
+		(select C.match from Continents C)
+		union all
+		(extract dictionary 'IntlBranch' with flags 'Exact' on D.text as match from Doc D);
+				
+	create view OrgWithRegionalBranch as
+	extract pattern <O.organization> (<R.match>)
+		return group 0 as organization
+		   and group 1 as wrongloc
+	from RegionalBranch R,  OrganizationFull O
+	having Not(ContainsRegex(/[\n\r\t]{2,}/, organization)); 
+	---------------------------------------------------
+
+create view WrongLocationDictBased as
+extract 
+	dictionaries 'location/ace2005/ace2005wrongLocation.dict' 
+	on D.text 
+	as loc 
+from Doc D;
+
+create view LocationValid as
+	(select L.loc as loc from LocationAll L)
+	minus
+	(
+		(select L.loc as loc from LocationInvalid L)
+		union all
+		-- Customization for ACE2005: remove Country/Continent immediately after an org 
+	    -- Laura: added on 11/20/2009
+		(select O.wrongloc as loc from OrgWithRegionalBranch O)
+		union all
+		-- Yunyao: added on 04/12/2010
+		(select P.name as loc from Person P)
+		union all
+		(select L.* from LocationAll L, WrongLocationDictBased WL where Contains(WL.loc, L.loc))
+		union all
+		(select L.match as loc from WrongPatternBasedLocation L)
+		union all
+		(select C.city as loc from MapLocation C where Not(MatchesRegex(//, C.city)))
+	);
+	
+	
+
+create view LocationConsolidated as
+select C.loc as loc
+from LocationValid C
+consolidate on C.loc
+using 'LeftToRight';
+
+create view Location as
+select C.loc as loc
+from LocationConsolidated C;

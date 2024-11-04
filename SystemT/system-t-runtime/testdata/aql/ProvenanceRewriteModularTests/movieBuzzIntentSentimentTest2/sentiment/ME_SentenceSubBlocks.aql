@@ -1,0 +1,77 @@
+module sentiment;
+
+import dictionary MET_ConjunctionsPreps_Dict from module common_dict as MET_ConjunctionsPreps_Dict;
+import dictionary MET_Adversary_ConjunctionsPreps_Dict from module common_dict as MET_Adversary_ConjunctionsPreps_Dict;
+import dictionary MET_Conditional_ConjunctionsPreps_Dict from module common_dict as MET_Conditional_ConjunctionsPreps_Dict;
+import dictionary MET_ConjunctivePunct_Dict from module common_dict as MET_ConjunctivePunct_Dict;
+
+--------------------------------------------
+-- DELIMIT SUB-SENTENCE CONSTRUCTS
+--------------------------------------------
+-- use as separators	
+create view MET_SubsentenceDelimsUnconsolidated as 
+	(
+	extract D.text as text, 'MET_ConjunctionsPreps_Dict' as prov, dictionary 'MET_ConjunctionsPreps_Dict' on D.text as match
+	from MET_AllBuzz_OnlyText D
+	)
+	union all
+	(
+	extract D.text as text, 'MET_Adversary_ConjunctionsPreps_Dict' as prov, dictionary 'MET_Adversary_ConjunctionsPreps_Dict' on D.text as match
+	from MET_AllBuzz_OnlyText D
+	)
+	union all
+	(
+	extract D.text as text, 'MET_Conditional_ConjunctionsPreps_Dict' as prov, dictionary 'MET_Conditional_ConjunctionsPreps_Dict' on D.text as match
+	from MET_AllBuzz_OnlyText D
+	)
+	union all
+	(
+	extract D.text as text, 'MET_ConjunctivePunct_Dict' as prov, dictionary 'MET_ConjunctivePunct_Dict' on D.text as match
+	from MET_AllBuzz_OnlyText D
+	)
+	union all
+	(
+	--extract D.text as text, 'other_punct' as prov, regex /$|[^A-Za-z0-9\s\.@'"`\\]|^|(http:)|(\bRT\s)/ on D.text as match
+	--extract D.text as text, 'other_punct' as prov, regex /$|[:|\.\.|(\.\s)|\!|\?]|^|-|(http:[^s]*)|(\bRT\s)/ on D.text as match
+	extract D.text as text, 'other_punct' as prov, regex /$|:|(\.\s)|\!|\?]|^|-|(http:)|(\bRT\s)/ on D.text as match
+	from MET_AllBuzz_OnlyText D
+	)
+	;
+--view for debug only
+create 	view MET_EntriesWithDelims as 
+	select D.text 
+	from MET_SubsentenceDelimsUnconsolidated D
+	consolidate on D.text;
+	
+
+create view MET_BetweenDelimsUnconsolidated as 
+	select D.text, SpanBetween(D.match, Other.match) as subsent, D.match as delim1, D.prov as prov1, Other.match as delim2, Other.prov as prov2
+	from MET_SubsentenceDelimsUnconsolidated D, MET_SubsentenceDelimsUnconsolidated Other
+	where Overlaps(D.text,Other.text)
+	and Follows(D.match, Other.match, 1,10000);
+	
+-- view for debug only	
+create view MET_DebugBetweenDelimsUnconsolidated as
+	select D.text 
+	from MET_BetweenDelimsUnconsolidated D;	
+	
+create view MET_SentenceSubBlocks as
+	select D.text as text, D.subsent as block
+	from MET_BetweenDelimsUnconsolidated D
+	consolidate on D.subsent using 'NotContainedWithin';
+	
+create view ME_NotSentenceSubBlocks as 
+	(
+	select D.text from 	MET_BetweenDelimsUnconsolidated D
+	)
+	minus
+	(
+	select D.text from MET_SentenceSubBlocks D
+	);
+/*
+output view MET_AllBuzz_OnlyText;
+--output view MET_SubsentenceDelimsUnconsolidated ;
+output view  MET_EntriesWithDelims;
+output view MET_DebugBetweenDelimsUnconsolidated;
+--output view MET_BetweenDelimsUnconsolidated;	
+output view ME_NotSentenceSubBlocks;*/

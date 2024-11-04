@@ -1,0 +1,94 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test cases for associating AQL Doc comments with the right create dictionary 
+-- statement when there are no ParseExceptions.
+--
+-------------------------------------------------------------------------------
+
+
+module createDictionaryTest;
+
+/* A comment spanning a single line. Will be ignored.*/
+
+/*
+A comment spanning
+multiple lines.
+Will be ignored.
+*/
+
+
+/** An AQL Doc comment for Test1 on a single line. Should be attached to Test1.*/
+create dictionary Test1 as
+( 'a' );
+
+
+/** An AQL Doc comment for Test2 
+on two lines. Should be parsed and attaced to Test2.*/
+create dictionary Test2  as
+( 'a' );
+
+
+/** 
+ * An AQL Doc comment for Test3 
+ * on multiple lines. 
+ * Should be parsed and attached to Test3.
+ */
+create dictionary Test3  as
+( 'a' );
+
+
+/** 
+ * Some AQL Doc comment. Should be parsed but not attached to the next view.
+ * Instead, the next view will be paired with the following AQL doc comment. 
+ */
+/** 
+ * An AQL Doc comment for Test4. Should be parsed and attached to Test4.
+ */
+create dictionary Test4  as
+( 'a' );
+
+
+/** 
+ * An AQL Doc comment for Test5. Should be parsed and attached to Test5. 
+ * The next multiline comment and single line comments will be ignored.
+ */
+/* 
+ * A multiline comment. Should be ignored.
+ */
+-- A single line comment. Should be ignored.
+create dictionary Test5  as
+( 'a' );
+
+
+/** 
+ * An AQL Doc comment for Test6. Should be parsed and attached to Test6. 
+ * The next single line comment will be ignored.
+ */
+-- A single line comment. Should be ignored.
+create dictionary Test6  as
+( 'a' );
+
+/** 
+ * An AQL Doc comment for Test7. Should be parsed and attached to Test7. 
+ * The next multiline comment will be ignored.
+ */
+/* 
+ * A multiline comment. Should be ignored.
+ */
+create dictionary Test7  as
+( 'a' );
+
+
+-- A dictionary without an AQL doc comment
+create dictionary Test8  as
+( 'a' );
+
+export dictionary Test1;
+export dictionary Test2;
+export dictionary Test3;
+export dictionary Test4;
+export dictionary Test5;
+export dictionary Test6;
+export dictionary Test7;
+export dictionary Test8;
+

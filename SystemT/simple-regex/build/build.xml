@@ -1,0 +1,213 @@
+<?xml version="1.0"?>
+
+<!-- General build file for jars to export to other projects. -->
+<project name="System T" default="jars">
+
+	<!-- Read volatile release properties from an external file. -->
+	<property file="${basedir}/release.properties" />
+
+	<!-- Constants go here -->
+	<property name="basedir" value="." />
+	<property name="tmp.dir" value="${basedir}/tmp" />
+
+	<property name="src.dir" value="${basedir}/../src" />
+
+	<property name="regex.src.tmp.dir"
+		value="${tmp.dir}/regex/src" />
+	<property name="regex.bin.tmp.dir"
+		value="${tmp.dir}/regex/bin" />
+
+	<property name="test.src.tmp.dir" value="${tmp.dir}/test/src" />
+	<property name="test.bin.tmp.dir" value="${tmp.dir}/test/bin" />
+
+	<property name="local.lib.dir" value="${basedir}/../lib" />
+
+
+	<property name="regex.jar" value="systemT_regex.jar" />
+	<property name="regex.src.jar" value="systemT_regex_src.jar" />
+
+	<!-- Location of the JavaCC installation -->
+	<property name="javacc.home"
+		location="${basedir}/../../DevelopmentEnvironmentBinaries/biginsights-shared-libraries/lib/javacc-5.0" />
+
+	<!-- Set up a timestamp and date for the manifest of the jars we produce -->
+	<tstamp>
+		<format property="release.timestamp"
+			pattern="MMMM dd, yyyy, HH:mm:ss" locale="en,US" />
+	</tstamp>
+
+
+	<!-- Main classpath for compilation, not including source dir -->
+	<path id="build.class.path">
+		<pathelement path="${classpath}" />
+
+		<!-- JUnit; needed to compile classes with JUnit annotations. -->
+		<pathelement
+			location="${local.lib.dir}/JUnit-4.4/junit-4.4.jar" />
+
+		<!-- JUnit extensions. -->
+		<pathelement
+			location="${local.lib.dir}/junit-addons-1.4/junit-addons-1.4.jar" />
+
+	</path>
+
+	<!-- Separate classpath for running JUnit tests. -->
+	<path id="test.class.path">
+		<!-- DO NOT use the build classpath; we want to make sure that the API 
+			runs without extra libs. -->
+		<pathelement location="${test.bin.tmp.dir}" />
+		<pathelement location="${regex.jar}" />
+
+		<pathelement
+			location="${local.lib.dir}/JUnit-4.4/junit-4.4.jar" />
+	</path>
+
+
+	<!-- Generate files from javacc -->
+	<target name="javacc">
+		<javacc
+			target="${src.dir}/regex/com/ibm/systemt/regex/parse/SimpleRegexParser.jj"
+			outputdirectory="${src.dir}/regex/com/ibm/systemt/regex/parse"
+			javacchome="${javacc.home}">
+		</javacc>
+	</target>
+
+
+
+
+	<!-- ================================================================== -->
+	<!-- jarPrep -->
+	<!-- ================================================================== -->
+	<!-- Pack a temporary directory with files for loading into a JAR. -->
+	<!-- ================================================================== -->
+	<target name="jarPrep" depends="javacc">
+		<!-- Clean out the temp directory. -->
+		<delete dir="${tmp.dir}" />
+		<mkdir dir="${tmp.dir}" />
+
+		<!-- Create some subdirectories within the temporary directory. -->
+		<!-- Regex code -->
+		<mkdir dir="${regex.src.tmp.dir}" />
+		<mkdir dir="${regex.bin.tmp.dir}" />
+
+		<!-- Testing code -->
+		<mkdir dir="${test.src.tmp.dir}" />
+		<mkdir dir="${test.bin.tmp.dir}" />
+
+		<!-- Copy the core SimpleRegex source files into the temporary directory -->
+		<copy todir="${regex.src.tmp.dir}">
+			<!-- Only one collection of source files right now -->
+			<fileset dir="${src.dir}/regex" casesensitive="yes">
+				<include name="**/*.java" />
+				<include name="**/*.properties" />
+			</fileset>
+		</copy>
+
+		<!-- Copy test case source files into the temp dir. -->
+		<copy todir="${test.src.tmp.dir}">
+			<fileset dir="${src.dir}/test" casesensitive="yes">
+				<include name="**/*.java" />
+				<include name="**/*.properties" />
+			</fileset>
+		</copy>
+	</target>
+
+	<!-- ================================================================== -->
+	<!-- jarTests -->
+	<!-- ================================================================== -->
+	<!-- Runs JUnit tests on a regex JAR file. -->
+	<!-- ================================================================== -->
+	<target name="jarTests">
+
+		<!-- Compile the test cases. -->
+		<javac srcdir="${test.src.tmp.dir}"
+			destdir="${test.bin.tmp.dir}" target="1.5" debug="Yes"
+			encoding="UTF-8">
+			<!-- Add relevant libraries to classpath -->
+			<classpath>
+				<path refid="build.class.path" />
+				<pathelement location="${regex.jar}" />
+			</classpath>
+		</javac>
+
+		<!-- Try out the core jar file by running some JUnit tests. -->
+		<junit showoutput="yes" printsummary="yes" haltonfailure="no"
+			fork="yes" dir="${basedir}/.." maxmemory="1024m"
+			errorProperty="tests.failed" failureProperty="tests.failed">
+
+			<!-- Tell the tests where to find config files -->
+			<sysproperty key="avatar.test.dir" value="${basedir}/.." />
+
+			<classpath>
+				<!-- DO NOT use the build classpath; we want to make sure that basic 
+					AQL runs without extra libs. -->
+				<pathelement location="${test.bin.tmp.dir}" />
+				<pathelement location="${regex.jar}" />
+				<pathelement
+					location="${local.lib.dir}/JUnit-4.4/junit-4.4.jar" />
+			</classpath>
+
+			<formatter type="plain" />
+			<test name="com.ibm.systemt.regex.test.SimpleRegexTests"
+				outfile="testOutput" />
+		</junit>
+		<fail if="tests.failed">Test failed; see testOutput.txt for more info.</fail>
+
+	</target>
+
+	<!-- ================================================================== -->
+	<!-- jars -->
+	<!-- ================================================================== -->
+	<!-- Build source and binary jars for the regex library. -->
+	<!-- ================================================================== -->
+	<target name="jars" depends="jarPrep">
+
+		<!-- Compile the source files to make JDK 5.0 compatible class files. -->
+		<javac srcdir="${regex.src.tmp.dir}"
+			destdir="${regex.bin.tmp.dir}" target="1.5" debug="Yes"
+			encoding="UTF-8">
+			<classpath>
+				<path refid="build.class.path" />
+			</classpath>
+		</javac>
+
+
+		<!-- Build the main JAR file -->
+		<jar jarfile="${regex.jar}" compress="yes">
+			<manifest>
+				<section name="versioninfo">
+					<attribute name="Version"
+						value="${major}.${minor}.${point}" />
+					<attribute name="BuildTime" value="${release.timestamp}" />
+				</section>
+			</manifest>
+			<fileset dir="${regex.bin.tmp.dir}" />
+		</jar>
+
+		<!-- Create a jar with just the Java source files. -->
+		<jar jarfile="${regex.src.jar}" compress="yes">
+			<manifest>
+				<section name="versioninfo">
+					<attribute name="Version"
+						value="${major}.${minor}.${point}" />
+					<attribute name="BuildTime" value="${release.timestamp}" />
+				</section>
+			</manifest>
+			<!-- Only include source files. -->
+			<fileset dir="${regex.src.tmp.dir}" includes="**/*.java" />
+		</jar>
+
+
+		<!-- Try out the jar file by running some JUnit tests. -->
+		<echo>Running tests...</echo>
+		<antcall target="jarTests" />
+
+		<!-- Clean up after ourselves. -->
+		<echo>Cleaning up temporary directories...</echo>
+		<delete dir="${tmp.dir}" />
+
+		<echo>Build complete!</echo>
+	</target>
+
+
+</project>

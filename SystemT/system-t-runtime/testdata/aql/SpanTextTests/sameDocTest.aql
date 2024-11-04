@@ -1,0 +1,87 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test case for join predicates requiring same docText attribute
+--
+-------------------------------------------------------------------------------
+require document with columns text Text;
+
+-- Create a vew with two Text attributes which are possibly unequal.
+create view AuxSpan as
+  extract regex 
+    /1([\w\s]+)?, 2([\w\s]+)?/
+  on D.text
+  return 
+    group 1 as arg1
+    and group 2 as arg2
+  from Document D;
+--output view AuxSpan;
+
+create view InputTexts as
+select GetText(S.arg1) as arg1, GetText(S.arg2) as arg2
+from AuxSpan S;
+output view InputTexts;
+
+-- Create spans based on possibly unequal texts
+create view Span1 as
+extract 
+  regex /([AB])[^a]*(aa[\w\s]+bb)?/ 
+  	on A.arg1 
+  return 
+  	group 1 as label
+  	and group 2 as match
+from InputTexts A;
+--output view Span1;
+
+create view Span2 as
+extract 
+  regex /([AB])[^c]*(cc[\w\s]+dd)?/ 
+  	on A.arg2 
+  return 
+  	group 1 as label
+  	and group 2 as match
+from InputTexts A;
+--output view Span2;
+
+-- Check join predicates of these span pairs
+create view ContainsView as
+	select R1.match as span1, R2.match as span2
+	from Span1 R1, Span2 R2
+	where Contains(R1.match, R2.match);
+output view ContainsView;
+
+create view ContainedWithinView as
+	select R1.match as span1, R2.match as span2
+	from Span1 R1, Span2 R2
+	where ContainedWithin(R1.match, R2.match);
+output view ContainedWithinView;
+
+create view FollowsView as
+	select R1.match as span1, R2.match as span2
+	from Span1 R1, Span2 R2
+	where Follows(R1.match, R2.match, 0, 4);
+output view FollowsView;
+
+create view FollowsTokView as
+	select R1.match as span1, R2.match as span2
+	from Span1 R1, Span2 R2
+	where FollowsTok(R1.match, R2.match, 0, 1);
+output view FollowsTokView;
+
+create view FollowedByView as
+	select R1.match as span1, R2.match as span2
+	from Span1 R1, Span2 R2
+	where FollowedBy(R1.match, R2.match, 0, 4);
+output view FollowedByView;
+
+create view FollowedByTokView as
+	select R1.match as span1, R2.match as span2
+	from Span1 R1, Span2 R2
+	where FollowedByTok(R1.match, R2.match, 0, 1);
+output view FollowedByTokView;
+
+create view OverlapsView as
+	select R1.match as span1, R2.match as span2
+	from Span1 R1, Span2 R2
+	where Overlaps(R1.match, R2.match);
+output view OverlapsView;
+

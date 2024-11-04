@@ -1,0 +1,470 @@
+module travel;
+
+-- TODO: Add AQL content here
+--include 'jpmc/travel/travelTextInputView.aql';
+--include 'jpmc/travel/travelShared.aql';
+/*Plain old dictionary to list 2nd person possessive pronouns.*/
+create dictionary travel_possessive_pronouns as 
+('you',
+'your'
+);
+
+
+/*Plain old dictionary to list transitive verbs.*/
+create dictionary travel_transitive_verbs as 
+('had',
+'have'
+);
+
+
+/*Plain old dictionary to list need verbs.*/
+create dictionary need_verbs as 
+('want',
+'need',
+'would like',
+'eager',
+'can\'t wait',
+'cant wait',
+'looking forward'
+);
+
+/*Plain old dictionary to list words wishing well.*/
+create dictionary travel_well_wish_words as 
+('safe',
+'good',
+'nice',
+'wonderful',
+'excellent',
+'great',
+'amazing'
+);
+
+
+create dictionary travel_sensory_words as
+('hear',
+'know'
+);
+
+create dictionary travel_wish_words as
+('wish',
+'hope'
+);
+
+create dictionary travel_question_words_past_dict as
+('how was',
+'where was',
+'enjoyed',
+'hear about'
+);
+
+
+create dictionary travel_question_words_intent_dict as
+(
+'where are',
+'when do you',
+'when is',
+'enjoy'
+);
+
+create dictionary travel_question_words_during_dict as
+('how is',
+'How\'s',
+'hows',
+'enjoying',
+'enjoy the rest of'
+);
+
+
+create dictionary travel_until_words as
+('til',
+'till'
+);
+
+
+
+/*Filter the input further to make sure a twitter handle is present in the body of the message*/
+create view input_filter as
+extract
+	 I.text as text,
+	regex /@[A-Za-z0-9_]+/ on I.text as twitter_handle 
+from	
+	travel_inputView I;
+
+create view travel_question_words_past as
+extract dictionary 'travel_question_words_past_dict' on I.text as howWas
+from input_filter I;
+
+create view travel_question_words_during as
+extract dictionary 'travel_question_words_during_dict' on I.text as howIs
+from input_filter I;
+
+create view travel_question_words_intent as
+extract dictionary 'travel_question_words_intent_dict' on I.text as enjoy
+from input_filter I;
+
+
+/*Extract the 2nd person possessive pronouns dictionary as a view*/
+create view travel_you_fromdict as 
+extract dictionary 'travel_possessive_pronouns'  on D.text as secondPerson from
+input_filter D;
+
+
+/*Extract the transitive verb dictionary as a view*/
+create view travel_transitive_verbdict as 
+extract dictionary 'travel_transitive_verbs'  on D.text as transitiveVerb from
+input_filter D;
+
+/*Extract the well wishing words as a view*/
+create view travel_well_wish_dict as 
+extract dictionary 'travel_well_wish_words'  on D.text as wellwish from
+input_filter D;
+
+/*Extract the need words as a view*/
+create view travel_need_dict as 
+extract dictionary 'need_verbs'  on D.text as needterm from
+input_filter D;
+
+/*Extract the need words as a view*/
+create view travel_sensory_dict as 
+extract dictionary 'travel_sensory_words'  on D.text as sensoryterm from
+input_filter D;
+
+/*Extract the wish words as a view*/
+create view travel_wish_dict as 
+extract dictionary 'travel_wish_words'  on D.text as wishterm from
+input_filter D;
+
+/*
+This view works for these patterns
+
+<have><Token{0,2}><travel_phrase>
+
+"@julianachoe i didn\'t even get this tweet until now, your shit\'s on private so i never got it til u accepted lol. have a safe trip though"
+"@photodartmouth have a great trip andy, will look forward to your tweets from around the world."
+
+*/
+--Could be either past or intent
+create view travel_have_trip_pattern as
+extract
+	pattern /(H|h)ave/ <Token>{0,2} <T.tripWord> as keyPhrase
+from travel_trip_word T, travel_transitive_verbdict V
+having Not(ContainsDict('travel_boring_trip',keyPhrase)) and
+	Or(Not(ContainsDict('travel_firstPerson_pronoun_dict',LeftContextTok(keyPhrase,6))),
+	   MatchesDict('travel_possessive_pronouns',LeftContextTok(keyPhrase,1)));
+
+
+create view travel_had_trip_pattern as
+extract
+	pattern /(H|h)ad/ <Token>{0,2} <T.tripWord> as keyPhrase
+from travel_trip_word T, travel_transitive_verbdict V
+having Not(ContainsDict('travel_boring_trip',keyPhrase)) and
+	Or(Not(ContainsDict('travel_firstPerson_pronoun_dict',LeftContextTok(keyPhrase,4))),
+	   MatchesDict('travel_possessive_pronouns',LeftContextTok(keyPhrase,1)));
+
+
+create view travel_had_trip as
+select I.text as text,
+	T.keyPhrase as keyPhrase,
+	I.twitter_handle as twitterHandle,
+	GetString('post') as kind
+from 
+travel_had_trip_pattern T, input_filter I;
+
+create view travel_have_trip as
+select I.text as text,
+	T.keyPhrase as keyPhrase,
+	I.twitter_handle as twitterHandle,
+	GetString('near_intent') as kind
+from 
+travel_have_trip_pattern T, input_filter I;
+
+
+
+create view safe_trip_had as
+	extract pattern /(H|h)ad//\ba\b/<travel_well_wish_dict.wellwish> <T.tripWord> as keyPhrase
+from
+	travel_transitive_verbdict V,travel_trip_word T,travel_well_wish_dict;
+
+
+create view safe_trip_have as
+	extract pattern /(H|h)ave//\ba\b/<travel_well_wish_dict.wellwish> <T.tripWord> as keyPhrase
+from
+	travel_transitive_verbdict V,travel_trip_word T,travel_well_wish_dict;
+
+
+--want to hear about your trip
+create view want_to_hear_about_trip as
+	extract pattern <N.needterm>/\bto\b/<S.sensoryterm>/\babout your\b/ <T.tripWord> as keyPhrase
+from
+	travel_sensory_dict S,travel_trip_word T,travel_need_dict N;
+
+--hope your trip is going well
+create view your_trip as
+extract pattern /\byour\b/<T.tripWord>  as keyPhrase
+from
+travel_trip_word T
+having Not(ContainsDict('travel_boring_trip',
+						RightContextTok(keyPhrase,2)));
+
+--Could be either past or intent
+create view travel_safe_trip_had as
+select I.text as text,
+	T.keyPhrase as keyPhrase,
+	I.twitter_handle as twitterHandle,
+	GetString('post') as kind
+from 
+safe_trip_had T, input_filter I;
+
+
+--Could be either past or intent
+create view travel_safe_trip_have as
+select I.text as text,
+	T.keyPhrase as keyPhrase,
+	I.twitter_handle as twitterHandle,
+	GetString('near_intent') as kind
+from 
+safe_trip_have T, input_filter I;
+
+
+
+--Could be past
+create view travel_want_to_hear_trip as
+select I.text as text,
+	T.keyPhrase as keyPhrase,
+	I.twitter_handle as twitterHandle,
+	GetString('post') as kind
+from 
+want_to_hear_about_trip T, input_filter I;
+
+--Could be past, intent or ontrip
+
+create view travel_your_trip_past as
+select I.text as text,
+	CombineSpans(H.howWas,T.keyPhrase) as keyPhrase,
+	I.twitter_handle as twitterHandle,
+	GetString('post') as kind
+from 
+your_trip T, input_filter I, travel_question_words_past H
+where
+FollowsTok(H.howWas,T.keyPhrase,0,2); 
+
+create view travel_your_trip_during as
+select I.text as text,
+	CombineSpans(H.howIs,T.keyPhrase) as keyPhrase,
+	I.twitter_handle as twitterHandle,
+	GetString('during') as kind
+from 
+your_trip T, input_filter I, travel_question_words_during H
+where
+FollowsTok(H.howIs,T.keyPhrase,0,2);
+
+create view travel_your_trip_intent as
+select I.text as text,
+	CombineSpans(H.enjoy,T.keyPhrase) as keyPhrase,
+	I.twitter_handle as twitterHandle,
+	GetString('near_intent') as kind
+from 
+your_trip T, input_filter I, travel_question_words_intent H
+where
+FollowsTok(H.enjoy,T.keyPhrase,0,2);
+
+--
+-- Airline apologies
+create dictionary travel_airline_apology_dict as
+('We hope you enjoy your flight',
+'we\'re sorry to hear that',
+'we hope you have a great flight',
+--'we apologize for the delay',
+'we hope you have a fantastic trip',
+'we\'re happy to hear you enjoyed your flight',
+'we hope to see you again soon',
+'we\'re working hard to get everyone on their way.',
+--'we apologize for any incovenience',
+--'we are sorry for any inconvenience',
+'we regret hearing that your bag has been delayed',
+--'we regret hearing of this',
+'I hope you enjoy your flight',
+--'I\'m sorry to hear that',
+'I hope you have a great flight',
+--'I apologize for the delay',
+--'I\'m sorry for the delay',
+'I hope you have a fantastic trip',
+'I\'m happy to hear you enjoyed your flight',
+'I regret hearing that your bag has been delayed',
+'welcome aboard',
+'sorry to hear that your flight',
+'we look forward to having you on-board',
+--'Sorry for the delay',
+'I\'m sorry you missed your connection',
+'I\'m sorry you missed your connection',
+'enjoy your flight',
+'sorry you\'re delayed',
+'Look forward to welcoming you on your flight!',
+'enjoy your flight',
+'We apologize for the delay',
+'hope you have a good flight',
+'I\'m sorry that your flight is delayed',
+'we\'re sorry that your flight is delayed',
+'Our apologies for the long line at check-in'
+);
+
+create view travel_airline_apology_phrase as 
+extract dictionary 'travel_airline_apology_dict' on I.text as apology
+from travel_inputView I
+consolidate on apology using 'ContainedWithin';
+
+-- American Airlines and southwest doesn't have a sig, so this rule won't work.
+create view travel_airline_sig as 
+extract regexes /\/[A-Za-z][A-Za-z]/ and
+				/\^[A-Za-z][A-Za-z]/ on between 2 and 2 tokens in D.text as sig
+from travel_inputView D;
+
+---  blhblha blha ^KH
+--- blah blha blha /cc
+
+-- 
+create view travel_airline_apology as
+select CombineSpans(U.username, S.sig) as keyPhrase,
+GetText(U.username) as twitterHandle,
+GetString('during') as kind
+/*, Or(Overlaps(B.begin,U.username), FollowsTok(B.begin,U.username,0,1)) as startsWithUsername
+, Follows(U.username,P.apology,0,140) as usernameApology
+, Follows(P.apology,S.sig,0,140)*/
+
+from travel_airline_apology_phrase P, travel_airline_sig S, travel_username U, travel_begin B 
+where Or(Overlaps(B.begin,U.username), FollowsTok(B.begin,U.username,0,1)) and -- username at the start
+	  Follows(U.username,P.apology,0,140) and -- apology after username
+	  Follows(P.apology,S.sig,0,140) -- a sig after the apology
+	  ;
+
+/**
+--- Destination intent
+--- These have low volume and so don't seem worth it, so I'm commenting them out.  But I'm leaving them in the file
+--- in case anyone gets this brilliant idea again, it will (1) give them a starting point, and (2) let them know
+--- it may not be easy.
+create dictionary travel_3rd_intentDest_dict as
+('I hope you enjoy',
+'I hope u enjoy',
+'hope you enjoy',
+'hope u enjoy',
+'hope you have fun in',
+'I hope you have fun in',
+'have fun in',
+'enjoy'
+);
+
+create dictionary travel_3rd_postDest_dict as
+('did you enjoy',
+'how was',
+'did u enjoy',
+'did you like',
+'did u like',
+'did you have fun in',
+'did u have fun in',
+'u enjoy',
+'you enjoy',
+'you like',
+'u like',
+'u have fun in',
+'you have fun in'
+);
+
+create view travel_3rd_intentDest_phrase as 
+extract dictionary 'travel_3rd_intentDest_dict' on D.text as hopeYouEnjoy 
+from input_filter D;
+
+create view travel_3rd_postDest_phrase as
+extract dictionary 'travel_3rd_postDest_dict' on D.text as didYouHaveFunIn 
+from input_filter D;
+
+-- catch stuff like 
+--"@DanaIM5 how was hershey!Did u ride sky rush??"
+--"@GleeLovesDarren how was chicago?? Ive been curious about tht one:)"
+-- "@adamlevine did you like Peru? Hope so! ;) #FollowMeAdam"
+create view travel_3rd_postDest as 
+select CombineSpans(F.didYouHaveFunIn,D.destination) as keyPhrase,
+GetText(U.username) as twitterHandle,
+GetString('post') as kind
+from travel_username U, travel_3rd_postDest_phrase F, travel_destination_word D
+where FollowsTok(F.didYouHaveFunIn,D.destination,0,2) and
+	Or(FollowsTok(U.username,F.didYouHaveFunIn,0,2),
+	   FollowsTok(D.destination,U.username,0,2));
+	
+-- Catch stuff like   
+-- "Never been good at good byes! But thank god its not forever have fun in New York @nikki_slaughter!"
+-- "Hope @itsCar_tahh and @kayyy_swade have fun in Bahamas . Drink a Bahamas mama for me !"
+-- "Wrapped up in my own bed now thanks for a great weekend @SophieLou_Kw_Tw enjoy Disneyland and happy almost birthday :)"
+create view travel_3rd_intentDest as
+select CombineSpans(H.hopeYouEnjoy,D.destination) as keyPhrase,
+GetText(U.username) as twitterHandle,
+GetString('intent') as kind
+from travel_username U, travel_3rd_intentDest_phrase H, travel_destination_word D
+where FollowsTok(H.hopeYouEnjoy,D.destination,0,2) and 
+	  Or(FollowsTok(U.username,H.hopeYouEnjoy,0,2),
+	     FollowsTok(D.destination,U.username,0,2));
+
+--END patterns with destination
+*/
+
+create view travel_indirect_output_preconsolidate as
+(select A.keyPhrase as keyPhrase,A.twitterHandle as twitterHandle, A.kind as kind from travel_your_trip_past A)
+union all
+(select A1.keyPhrase as keyPhrase,A1.twitterHandle as twitterHandle, A1.kind as kind from travel_your_trip_intent A1)
+union all
+(select A2.keyPhrase as keyPhrase,A2.twitterHandle as twitterHandle, A2.kind as kind from travel_your_trip_during A2)
+union all
+(select B.keyPhrase as keyPhrase,B.twitterHandle as twitterHandle,B.kind as kind from travel_want_to_hear_trip B)
+union all
+(select C.keyPhrase as keyPhrase,C.twitterHandle as twitterHandle,C.kind as kind from travel_safe_trip_had C)
+union all
+(select D.keyPhrase as keyPhrase,D.twitterHandle as twitterHandle,D.kind as kind from travel_safe_trip_have D)
+union all
+(select E.keyPhrase as keyPhrase,E.twitterHandle as twitterHandle,E.kind as kind from travel_had_trip E)
+union all 
+(select F.keyPhrase as keyPhrase,F.twitterHandle as twitterHandle,F.kind as kind from travel_have_trip F)
+union all
+(select G.* from travel_airline_apology G)
+-- These views weren't that useful, so they are commented out.  See the comment aboe
+--union all
+--(select H.* from travel_3rd_intentDest H)
+--union all
+--(select I.* from travel_3rd_postDest I)
+;
+
+create view travel_indirect_preclassified as
+select A.keyPhrase as keyPhrase from your_trip A;
+
+
+create view travel_indirect_text_unknown as 
+(select I.text as text,I.twitter_handle as twitterHandle from travel_indirect_preclassified A, input_filter I  where Overlaps(A.keyPhrase,I.text))
+minus
+(select I.text as text,I.twitter_handle as twitterHandle from travel_indirect_output_preconsolidate B, input_filter I where Overlaps(B.keyPhrase,I.text));
+
+create view travel_indirect_unknown as
+select A.keyPhrase, U.twitterHandle, GetString('unknown') as kind from travel_indirect_preclassified A, travel_indirect_text_unknown U
+where Overlaps(U.text,A.keyPhrase);
+
+create view travel_indirect_output as 
+select O.keyPhrase as keyPhrase,
+	GetText(O.twitterHandle) as twitterHandle,
+	O.kind as kind
+from ((select * from travel_indirect_output_preconsolidate)
+	   union all
+	   (select * from travel_indirect_unknown))
+O
+consolidate on O.twitterHandle;
+
+
+--output view travel_indirect_output;
+
+/*Filter view to identify the twitter handles from the relevant messages
+create view twitter_handle_extractor as
+extract
+	regex /@[A-Za-z0-9_]+/ on I.text as twitter_handle 
+from	
+	indirect_all I;
+
+
+create view twitter_handle_view as
+	select GetText(A.twitter_handle) as handle from twitter_handle_extractor A;
+*/

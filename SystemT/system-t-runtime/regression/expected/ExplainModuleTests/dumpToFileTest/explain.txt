@@ -1,0 +1,56 @@
+$Document = DocScan(
+  (
+    "text" => "Text",
+    "label" => "Text"
+  )
+);
+$_{"phone.PhoneNumber❡subquery1"} =
+Project(
+  (
+    "num" => "num"
+  ),
+  Union(
+    FastRegex(/\+?\([1-9]\d{2}\)\d{3}-\d{4}/, (0 => "num"), "DOTALL", "D.text",
+      Project(
+        (
+          "text" => "D.text"
+        ),
+        $Document
+      )
+    ),
+    FastRegex(/\+?[Xx]\.?\d{4,5}/, (0 => "num"), "DOTALL", "D.text",
+      Project(
+        (
+          "text" => "D.text"
+        ),
+        $Document
+      )
+    )
+  )
+);
+
+$_{"phone.PhoneNumber"} =
+Project(
+  (
+    "P.num" => "number",
+    "@@phone@@PhoneNumber@@lc" => "lc"
+  ),
+  ApplyFunc(
+    LeftContextTok(
+      GetCol(
+        "P.num"
+      ),
+      IntConst(
+        3
+      )
+    ) => "@@phone@@PhoneNumber@@lc",
+    Project(
+      (
+        "num" => "P.num"
+      ),
+      $_{"phone.PhoneNumber❡subquery1"}
+    )
+  )
+);
+
+Output: $_{"phone.PhoneNumber"};

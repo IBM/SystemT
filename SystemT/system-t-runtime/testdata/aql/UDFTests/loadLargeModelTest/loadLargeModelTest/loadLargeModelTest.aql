@@ -1,0 +1,24 @@
+module loadLargeModelTest;
+
+require document with columns text Text;
+
+/**
+ * A simple function that just reads a large resource from the classpath.
+ */
+create function getResource(pathToResource Text) 
+	return Boolean
+	external_name
+		-- Path relative to module root; udfjars is inside <project root>/testdata
+    	'../../../../udfjars/largeUDFs.jar:com.ibm.test.udfs.LoadLargeResource!getResource'
+	language java
+	deterministic
+	called on null input;
+
+-- Call the function
+create view ScalarFuncOutput as
+	select getResource('/com/ibm/test/udfs/largeFile.properties') as successfullyLoaded
+	from Document D;
+	
+output view ScalarFuncOutput;
+	
+	

@@ -1,0 +1,21 @@
+module module2;
+
+import module module1;
+
+-- One regex, on token boundaries
+create view Regex_3 as
+	extract regex /\p{Nd}+\.\p{Nd}+/ on 3 tokens in D.text as match
+	from Document D;
+
+-- Second regex, on token boundaries, to trigger the compiler to create an SRM node
+create view Regex_4 as
+	extract regex /\p{N}+\.\p{N}+/ on 3 tokens in D.text as match
+	from Document D;
+	
+-- To trigger the bug, output only Regexes 1,3 and 4.
+-- Not outputing Regex 2 leads to Regex params for /\p{N}+/ to be removed from the
+-- Shared Regex Match node for both Regex 2 and Regex 4, leading to 
+-- java.lang.ArrayIndexOutOfBoundsException in AOGMultiOpTree$RegexesTokOp
+output view module1.Regex_1;
+output view Regex_3;
+output view Regex_4;

@@ -1,0 +1,31 @@
+module datapower;
+
+
+create view tidBuildingBlock as
+  select  Op.match as match,
+          AutoID() as __auto__id
+  from  __Base__datapower__tidBuildingBlock__Temp Op;
+
+output view tidBuildingBlock;
+
+create view tidOutput as
+  select  D.match as span,
+          GetText(D.match) as text,
+          GetString('Tid') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as tidBuildingBlock_____sep_____D____id
+  from  tidBuildingBlock D;
+
+output view tidOutput;
+
+export view datapower.tidOutput;
+
+
+create view __Base__datapower__tidBuildingBlock__Temp as
+  extract pattern 'tid(' (      /\d+/) ')'
+  return group 1 as match
+  from  Document D;
+
+output view __Base__datapower__tidBuildingBlock__Temp;
+

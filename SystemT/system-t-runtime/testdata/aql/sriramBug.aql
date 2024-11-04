@@ -1,0 +1,24 @@
+ 
+-- Find strict capitalized words
+create view StrictCapsPerson as
+select R.match as name
+from   Regex(/\b\p{Upper}\p{Lower}[\p{Alpha}]{1,20}\b/, DocScan.text) R;
+
+
+-- Find dictionary matches for all last names
+create view StrictLastName as
+select D.match as lastname
+from   Dictionary('dictionaries/lotus/strictlast.dict', DocScan.text) D
+where  MatchesRegex(/\p{Upper}.{1,20}/, D.match);	
+ 
+create view RelaxedLastName2 as
+select CombineSpans(CP.name, SL.lastname) as lastname
+from StrictLastName SL,
+     StrictCapsPerson CP
+where FollowsTok(CP.name, SL.lastname, 1, 1)
+  and MatchesRegex(/\-/, SpanBetween(CP.name, SL.lastname));
+
+
+select P.lastname as person
+into RelaxedLastName
+from RelaxedLastName2 P;

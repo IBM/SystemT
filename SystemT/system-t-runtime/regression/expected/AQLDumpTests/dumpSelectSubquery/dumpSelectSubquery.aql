@@ -1,0 +1,34 @@
+require document with columns
+  text Text and
+  label Text;
+
+create view FirstName as
+  select  'John' as firstName
+  from  Document D;
+
+create view LastName as
+  select  'Doe' as lastName
+  from  Document D;
+
+create view FullPersonName as
+  select  F1.fullName,
+          F1.firstName,
+          F1.lastName
+  from  
+    (select  F1.fullName,
+            F1.firstName,
+            F1.lastName
+    from  
+      (extract pattern (<F.firstName>) <Token>{1,2} (<L.lastName>)
+      return group 0 as fullName
+         and group 1 as firstName
+         and group 2 as lastName
+      from  FirstName F,
+            LastName L
+      ) F1
+    where Not(ContainsRegex(/D.+/, 'CASE_INSENSITIVE', F1.lastName))
+    ) F1
+  consolidate on F1.fullName using 'ContainedWithin';
+
+output view FullPersonName;
+

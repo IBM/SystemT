@@ -1,0 +1,298 @@
+module URL;
+
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText
+;
+
+
+require document with columns
+  text Text;
+
+create view URL1 as
+  select  R.match as annot,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__59__Temp_____sep_____R____id
+  from  __Subquery__59__Temp R;
+
+output view URL1;
+
+create view URL1a as
+  select  R.match as annot,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__60__Temp_____sep_____R____id
+  from  __Subquery__60__Temp R;
+
+output view URL1a;
+
+create view URL2 as
+  select  R.match as annot,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__61__Temp_____sep_____R____id
+  from  __Subquery__61__Temp R;
+
+output view URL2;
+
+create view URL1a_2 as
+  (select  Op.annot as annot,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__62__TempOp__0 Op)
+  union all
+  (select  Op.annot as annot,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__62__TempOp__1 Op);
+
+output view URL1a_2;
+
+create view URL1a_2BeginwithProtocol as
+  select  R.match as annot,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__63__Temp_____sep_____R____id
+  from  __Subquery__63__Temp R;
+
+output view URL1a_2BeginwithProtocol;
+
+create view URL1a_2All as
+  (select  Op.annot as annot,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__64__TempOp__0 Op)
+  union all
+  (select  Op.annot as annot,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__64__TempOp__1 Op);
+
+output view URL1a_2All;
+
+create view URL1a_2Consolidated as
+  select  __t2.annot as annot,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__65__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__65__Temp__1 __t1,
+        __Consolidate__65__Temp__2 __t2
+  where Contains(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.annot;
+
+output view URL1a_2Consolidated;
+
+create view URLWeakOverlap as
+  select  U2.annot as annot,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U1.__auto__id as URL1_____sep_____U1____id,
+          U2.__auto__id as URL1a_2Consolidated_____sep_____U2____id
+  from  URL1 U1,
+        URL1a_2Consolidated U2
+  where Overlaps(U1.annot, U2.annot);
+
+output view URLWeakOverlap;
+
+create view URLWeakOnly as
+  select  Op.annot as annot,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__66__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__66__TempOp__1 Op,
+        __Minus__66__Temp __t
+  where Equals(Op.annot, __t.annot);
+
+output view URLWeakOnly;
+
+create view URLAll as
+  (select  Op.annot as annot,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__67__TempOp__0 Op)
+  union all
+  (select  Op.annot as annot,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__67__TempOp__1 Op);
+
+output view URLAll;
+
+export view URL.URLAll;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+create view __Consolidate__65__Temp__1 as
+  select  C.annot as annot,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as URL1a_2All_____sep_____C____id,
+          C.annot as __consolidate__target
+  from  URL1a_2All C;
+
+output view __Consolidate__65__Temp__1;
+
+create view __Consolidate__65__Temp__2 as
+  select  __t1.annot as annot,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__65__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'NotContainedWithin';
+
+output view __Consolidate__65__Temp__2;
+
+create view __Minus__66__Temp as
+  select  __t.annot as annot
+  from  
+    ((select  Op.annot as annot
+      from  __Minus__66__TempOp__1 Op)
+    minus
+    (select  Op.annot as annot
+      from  __Minus__66__TempOp__2 Op)
+    ) __t
+  group by __t.annot;
+
+output view __Minus__66__Temp;
+
+create view __Minus__66__TempOp__1 as
+  select  U.annot as annot,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URL1a_2Consolidated_____sep_____U____id
+  from  URL1a_2Consolidated U;
+
+output view __Minus__66__TempOp__1;
+
+create view __Minus__66__TempOp__2 as
+  select  U.annot as annot,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URLWeakOverlap_____sep_____U____id
+  from  URLWeakOverlap U;
+
+output view __Minus__66__TempOp__2;
+
+create view __Subquery__59__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    regex /((ht|f)tps?:\/\/\w+[\w\-:&=_?\/~.<>@:]+[\w\-:&=_?\/~]{2,100})/
+    with flags 'DOTALL'
+    on between 1 and 50 tokens in D.text
+    return group 0 as match
+  from DocumentText D;
+
+output view __Subquery__59__Temp;
+
+create view __Subquery__60__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    regex /(\w+[\w\-:&=_?\/~.<>@:]+\.(com|edu|org)\/[\w&_?~.<>@:][\w\-:&=_?\/~.<>@:]+[\w\-:&=_?\/~]{2,100})/
+    with flags 'DOTALL'
+    on between 1 and 50 tokens in D.text
+    return group 0 as match
+  from DocumentText D;
+
+output view __Subquery__60__Temp;
+
+create view __Subquery__61__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    regex /(((([\w]+:)\/\/)|(w\w+\.))(([\p{Nd}\w]|%[a-fA-f\p{Nd}]{2,2})+(:([\p{Nd}\w]|%[a-fA-f\p{Nd}]{2,2})+)?@)?([\p{Nd}\w][-\p{Nd}\w]{0,253}[\p{Nd}\w]\.)+[\w]{2,4}(:[\p{Nd}]+)?(\/([-+_~.\p{Nd}\w]|%[a-fA-f\p{Nd}]{2,2})*)*(\?(&?([-+_~.\p{Nd}\w]|%[a-fA-f\p{Nd}]{2,2})=?)*)?(#([-+_~.\p{Nd}\w]|%[a-fA-f\p{Nd}]{2,2})*)?)/
+    with flags 'DOTALL'
+    on between 1 and 50 tokens in D.text
+    return group 0 as match
+  from DocumentText D;
+
+output view __Subquery__61__Temp;
+
+create view __Subquery__63__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    U.__auto__id as URL1a_2_____sep_____U____id,
+    regex /(ht|f)tps?.+/
+    with flags 'DOTALL'
+    on U.annot
+    return group 0 as match
+  from URL1a_2 U;
+
+output view __Subquery__63__Temp;
+
+create view __Union__62__TempOp__0 as
+  select  U.annot as annot,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URL1a_____sep_____U____id
+  from  URL1a U;
+
+output view __Union__62__TempOp__0;
+
+create view __Union__62__TempOp__1 as
+  select  U.annot as annot,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URL2_____sep_____U____id
+  from  URL2 U;
+
+output view __Union__62__TempOp__1;
+
+create view __Union__64__TempOp__0 as
+  select  U.annot as annot,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URL1a_2_____sep_____U____id
+  from  URL1a_2 U;
+
+output view __Union__64__TempOp__0;
+
+create view __Union__64__TempOp__1 as
+  select  U.annot as annot,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URL1a_2BeginwithProtocol_____sep_____U____id
+  from  URL1a_2BeginwithProtocol U;
+
+output view __Union__64__TempOp__1;
+
+create view __Union__67__TempOp__0 as
+  select  URL1.annot as annot,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          URL1.__auto__id as URL1_____sep_____URL1____id
+  from  URL1 URL1;
+
+output view __Union__67__TempOp__0;
+
+create view __Union__67__TempOp__1 as
+  select  URLWeakOnly.annot as annot,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          URLWeakOnly.__auto__id as URLWeakOnly_____sep_____URLWeakOnly____id
+  from  URLWeakOnly URLWeakOnly;
+
+output view __Union__67__TempOp__1;
+

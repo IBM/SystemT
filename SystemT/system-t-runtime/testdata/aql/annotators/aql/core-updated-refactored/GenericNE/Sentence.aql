@@ -1,0 +1,196 @@
+
+--===========================================================================
+-- Sentence annotator
+--===========================================================================
+
+-- Sudarshan regex : 10/12/2011 : backreference on line 9
+-- Line with all CAPS words - subsumed by HeadlineMixedCaps annotator
+create view HeadlineAllCaps as
+extract regex /^([^(\p{Ll}\p{M}*)\n\r]+)([\n\r]+)/ 
+	with flags 'MULTILINE'
+	on D.text
+	return group 1 as headline
+	   and group 2 as boundary
+from Doc D
+having Not(MatchesRegex(/\s+/, headline));
+
+--*********************************************************
+-- MixedCaps headlines 
+-- Slow version replaced with faster version below
+--*********************************************************
+
+-- List of lower case tokens that are allowed in MixedCaps headlines
+/*create dictionary LowerCaseTitleWordAdditionalDict as(
+	'to' , 'as', 'for', 'and', 'or', 'but', 'online',
+	-- to match She'll, Don't, I'm, John's
+	's', 't', 'm', 'll'
+);*/
+
+--*********************************************************
+-- Slow version replaced with faster version below
+--*********************************************************
+/*
+create view LowerCaseTitleToken as
+extract dictionaries 'pos/preps-list' and 'pos/dets-list' and 'LowerCaseTitleWordAdditionalDict'
+	on D.text as match
+from Doc D
+having MatchesRegex(/'?(\p{Ll}\p{M}*)+/, match); --'
+*/
+
+--create view OtherTitleToken as
+--extract regex /[&.?!:;,\|\/\p{Pd}\p{Pi}\p{Pf}(\p{Lu}\p{M}*)\d].*/ --'
+--	on 1 token in D.text as match
+--from Doc D;
+
+/*
+create view TitleToken as
+(select * from LowerCaseTitleToken)
+union all
+(select * from OtherTitleToken);
+
+create view HeadlineMixedCaps as
+select LeftContext(H.headline,1) as lb,
+       RightContext(H.headline,1) as rb,
+       H.headline as headline
+from
+(
+	extract blocks
+	    with count between 1 and 30
+	    and separation 0 tokens
+	    on TT.match as headline
+	from TitleToken TT
+	having ContainsRegex(/[\n\r]/, LeftContextTok(headline,1))
+	   and ContainsRegex(/[\n\r]/, RightContextTok(headline,1))
+	   and Not(ContainsRegex(/[\n\r]/, headline))
+	consolidate on headline
+) H;
+*/
+
+--*********************************************************
+--  Alternative method for extracting MixedCaps headlines
+--*********************************************************
+
+
+create view CapsToken as 
+extract regex  
+	--Laura: 04/30/2010: replaced \p{Pi} and \p{Pf} (begin/end quotation marks) with individual unicodes, for Java 5 compatibility
+	--/[&.?!:;,\|\/\p{Pd}\p{Pi}\p{Pf}(\p{Lu}\p{M}*)\d].*/
+	-- Sudarshan regex : 10/12/2011 : backreference on line 79
+	/[&.?!:;,\|\/\p{Pd}\u0093\u0094\u2018\u2019\u0022\u0027\u00AB\u00BB\u201A\u201B\u201C\u201D\u201E\u301D\u301E\u301F(\p{Lu}\p{M}*)\d].*/
+	on 1 token in D.text as match
+from Doc D;
+
+
+
+-- Tokens with new line to the left
+create view FirstCapsToken as
+select T.match as match
+from CapsToken T
+where ContainsRegex(/[\n\r]/, LeftContextTok(T.match, 1));
+
+-- Tokens with new line to the right
+create view LastCapsToken as
+select T.match as match
+from CapsToken T
+where ContainsRegex(/[\n\r]/, RightContextTok(T.match, 1));
+
+-- Headlines with a single token (i.e., new line to the left and right)
+create view HeadlineCandSingleToken as
+select T.match as match
+from FirstCapsToken T
+where ContainsRegex(/[\n\r]/, RightContextTok(T.match, 1));
+
+-- Headlines with two or more tokens
+create view HeadlineCandMultiToken as
+select CombineSpans(F.match, L.match) as headline
+from FirstCapsToken F, LastCapsToken L
+where FollowsTok(F.match, L.match, 0, 30)
+and Not(ContainsRegex(/[\n\r]/, CombineSpans(F.match, L.match)));
+
+-- All headline candidates
+create view HeadlineCand as
+(select H.match as headline from HeadlineCandSingleToken H)
+union all
+(select H.headline as headline from HeadlineCandMultiToken H);
+
+
+-- Candidates containing disallowed tokens in lower case
+create view HeadlineInvalid as
+extract H.headline as headline,
+	regex /\p{Ll}\p{M}*.*/ on 1 token in H.headline as ltoken
+from HeadlineCand H
+--having Not(MatchesDict('pos/preps-list', ltoken))
+having Not(MatchesDict('pos/lang_preps_en.dict', ltoken))
+   --and Not(MatchesDict('pos/dets-list', ltoken))
+   and Not(MatchesDict('pos/lang_detrmnrs_en.dict', ltoken))
+   --and Not(MatchesDict('LowerCaseTitleWordAdditionalDict', ltoken))
+   and Not(MatchesDict('misc/misc_lang_title_word_en.dict', ltoken))
+consolidate on headline;                        
+
+-- All valid candidates
+create view HeadlineValid as
+(select H.headline as headline from HeadlineCand H)
+minus
+(select H.headline as headline from HeadlineInvalid H);
+
+-- Calculate the left and right boundaries
+create view HeadlineMixedCaps as
+select LeftContext(H.headline,1) as lb,
+       RightContext(H.headline,1) as rb,
+       H.headline as headline
+from HeadlineValid H;
+
+--*********************************************************
+-- Other boundaries obtained by exploiting HTML tags
+--*********************************************************
+create view HTMLTagBoundary as
+(select LeftContext(T.match, 0) as lb, RightContext(T.match, 0) as rb from DivContent T)
+union all
+(select LeftContext(T.match, 0) as lb, RightContext(T.match, 0) as rb from SpanContent T)
+union all
+(select LeftContext(T.match, 0) as lb, RightContext(T.match, 0) as rb from AnchorContent T)
+union all
+(select LeftContext(T.match, 0) as lb, RightContext(T.match, 0) as rb from ParagraphContent T);
+
+
+--*********************************************************
+-- Combine sentence boundaries with headline boundaries 
+-- and HTML tag boundaries
+--*********************************************************
+create view SentenceBoundary as
+select S.boundary as boundary
+from
+(
+	(
+		select R.match as boundary
+		-- Sudarshan regex : 10/12/2011 : backreference on line 164
+		-- from Regex(/(([\.\?!]+\s)|(\n\s*\n))/, Doc.text) R
+		from (extract regex /(([\.\?!]+\s)|(\n\s*\n))/ on D.text as match from Doc D) R
+		where
+			-- Filter the candidate boundaries.
+			--Not(ContainsDict('abbreviation.dict',
+			Not(ContainsDict('misc_abbrev_en.dict', 
+				CombineSpans(LeftContextTok(R.match, 1), R.match)))
+	)
+--	union all
+--	( select H.boundary as boundary from HeadlineAllCaps H )
+	union all
+	( select H.lb as boundary from HeadlineMixedCaps H )
+	union all
+	( select H.rb as boundary from HeadlineMixedCaps H )
+	union all
+	( select H.lb as boundary from HTMLTagBoundary H )
+	union all
+	( select H.rb as boundary from HTMLTagBoundary H )
+) S
+consolidate on S.boundary;
+
+
+
+/*
+--output view SentenceBoundary;
+--output view HeadlineMixedCaps;
+--output view HeadlineInvalid;
+--output view Diff;
+--output view Diff1;
+*/

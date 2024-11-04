@@ -1,0 +1,22 @@
+module test;
+
+create view NullType as
+	select null as nullColl
+	from Document D;
+	
+output view NullType as 'NullType';
+
+create view AllType as
+	( select 5 as key, 1 as intType, 1.5 as floatType, true as boolType, 'test' as textType, SubSpanTok(D.text, 0, 1) as spanType from Document D )
+	union all
+	( select 5 as key, null as intType, null as floatType, null as boolType, null as textType, null as spanType from Document D );
+	
+output view AllType as 'AllType';
+
+create view AllTypeList as
+	select List(T.intType) as intList, List(T.floatType) as floatList, List(T.spanType) as spanList, List(T.textType) as textList
+	from AllType T
+	group by T.key;
+	
+output view AllTypeList as 'AllTypeList';
+	

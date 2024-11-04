@@ -1,0 +1,466 @@
+module buzz;
+
+import dictionary ME_MovieCategClue_Dict from module dictionariesAndTables as ME_MovieCategClue_Dict;
+import dictionary ME_Star_Dict from module dictionariesAndTables as ME_Star_Dict; 
+import dictionary ME_Role_Dict from module dictionariesAndTables as ME_Role_Dict;
+import dictionary ME_Movies_Nicknames_Dict from module dictionariesAndTables as ME_Movies_Nicknames_Dict;
+import dictionary ME_Ambiguous_Movies_Dict from module dictionariesAndTables as ME_Ambiguous_Movies_Dict;
+import dictionary ME_HighlyAmbiguous_Movies_Dict from module dictionariesAndTables as ME_HighlyAmbiguous_Movies_Dict;
+
+import table ME_Movies_Name2Nick_Map from module dictionariesAndTables as ME_Movies_Name2Nick_Map;
+import table ME_Keyword2Category_Map from module dictionariesAndTables as ME_Keyword2Category_Map;
+import table ME_Movies2Star2Role_Map from module dictionariesAndTables as ME_Movies2Star2Role_Map;
+
+import view ME_SpamPost from module postCategory as ME_SpamPost;
+import view ME_PromotionalPost from module postCategory as ME_PromotionalPost;
+
+import function isSubstringIgnoreCase from module udfs as isSubstringIgnoreCase;
+
+create view ME_Entries as 
+	select D.text as text
+	from Document D;
+
+
+-- to do: exclude "is/a" right before the movie ("is mission impossible")
+-- exclude video games, comics, books references
+create dictionary ME_OtherMediaMentions_Dict as 
+	('book','novel','toy','action figure','books','game','games','comics','play','read','reading','exhibition','library','bookstore','issue',
+	'volume','programme','cover','gop','rep','republican','representative','ER','E.R.');
+	
+-- clues that entry is about a movie	
+create dictionary ME_Movies_ContextWords_Dict as (
+'starring','performance','box office','movie','film','clip','trailer','preview',
+'watching','watch','watched','see','saw','seen','screening','cast','actor',
+'director','actress','actors','preview','viral','ticket','rating','cinema','theatre'
+);
+
+-- clues for highly ambiguous movies, immediately preceding titles
+create dictionary ME_PrecedeTitle_Dict as (
+'see','saw','seen','watch','watched','watching'
+);
+-- clues for likely foreign entries
+create dictionary ME_LikelyForeign_Dict as (
+'la','de','il','e','si','de','del'
+);
+
+-- used to filter out entries that are likely not movies but expressions "a mission impossible"
+create dictionary ME_NotBeforeTitle as(
+'a','an','rin','not','first'
+);
+
+
+create dictionary ME_AfterHighlyAmbigTitle_Dict as
+('badly', 'now','tomorrow', 'soon','too','yet','and','but','though','although','at',',',';','.','!','-','?');
+
+create view ME_CluesForCategories as 
+	extract D.text as text, dictionary 'ME_MovieCategClue_Dict' on D.text as match
+	from Document D
+	consolidate on match using 'ContainedWithin';
+	
+create view MET_MovieStar as 
+	extract D.text as text, dictionary 'ME_Star_Dict' on D.text	as match
+	from Document D;
+	
+create view MET_MovieRole as 
+	extract D.text as text, dictionary 'ME_Role_Dict' on D.text	as match
+	from Document D;	
+	
+	
+----------------------------------------
+-- EXTRACT ALL MENTIONS OF MOVIES
+----------------------------------------
+create view MET_AllMoviesUnconsolidated as
+	(
+	extract D.text as text,'nonambig' as prov, dictionary 'ME_Movies_Nicknames_Dict' on D.text as match 
+	from ME_Entries D
+	)
+	union all
+	(
+	extract D.text as text,'ambig' as prov, dictionary 'ME_Ambiguous_Movies_Dict' on D.text as match 
+	from ME_Entries D
+	)
+	union all
+	(
+	extract D.text as text,'highlyambig' as prov, dictionary 'ME_HighlyAmbiguous_Movies_Dict' on D.text as match 
+	from ME_Entries D
+	);
+	
+create view MET_AllMovies as
+	select D.*
+	from MET_AllMoviesUnconsolidated D
+	consolidate on D.match using 'ContainedWithin';		
+----------------------------------------
+-- FILTER OUT SPAM, ETC
+----------------------------------------
+create view MET_ToFilterForeign as 
+	select D.text, D.match	--filter spanish entries
+	from  MET_AllMovies D 
+	where ContainsDict('ME_LikelyForeign_Dict', D.text);
+	
+create view ME_ToFilterNotMovies as 
+	select D.text, D.match	-- filter entries that are related to books and not to movies
+	from  MET_AllMovies D
+	where ContainsDict('ME_OtherMediaMentions_Dict', D.text)
+		--and Not(ContainsDict('ME_Movies_ContextWords_Dict', D.text))  -- to be on the safe side in filtering comics/novels, etc
+	;
+	/*
+create view ME_ToFilterExpression as
+	select D.text , D.match, LeftContextTok(D.match,0)
+	from  MET_AllMovies D
+	where MatchesRegex(/(is)|(a)|(an)/,'CASE_INSENSITIVE',LeftContextTok(D.match,1));*/
+	
+create view Met_AllMoviesWithLeftContext as 
+	select D.text, D.match, LeftContextTok(D.match,1) as l_context
+	from  MET_AllMovies D
+	where ContainsDict('ME_NotBeforeTitle', LeftContextTok(D.match,1));
+	
+create view MET_ToFilterSpam as 
+	select D.match, D.text
+	from MET_AllMovies D, ME_SpamPost S
+	where Overlaps(D.text, S.text);
+	
+	
+create view MET_ToFilterEntries as 
+	/*(
+	select '1' as prov ,D.text	--filter spanish entries
+	from  MET_ToFilterForeign D 
+	)
+	union all*/
+	(
+	select'2' as prov ,D.text	--filter spam
+	from  ME_SpamPost D
+	)
+	/*union all
+	(		
+	select D.text	--filter retweets, temporary solution
+	from  ME_RetweetPost D
+	)*/
+	union all
+	(
+	select '3' as prov ,D.text	-- filter entries that are related to books and not to movies
+	from  ME_ToFilterNotMovies  D
+	)
+	union all
+	(
+	select '4' as prov ,D.text 
+	from  Met_AllMoviesWithLeftContext D
+	);
+
+create view MET_FilteredEntries as
+	(
+	select D.text
+	from MET_AllMovies D
+	)
+	minus
+	(
+	select D.text
+	from MET_ToFilterEntries D
+	);
+	
+-- join back to get all attributes
+create view MET_FilteredMovies as
+	select D.text as text, D.prov as prov, D.match as name, ToLowerCase(D.match) as name_lc
+	from MET_AllMovies D, MET_FilteredEntries F
+	where Overlaps(D.text, F.text)
+	and Not(MatchesRegex(/_/,LeftContext(D.match,1)))
+	and Not(MatchesRegex(/_/,RightContext(D.match,1)))
+	and Not(ContainsRegex(/((is like)|(its like)|(it\'s like)|(a)|(is it)|(it is))mission impossible/, 'CASE_INSENSITIVE',D.text))
+	consolidate on D.match using 'ContainedWithin';
+
+-----------------------------------------------
+-- NORMALIZE
+-----------------------------------------------
+create view MET_FilteredMovies_Normalized as 
+	select D.*, M.formalName as formal_name
+	from MET_FilteredMovies D , ME_Movies_Name2Nick_Map M
+	where Equals(ToLowerCase(M.nick), GetString(D.name_lc))
+	consolidate on D.name;	
+----------------------------------------------
+-- CATEGORIZE POSTS USING DOMAIN-SPECIFIC CATEGORIES
+----------------------------------------------
+-- categories based on vocabulary
+create view MET_Movies_WithCategoryClue as 
+	select D.text as text, D.prov as prov, D.name as name, D.name_lc as name_lc, D.formal_name as formal_name, C.match as clue, ToLowerCase(C.match) as clue_lc
+	from  MET_FilteredMovies_Normalized D, ME_CluesForCategories C
+	where Overlaps(D.text,C.match)
+	and Not(Overlaps(D.name, C.match));	-- clue should not overlap with the title
+		
+-- WARNING: if more than one movie, each will be associated with the same set of clues		
+create view MET_Movies_WithCategory_Vocab as
+	select D.text as text, D.name_lc as name_lc, D.name as name, GetString(M.category) as category,D.formal_name as formal_name, D.clue as clue,D.prov as prov	-- case has hints of category
+	from MET_Movies_WithCategoryClue D, ME_Keyword2Category_Map M
+	where Equals(GetString(ToLowerCase(M.clue)),GetString(D.clue_lc));
+--	consolidate on M.clue;
+
+create view MET_Movies_WithCategory_Stars as 
+	select D.*, R.match as clue, GetString('cast') as category
+	from MET_FilteredMovies_Normalized D, MET_MovieStar R, ME_Movies2Star2Role_Map MSR
+	where Overlaps(D.text,R.match)
+	and Equals(ToLowerCase(MSR.star), ToLowerCase(R.match)) -- role must be in movie
+	and Equals(GetString(MSR.formalName),GetString(D.formal_name))
+	consolidate on R.match;	
+	
+-- categories based on roles. Need to check that roles and movies match
+create view MET_Movies_WithCategory_AllRoles as 
+	select D.*, R.match as clue, GetString('plot') as category
+	from MET_FilteredMovies_Normalized D, MET_MovieRole R, ME_Movies2Star2Role_Map MSR
+	where Overlaps(D.text,R.match)
+	and Not(isSubstringIgnoreCase(GetString(D.formal_name),GetString(R.match)))	-- role mention should not be part of the title
+	and Equals(ToLowerCase(MSR.role), ToLowerCase(R.match)) -- role must be in movie
+	and Equals(GetString(MSR.formalName),GetString(D.formal_name));	
+	
+--  If the actor is mentioned then it is probably not about plot	!!!!!!!!!!!!!!!
+create view MET_Movies_WithCategory_Roles_ToKeep as
+	(
+	select D.name
+	from MET_FilteredMovies_Normalized D
+	)
+	minus
+	(
+	select D.name
+	from MET_Movies_WithCategory_Stars D
+	);
+
+
+create view MET_Movies_WithCategory_Roles as 
+	select D.*
+	from MET_Movies_WithCategory_Roles_ToKeep K,MET_Movies_WithCategory_AllRoles D
+	where Overlaps(D.name, K.name);
+	
+create view MET_Movies_WithCategory as
+	(
+	select D.text as text, D.prov as prov, D.name as name, 
+		D.formal_name as formal_name, D.category as category, D.clue as clue, 'vocab' as categ_prov
+	from MET_Movies_WithCategory_Vocab D
+	)
+	union all
+	(
+	select D.text as text, D.prov as prov, D.name as name, 
+		D.formal_name as formal_name, D.category as category, D.clue as clue, 'rs' as categ_prov
+	from MET_Movies_WithCategory_Roles D
+	)
+	union all
+	(
+	select D.text as text, D.prov as prov, D.name as name, 
+		D.formal_name as formal_name, D.category as category, D.clue as clue, 'rs' as categ_prov
+	from MET_Movies_WithCategory_Stars D
+	);
+
+create view MET_Movies_NoCategory as
+	(
+	select D.text as text, D.name as name
+	from MET_FilteredMovies_Normalized D
+	)
+	minus
+	(
+	select D.text as text, D.name as name 
+	from MET_FilteredMovies_Normalized D, MET_Movies_WithCategory C
+	where Overlaps(D.name, C.name )
+	);
+
+create view MET_Movies_AllCategories as 
+	(
+	select D.text as text, D.prov as prov, D.name as name, D.clue as clue,GetString(D.category) as category,
+		D.formal_name as formal_name, GetString(D.categ_prov) as categ_prov
+	from MET_Movies_WithCategory D
+	)
+	union all
+	(
+	select D.text as text, D.prov as prov, D.name as name, D.name as clue,GetString('general') as category,
+		D.formal_name as formal_name, GetString('none') as categ_prov
+	from MET_Movies_NoCategory C, MET_FilteredMovies_Normalized D
+	where Overlaps(D.name, C.name)
+	)
+	;
+	
+create view	MET_HighlyAmbiguousMoviesUnfiltered as
+	select D.* 
+	from MET_Movies_AllCategories D
+	where Equals(GetString(D.prov),GetString('highlyambig'));
+	
+create view	MET_AmbiguousMoviesUnfiltered as
+	select D.* 
+	from MET_Movies_AllCategories D
+	where Equals(GetString(D.prov),GetString('ambig'));	
+	
+create view	MET_UnAmbiguousMoviesUnfiltered as
+	select D.* 
+	from MET_Movies_AllCategories D
+	where Equals(GetString(D.prov),GetString('nonambig'));	
+
+
+
+create view MET_AmbiguousMovies_Filtered as
+	(	-- 
+	select  D.text as text, D.prov as prov, D.name as name, D.clue as clue,D.category as category,
+		D.formal_name as formal_name
+	from  MET_AmbiguousMoviesUnfiltered D
+	where ContainsDict('ME_Movies_ContextWords_Dict', D.text)
+	)
+	union all
+	( --  titles in quotes
+	select D.text as text, D.prov as prov, D.name as name, D.clue as clue,D.category as category,
+		D.formal_name as formal_name
+	from MET_AmbiguousMoviesUnfiltered D
+	where MatchesRegex(/\"|\'/,LeftContextTok(D.name, 1))
+	and MatchesRegex(/\"|\'/,RightContextTok(D.name, 1))
+	)
+	union all
+	( -- star or role mentioned
+	select  D.text as text, D.prov as prov, D.name as name, D.clue as clue,D.category as category,
+		D.formal_name as formal_name
+	from  MET_AmbiguousMoviesUnfiltered D
+	where Equals(GetString(D.categ_prov),GetString('rs'))
+	);
+	
+create view MET_PrecededHighlyAmbiguousMovies as
+	select D.text as text, D.prov as prov, D.name as name, D.clue as clue,D.category as category,
+		D.formal_name as formal_name
+	from MET_HighlyAmbiguousMoviesUnfiltered D
+	where ContainsDict('ME_PrecedeTitle_Dict',LeftContextTok(D.name, 1) );
+	
+create view MET_PrecededAndFollowedHighltyAmbiguousMovies as
+	(-- followed by punctionation marsk or selected words
+	select D.text as text, D.prov as prov, D.name as name, D.clue as clue,D.category as category,
+		D.formal_name as formal_name
+	from MET_PrecededHighlyAmbiguousMovies D
+	where ContainsDict('ME_AfterHighlyAmbigTitle_Dict',RightContextTok(D.name, 1) )
+	)
+	union all
+	( -- followed by end of input string
+	select D.text as text, D.prov as prov, D.name as name, D.clue as clue,D.category as category,
+		D.formal_name as formal_name
+	from MET_PrecededHighlyAmbiguousMovies D
+	where MatchesRegex(/\s*$/,RightContext(D.name, 5))
+	);
+	
+	
+create view MET_HighlyAmbiguousMovies_Filtered as
+	(	-- 
+	select  D.text as text, D.prov as prov, D.name as name, D.clue as clue,D.category as category,
+		D.formal_name as formal_name
+	from  MET_PrecededAndFollowedHighltyAmbiguousMovies D
+	)
+	union all
+	( --  titles in quotes
+	select D.text as text, D.prov as prov, D.name as name, D.clue as clue,D.category as category,
+		D.formal_name as formal_name
+	from MET_HighlyAmbiguousMoviesUnfiltered D
+	where MatchesRegex(/\"|\'/,LeftContextTok(D.name, 1))
+	and MatchesRegex(/\"|\'/,RightContextTok(D.name, 1))
+	)
+	union all
+	( -- star or role mentioned
+	select  D.text as text, D.prov as prov, D.name as name, D.clue as clue,D.category as category,
+		D.formal_name as formal_name
+	from  MET_HighlyAmbiguousMoviesUnfiltered D
+	where Equals(GetString(D.categ_prov),GetString('rs'))
+	);	
+	
+	-- for debug:
+create view MET_HighlyAmbigFiltereOut as 
+	(
+	select D.name, D.text
+	from MET_HighlyAmbiguousMoviesUnfiltered D
+	)
+	minus
+	(
+	select D.name, D.text
+	from MET_HighlyAmbiguousMovies_Filtered D
+	);
+	
+create view MET_AmbiguousFilteredOut as 
+	(
+	select D.name, D.text
+	from MET_AmbiguousMoviesUnfiltered D
+	)
+	minus
+	(
+	select D.name, D.text
+	from MET_AmbiguousMovies_Filtered D
+	);
+	
+create view MET_AllBuzz as 
+	(
+	select D.name as name_span, D.text as text, D.category as category, D.clue as clue, D.formal_name as formal_name
+	from MET_HighlyAmbiguousMovies_Filtered D
+	)
+	union all
+	(
+	select D.name as name_span, D.text as text, D.category as category, D.clue as clue, D.formal_name as formal_name
+	from MET_AmbiguousMovies_Filtered D
+	)	
+	union all
+	(
+	select D.name as name_span, D.text as text, D.category as category, D.clue as clue, D.formal_name as formal_name
+	from MET_UnAmbiguousMoviesUnfiltered D
+	);
+	
+create view MET_AllBuzz_OnlyText as 
+	select D.text as text
+	from MET_AllBuzz D;
+
+create view ME_Buzz_Output as
+	select D.formal_name as formal_name, D.name_span as name_span, GetString(D.name_span) as name, 
+	GetString(D.category) as category,  GetString(D.clue) as category_clue
+	from MET_AllBuzz D;
+		
+			
+create view MET_PromotionalInBuzz_Output as 
+	select D.text
+	from MET_AllBuzz D, ME_PromotionalPost P
+	where Overlaps(D.text, P.text)
+	consolidate on D.text;
+
+/*
+create view MET_NowWatching as
+	(
+	--extract regex /I(.)+(am)\s+(.){0,5}\s*(watching)/ on D.text as watchingclue
+	extract D.formal_name as formal_name, D.name as name, regex /(watching)/ on D.text as watchingclue
+	from MET_AllBuzz D
+	having FollowsTok(watchingclue, name, 1,10)
+	)
+	union all
+	(
+		--extract regex /I(.)+(am)\s+(.){0,5}\s*(watching)/ on D.text as watchingclue
+	extract D.formal_name as formal_name, D.name as name, regex /(watched)|(saw)|(liked)|(loved)|(didn\'t)|(didnt)/ on D.text as watchingclue
+	from MET_AllBuzz D
+	having FollowsTok(watchingclue, name, 1,10)
+	)
+	;
+/*
+
+output view ME_PromotionalPost;
+output view ME_SpamPost;
+
+
+output view MET_AllMovies;
+output view MET_ToFilterForeign;
+output view ME_ToFilterNotMovies;
+output view  MET_ToFilterEntries;
+output view MET_FilteredEntries;
+
+output view MET_FilteredMovies_Normalized;
+
+output view MET_Movies_WithCategoryClue;
+output view MET_Movies_WithCategory_Vocab;
+output view MET_Movies_WithCategory_Roles;
+output view MET_Movies_WithCategory_Stars;
+
+output view MET_Movies_WithCategory;
+output view MET_Movies_AllCategories;
+output view MET_HighlyAmbiguousMoviesUnfiltered;
+output view MET_AmbiguousMoviesUnfiltered;
+output view MET_UnAmbiguousMoviesUnfiltered;
+output view MET_AmbiguousMovies_Filtered;
+output view MET_PrecededHighlyAmbiguousMovies;
+output view MET_PrecededAndFollowedHighltyAmbiguousMovies;
+output view MET_HighlyAmbiguousMovies_Filtered;
+output view MET_AllBuzz;
+
+output view  MET_ToFilterSpam;
+output view MET_HighlyAmbigFiltereOut;
+output view MET_AmbiguousFilteredOut;*/
+
+--output view  MET_AllBuzz;
+--output view MET_AllMovies;

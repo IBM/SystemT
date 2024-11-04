@@ -1,0 +1,61 @@
+###############################################################################
+# followstokBench.aog
+#
+# ("aog" stands for Avatar Operator Graph.)
+#
+# Benchmark of the FollowsTok and FollowedByTok predicates, for profiling
+# purposes.
+###############################################################################
+
+
+$Document = DocScan(
+  (
+    "text" => "Text",
+    "label" => "Text"
+  )
+);
+
+CreateDict(
+    "name" => "dictionaries/first.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+
+CreateDict(
+    "name" => "dictionaries/last.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+# Find potential first names.
+$FirstName = 
+Project(( "match" => "first" ), 
+	Dictionary("dictionaries/first.dict", "text", $Document));
+
+# Find potential last names.
+$LastName = 
+Project(( "match" => "last" ), 
+	Dictionary("dictionaries/last.dict", "text", $Document));
+	
+
+# Use a merge join with $FirstName as the outer.
+$MergeFollowsTok =
+ApplyFunc(CombineSpans(GetCol("first"), GetCol("last")) => "Combined", 
+	SortMergeJoin(FollowsTok(GetCol("first"), GetCol("last"), 
+			IntConst(2), IntConst(5)), $FirstName, $LastName)
+);
+
+# Use a merge join with $LastName as the outer.
+$MergeFollowedByTok =
+ApplyFunc(CombineSpans(GetCol("first"), GetCol("last")) => "Combined", 
+	SortMergeJoin(FollowedByTok(GetCol("last"), GetCol("first"), 
+			IntConst(2), IntConst(5)), $LastName, $FirstName)
+);
+
+################################################################################
+# OUTPUT SPEC
+Output: $MergeFollowsTok, $MergeFollowedByTok;
+

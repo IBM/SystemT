@@ -1,0 +1,86 @@
+--
+-- manage extraction of Part Of Speech 'u' (Unknown) 
+-- those words could be
+-- all simple word (token) that are not belonging to language (base) dictionaries
+-- all hyphenated words where one of the two tokens not have PoS=s
+--
+
+module pos_u_en;
+
+import view Doc_en from module doc_en as Doc;
+import module pos_base_en;
+import module pos_forced_en;
+
+set default dictionary language as 'en';
+
+--
+-- We have an "accomodate punctuation errors" parameters
+-- when it's disabled we want to words like xxx.yyy to be a single PoS instead of 2 PoS (xxx + yyy)
+-- this is for application like genomics, ...
+--
+create view accomodate_punctuation_errors_disabled_en as
+extract
+regex /[a-zA-Z0-9ÀÁÂÃÄÅÆÇÈÉËÌÍÎÏÑÒÓÔÕÖÙÚÛÜÝàáâãäåæçèéêëìíîïñòóôõöùúûüýÿĨĩŒœŨũß][a-zA-Z0-9'ÀÁÂÃÄÅÆÇÈÉËÌÍÎÏÑÒÓÔÕÖÙÚÛÜÝàáâãäåæçèéêëìíîïñòóôõöùúûüýÿĨĩŒœŨũß\.\/:,()\[\]{}+|\\]*[a-zA-Z0-9'ÀÁÂÃÄÅÆÇÈÉËÌÍÎÏÑÒÓÔÕÖÙÚÛÜÝàáâãäåæçèéêëìíîïñòóôõöùúûüýÿĨĩŒœŨũß]/
+with flags 'CASE_INSENSITIVE'
+on between 1 and 10 tokens in D.text as partOfSpeech
+from Doc D;
+
+-- output view accomodate_punctuation_errors_disabled;
+
+--
+-- Extract all candidate words that can be "Unknown" words
+-- (union off all simple words + hyphenated words + words from language dictionary
+--
+create view pos_u_all_unconsolidated_en as
+(select * from pos_base_en.pos_u_all_simple_word_at_least_three_char_en)
+union all
+(select * from pos_base_en.pos_u_all_hyphenated_word_en)
+union all
+(select * from pos_base_en.pos_base_all_en)
+--union all
+--(select * from accomodate_punctuation_errors_disabled_en)
+union all
+(select * from pos_base_en.pos_u_abbrev_en);
+
+-- output view pos_u_all_unconsolidated_en;
+
+--
+-- consolidate left to right to resolve possible conflict
+-- (union off all simple words + hyphenated words + words from language dictionary
+--
+-- sample: "in memoriam" in dict so "memoriam" should not be extracted
+--
+create view pos_u_all_en as
+select * from pos_u_all_unconsolidated_en
+consolidate on pos_u_all_unconsolidated_en.partOfSpeech using 'LeftToRight';
+
+-- output view pos_u_all_en;
+
+
+-- gather all elements that can't be a pos u
+--
+-- all terms that is in language dictionary
+-- all user terms that identified as pos=s (simple and coumpound)
+-- all terms that are not valid hyphenated words because it contains 
+-- exemple : "1-IPAD" is not a valid extraction as '1' is PoS 's' (and such word not in base dictionary)
+
+create view anti_u_en as
+(select P.partOfSpeech from pos_base_en.pos_base_all_en P)
+union all
+(select P.partOfSpeech from pos_forced_en.pos_s_forced_def_en P )
+union all
+(select P.partOfSpeech from pos_forced_en.pos_s_compound_forced_def_en P)
+union all
+(select P.partOfSpeech from pos_base_en.pos_u_all_hyphenated_word_and_part_pos_s_en P);
+
+--
+-- remove all terms to keep only real unknown terms
+-- 
+create view pos_u_en as 
+(select W.partOfSpeech from pos_u_all_en W)
+minus
+(select P.partOfSpeech from anti_u_en P);
+
+export view pos_u_en;
+
+-- output view pos_u_en;

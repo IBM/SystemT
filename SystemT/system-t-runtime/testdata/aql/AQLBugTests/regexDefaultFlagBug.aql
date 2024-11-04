@@ -1,0 +1,41 @@
+-----------------------------------------------------------------------------
+-- regexDefaultFlagBug.aql
+--
+-- A bug in regex execution
+-----------------------------------------------------------------------------
+
+require document with columns text Text;
+
+
+--===============================
+-- Create inline dictionary
+--===============================
+create dictionary CountryAbbrevDict as
+(
+    'United States'
+);
+
+--===============================
+-- View using inline dictionary
+--===============================
+create view CountryAbbrev as
+ extract
+  dictionaries 'CountryAbbrevDict'
+  with flags 'IgnoreCase'
+  on D.text   
+        as country
+  from Document D;
+
+output view CountryAbbrev;
+
+--===============================
+-- View using external dictionary
+--===============================
+create view CountryCandidate as
+select
+ D.match as match
+from
+ Dictionary('dictionaries/regexDefaultFlagBug.dict', Document.text) D
+where MatchesRegex(/\p{Lu}\p{M}*.+/, D.match);
+
+output view CountryCandidate;

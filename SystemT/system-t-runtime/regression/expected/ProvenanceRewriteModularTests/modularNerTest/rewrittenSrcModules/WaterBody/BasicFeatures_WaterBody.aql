@@ -1,0 +1,44 @@
+module WaterBody;
+
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText
+;
+
+
+import dictionary WaterBodies from module Dictionaries as WaterBodies
+;
+
+
+import dictionary Oceans from module Dictionaries as Oceans
+;
+
+
+import dictionary Seas from module Dictionaries as Seas
+;
+
+
+require document with columns
+  text Text;
+
+create view WaterBodyRightClue as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'WaterBodies'
+    on D.text as match
+  from DocumentText D;
+
+output view WaterBodyRightClue;
+
+create view WaterBodyDictMatch as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionaries 'Oceans'
+                   and 'Seas'
+    on D.text as match
+  from DocumentText D
+  having MatchesRegex(/\p{Lu}\p{M}*.+/, match);
+
+output view WaterBodyDictMatch;
+

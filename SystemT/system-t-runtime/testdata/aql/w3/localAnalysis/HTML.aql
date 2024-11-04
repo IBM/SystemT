@@ -1,0 +1,381 @@
+-------------------------------------------------------------------------------
+-- HTML.aql
+--
+-- HTML tag extraction for W3 local analysis.
+--
+-- This file produces the contents of the following local analysis result
+-- tables:
+--      a. Title: The contents of every TITLE tag, along with the substring
+--				  of the tag that contains the name of the page.
+--		b. TitleHash: The hash code of the text inside the first TITLE tag
+--		c. TitleSegs: The first two segments separated by | of the TITLE
+--      d. H1: Text inside every H1 tag
+--      e. H2H3: Text inside all H2 and H3 tags
+--      f. FirstMainHead: The contents of the first H1 or Font tag after the "start main content" comment
+--		g. MetaKeywords: Keywords drawn from META tags
+--		h. MetaDescription: Page descriptions drawn from META tags
+--		i. MetaCountry: Country codes drawn from META Country tags
+--		j. MetaLanguage: Country codes drawn from META Language tags
+--		
+--
+-- This file also creates the following shared internal outputs:
+--      a. 
+--
+-- Based on Huiayu's original Java implementation.
+-- Author: Fred Reiss <frreiss@us.ibm.com>, Laura Chiticariu <chiti@us.ibm.com>
+-------------------------------------------------------------------------------
+
+
+-- Extract important HTML tags, as well as relevant field values.
+--TODO: For META tags, also extract the contents of attribute "value", 
+--      in addition to attribute named "content".
+--      See es2resources/configs/local/change_types.txt.
+detag Document.text as Doc
+annotate 
+    element 'a' as Anchor
+		with attribute 'href' as target,
+	element 'h1' as H1,
+	element 'h2' as H2,
+	element 'h3' as H3,
+	element 'title' as AllTitle,
+	element 'font' as Font,
+	element 'meta' as Meta
+		with attribute 'name' as name
+		and attribute 'content' as content
+	;
+
+
+	
+-- ***********************************************************************
+-- ***                        H2, H3                                  ****
+-- ***********************************************************************
+
+	
+create view H2H3 as
+(select H.match as match from H2 H)
+union all
+(select H.match as match from H3 H);
+
+
+-- ***********************************************************************
+-- ***                        TITLE                                   ****
+-- ***********************************************************************
+	
+-- We want the contents of only the *first* title tag in the document.
+-- While we're at it, trim any whitespace from the beginning or end 
+-- of the title string.
+create view FirstTitle as 
+select Chomp(A.match) as title
+from AllTitle A
+consolidate on A.match using 'RetainFirst';
+
+
+-- Compute the hash code of the title
+create view TitleHash as
+select HashCode(GetText(T.title)) as titleHash, T.title as title
+from FirstTitle T
+where NotNull(T.title);
+
+
+-- Titles in the IBM intranet tend to have a hierarchical structure.
+create view SplitTitle as
+extract 
+	E.title as title,
+	split using E.delim on E.title as elem
+from 
+(
+	extract
+		T.title as title, 
+		regex /\s*\|\s*|\s*[-:]\s+/ on T.title as delim
+	from FirstTitle T
+) E;
+
+
+-- Dictionary of title entries that we skip when going 
+create dictionary SkipTail as
+(
+	'employee checklist',
+	'all topics index',
+	'all topics library',
+	'overview',
+	'united states',
+	'intranet',
+	'project info',
+	'portal page',
+	'faq',
+	'faqs',
+	'welcome!',
+	'welcome',
+	'login',
+	'logon'
+);
+
+-- Extract the substring of the title tag that contains the name of the page.
+-- We do so by finding the last part of the split title that is not in the
+-- SkipTail dictionary.
+create view Title as 
+select Remap(S.title) as title, Remap(S.elem) as name
+from SplitTitle S
+where 
+	-- Filter out segments that contain only whitespace
+	Not(MatchesRegex(/\s*/,S.elem))
+	-- Filter out segments that exactly match the SkipTail dictionary
+	and Not(MatchesDict('SkipTail', S.elem))
+consolidate on S.elem using 'RetainLast';
+
+
+
+-- ***********************************************************************
+-- ***                      TITLE SEGS                                ****
+-- ***********************************************************************
+
+-- Select the first and second segments of the title delimited by |
+-- At the same time, strip the word 'IBM' (if it exists) 
+-- from the beginning of the first segment
+create view TitleSegsTemp as
+select Chomp(T.seg1) as seg1, Chomp(T.seg2) as seg2
+from
+(
+	extract
+		regex /\A(IBM\s*)?([^\|]*)\|?([^\|]*)\|?(\.*)/
+		on T.title
+		return group 2 as seg1
+		and group 3 as seg2
+	from FirstTitle T
+) T;
+
+
+-- Finally, strip the words 'Intranet', 'intranet' from the end of the first segment
+create view TitleSegs as
+(
+	select T.seg1 as seg1, T.seg2 as seg2
+	from TitleSegsTemp T
+	where Not(ContainsRegex(/[Ii]ntranet\Z/, T.seg1))
+)
+union all
+(	
+	select  
+		   Chomp(SpanIntersection(LeftContext(T.delim,200), T.seg1)) as seg1,
+		   T.seg2 as seg2
+	from 
+		(
+			extract
+				T.seg1 as seg1,
+				T.seg2 as seg2,
+				regex /[Ii]ntranet\Z/ on T.seg1 as delim			
+			from TitleSegsTemp T
+		) T
+);
+
+
+
+-- ***********************************************************************
+-- ***                      FIRST MAIN HEAD                           ****
+-- ***********************************************************************
+
+-- Identify the "start main content" spans in the original document (not the detagged doc)
+create view StartMainContent as
+extract 
+	regex /start main content/ with flags 'CASE_INSENSITIVE' 
+		on D.text 
+		as match
+from Document D;
+
+--output view StartMainContent;
+
+-- Select the contents of the H1 and FONT tags
+create view H1Font as
+(select H.match as match from H1 H)
+union all
+(select F.match as match from Font F);
+
+--output view H1Font;
+
+-- Extract the contents of the first H1 or Font tag occurring after a "start main content" comment
+-- Assumption: the first match is at most 100000 tokens away from "start main comment"...
+create view FirstMainHead as
+select SMC.match as smc, Remap(HF.match) as HF
+from H1Font HF,
+	 StartMainContent SMC
+where FollowsTok(SMC.match, Remap(HF.match), 0, 100000)
+consolidate on HF.match using 'RetainFirst';
+
+-- TEMPORARY output for debugging
+--output view FirstMainHead;
+	 
+
+
+-- ***********************************************************************
+-- ***                        META KEYWORDS                           ****
+-- ***********************************************************************
+
+create dictionary MetaKeywordsTagName as
+(
+	'Keywords'
+);
+
+
+-- Separate out the META tags containing name="keywords".
+create view MetaKeywordsFull as
+select M.content as content
+from Meta M
+where ContainsDict('MetaKeywordsTagName', M.name)
+   	--MatchesRegex(/keywords/, M.name)
+	and NotNull(M.content);
+--order by GetText(M.content);
+
+
+-- Find comma-separated keywords in META tags, separate out the 
+-- individual keywords, and trim out whitespace.
+create view MetaKeywords as
+select Chomp(S.keyword) as keyword
+from
+(
+	(
+		extract
+		    split using S2.comma
+		        on S2.content
+		        as keyword
+		from 
+		(
+			-- Find commas in the content field to keywords tags
+			extract 
+				M.content as content, 
+				regex /,/ on M.content as comma 
+			from MetaKeywordsFull M
+		) S2
+	)
+	union all
+	(
+		-- Also return the keywords lists that *don't* contain
+		-- commas.
+		select M.content as keyword
+		from MetaKeywordsFull M
+		where Not(ContainsRegex(/,/, M.content))
+	)
+) S
+-- Filter out empty strings
+where Not(MatchesRegex(/\s*/, S.keyword))
+order by GetText(S.keyword);
+
+
+-- ***********************************************************************
+-- ***                        META DESCRIPTION                        ****
+-- ***********************************************************************
+
+create dictionary MetaDescriptionTagName as
+(
+	'Description'
+);
+
+
+-- Extract any META tags that are marked as a description of the page.
+create view MetaDescription as
+select M.content as content
+from Meta M
+where ContainsDict('MetaDescriptionTagName', M.name)
+      --MatchesRegex(/description/, M.name);
+      and NotNull(M.content);
+
+
+-- ***********************************************************************
+-- ***                        META COUNTRY                            ****
+-- ***********************************************************************
+
+create dictionary MetaCountryTagName as
+(
+	'IBM.Country'
+);
+
+create dictionary IgnoreCountriesDict as
+(
+	'US','GB'
+);
+
+-- Select the contents of META tags with name "IBM.Country" (case ignored)
+-- An "ignore_case" flag on MatchesRegex would be useful
+create view MetaCountryFull as
+select M.content as content
+from Meta M
+where ContainsDict('MetaCountryTagName', M.name) 
+	-- MatchesRegex(/[Ii][Bb][Mm].[Cc]ountry/, M.name) 
+	and NotNull(M.content);
+
+-- Extract individual country codes from the list of codes of the country META tag.
+-- We handle two separate cases:
+-- 1) list contains two or more country codes separated by commas
+-- 2) the list contains a single country code
+-- And we take the union of the results.
+-- Revisit when the split operator is fixed
+create view SplitCountries as
+extract
+    split using S2.comma
+        on S2.content
+        as country
+	from (
+		-- Find commas in the content field of country entries
+		extract 
+			C.content as content, 
+			regex /,\s*/ on C.content as comma 
+		from MetaCountryFull C
+	) S2;
+
+
+create view Countries as
+	(select M.content as content from MetaCountryFull M
+	 where Not(ContainsRegex(/,/, M.content)) )
+union all
+	(select S.country as content from SplitCountries S);
+
+
+-- Retain the country code entries that have exactly two letters, 
+-- are not in the list of ignored country codes, and  
+-- match the country_code_list dictionary
+create view MetaCountry as
+select C.content as content
+from Countries C
+where MatchesRegex(/[a-zA-Z]{2}/, C.content) 
+	and Not(ContainsDict('IgnoreCountriesDict', C.content))
+	and ContainsDict('dicts/country_code_list.dict', C.content);
+
+
+	
+
+-- ***********************************************************************
+-- ***                        META LANGUAGE                           ****
+-- ***********************************************************************
+
+create dictionary MetaLanguageTagName as
+(
+	'dc.language'
+);
+
+
+-- Inspect the language META tags contents and retain the country codes
+-- E.g., if the content is "en-US" we retain only the last two characters "US"
+create view MetaLanguageFull as
+extract regex /(\w{2})-(\w{2})/
+		on L.content
+		return group 2 as lang
+from (
+	select M.content as content
+	from Meta M
+	where ContainsDict('MetaLanguageTagName', M.name)
+	and NotNull(M.content)
+	) L;
+	
+-- Retain the language entries that are not in the list of ignored country codes.
+create view MetaLanguage as
+select L.lang as content
+from MetaLanguageFull L
+where Not(ContainsDict('IgnoreCountriesDict', L.lang));	
+	
+	
+	
+
+
+
+
+
+
+

@@ -1,0 +1,67 @@
+create view LandDictMatch as
+extract
+    dictionaries
+        'location/geo/land.dict' 
+    on D.text   
+        as match     
+from Doc D
+having MatchesRegex(/\p{Lu}\p{M}*.+/, match);
+
+create view landSuffixDict as
+extract
+    dictionaries
+         'location/geo/landSuffix.dict'
+     and 'location/geo/politicalSuffix.dict'     
+    on D.text   
+        as match     
+from Doc D;
+
+create view LandClueBased1 as
+select CombineSpans(CP.match, L.match) as match
+from ExtendedCapsPlace CP,
+     landSuffixDict L
+where FollowsTok(CP.match, L.match, 0, 2)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(CP.match, L.match)))
+  and MatchesRegex(/\s*('s)?\s*/, SpanBetween(CP.match, L.match))
+  and MatchesRegex(/\p{Lu}\p{M}*.+/, L.match)
+  -- don't have a capitalized word before it
+  and Not(MatchesRegex(/\p{Lu}\p{M}*.+/, LeftContextTok(CP.match, 1)));
+  
+create view LandClueBased2 as
+select CP.match as match
+from CapsPlace CP,
+     landSuffixDict L
+where FollowsTok(CP.match, L.match, 0, 2)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(CP.match, L.match)))
+  and MatchesRegex(/\s*('s)?\s*/, SpanBetween(CP.match, L.match))
+  and MatchesRegex(/\p{Ll}\p{M}*.+/, L.match)
+  and Not(MatchesRegex(/The/, CP.match));
+  
+--output view LandClueBased2;
+  
+create view LandDirectionBased as
+select D.*
+from Direction D
+where MatchesRegex(/the\s*/, LeftContextTok(D.match, 1))
+  and Not(MatchesRegex(/\s*\p{Lu}\p{M}*.*/, RightContextTok(D.match, 1))); 
+  
+-- new location based on conjunction as  
+create view LandDirectionBasedExtended as
+select D.*
+from LandDirectionBased L,
+     Direction D
+where FollowsTok(L.match, D.match, 1, 1)
+  and MatchesRegex(/\s*and\s*/, SpanBetween(L.match, D.match));  
+
+create view Land as
+	(select L.* from LandDictMatch L)
+	union all
+	(select L.* from LandClueBased1 L)
+	union all
+	(select L.* from LandClueBased2 L)
+    union all
+    (select L.* from LandDirectionBased L)
+    union all
+    (select L.* from LandDirectionBasedExtended L);
+	
+--output view Land;

@@ -1,0 +1,51 @@
+-------------------------------------------------------------------------------
+-- detagBug.aql
+--
+-- A test case for a bug in the detag operator.
+-------------------------------------------------------------------------------
+
+
+-- Extract important HTML tags, as well as relevant field values.
+detag Document.text into Doc
+annotate 
+	element 'meta' as Meta
+		with attribute 'name' as name
+		and attribute 'content' as content
+	;
+
+create view MetaKeywords as
+select M.content as content
+from Meta M
+where MatchesRegex(/keywords/, M.name);
+
+create view MetaKeywordsComma as
+extract 
+	K.content as content, 
+	regex /,\s*/ on K.content as comma 
+from MetaKeywords K;
+
+output view MetaKeywords;
+output view MetaKeywordsComma;
+
+create view Keywords as
+extract
+    split using S2.comma
+        on S2.content
+        as keyword
+	from (
+		-- Find commas in the content field to keywords tags
+		extract 
+			S1.content as content, 
+			regex /,\s*/ on S1.content as comma 
+		from (
+			-- Find meta tags with name="keywords"
+			select M.content as content
+			from Meta M
+			where MatchesRegex(/keywords/, M.name)
+		) S1
+	) S2;
+
+
+
+
+

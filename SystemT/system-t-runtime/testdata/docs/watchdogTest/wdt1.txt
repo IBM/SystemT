@@ -1,0 +1,147 @@
+Re: w3 run status
+  
+Huaiyu Zhu
+ 
+to:
+Shivakumar Vaithyanathan
+11/09/2007 05:59 PM
+Cc:
+Fatma Ozcan, Sriram Raghavan
+Custom expiration date:
+ 
+11/09/2106
+Show Details
+History:
+This message has been forwarded.
+I examined the local analysis speed issue.   The picture is not clear yet.   Here's a record of what I saw just for reference.
+1. Of the 5M docs done on avatar7,  most took a few ms to finish, but about 20k took more than a second.    The fast and slow documents seem to form two very distinct groups.   There are very few documents that took between 20ms to 200ms.
+2. If  we assume that there are 20k slow documents, and that on average they take 500 times amount of time compared with fast documents, then this is equivalent to adding 10M fast documents.    The time taken for 15M documents would be reasonable. 
+3. To find out which documents are slow, I compared the relative speed of each document.   Since the documents  are given out in order, their return order can be used as an idication of time cost.  For example, if document 200 was finished after document 250 had already finished, then during the time it was being processed, the other threads processed at least 50 documents.   very supprisingly, there are no document that are overly excessive by this measures.  The most is around 130 times the other documents.    This is a very small number, considering that  only about 1/2 of the docids exist in this db and there are 4 threads.  (In a previous run when a particular regular expressions was costly, we saw documents taking 5000 times as long as their peers).     
+The last point is very puzzling relating to the observation that the documents are divided into fast and slow groups. 
+Here are the raw data
+(A) Timing for the steps
+init_aom            0: 0: 3      0.0h
+run_local          18:48:13     18.8h
+load_local          3:46: 7      3.8h
+index_local         1:22:33      1.4h
+run_global_1        2: 2:36      2.0h
+load_global_1       0: 0:14      0.0h
+index_global_1      0: 0: 9      0.0h
+run_global_2        1:20:52      1.3h
+load_global_2       0: 2:34      0.0h
+index_global_2      0: 1:37      0.0h
+build_lucene_index  1: 0:36      1.0h
+(B) Timing for the steps within local analysis
+Timing for composite annotator AllLocalAnnotators in Thread 3 steps
+    STEP                0       1       2       3       4       5       6       7       8       9       10      total
+----------------
+urls                    1275998 5694    18      4       2       2       0       0       0       5       4       15133
+urlnames                1180738 100228  497     142     32      16      0       0       0       32      42      181750
+html_elems              159735  135593  138175  786906  49460   2093    144     1       0       1949    7671    19536094
+titles                  1233572 47874   130     98      11      1       0       0       0       17      24      92027
+title                   1276501 5202    12      5       2       0       0       0       0       4       1       10546
+homepage                1145686 135250  417     229     27      10      0       0       1       59      48      251235
+personal                167918  146927  887211  66649   7168    634     28      0       0       1671    3521    10376225
+headings                1228807 52655   132     79      8       2       0       0       0       22      22      99597
+meta_kw                 1230706 50744   123     100     19      1       0       0       0       15      19      87857
+some_kw                 1276531 5163    14      12      0       0       0       0       0       2       5       12751
+keywords                1276020 5676    13      10      0       0       0       0       0       2       6       14120
+anchors                 1184910 96224   311     172     21      2       0       0       0       40      47      189660
+links                   457333  812172  9067    1927    314     72      1       0       0       369     472     1769910
+anchorhomes             264986  95519   765000  143106  8205    507     9       0       0       1309    3086    10029887
+navs                    167317  138377  899978  65497   6252    177     2       1       2       1293    2831    9618369
+navanchors              1271877 9694    42      82      15      1       0       0       0       7       9       27593
+navlinks                1273585 8085    29      17      4       3       0       0       0       3       1       12698
+navhomes                1272797 8874    27      12      5       1       0       0       0       7       4       20632
+geogs                   92221   166845  290552  708774  16679   720     12      1       1       1598    4324    14155568
+output                  1265415 16243   39      15      4       0       0       0       0       5       6       28256
+total duration 67683441
+Thread finished: 3
+Note:
+1. This is the printout of one thread, which dealt with about 1.27M documents.   There are 4 such threads.
+2. The columns labeled 0, 1, 2, 3, etc are the histograms for documents that took between 2^(n-1) and 2^n ms, except column 0 contains everything below 1ms.
+3. The column named 'total' is the total time (in ms) taken by all documents in this step.
+4. The total time this thread lived translates to 18:48:03.  This not a sum of the steps, so it is not an indication that no time is lost to IO.
+The most time consuming steps are as follows.  It appears that 
+    STEP                0          9       10      total(seconds)
+----------------
+html_elems              159735     1949    7671    19536.094	5.4h
+personal                167918     1671    3521    10376.225	2.9h
+anchorhomes             264986     1309    3086    10029.887	2.7h
+navs                    167317     1293    2831     9618.369	2.7h
+geogs                    92221     1598    4324    14155.568	3.9h
+total duration 67683441
+Thread finished: 3
+(C) The slowest documents
+These are the slowest documents compared with their peers.  Examination of a few documents did not show the reason of the slowness.
+factor   docid
+70       2167524
+70       3306980
+71       1202106
+71       8325464
+75       1498625
+76       3306984
+78       767051
+79       1498454
+82       1634010
+100      1202077
+103      1498480
+129      1498475
+132      8613885
+Huaiyu
+Shivakumar Vaithyanathan/Almaden/IBM
+11/08/2007 05:48 AM
+To
+Huaiyu Zhu/Almaden/IBM@IBMUS
+cc
+Fatma Ozcan/Almaden/IBM@IBMUS, Huaiyu Zhu/Almaden/IBM@ibmus, Sriram Raghavan/Almaden/IBM@IBMUS
+Subject
+Re: w3 run status
+>>
+This means that the slow down is likely caused by a few documents taking extremely long time.  
+>>
+we will need to debug this once we have the second run set up -- as to why some documents are taking so long.  Is there any facility in your code to flag such documents ? My worry is that the second loan will be about 29 hours or so with the current speed !  But c'est la vie.
+regards,
+-shiv
+Huaiyu Zhu/Almaden/IBM
+11/07/2007 09:39 PM
+To
+Huaiyu Zhu/Almaden/IBM@IBMUS
+cc
+Fatma Ozcan/Almaden/IBM, Shivakumar Vaithyanathan/Almaden/IBM@IBMUS, Sriram Raghavan/Almaden/IBM
+Subject
+Re: w3 run status
+1) complete run
+The run started last night was unexpectedly stow.  It is currently running db2 index for local annotations.  The finished steps are the following
+init_aom            0: 0: 3      0.0h
+run_local          18:48:13     18.8h
+load_local          3:46: 7      3.8h
+The local analysis took about three time as long as expected (130 docid/s).    I have checked several times on the local analysis.   The average speed was similar to what we used to have (around 300 to 500 docid/s).    This means that the slow down is likely caused by a few documents taking extremely long time.   The loading time seems normal.
+2) import
+We tuned various db2 parameters.   We were finally able to use 'db2 load' to load the data.    ('db2 import' was an order of magnitude slower.) 
+Current estimate of the otal load time is between 10 to 12 hours.    I'll start a run on the whole set when the load finishes.
+Huaiyu
+Huaiyu Zhu/Almaden/IBM 
+11/06/2007 11:02 PM
+To
+Shivakumar Vaithyanathan/Almaden/IBM
+cc
+Fatma Ozcan/Almaden/IBM, Sriram Raghavan/Almaden/IBM
+Subject
+w3 run status
+The three machines, avatar[789], ended up having very different number of documents.   (See below)
+The exporting of the data finished this afternoon.
+The importing takes much longer.  I rebooted all three machines and restarted the importing.   It'll take overnight.
+Since avatar7 already have 5M documents, I started a run on avatar7.   It should finish around 15 hours.   Once the import finishes I'll start a run on all the data.
+The code change will finish tomorrow morning and a run can start at that time.
+Stats for this crawl:  The data are stored in w3db5 on the 3 hosts.   The merged data will be in w3db6. Current sizes in w3db5 are as follows:
+		stored docs	 size		export time
+avatar7: 	5094692	106G		4.5h
+avatar8: 	2505086	  47G		1.5h
+avatar9:  	  778820	  22G		0.8h
+Total:		8378598	175G	
+Note:
+1. The document stored is about 92% of documents received ( 9121581)
+2. Of  the documents stored, about 8% were from earlier crawls.  The docid range for current crawl is (746459, 9121581),
+3. The numbers in the above two notes are completely independent.  They both give about 8.38M docs by coinsidence.   The actual stored docs for this crawl is approx 7.7M.
+Huaiyu

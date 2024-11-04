@@ -1,0 +1,36 @@
+/*
+Module containing required and optional external artifacts(dictionary and table).
+*/
+module validateModuleContainingReqExtArtifactsTest;
+
+-- required external dictionary
+create external dictionary requiredExtDict
+allow_empty false
+with language as 'en'
+and case insensitive;
+
+-- optional external dictionary
+create external dictionary optionalExtDict
+allow_empty true
+with language as 'en'
+and case insensitive;
+
+-- required external table
+create external table requiredExtTable (id Integer, name Text)
+allow_empty false;
+
+-- optional external table
+create external table optionalExtTable (id Integer, name Text)
+allow_empty true;
+
+create view testView as
+extract dictionary requiredExtDict on D.text as match
+from Document D;
+
+output view testView;
+
+create view dumpExtTable as
+select *
+from requiredExtTable;
+
+output view dumpExtTable;

@@ -1,0 +1,126 @@
+module nullargs;
+
+require document with columns text Text;
+
+-- For best results, turn debug on in the appropriate Join class (i.e., NLJoin.java) before
+-- running its associated test(s)
+
+--------------------------------------------
+-- Extract names and nulls from the document
+create view _Name as
+  extract regex 
+    /!(\w+)?,(\w+)?,(\w+)?/
+  on D.text
+  return 
+    group 1 as firstname
+    and group 2 as middlename
+    and group 3 as lastname
+  from Document D;
+  
+output view _Name;
+
+
+-------------------------------------------
+-- Extract ages and nulls from the document
+create view _Age as 
+  extract regex 
+    /,(\d+)?@/
+  on D.text
+  return
+    group 1 as age
+  from Document D;
+  
+output view _Age;
+
+
+
+-- SORT MERGE JOIN
+-- Find all first name spans within 10 characters of the ages in this document
+
+create view NullSMJoinTest as
+select
+       N.firstname as match1,
+       A.age as match2
+from _Name N, _Age A
+where Follows(N.firstname, A.age, 0, 10);
+
+output view NullSMJoinTest;
+
+
+-- ADJACENT JOIN
+-- Find all last name spans adjacent in tokens to ages in this document
+
+create view NullAdjacentJoinTest as
+select
+       N.lastname as match1,
+       A.age as match2
+from _Name N, _Age A
+where FollowsTok(N.lastname, A.age, 0, 1);
+
+output view NullAdjacentJoinTest;
+
+
+
+
+-- NL JOIN
+
+-- This view tests NLJoin with null inputs to a predicate that returns null on null input
+-- Finds a first name in the database named 'Ginni'
+
+create view NullNLJoinTest1 as
+select
+       N1.firstname as match1,
+       N2.firstname as match2
+from _Name N1, _Name N2
+where Equals(GetText(SpanIntersection(N1.firstname, N2.firstname)),'Ginni');
+
+output view NullNLJoinTest1;
+
+
+
+-- This view tests NLJoin with null inputs to a predicate that doesn't return null on null input
+-- Returns last names that match a first name in the database
+
+create view NullNLJoinTest2 as
+select
+       N1.firstname as match1,
+       N2.lastname as match2
+from _Name N1, _Name N2
+where Or(Equals(GetText(N1.firstname), GetText(N2.lastname)),Equals(0, 1));
+
+output view NullNLJoinTest2;
+
+
+
+-- RSE JOIN
+
+create view _CapsWord as
+extract regex /[A-Z][a-z]+/ 
+    on 1 token in D.text
+    as word
+from Document D;
+
+output view _CapsWord;
+
+-- Uses RSEJoin with nulls in one input
+create view NullRSEJoinView as
+select CW.word as word, N.lastname as thematch
+from _CapsWord CW, _Name N
+where Follows(CW.word, N.lastname, 0, 5);
+
+output view NullRSEJoinView;
+
+
+
+-- HASH JOIN
+
+
+-- Uses HashJoin with nulls in inputs
+create view NullHashJoinTest as
+select
+       N1.firstname as match1,
+       N2.lastname as match2
+from _Name N1, _Name N2
+where Equals(GetText(N1.firstname), GetText(N2.lastname));
+
+output view NullHashJoinTest;

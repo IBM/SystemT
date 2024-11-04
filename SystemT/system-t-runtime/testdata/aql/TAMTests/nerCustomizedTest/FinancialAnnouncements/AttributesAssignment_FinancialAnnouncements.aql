@@ -1,0 +1,157 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module FinancialAnnouncements;
+
+---------------------------------------------------------------------------------------
+-- This file creates and assigns attributes for all output Financial announcement types
+---------------------------------------------------------------------------------------
+
+----------------------------------------------------------------
+--                  CompanyEarningsAnnoucement 
+----------------------------------------------------------------
+create view CompanyEarningsAnnouncement_ as
+select R.companyname as company, R.exchange as stockexchange, R.ticker as stocksymbol, R.year as year, R.quarter as quarter, R.metric as financialmetricname, R.amountrange1 as financialmetricvalue, R.estimaterange as financialmetricestimated, R.match as reference  
+from FMReportOptionalEstimateWithCompanyPast R;
+
+----------------------------------------------------------------
+--                  AnalystEarningEstimate 
+----------------------------------------------------------------
+create view AnalystEarningsEstimate1 as
+select A.analyst as companysource, '' as personsource, A.companyrated as companyrated, A.exchange as stockexchange, A.ticker as stocksymbol, A.metric as financialmetricname,   A.financialmetricestimate as  financialmetricestimate, A.financialmetricpreviousestimate as financialmetricpreviousestimate, A.match as reference
+from  AnalystReportsConsolidated A
+where Equals(GetText(A.analysttype),'company');
+
+create view AnalystEarningsEstimate2 as
+select '' as companysource, A.analyst as personsource, A.companyrated as companyrated, A.exchange as stockexchange, A.ticker as stocksymbol, A.metric as financialmetricname,   A.financialmetricestimate as  financialmetricestimate,A.financialmetricpreviousestimate as financialmetricpreviousestimate, A.match as reference
+from  AnalystReportsConsolidated A
+where Equals(GetText(A.analysttype),'person');
+
+create view AnalystEarningsEstimate_ as
+(select A.companysource as companysource, A.personsource as personsource, A.companyrated as companyrated, A.stockexchange as stockexchange, A.stocksymbol as stocksymbol, A.financialmetricname as financialmetricname,   A.financialmetricestimate as  financialmetricestimate,A.financialmetricpreviousestimate as financialmetricpreviousestimate, A.reference as reference from AnalystEarningsEstimate1 A) 
+union all
+(select A.companysource as companysource, A.personsource as personsource, A.companyrated as companyrated, A.stockexchange as stockexchange, A.stocksymbol as stocksymbol, A.financialmetricname as financialmetricname,   A.financialmetricestimate as  financialmetricestimate,A.financialmetricpreviousestimate as financialmetricpreviousestimate, A.reference as reference from AnalystEarningsEstimate2 A) ;
+
+----------------------------------------------------------------
+--                  CompanyEarningsGuidance 
+----------------------------------------------------------------
+create view CompanyEarningsGuidance_ as
+select R.companyname as company, R.exchange as stockexchange, R.ticker as stocksymbol, R.year as year, R.quarter as quarter, R.metric as financialmetricname, R.newamountrange as financialmetricestimate, R.originalamountrange as financialmetricpreviousestimate, R.estimaterange as financialmetricconsensusestimate, R.match as reference  
+from FMReportOptionalEstimateWithCompanyFuture R;
+
+
+-------------------------------------------------------------------
+
+create view CompanyEarningsAnnouncement as
+select
+	C.company as company, C.company_detag as company_detag, GetText(C.company) as company_text, GetText(C.company_detag) as company_detag_text,  
+	C.stockexchange as stockexchange, 
+	C.stocksymbol as stocksymbol, 
+	C.year as year, 
+	C.quarter as quarter,
+	C.financialmetricname as financialmetricname, C.financialmetricname_detag as financialmetricname_detag, GetText(C.financialmetricname) as financialmetricname_text, GetText(C.financialmetricname_detag) as financialmetricname_detag_text, 
+	C.financialmetricvalue as financialmetricvalue, C.financialmetricvalue_detag as financialmetricvalue_detag, GetText(C.financialmetricvalue) as financialmetricvalue_text, GetText(C.financialmetricvalue_detag) as financialmetricvalue_detag_text, 
+	C.financialmetricestimated as financialmetricestimated, 
+	'' as date, 
+	'' as datestring,
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text 
+from
+(
+	select
+		Remap(C.company) as company, C.company as company_detag, 
+		C.stockexchange as stockexchange, 
+		C.stocksymbol as stocksymbol, 
+		C.year as year, 
+		C.quarter as quarter, 
+		Remap(C.financialmetricname) as financialmetricname, C.financialmetricname as financialmetricname_detag, 
+		Remap(C.financialmetricvalue) as financialmetricvalue, C.financialmetricvalue as financialmetricvalue_detag, 
+		C.financialmetricestimated as financialmetricestimated, 
+		'' as date, 
+		'' as datestring,
+		Remap(C.reference) as match, C.reference as match_detag 
+	from CompanyEarningsAnnouncement_ C
+) C
+;
+
+
+create view AnalystEarningsEstimate as
+select
+	C.companysource as companysource, 
+	C.personsource as personsource, 
+	C.companyrated as companyrated, C.companyrated_detag as companyrated_detag, GetText(C.companyrated) as companyrated_text, GetText(C.companyrated_detag) as companyrated_detag_text, 
+	C.stockexchange as stockexchange, 
+	C.stocksymbol as stocksymbol, 
+	'' as year, 
+	'' as quarter, 
+	C.financialmetricname as financialmetricname,
+	C.financialmetricestimate as financialmetricestimate,
+	C.financialmetricpreviousestimate as financialmetricpreviousestimate,
+	'' as date, 
+	'' as datestring,
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text
+from
+(
+	select 
+		C.companysource as companysource, 
+		C.personsource as personsource, 
+		Remap(C.companyrated) as companyrated, C.companyrated as companyrated_detag,  
+		C.stockexchange as stockexchange, 
+		C.stocksymbol as stocksymbol, 
+		'' as year, 
+		'' as quarter, 
+		C.financialmetricname as financialmetricname,
+		C.financialmetricestimate as financialmetricestimate,
+		C.financialmetricpreviousestimate as financialmetricpreviousestimate,
+		'' as date, 
+		'' as datestring,
+		Remap(C.reference) as match, C.reference as match_detag 
+	from AnalystEarningsEstimate_ C
+) C
+;
+
+
+create view CompanyEarningsGuidance as
+select 
+	C.company as company, C.company_detag as company_detag, GetText(C.company) as company_text, GetText(C.company_detag) as company_detag_text,  
+	C.stockexchange as stockexchange, 
+	C.stocksymbol as stocksymbol, 
+	'' as year, 
+	'' as quarter, 
+	C.financialmetricname as financialmetricname, C.financialmetricname_detag as financialmetricname_detag, GetText(C.financialmetricname) as financialmetricname_text, GetText(C.financialmetricname_detag) as financialmetricname_detag_text, 
+	C.financialmetricestimate as financialmetricestimate,
+	C.financialmetricpreviousestimate as financialmetricpreviousestimate, 
+	C.financialmetricconsensusestimate as financialmetricconsensusestimate, 
+	'' as date, 
+	'' as datestring,
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text 
+from
+(
+	select 
+		Remap(C.company) as company, C.company as company_detag, 
+		C.stockexchange as stockexchange, 
+		C.stocksymbol as stocksymbol, 
+		'' as year, 
+		'' as quarter, 
+		Remap(C.financialmetricname) as financialmetricname, C.financialmetricname as financialmetricname_detag,
+		C.financialmetricestimate as financialmetricestimate,
+		C.financialmetricpreviousestimate as financialmetricpreviousestimate, 
+		C.financialmetricconsensusestimate as financialmetricconsensusestimate, 
+		'' as date, 
+		'' as datestring,
+		Remap(C.reference) as match, C.reference as match_detag 
+	from CompanyEarningsGuidance_ C
+) C
+;

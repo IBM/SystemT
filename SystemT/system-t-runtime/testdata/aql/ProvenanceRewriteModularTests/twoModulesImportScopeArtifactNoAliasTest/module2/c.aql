@@ -1,0 +1,15 @@
+module module2;
+
+create view PersonCopy as
+select C.*, CombineSpans(F.match, C.match) as name
+from First F, module1.CapsWord C
+where FollowsTok(F.match, C.match, 0, 0);
+
+create view PersonWithGenderCopy as
+select N.*, CombineSpans(F.match, C.match) as fullName
+from First F, module1.CapsWord C, module1.NameTable N
+where FollowsTok(F.match, C.match, 0, 0)
+  and Equals(GetString(N.name), GetString(F.match));
+
+output view PersonCopy;
+output view PersonWithGenderCopy;

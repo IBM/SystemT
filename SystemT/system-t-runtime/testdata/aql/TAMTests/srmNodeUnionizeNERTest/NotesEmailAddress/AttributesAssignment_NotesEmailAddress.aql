@@ -1,0 +1,22 @@
+module NotesEmailAddress;
+
+create view NotesEmailAddressWithAttr as
+  extract 
+        regex /^([^\/]+)\/(.+)$/ on E.annot
+       return group 0 as reference and group 1 as name and group 2 as domain
+  from NotesEmailConsolidated E;
+
+create view NotesEmailAddressWithoutAttr as
+(select E.annot as email from NotesEmailConsolidated E)
+minus
+(select E.reference as email from NotesEmailAddressWithAttr E);
+
+create view NotesEmailAddressWithAttrAll as
+(select E.reference as email, E.name as name, E.domain as domain, E.reference as reference from NotesEmailAddressWithAttr E)
+union all
+(select E.email as email, '' as name, '' as domain, E.email as reference from NotesEmailAddressWithoutAttr E);
+
+create view NotesEmailAddress_ as
+select E.email as email, E.name as name, E.domain as domain, E.reference as reference
+from NotesEmailAddressWithAttrAll E;
+

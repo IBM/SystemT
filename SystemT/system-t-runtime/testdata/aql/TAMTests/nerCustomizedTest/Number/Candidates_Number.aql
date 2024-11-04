@@ -1,0 +1,57 @@
+module Number; 
+-------------------------------------------------------------------------------
+-- Identify Integer candidate in both text and digital format
+-------------------------------------------------------------------------------
+
+create view IntegerCandidateText as
+	select CombineSpans(NTWU.match, TDT.match) as match
+			from
+				NumberTextWithUnit NTWU,  ThreeDigitalText TDT
+			where FollowsTok(NTWU.match, TDT.match, 0, 1) 
+			and Not(ContainsDict('PointDict', LeftContextTok(TDT.match, 1)));
+			
+			
+create view IntegerText_ as
+	select NTCandidate.match as match from
+		((select ICT.match as match
+			from IntegerCandidateText ICT)
+		union all
+		(select TDT.match as match 
+			from ThreeDigitalText TDT)
+		union all
+		(select NTWU.match as match
+			from NumberTextWithUnit NTWU)) NTCandidate;
+			
+
+create view DecimalPart as
+	select CombineSpans(PE.match, DPP.match) as match
+	from	PointElement PE, (
+		extract pattern <NE1.match> <Token>{0,1} <NE2.match> as match
+		from NumberElement NE1, NumberElement NE2) DPP
+	where FollowsTok(PE.match, DPP.match, 0, 1);
+		
+create view DecimalText as
+	select DTC.match as match from
+		(extract pattern <IT.match> <DP.match> as match
+		from IntegerText_ IT, DecimalPart DP) DTC
+	consolidate on DTC.match;
+
+	
+create view IntegerText as
+	select IT.match 
+	from IntegerText_ IT, DecimalText DT
+	where Not (Overlaps(IT.match, DT.match));
+
+	
+create view IntegerCandidate as
+	(select I.match as integerview
+		from IntegerSimple_ I)
+	union all
+	(select II.match as integerview
+		from IntegerSimpleWithSign_ II)
+	union all
+	(select IW.match as integerview
+		from IntegerWithThousandsSepAndSign_ IW);
+		
+
+	

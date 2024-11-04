@@ -1,0 +1,63 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module nullUDFs;
+
+require document with columns
+text Text;
+
+-- Central repository of all UDF definitions. Any UDF to be used elsewhere in this NER library must be defined in here.
+
+---------------------------------------
+-- UDFs Declarations
+---------------------------------------
+create function containsT(s String)
+return String
+    -- Path relative to module root; udfjars is inside <project root>/testdata
+external_name '../../../../udfjars/nullUDFs.jar:com.ibm.test.udfs.NullHandlingUDFs!containsT'
+language java
+deterministic
+return null on null input;
+
+create function containsTEvalNull(s String)
+return String
+    -- Path relative to module root; udfjars is inside <project root>/testdata
+external_name '../../../../udfjars/nullUDFs.jar:com.ibm.test.udfs.NullHandlingUDFs!containsT'
+language java
+deterministic
+called on null input;
+
+create function implies(a Boolean, b Boolean)
+return Boolean
+    -- Path relative to module root; udfjars is inside <project root>/testdata
+external_name '../../../../udfjars/nullUDFs.jar:com.ibm.test.udfs.NullHandlingUDFs!implies'
+language java
+deterministic
+called on null input;
+
+create function impliesSkipNull(a Boolean, b Boolean)
+return Boolean
+    -- Path relative to module root; udfjars is inside <project root>/testdata
+external_name '../../../../udfjars/nullUDFs.jar:com.ibm.test.udfs.NullHandlingUDFs!implies'
+language java
+deterministic
+return null on null input;
+
+export function containsT;
+export function containsTEvalNull;
+
+export function implies;
+export function impliesSkipNull;

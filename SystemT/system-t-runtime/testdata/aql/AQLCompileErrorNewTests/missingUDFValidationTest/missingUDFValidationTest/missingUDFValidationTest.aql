@@ -1,0 +1,26 @@
+/*
+Test to verify that the compiler is validating missing UDF jars and reporting back error with proper error location.
+*/
+
+module missingUDFValidationTest;
+
+-- Declare a udf with implementation jar missing
+create function myToUpperCase(inputText String)
+return String
+external_name 'StringUtil.JAR:com.ibm.udf.test.StringUtil!toUpperCase'
+language java
+deterministic
+return null on null input;
+
+-- Test view that uses the UDF correctly.  Should compile without errors.
+select myToUpperCase(D.text)
+into testView
+from Document D;
+ 
+ 
+-- Test view that uses the UDF in a way inconsistent with the declaration
+-- Should generate a usable error in spite of the missing UDF jar.
+select myToUpperCase(D.text, "Invalid extra argument")
+into testView2
+from Document D;
+ 

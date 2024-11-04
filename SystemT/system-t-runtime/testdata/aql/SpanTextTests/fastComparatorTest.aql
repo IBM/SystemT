@@ -1,0 +1,45 @@
+-- RTC 167415: Comparison of Span objects derived from distinct DocumentText objects (but with similar underlying String content) is incomplete
+
+-- Create two distinct document-Text objects but containing similar String contents
+detag Document.text as DetaggedDocument1;
+detag Document.text as DetaggedDocument2;
+
+create dictionary dictTextDoc as ('Text Document');
+create dictionary dictDoc as ('Document');
+create dictionary dictDocCand as ('Document Candidate');
+
+-- Two dictionaries are applied on one document-Text object while the third is applied on the other document-Text object
+-- Union the resulting TupleLists together into one TupleList
+create view ViewA as
+	(select V.* from 
+		(
+			extract
+			D1.text as text,
+			dictionary dictTextDoc on D1.text as match
+			from DetaggedDocument1 D1
+		) V
+	)
+	union all
+	(select V.* from
+		(
+			extract
+			D1.text as text,
+			dictionary dictDocCand on D1.text as match
+			from DetaggedDocument1 D1
+		) V
+	)
+	union all
+	(select V.* from
+		(
+			extract
+			D2.text as text,
+			dictionary dictDoc on D2.text as match
+			from DetaggedDocument2 D2
+		) V
+	);
+
+-- Sort the resultant TupleList 
+create view ViewB as
+	select V.match from ViewA V
+	order by V.match;
+output view ViewB;

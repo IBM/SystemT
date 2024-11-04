@@ -1,0 +1,91 @@
+create view PhoneSimpleCand as
+extract
+ 	regexes /\+?\(\d{3}\) ?\d{3}-\d{4}/ and /\+?\d{3}-\d{3}-\d{4}/ 
+	    on D.text as num
+from Document D;
+
+output view PhoneSimpleCand;
+
+--------------------------------------------------------------------
+-- Use Pattern Discovery and RegexGenerator to refine the precision 
+-- and recall of Phone
+--------------------------------------------------------------------
+
+--------------------------------------------------------------------
+-- Left context of know phones used to invoke Pattern Discovery
+--------------------------------------------------------------------
+create view PhoneContext as
+select LeftContextTok(P.num, 10) as leftCtx
+from PhoneSimpleCand P;
+
+output view PhoneContext;
+
+--------------------------------------------------------------------
+-- Invoke Pattern Discovery
+--------------------------------------------------------------------
+
+--------------------------------------------------------------------
+-- Improve the precision of the PhoneSimple Annotator 
+-- with negative clues learned by the PatternDiscovery
+--------------------------------------------------------------------
+
+create dictionary FaxClueDict as (
+	'fax', 'fax:'
+);
+
+create view PhoneSimple as
+extract
+ 	regexes /\+?\(\d{3}\) ?\d{3}-\d{4}/ and /\+?\d{3}-\d{3}-\d{4}/ 
+	    on D.text as num
+from Document D;
+
+--------------------------------------------------------------------
+-- Improve the recall of the PhoneSimple Annotator 
+-- with positive clues learned by the PatternDiscovery
+--------------------------------------------------------------------
+
+--------------------------------------------------------------------
+-- Step 1: Extract positive phone clues discovered by the PatternDiscovery
+--------------------------------------------------------------------
+create dictionary PhoneClueDict as (
+	'phone', 'phone:', 'call', 'at'
+);
+create view PhoneClue as 
+extract dictionary 'PhoneClueDict' on D.text as clue
+from Document D; 
+
+--------------------------------------------------------------------
+-- Step 2: Examine the right context of the discovered phone clues,
+-- but subtract those with known phone numbers, as our purpose
+-- is to discover phone patterns not yet covered by the PhoneSimple 
+-- annotator
+--------------------------------------------------------------------
+create view PhoneClueContextAll as
+select P.clue as clue, RightContextTok(P.clue, 15) as rightCtx
+from PhoneClue P
+where ContainsRegex(/\d{3}/, RightContextTok(P.clue, 15)); 
+
+create view PhoneClueContextKnown as
+select P.*
+from PhoneClueContextAll P, PhoneSimple Ph
+where Contains(P.rightCtx, Ph.num);
+
+create view PhoneClueContextNew as
+(select * from PhoneClueContextAll)
+minus
+(select * from PhoneClueContextKnown);
+
+output view PhoneClueContextNew;
+
+--------------------------------------------------------------------
+-- Step 3: Invoke RegexLearner on a list of phones that are not captured yet
+-- PhoneSimple will be updated with the regex output by the RegexLearner
+--------------------------------------------------------------------
+create view PhoneSimpleFinal as
+extract
+ 	regexes /\+?\(\d{3}\) ?\d{3}-\d{4}/ and /\+?\d{3}-\d{3}-\d{4}/ and  /(x)?\d?((x)|(-))\d{4,5}/
+	    on D.text as num
+from Document D
+having Not(ContainsDict('FaxClueDict', LeftContextTok(num,4)));
+
+output view PhoneSimpleFinal;

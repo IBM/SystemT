@@ -1,0 +1,171 @@
+###############################################################################
+# equals.aog
+#
+# ("aog" stands for Avatar Operator Graph.)
+#
+# Test of the Equals join/selection predicates.
+###############################################################################
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+
+CreateDict(
+    "name" => "dictionaries/first.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+CreateDict(
+    "name" => "dictionaries/lotus/CITY.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+# Find potential first names.
+$FirstName = 
+Project(( "match" => "name" ), 
+	Dictionary("dictionaries/first.dict", "text", $Document));
+
+# Find city names
+$CityName = 
+Project(( "match" => "city" ), 
+	Dictionary("dictionaries/lotus/CITY.dict", "text", $Document));
+
+# For each equality test, we do a cross-product, then a NLJoin, then a merge join.
+# We sort the outputs of the non-merge-join entries so as to get comparable
+# results.
+
+#################
+# String equality
+
+# Select/Crossproduct
+$SelectStr = 
+	Sort((GetText(GetCol("name"))),
+		    Select(Equals (GetText(GetCol("name")), GetText(GetCol("city")) ),
+				CrossProduct($FirstName, $CityName)
+		)
+	);
+	
+# Nested-loops join
+$NLJoinStr =
+Sort((GetText(GetCol("name"))),
+	NLJoin(Equals(GetText(GetCol("name")), GetText(GetCol("city"))), $FirstName, $CityName)
+);
+
+# Merge join
+$MergeStr = 
+	SortMergeJoin(Equals(GetText(GetCol("name")), 
+			GetText(GetCol("city"))), $FirstName, $CityName);
+	
+# Merge join with arguments reversed.
+$MergeStr2 =
+Project(("name" => "name", "city" => "city"),
+	SortMergeJoin(Equals(GetText(GetCol("city")), 
+		GetText(GetCol("name"))), $CityName, $FirstName)
+);
+
+# Hash join
+$HashStr = 
+	SortMergeJoin(Equals(GetText(GetCol("name")), 
+			GetText(GetCol("city"))), $FirstName, $CityName);
+	
+# Hash join with arguments reversed.
+$HashStr2 =
+Project(("name" => "name", "city" => "city"),
+	SortMergeJoin(Equals(GetText(GetCol("city")), 
+		GetText(GetCol("name"))), $CityName, $FirstName)
+);
+
+################################
+# Integer equality (same begin)
+
+# Select/Crossproduct
+$SelectInt = 
+Sort((GetBegin(GetCol("name"))),
+	Select(Equals(GetBegin(GetCol("name")), GetBegin(GetCol("city"))),
+		CrossProduct($FirstName, $CityName)
+	)
+);
+	
+# Nested-loops join
+$NLJoinInt =
+Sort((GetBegin(GetCol("name"))),
+	NLJoin(Equals(GetBegin(GetCol("name")), GetBegin(GetCol("city"))),
+		$FirstName, $CityName)
+);
+
+# Merge join
+$MergeInt = 
+	SortMergeJoin(Equals(GetBegin(GetCol("name")), GetBegin(GetCol("city"))), 
+			$FirstName, $CityName);
+	
+# Merge join with arguments reversed.
+$MergeInt2 =
+Project(("name" => "name", "city" => "city"),
+	SortMergeJoin(Equals(GetBegin(GetCol("city")), GetBegin(GetCol("name"))), 
+			$CityName, $FirstName)
+);
+
+# Hash join
+$HashInt = 
+	HashJoin(Equals(GetBegin(GetCol("name")), GetBegin(GetCol("city"))), 
+			$FirstName, $CityName);
+	
+# Hash join with arguments reversed.
+$HashInt2 =
+Project(("name" => "name", "city" => "city"),
+	HashJoin(Equals(GetBegin(GetCol("city")), GetBegin(GetCol("name"))), 
+			$CityName, $FirstName)
+);
+
+
+################
+# Span equality
+
+# Select/Crossproduct
+$SelectSpan = 
+Sort((GetCol("name")),
+	Select(Equals(GetCol("name"), GetCol("city")),
+		CrossProduct($FirstName, $CityName)
+	)
+);
+	
+# Nested-loops join
+$NLJoinSpan =
+Sort((GetCol("name")),
+	NLJoin(Equals(GetCol("name"), GetCol("city")), $FirstName, $CityName)
+);
+
+# Merge join
+$MergeSpan = 
+	SortMergeJoin(Equals(GetCol("name"), GetCol("city")), $FirstName, $CityName);
+	
+# Merge join with arguments reversed.
+$MergeSpan2 =
+Project(("name" => "name", "city" => "city"),
+	SortMergeJoin(Equals(GetCol("city"), GetCol("name")), $CityName, $FirstName)
+);
+
+# Hash join
+$HashSpan = 
+	HashJoin(Equals(GetCol("name"), GetCol("city")), $FirstName, $CityName);
+	
+# Hash join with arguments reversed.
+$HashSpan2 =
+Project(("name" => "name", "city" => "city"),
+	HashJoin(Equals(GetCol("city"), GetCol("name")), $CityName, $FirstName)
+);
+
+
+################################################################################
+# OUTPUT SPEC
+Output: $FirstName, $CityName, 
+	$SelectStr, $NLJoinStr, $MergeStr, $MergeStr2, $HashStr, $HashStr2,
+	$SelectInt, $NLJoinInt, $MergeInt, $MergeInt2, $HashInt, $HashInt2,
+	$SelectSpan, $NLJoinSpan, $MergeSpan, $MergeSpan2, $HashSpan, $HashSpan2
+	;

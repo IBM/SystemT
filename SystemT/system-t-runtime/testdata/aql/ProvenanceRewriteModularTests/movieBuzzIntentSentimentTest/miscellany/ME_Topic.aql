@@ -1,0 +1,29 @@
+module miscellany;
+
+import dictionary ME_Studios_Dict from module dictionariesAndTables as ME_Studios_Dict;
+import dictionary MovieTopicDict from module dictionariesAndTables as MovieTopicDict;
+
+import view ME_Buzz_Output from module buzz as ME_Buzz_Output;
+
+create view ME_Topic_Keywords as
+	extract  'MovieTopicDict' as prov, dictionary 'MovieTopicDict' on D.text as match
+	from Document D;
+	
+--output view ME_Topic_Keywords;
+
+create view ME_Studios as
+	extract  'ME_Studios_Dict' as prov, dictionary 'ME_Studios_Dict' on D.text as match
+	from Document D;
+
+
+--output view ME_Studios;
+
+create view ME_Topic_Output as
+(select 'Movies' as topic, M.name_span as clue_span from ME_Buzz_Output M)
+union all
+(select 'Movies' as topic, M.match as clue_span from ME_Topic_Keywords M)
+union all
+(select 'Movies' as topic, M.match as clue_span from ME_Studios M);
+
+
+--output view ME_Topic_Output;	

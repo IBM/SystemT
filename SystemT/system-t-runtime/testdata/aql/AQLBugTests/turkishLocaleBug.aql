@@ -1,0 +1,34 @@
+create dictionary OrgDict as(
+	'Microsoft'
+);
+
+create dictionary OrgFullDict as(
+	'MICROSOFT'
+);
+
+-- Should match 'Microsoft', 'MICROSOFT'
+create view OrgNoCase as
+extract dictionary 'OrgDict' on D.text as match
+from Document D;
+
+-- Should match 'Microsoft'
+create view OrgCase as
+extract dictionary 'OrgDict' with flags 'Exact' on D.text as match
+from Document D;
+
+-- Should match 'Microsoft', 'MICROSOFT'
+-- With turkish locale, output is empty
+create view OrgFullNoCase as
+extract dictionary 'OrgFullDict' on D.text as match
+from Document D;
+
+-- Should match 'MICROSOFT'
+-- With turkish locale, output is empty
+create view OrgFullCase as
+extract dictionary 'OrgFullDict' with flags 'Exact' on D.text as match
+from Document D;
+
+output view OrgNoCase;
+output view OrgCase;
+output view OrgFullNoCase;
+output view OrgFullCase;

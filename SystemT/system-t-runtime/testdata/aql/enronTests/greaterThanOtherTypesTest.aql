@@ -1,0 +1,58 @@
+require document with columns text Text;
+-----------------------------------------------------------------------------
+-- Tests of the GreaterThan() predicate for types other than Integer
+------------------------------------------------------------------------------
+
+create dictionary CommonWords as (
+	'a', 'of', 'the'
+);
+
+create view CommonWords as
+	extract dictionary CommonWords on D.text as match
+	from Document D;
+	
+create view WordPairs as
+	select D1.match as arg1, D2.match as arg2 
+      from CommonWords D1, CommonWords D2 
+      where FollowsTok(D1.match, D2.match, 0, 5);
+
+-- Test Float
+select D.arg1, D.arg2, 
+       GreaterThan(D.arg1, D.arg2) as GreaterThanArg1Arg2,
+	   GreaterThan(D.arg2, D.arg1) as GreaterThanArg2Arg1
+into GreaterThanFloat
+from (select 1.2 as arg1, 1.5 as arg2 from Document D where GreaterThan(1.5, 1.2)) D;
+
+-- Test Boolean
+-- False compares before (is smaller than) true
+select D.arg1, D.arg2, 
+       GreaterThan(D.arg1, D.arg2) as GreaterThanArg1Arg2,
+	   GreaterThan(D.arg2, D.arg1) as GreaterThanArg2Arg1
+into GreaterThanBoolean
+from (select false as arg1, true as arg2 from Document D where GreaterThan(true, false)) D;
+	
+-- Test Span
+select D.arg1, D.arg2, 
+       GreaterThan(D.arg1, D.arg2) as GreaterThanArg1Arg2,
+	   GreaterThan(D.arg2, D.arg1) as GreaterThanArg2Arg1
+into GreaterThanSpan
+from WordPairs D;
+
+-- Test Text
+select D.arg1, D.arg2, 
+       GreaterThan(D.arg1, D.arg2) as GreaterThanArg1Arg2,
+	   GreaterThan(D.arg2, D.arg1) as GreaterThanArg2Arg1
+into GreaterThanText
+from (select GetText(D.arg1) as arg1, GetText(D.arg2) as arg2 from WordPairs D) D;
+
+--Test ScalarList
+create view Lists as
+select List(GetText(W.arg1)) as arg1, List(GetText(W.arg2)) as arg2
+from WordPairs W, Document D
+group by D.text;
+
+select D.arg1, D.arg2, 
+       GreaterThan(D.arg1, D.arg2) as GreaterThanArg1Arg2,
+	   GreaterThan(D.arg2, D.arg1) as GreaterThanArg2Arg1
+into GreaterThanScalarList
+from Lists D;

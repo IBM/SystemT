@@ -1,0 +1,198 @@
+module PersonCandidates;
+
+-----------------------------------------------------------------
+-- Create and assign attributes for the Person entity type
+-----------------------------------------------------------------
+
+create view PersonFinalAllWithoutDotsConsolidated as 
+select P.person as person
+from PersonFinalAllWithoutDots P
+consolidate on P.person;
+
+-- <FirstName> <LastName>
+create view PersonWithAttr1 as
+  extract 
+        regex /^([\p{L}\p{M}-']{2,})\s+([\p{L}\p{M}-']{2,})$/ on P.person
+       return group 0 as reference and group 1 as first and group 2 as last
+  from PersonFinalAllWithoutDotsConsolidated P;
+
+-- <LastName>,<FirstName>
+create view PersonWithAttr2 as
+  extract 
+        regex /^([\p{L}\p{M}-']{2,})\s*,\s*([\p{L}\p{M}-']{2,})$/ on P.person
+       return group 0 as reference and group 2 as first and group 1 as last
+  from PersonFinalAllWithoutDotsConsolidated P;
+  
+-- <FirstName><MiddleName><LastName>
+create view PersonWithAttr3 as
+  extract 
+        regex /^([\p{L}\p{M}-']{2,})\s+([\p{L}\p{M}-'.]+)\s+([\p{L}\p{M}-'.]{2,})$/ on P.person --'
+       return group 0 as reference and group 1 as first and group 2 as middle and group 3 as last
+  from PersonFinalAllWithoutDotsConsolidated P;
+  
+-- <FirstName><MiddleName><LastName>  
+create view PersonWithAttr3a as
+select R.first as first, R.middle as middle, R.last as last, R.reference as reference
+from PersonWithAttr3 R
+where Not(ContainsDict('RightContextSuffixesForProperNounNames',R.last));  
+
+-- <FirstName><LastName><Suffix>
+create view PersonWithAttr3b as
+select R.first as first, '' as middle, R.middle as last, R.reference as reference
+from PersonWithAttr3 R
+where ContainsDict('RightContextSuffixesForProperNounNames',R.last);  
+ 
+-- <Name>
+create view PersonWithAttr4 as
+  extract 
+        regex /^([\p{L}\p{M}-']{2,})$/ on P.person --'
+       return group 0 as reference  
+  from PersonFinalAllWithoutDotsConsolidated P;
+
+-- <FirstName>
+create view PersonWithAttr4a as
+select R.reference as first, '' as middle, '' as last, R.reference as reference
+from PersonWithAttr4 R
+where ContainsDicts(
+					'FirstNamesUsedGlobally',
+					'FirstNamesUsedInGermanyLong',
+					'NickNamesUsedGlobally',
+					'FirstNamesUsedInGermanyShort',
+					'FirstNamesUsedInItaly',
+					'FirstNamesUsedInFrance',
+					'FirstNamesUsedInSpain',
+					'FirstNamesUsedInIndia',
+					'FirstNamesUsedInIsrael',
+					R.reference) 
+	  and 
+  Not(ContainsDicts(
+  					'LastNamesUsedGlobally',
+                    'LastNamesUsedInGermanyLong',
+ 					'LastNamesUsedInGermanyShort',
+ 					'LastNamesUsedGloballyUnique',
+ 					'LastNamesUsedInItaly',
+ 					'LastNamesUsedInFrance',
+ 					'LastNamesUsedInSpain',
+ 					'LastNamesUsedInIndia',
+ 					'LastNamesUsedInIsrael', 
+ 					R.reference));
+ 				
+-- <LastName> 					
+create view PersonWithAttr4b as
+select '' as first, '' as middle, R.reference as last, R.reference as reference
+from PersonWithAttr4 R
+where Not(ContainsDicts(
+					'FirstNamesUsedGlobally',
+					'FirstNamesUsedInGermanyLong',
+					'NickNamesUsedGlobally',
+					'FirstNamesUsedInGermanyShort',
+					'FirstNamesUsedInItaly',
+					'FirstNamesUsedInFrance',
+					'FirstNamesUsedInSpain',
+					'FirstNamesUsedInIndia',
+					'FirstNamesUsedInIsrael',
+					R.reference)) 
+	  and 
+  ContainsDicts(
+  					'LastNamesUsedGlobally',
+                    'LastNamesUsedInGermanyLong',
+ 					'LastNamesUsedInGermanyShort',
+ 					'LastNamesUsedGloballyUnique',
+ 					'LastNamesUsedInItaly',
+ 					'LastNamesUsedInFrance',
+ 					'LastNamesUsedInSpain',
+ 					'LastNamesUsedInIndia',
+ 					'LastNamesUsedInIsrael', 
+ 					R.reference);
+
+--<Initial><Name>					
+ create view PersonWithAttr5 as
+  extract 
+        regex /^([\p{L}\p{M}]+\.)\s+([\p{L}\p{M}-']{2,})$/ on P.person --'
+       return group 0 as reference and group 1 as initial and group 2 as name
+  from PersonFinalAllWithoutDotsConsolidated P;
+  
+-- <Initial><LastName>  
+create view PersonWithAttr5a as
+select '' as first, '' as middle, R.name as last, R.reference as reference
+from PersonWithAttr5 R
+where Not(ContainsDicts(
+					'FirstNamesUsedGlobally',
+					'FirstNamesUsedInGermanyLong',
+					'NickNamesUsedGlobally',
+					'FirstNamesUsedInGermanyShort',
+					'FirstNamesUsedInItaly',
+					'FirstNamesUsedInFrance',
+					'FirstNamesUsedInSpain',
+					'FirstNamesUsedInIndia',
+					'FirstNamesUsedInIsrael',
+					R.name));
+ 
+-- <Initial> <FirstName>
+create view PersonWithAttr5b as
+select R.name as first, '' as middle, '' as last, R.reference as reference
+from PersonWithAttr5 R
+where ContainsDicts(
+					'FirstNamesUsedGlobally',
+					'FirstNamesUsedInGermanyLong',
+					'NickNamesUsedGlobally',
+					'FirstNamesUsedInGermanyShort',
+					'FirstNamesUsedInItaly',
+					'FirstNamesUsedInFrance',
+					'FirstNamesUsedInSpain',
+					'FirstNamesUsedInIndia',
+					'FirstNamesUsedInIsrael',
+					R.name) 
+	  and 
+  Not(ContainsDicts(
+                    'LastNamesUsedGlobally',
+                    'LastNamesUsedInGermanyLong',
+ 					'LastNamesUsedInGermanyShort',
+ 					'LastNamesUsedGloballyUnique',
+ 					'LastNamesUsedInItaly',
+ 					'LastNamesUsedInFrance',
+ 					'LastNamesUsedInSpain',
+ 					'LastNamesUsedInIndia',
+ 					'LastNamesUsedInIsrael', 
+ 					R.name));			
+ 	
+-- <FirstName><MiddleName><LastName><Suffix>
+create view PersonWithAttr6 as
+  extract 
+        regex /^([\p{L}\p{M}-']{2,})\s+([\p{L}\p{M}-'.]+)\s+([\p{L}\p{M}-'.]{2,})[,\s]+([\p{L}\p{M}-'.]{2,})$/ on P.person
+       return group 0 as reference and group 1 as first and group 2 as middle and group 3 as last and group 4 as suffix
+  from PersonFinalAllWithoutDotsConsolidated P;
+   
+create view PersonWithAttr6a as
+select R.first as first, R.middle as middle, R.last as last, R.reference as reference
+from PersonWithAttr6 R
+where ContainsDict('RightContextSuffixesForProperNounNames',R.suffix);  
+ 						
+create view PersonWithAttrValid as
+(select P.reference as person, P.first as first, '' as middle, P.last as last, P.reference as reference from PersonWithAttr1 P)
+union all
+(select P.reference as person, P.first as first, '' as middle, P.last as last, P.reference as reference from PersonWithAttr2 P)
+union all
+(select P.reference as person, P.first as first, P.middle as middle, P.last as last, P.reference as reference from PersonWithAttr3a P)
+union all
+(select P.reference as person, P.first as first, P.middle as middle, P.last as last, P.reference as reference from PersonWithAttr3b P)
+union all
+(select P.reference as person, P.first as first, P.middle as middle, P.last as last, P.reference as reference from PersonWithAttr4a P)
+union all
+(select P.reference as person, P.first as first, P.middle as middle, P.last as last, P.reference as reference from PersonWithAttr4b P)
+ union all
+(select P.reference as person, P.first as first, P.middle as middle, P.last as last, P.reference as reference from PersonWithAttr5a P)
+ union all
+(select P.reference as person, P.first as first, P.middle as middle, P.last as last, P.reference as reference from PersonWithAttr5b P)
+ union all
+(select P.reference as person, P.first as first, P.middle as middle, P.last as last, P.reference as reference from PersonWithAttr6a P);
+ 
+create view PersonWithoutAttr as
+(select P.person as person from PersonFinalAllWithoutDotsConsolidated P)
+minus
+(select P.reference as person from PersonWithAttrValid P);
+
+create view PersonWithAttrAll as
+(select P.reference as person, P.first as first, P.middle as middle, P.last as last, P.reference as reference from PersonWithAttrValid P)
+union all
+(select P.person as person, '' as first, '' as middle, '' as last, P.person as reference from PersonWithoutAttr P);

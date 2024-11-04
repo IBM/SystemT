@@ -1,0 +1,73 @@
+module badJoinPredTest;
+
+create view Number as 
+extract regex /\d+/ on between 1 and 1 tokens in D.text as match
+from Document D;
+
+-- Bad FollowsTok() predicate in the following view should cause a
+-- compile error during the type inference phase.
+create view BadJoinPredView as
+select N1.match
+from Number N1, Number N2
+    -- Bad predicate is here:
+where FollowsTok(N1.match, N2.match, 0);
+
+output view BadJoinPredView;
+
+
+-- More complicated view that more closely models the exact scenario
+-- described in the original bug report.
+create view BadThreeWayJoin as
+select CombineSpans(NP.match, WPC.match) as phrase
+from Number NP, Number WH, Number WPC
+    -- Bad predicate is here:
+where FollowsTok(NP.match, WH.match, 0)
+  and FollowsTok(WH.match, WPC.match, 0, 0);
+
+output view BadThreeWayJoin;
+
+
+-- View that attempts to use a function in the where clause that does 
+-- not return a boolean value.
+create view BadWhereFunc as
+select * 
+from Number N
+where Chomp(N.match);
+
+output view BadWhereFunc;
+
+-- Extract statement with an invalid function call in the HAVING clause
+create view BadExtractPred as
+extract regex /[a-z]/ on D.text as match
+from Document D
+having Equals(match);
+
+output view BadExtractPred;
+
+-- Extract statement with a non-boolean function in the HAVING clause
+create view BadExtractPred2 as
+extract regex /[a-z]/ on D.text as match
+from Document D
+having CombineSpans(match, match);
+
+output view BadExtractPred2;
+
+
+-- The extract tests above, but with an extract pattern stmt instead
+create view BadExtractPatternPred as
+extract pattern /[a-z]/ 
+    return group 0 as match
+from Document D
+having Equals(match);
+
+output view BadExtractPatternPred;
+
+create view BadExtractPatternPred2 as
+extract pattern /[a-z]/ 
+    return group 0 as match
+from Document D
+having CombineSpans(match, match);
+
+output view BadExtractPatternPred2;
+
+

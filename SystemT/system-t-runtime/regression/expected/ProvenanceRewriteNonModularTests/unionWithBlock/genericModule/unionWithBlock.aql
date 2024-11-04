@@ -1,0 +1,108 @@
+module genericModule;
+
+
+create view CapsToken as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /\p{Lu}\p{Ll}+/
+    with flags 'DOTALL'
+    on between 1 and 1 tokens in D.text
+    return group 0 as match
+  from Document D;
+
+output view CapsToken;
+
+create dictionary "MissingNounDict"
+with case insensitive
+as (
+  '$'
+);
+
+
+create view CompoundNoun as
+  (select  Op.noun as noun,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__1__TempOp__0 Op)
+  union all
+  (select  Op.noun as noun,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__1__TempOp__1 Op);
+
+output view CompoundNoun;
+
+create view CompoundNoun1 as
+  (select  Op.noun as noun,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__3__TempOp__0 Op)
+  union all
+  (select  Op.noun as noun,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__3__TempOp__1 Op);
+
+output view CompoundNoun1;
+
+
+
+
+
+create view __Base__2__Temp as
+  extract blocks
+    with count between 1 and 3
+    and separation between 0 and 0 tokens
+    on N.match as noun
+  from CapsToken N;
+
+output view __Base__2__Temp;
+
+create view __Base__4__Temp as
+  extract blocks
+    with count between 1 and 3
+    and separation between 0 and 0 tokens
+    on N.match as noun
+  from CapsToken N;
+
+output view __Base__4__Temp;
+
+create view __Union__1__TempOp__0 as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'MissingNounDict'
+    on D.text as noun
+  from Document D;
+
+output view __Union__1__TempOp__0;
+
+create view __Union__1__TempOp__1 as
+  select  Op.noun as noun,
+          AutoID() as __auto__id
+  from  __Base__2__Temp Op;
+
+output view __Union__1__TempOp__1;
+
+create view __Union__3__TempOp__0 as
+  select  Op.noun as noun,
+          AutoID() as __auto__id
+  from  __Base__4__Temp Op;
+
+output view __Union__3__TempOp__0;
+
+create view __Union__3__TempOp__1 as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'MissingNounDict'
+    on D.text as noun
+  from Document D;
+
+output view __Union__3__TempOp__1;
+

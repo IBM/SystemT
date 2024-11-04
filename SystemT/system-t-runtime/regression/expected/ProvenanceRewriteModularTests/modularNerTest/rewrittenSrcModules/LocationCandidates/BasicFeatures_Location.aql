@@ -1,0 +1,148 @@
+module LocationCandidates;
+
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText
+;
+
+
+import dictionary LeftContextCluesPositive from module Dictionaries as LeftContextCluesPositive
+;
+
+
+import dictionary RightContextCluesPositive from module Dictionaries as RightContextCluesPositive
+;
+
+
+import dictionary CardinalDirections from module Dictionaries as CardinalDirections
+;
+
+
+import dictionary LeftContextCluesPositiveForLocation from module Dictionaries as LeftContextCluesPositiveForLocation
+;
+
+
+import dictionary LeftContextCluesPositiveWeakForLocation from module Dictionaries as LeftContextCluesPositiveWeakForLocation
+;
+
+
+import dictionary RightContextCluesPositiveForLocation from module Dictionaries as RightContextCluesPositiveForLocation
+;
+
+
+import dictionary LeftContextCluesNegativeForLocation from module Dictionaries as LeftContextCluesNegativeForLocation
+;
+
+
+import dictionary RightContextCluesNegativeForLocation from module Dictionaries as RightContextCluesNegativeForLocation
+;
+
+
+import dictionary RolesInOrganizations from module Dictionaries as RolesInOrganizations
+;
+
+
+require document with columns
+  text Text;
+
+create view RightMergeableContext as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__402__Temp_____sep_____D____id
+  from  __Subquery__402__Temp D;
+
+output view RightMergeableContext;
+
+create view LeftMergeableContext as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionaries 'LeftContextCluesPositive'
+                   and 'CardinalDirections'
+    with flags 'Exact'
+    on D.text as clue
+  from DocumentText D;
+
+output view LeftMergeableContext;
+
+create view LocationLeftClue as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'LeftContextCluesPositiveForLocation'
+    on D.text as clue
+  from DocumentText D;
+
+output view LocationLeftClue;
+
+create view LocationWeakLeftClue as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'LeftContextCluesPositiveWeakForLocation'
+    on D.text as clue
+  from DocumentText D;
+
+output view LocationWeakLeftClue;
+
+create view LocationRightClue as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'RightContextCluesPositiveForLocation'
+    on D.text as clue
+  from DocumentText D;
+
+output view LocationRightClue;
+
+create view DirectionAll as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__403__Temp_____sep_____D____id
+  from  __Subquery__403__Temp D;
+
+output view DirectionAll;
+
+create view WrongLocationLeftClue as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionaries 'LeftContextCluesNegativeForLocation'
+                   and 'RolesInOrganizations'
+    on D.text as clue
+  from DocumentText D;
+
+output view WrongLocationLeftClue;
+
+create view WrongLocationRightClue as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'RightContextCluesNegativeForLocation'
+    on D.text as clue
+  from DocumentText D;
+
+output view WrongLocationRightClue;
+
+create view __Subquery__402__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'RightContextCluesPositive'
+    with flags 'Exact'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__402__Temp;
+
+create view __Subquery__403__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'CardinalDirections'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__403__Temp;
+

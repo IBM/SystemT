@@ -1,0 +1,167 @@
+module metricsIndicator_features;
+
+
+create view IndicatorInvalid1 as
+  select  R.metric as metric,
+          R.amount as amount,
+          R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as IndicatorCandidate_____sep_____R____id,
+          M.__auto__id as Metric_____sep_____M____id
+  from  IndicatorCandidate R,
+        Metric M
+  where Contains(SpanBetween(R.metric, R.amount), M.match);
+
+output view IndicatorInvalid1;
+
+create view IndicatorInvalid2 as
+  select  R.metric as metric,
+          R.amount as amount,
+          R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as IndicatorCandidate_____sep_____R____id,
+          B.__auto__id as SentenceBoundary_____sep_____B____id
+  from  IndicatorCandidate R,
+        SentenceBoundary B
+  where Contains(R.match, B.match);
+
+output view IndicatorInvalid2;
+
+create view IndicatorInvalid as
+  (select  Op.metric as metric,
+            Op.amount as amount,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__2__TempOp__0 Op)
+  union all
+  (select  Op.metric as metric,
+            Op.amount as amount,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__2__TempOp__1 Op);
+
+output view IndicatorInvalid;
+
+create view IndicatorAll as
+  select  Op.metric as metric,
+          Op.amount as amount,
+          Op.match as match,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__3__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__3__TempOp__1 Op,
+        __Minus__3__Temp __t
+  where Equals(Op.metric, __t.metric)
+     and Equals(Op.amount, __t.amount)
+     and Equals(Op.match, __t.match);
+
+output view IndicatorAll;
+
+create view Indicator as
+  select  __t2.metric as metric,
+          __t2.amount as amount,
+          __t2.match as match,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__4__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__4__Temp__1 __t1,
+        __Consolidate__4__Temp__2 __t2
+  where Contains(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.metric, __t2.amount, __t2.match;
+
+output view Indicator;
+
+export view metricsIndicator_features.Indicator;
+
+
+create view __Consolidate__4__Temp__1 as
+  select  R.metric as metric,
+          R.amount as amount,
+          R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as IndicatorAll_____sep_____R____id,
+          R.match as __consolidate__target
+  from  IndicatorAll R;
+
+output view __Consolidate__4__Temp__1;
+
+create view __Consolidate__4__Temp__2 as
+  select  __t1.metric as metric,
+          __t1.amount as amount,
+          __t1.match as match,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__4__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'NotContainedWithin';
+
+output view __Consolidate__4__Temp__2;
+
+create view __Minus__3__Temp as
+  select  __t.metric as metric,
+          __t.amount as amount,
+          __t.match as match
+  from  
+    ((select  Op.metric as metric,
+              Op.amount as amount,
+              Op.match as match
+      from  __Minus__3__TempOp__1 Op)
+    minus
+    (select  Op.metric as metric,
+              Op.amount as amount,
+              Op.match as match
+      from  __Minus__3__TempOp__2 Op)
+    ) __t
+  group by __t.metric, __t.amount, __t.match;
+
+output view __Minus__3__Temp;
+
+create view __Minus__3__TempOp__1 as
+  select  R.metric as metric,
+          R.amount as amount,
+          R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as IndicatorCandidate_____sep_____R____id
+  from  IndicatorCandidate R;
+
+output view __Minus__3__TempOp__1;
+
+create view __Minus__3__TempOp__2 as
+  select  R.metric as metric,
+          R.amount as amount,
+          R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as IndicatorInvalid_____sep_____R____id
+  from  IndicatorInvalid R;
+
+output view __Minus__3__TempOp__2;
+
+create view __Union__2__TempOp__0 as
+  select  R.metric as metric,
+          R.amount as amount,
+          R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as IndicatorInvalid1_____sep_____R____id
+  from  IndicatorInvalid1 R;
+
+output view __Union__2__TempOp__0;
+
+create view __Union__2__TempOp__1 as
+  select  R.metric as metric,
+          R.amount as amount,
+          R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as IndicatorInvalid2_____sep_____R____id
+  from  IndicatorInvalid2 R;
+
+output view __Union__2__TempOp__1;
+

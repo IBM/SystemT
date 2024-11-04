@@ -1,0 +1,182 @@
+module Organization_Candidates;
+
+-- Remove organization suffix from strong organizations
+create view StrongOrgWithoutOrgSuffix as
+select R.organization as organization, R.match as match
+from
+(
+	(
+		select R.org as organization, R.match as match
+		from OrgWithoutSuffix R
+	)
+	union all
+	(
+		select R.organization as organization, R.organization as match 
+		from OrganizationFull R
+		where Not(ContainsDict('GlobalSuffixesForOrganizations', R.organization))
+	)
+) R
+consolidate on R.match using 'NotContainedWithin';
+
+
+-- Clean up trailing ,-& and "and" tokens
+create view StrongOrgWithoutOrgSuffixClean as
+(
+	select R.organization as organization, Chomp(SpanBetween(LeftContext(R.match,0), R.totrim)) as match
+	from
+	(
+		extract R.organization as organization, R.match as match,
+		-- Sudarshan regex : 10/12/2011 : backreference on line 31
+				regex /(,|-|&|(\s+and))\s*\z/ on R.match as totrim
+		from StrongOrgWithoutOrgSuffix R
+	) R
+)
+union all
+(
+	select R.organization as organization, Chomp(R.match) as match 
+	from StrongOrgWithoutOrgSuffix R 
+	-- Sudarshan regex : 10/12/2011 : backreference on line 40
+	where Not(ContainsRegex(/(,|-|&|(\s+and))\s*\z/, R.match)) 
+);
+
+
+-- Find organizations with industry type suffixes
+create view StrongOrgWithIndustrySuffix as
+extract R.organization as organization,
+		dictionaries 'SuffixesForGroupsOfOrganizations' 
+				 and 'SuffixesForEducationalOrganizations'
+				 and 'SuffixesForMedicalOrganizations'
+				 and 'SuffixesForMediaAndEntertainmentOrganizations'
+				 and 'ProfessionBasedSuffixesForOrganizations'
+				 and 'AuxiliarySuffixesForOrganizations'
+				 and 'SuffixesForMiscellaneousOrganizations'
+			on R.organization as totrim
+from 
+(
+	(select R.organization as organization from OrganizationFull R)
+	union all
+	(select R.match as organization from StrongOrgWithoutOrgSuffixClean R)
+) R
+having Equals(GetEnd(organization), GetEnd(totrim));
+
+
+-- Remove industry type suffixes from strong orgs
+-- In the process, also ignore some matches that most likely cause false positives
+create view StrongOrgWithoutIndustryOrgSuffix as
+select R.organization as organization, Chomp(SpanBetween(LeftContext(R.organization,0), R.totrim)) as match
+from StrongOrgWithIndustrySuffix R
+where Not(MatchesDict('SuffixFiltersForOrganization', R.totrim));
+
+-- Strong orgs without any industry and org suffixes
+create view StrongOrgWithoutFullOrgClue as
+select O.organization, Chomp(SpanBetween(LeftContext(O.organization,0), LeftContext(OCSC.match,0))) as match
+from OrganizationFull O, OrgClueStCaps OCSC
+where Contains(O.organization, OCSC.match)
+  and Not(Equals(O.organization, OCSC.match))
+  and Not(ContainsDict('SuffixFiltersForOrganization', OCSC.match));
+  
+-- Strong orgs with organization and industry suffixes removed
+create view PrefixFromFinalOrg as
+(select R.organization as original, R.match from StrongOrgWithoutOrgSuffixClean R)
+union all
+(select R.organization as original, R.match from StrongOrgWithoutIndustryOrgSuffix R)
+union all
+(select R.organization as original, R.match from StrongOrgWithoutFullOrgClue R);
+
+
+-- Deduplicate the list before Value-Based Join for performance
+create view PrefixFromFinalOrgDedup as
+select R.original as original, R.match as match, toUpperCase(R.match) as normMatch
+from
+(
+	select GetText(R.original) as original, GetText(R.match) as match
+	from PrefixFromFinalOrg R
+	group by GetText(R.original), GetText(R.match)
+) R
+where Not(Equals(GetText(R.match),''));
+
+
+
+-- Perform the Value-Based Join (VBJ)
+create view OrgTokenCand as
+select O.original, O.organization
+from
+(
+	(
+	  select CN.original as original, CW.match as organization
+	  from 	CapsWordOnetoFive CW,  
+	  		PrefixFromFinalOrgDedup CN
+	  where Equals(GetText(CW.match),GetText(CN.match))
+	)
+	union all
+	(
+	select CN.original as original, CW.match as organization
+	  from 	CapsWordOnetoFive CW,  
+	  		PrefixFromFinalOrgDedup CN
+	  where Equals(GetText(CW.match),GetText(CN.normMatch))
+	)
+) O;
+   
+-- Value based join (VBJ) matches contained within other organizations, 
+-- or that contain an invalid organization - to filter out
+create view OrgTokenOverlap as
+( select T.* from OrgTokenCand T, OrganizationFull O where Contains(O.organization, T.organization))
+union all
+( select T.* from OrgTokenCand T, InvalidOrg O where Contains(O.org, T.organization));
+	
+	
+-- VBJ matches overlapping but not contained within other organizations 
+create view OrgTokenOverlapNotContains as
+	select O.organization as overlap, T.*
+	from OrgTokenCand T, OrganizationFull O
+	where Not(Contains(O.organization, T.organization)) and Overlaps(O.organization, T.organization);
+
+-- Filter out overlapping VBJ matches
+create view OrgTokenBeforeConsolidation as
+	(select * from OrgTokenCand)
+	minus
+	(select * from OrgTokenOverlap);
+	
+create view OrgToken as
+select O.*
+from OrgTokenBeforeConsolidation O
+consolidate on O.organization;
+  
+	
+-- VBJ matches with Caps word to the right - to filter out
+create view OrgTokenWithRightCapsWord as
+	select T.*, RightContextTok(T.organization,1) as RC
+	from OrgToken T
+	where ContainsRegex(/\A\s*\p{Lu}\p{M}*/, RightContextTok(T.organization,1))
+	  and Not(Equals(GetText(T.organization), toUpperCase(T.organization)));
+
+	
+-- VBJ matches with Caps word to the left
+create view OrgTokenWithLeftCapsWordCand as
+	select LeftContextTok(T.organization,1) as LC, T.*
+	from OrgToken T
+	where ContainsRegex(/\A\p{Lu}\p{M}*/, LeftContextTok(T.organization,1))
+	  and Not(Equals(GetText(T.organization), toUpperCase(T.organization)));
+
+	
+-- VBJ matches with Caps word to the left containing sentence boundary
+create view OrgTokenWithLeftCapsWordFilter as
+	(select T.* from OrgTokenWithLeftCapsWordCand T, SentenceBoundary B where Contains(T.LC, B.boundary))
+	union all
+	(select T.* from OrgTokenWithLeftCapsWordCand T, SentenceBoundary B where Follows(B.boundary, T.LC, 0, 0));
+
+
+-- VBJ matches with Caps word to the left not containing sentence boundary - to filter out
+create view OrgTokenWithLeftCapsWord as
+(select * from OrgTokenWithLeftCapsWordCand)
+minus
+(select * from OrgTokenWithLeftCapsWordFilter);
+
+
+-- VBJ matches within UrlEmailPlace - to filter out only in certain versions of annotators (i.e., eDA)
+create view OrgTokenWithinUrlEmailPlace as
+select O.*
+from OrgToken O, UrlEmailPlace UEP
+where Contains (UEP.match, O.organization);
+
+

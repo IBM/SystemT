@@ -1,0 +1,53 @@
+module RSEJoin;
+require document with columns text Text;
+
+--------------------------------------------
+-- Extract names and nulls from the document
+create view _Name as
+  extract regex 
+    /!(\w+)?,(\w+)?,(\w+)?/
+  on D.text
+  return 
+    group 1 as firstname
+    and group 2 as middlename
+    and group 3 as lastname
+  from Document D;
+  
+output view _Name;
+
+
+-------------------------------------------
+-- Extract ages and nulls from the document
+create view _Age as 
+  extract regex 
+    /,(\d+)?@/
+  on D.text
+  return
+    group 1 as age
+  from Document D;
+  
+output view _Age;
+
+
+
+
+-- RSE JOIN
+
+create view _CapsWord as
+extract regex /[A-Z][a-z]+/ 
+    on 1 token in D.text
+    as word
+from Document D;
+
+output view _CapsWord;
+
+-- Uses RSEJoin with nulls in one input
+create view NullRSEJoinView1 as
+select CW.word as word, N.lastname as thematch
+from _CapsWord CW, _Name N
+where Follows(CW.word, N.lastname, 0, 5);
+
+output view NullRSEJoinView1;
+
+
+

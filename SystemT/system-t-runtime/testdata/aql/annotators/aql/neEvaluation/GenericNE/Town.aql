@@ -1,0 +1,56 @@
+create dictionary LeftClueTownDict as
+('town of', 'suburb of', 'towns of');
+
+create view HyphenCapsPlace as
+select CombineSpans(CP1.match, CP2.match) as match
+from CapsPlaceAll CP1,
+     CapsPlaceAll CP2
+where FollowsTok(CP1.match, CP2.match, 0, 1)
+  and MatchesRegex(/\s*(-|de)\s*/, SpanBetween(CP1.match, CP2.match))
+  and Not(MatchesRegex(/([tT]he|an?)/, CP1.match));
+  
+create view ExtendedCapsPlace as
+	(select H.* from HyphenCapsPlace H)
+	union all
+	(select C.* from CapsPlace C);
+
+create view TownLeftClue as
+select D.match as match
+from   Dictionary('LeftClueTownDict', Doc.text) D;
+
+create dictionary RightClueTownDict as
+('town');
+
+create view TownRightClue as
+select D.match as match
+from   Dictionary('RightClueTownDict', Doc.text) D
+where MatchesRegex(/\p{Lu}.*/, D.match);
+
+create view TownCandidates1 as
+select C.match as match
+from TownLeftClue CC,
+     ExtendedCapsPlace C	 
+where FollowsTok(CC.match, C.match, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(CC.match, C.match)))
+  and Not(MatchesRegex(/\s*\p{Lu}.*/, RightContext(C.match, 5)));
+  
+--output view CapsPlace;
+  
+create view TownCandidates2 as
+select CombineSpans(C.match, RC.match) as match
+from ExtendedCapsPlace C,
+     TownRightClue RC
+where FollowsTok(C.match, RC.match, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(C.match, RC.match)));
+
+create view TownCandidates as
+	(select C.* from TownCandidates1 C)
+	union all
+	(select C.* from TownCandidates2 C);
+	
+create view TownConsolidated as
+select C.match as match
+from TownCandidates C
+consolidate on C.match;
+
+--output view TownConsolidated;

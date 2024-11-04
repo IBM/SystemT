@@ -1,0 +1,1336 @@
+---------------------------------------
+-- Document Preprocessing
+---------------------------------------
+include 'detag.aql';
+
+---------------------------------------
+-- UDFs Declarations
+---------------------------------------
+create function getAbbreviation(span Span)
+return String
+external_name 'ExampleUDFs.jar:com.ibm.avatar.ExampleUDFs!getAbbreviation'
+language java
+deterministic
+return null on null input;
+
+create function toUpperCase(span Span)
+return String
+external_name 'ExampleUDFs.jar:com.ibm.avatar.ExampleUDFs!toUpperCase'
+language java
+deterministic
+return null on null input;
+
+
+create function equalsIgnoreCaseNormalized(span1 Span, span2 Span)
+return Boolean
+external_name 'ExampleUDFs.jar:com.ibm.avatar.ExampleUDFs!equalsIgnoreCaseNormalized'
+language java
+deterministic
+return null on null input;
+
+----------------------------------------
+-- Basic Named Entity Annotators
+----------------------------------------
+
+--------------------------------------------------------------------------------
+-- First, include the server side version of certain dictionaries
+include 'GenericNE/serverSideSpecific/AdditionalDictsForAddress.aql';
+include 'GenericNE/serverSideSpecific/AdditionalDictsForOrganization.aql';
+--------------------------------------------------------------------------------
+
+include 'GenericNE/DictsForAddress.aql';
+include 'GenericNE/Sentence.aql';
+include 'GenericNE/MacrosForTimeDates.aql';
+include 'GenericNE/Date.aql';
+include 'GenericNE/Time.aql';
+include 'GenericNE/PhoneNumber.aql';
+include 'GenericNE/Address.aql';
+include 'GenericNE/Location-Context-Based-for-CoNLL2003.aql';
+include 'GenericNE/CityStateCountry.aql';
+include 'GenericNE/County.aql';
+include 'GenericNE/StockExchangeAndTicker.aql';
+include 'GenericNE/URL.aql';
+include 'GenericNE/EmailAddress.aql';
+include 'GenericNE/NotesEmailAddress.aql';
+include 'GenericNE/Organization-for-CoNLL2003.aql';
+include 'GenericNE/Organization-FilterDoubleNewLineTab.aql';
+include 'GenericNE/Organization-Sentence.aql';
+include 'GenericNE/Person-for-CoNLL2003.aql';
+include 'GenericNE/Person-FilterMultiNewLineTab.aql';
+include 'GenericNE/Person-Filter-for-CoNLL2003.aql';
+include 'GenericNE/Region.aql';
+include 'GenericNE/Facility-CoNLL2003.aql';
+include 'GenericNE/Address-consolidation.aql';
+include 'GenericNE/OrgWithinNotesEmail.aql';
+include 'GenericNE/Organization-FilterAddress.aql';
+include 'GenericNE/Organization-SportsTeam-for-CoNLL2003.aql';
+include 'GenericNE/Organization-consolidation-for-CoNLL2003.aql';
+include 'GenericNE/Person-consolidation-for-CoNLL2003.aql';
+include 'GenericNE/DateTime-consolidation.aql';
+include 'GenericNE/StateStrongAbbrev.aql';
+
+----------------------------------------------
+-- Consolidation:
+-- For now, we just remove annotations that are completely
+-- contained within other annotations.
+----------------------------------------------
+create view StateOrCountry as
+	(select S.match as match from StateStrongAll S)
+	union all
+	(select C.match as match from CountryCandidate C);
+
+-- only keep cities that do not have the same name as a country or state
+create view CityConsolidatedFiltered as
+	(select C.match as match from CityConsolidated C)
+	minus 
+	(select SC.match as match from StateOrCountry SC);
+	
+create view CityCountry as
+select CC.match as match, 'city' as subtype, CC.match as city, '' as county, '' as state, C.match as country, '' as continent, CombineSpans(CC.match, C.match) as reference
+from CityConsolidatedFiltered CC,
+	 CountryCandidate C
+where FollowsTok(CC.match, C.match, 0, 1)
+  and MatchesRegex(/\s*[,]?\s*/, SpanBetween(CC.match, C.match))
+  and Not(ContainsRegex(/[\n\r]/, SpanBetween(CC.match, C.match)));
+  
+create view AllCityStateCountryZipcode as
+	(select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.match as reference from AllCityStateCountry C)
+	union all
+	(select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityCountry C);
+
+create view CityStateCountryInvalid1 as
+select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference
+from   AllCityStateCountryZipcode C,
+	   PersonFinalAllWithoutDots P
+where  Contains(P.person, C.match)
+  and  Not(Equals(P.person, C.match));      
+
+create view CityStateCountryInvalid2 as
+select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference
+from   AllCityStateCountryZipcode C,
+	   FinalOrgConsolidatedWithoutDots O 
+where  Contains(O.org, C.match)
+  and  Not(Equals(O.org, C.match));   
+
+create view CityStateCountryInvalid3 as
+select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference
+from   AllCityStateCountryZipcode C,
+	   FinalOrgConsolidatedWithoutDots O 
+where  Overlaps(O.org, C.match)
+  and  Not(Contains(O.org, C.match));  
+
+create view CityStateCountryInvalid4 as
+select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference
+from   AllCityStateCountryZipcode C,
+	   FinalOrgConsolidatedWithoutDots O 
+where  Overlaps(O.org, C.match)
+  and  Not(Contains(O.org, C.match));  
+ 
+
+create view CityStateCountryInvalid as
+	(select C.match as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityStateCountryInvalid1 C)
+	union all
+	(select C.match as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityStateCountryInvalid2 C)
+	union all
+	(select C.match as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityStateCountryInvalid3 C);
+
+create view CityStateCountryValid as
+	(select C.match as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from AllCityStateCountryZipcode C)
+	minus
+	(select C.loc as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityStateCountryInvalid C);
+	
+create view CityConsolidatedInvalid as
+select C.match as match
+from   CityStateCountryInvalid CI,
+	   CityConsolidated C
+where  Equals(CI.loc, C.match);   
+	
+create view CityConsolidatedValid as
+	(select C.match as match from CityConsolidated C)
+	 minus 
+	(select C.match as match from CityConsolidatedInvalid C);
+	
+create view StateCandidateInvalid as
+select S.match as match
+from   StateCandidate S,
+	   FinalOrgConsolidatedWithoutDots O 
+where  Overlaps(O.org, S.match); 
+
+create view StateCandidateValid as
+	(select S.match as match from StateCandidate S)
+	minus
+	(select S.match as match from StateCandidateInvalid S); 
+
+create view CountryCandidateInvalid as
+select C.match as match
+from   CountryCandidate C,
+	   FinalOrgConsolidatedWithoutDots O 
+where  Overlaps(O.org, C.match); 
+
+create view CountryCandidateValid as
+	(select C.match as match from CountryCandidate C)
+	minus
+	(select C.match as match from CountryCandidateInvalid C);
+			
+create view CountyInvalid as
+select C.match as match
+from FinalOrgConsolidatedWithoutDots O,
+	 CountyConsolidated C
+where Contains(O.org, C.match);
+
+create view CountyValid as
+	(select C.match as match from CountyConsolidated C)
+	minus
+	(select C.match as match from CountyInvalid C);
+
+create view RegionInvalid1 as
+select R.match as match
+from   RegionCandidate R,
+	   PersonFinalAllWithoutDots P
+where  Contains(P.person, R.match)
+  and  Not(Equals(P.person, R.match));      
+
+create view RegionInvalid2 as
+select R.match as match
+from   RegionCandidate R,
+	   FinalOrgConsolidatedWithoutDots O 
+where  Contains(O.org, R.match)
+  and  Not(Equals(O.org, R.match));   
+
+create view RegionInvalid3 as
+select R.match as match
+from   RegionCandidate R,
+	   FinalOrgConsolidatedWithoutDots O 
+where  Overlaps(O.org, R.match)
+  and  Not(Contains(O.org, R.match));  
+ 
+create view RegionInvalid4 as
+select R.match as match
+from   RegionCandidate R,
+	   CityStateCountryValid O 
+where  Contains(O.loc, R.match);
+
+create view RegionInvalid as
+	(select R.match as match from RegionInvalid1 R)
+	union all 
+	(select R.match as match from RegionInvalid2 R)
+	union all 
+	(select R.match as match from RegionInvalid3 R)
+	union all
+	(select R.match as match from RegionInvalid4 R);
+
+create view RegionValid as
+	(select R.match as match from RegionCandidate R)
+	minus
+	(select R.match as match from RegionInvalid R);
+	
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Assign attributes for output section <<<<<<<<<<<<<<<<
+-- ===========================================================================
+include 'GenericNE/OrganizationTypes.aql';
+include 'GenericNE/AttributesAssigner.aql';
+include 'GenericNE/AttributesAssigner-Person.aql';
+
+
+-----------------------------------------------------
+-- customization for CoNLL2003
+-----------------------------------------------------
+
+--4.8 MapLocation
+--output view MapLocation;
+
+-----------------------------------------------------
+-- customization for CoNBLL2003
+-----------------------------------------------------
+create view CoNLL2003MissingLocationExact as
+	extract
+		dictionaries 'location/conll2003/conll2003missingLocation.dict'
+		with flags 'Exact'
+		on D.text
+		as match
+		from Doc D;			
+		
+create view CoNLL2003MissingLocationAllCaps as
+	extract
+		dictionaries 'location/conll2003/conll2003missingLocation.dict'
+		on D.text
+		as match
+		from Doc D
+		having MatchesRegex(/(\p{Lu}\p{M}*\W?\s*)+/, match);		
+		
+create view CoNLL2003WrongLocation as
+	extract
+		dictionaries 'location/conll2003/conll2003wrongLocation.dict'
+		on D.text
+		as match
+		from Doc D
+		having MatchesRegex(/\p{Lu}\p{M}*.+/, match);
+				
+create dictionary CountryAbbrevDict as
+(
+    'US', 'U.S.', 'U.K.', 'UK', 'United States', 'H.K.', 'HK', 'UAE'
+);
+
+create view CountryAbbrevCandidate as
+	extract
+		dictionaries 'CountryAbbrevDict'
+		with flags 'Exact'
+		on D.text   
+        as country
+		from Doc D;
+
+create dictionary CurrencySignDict as
+(
+	'$', 'dollar'
+);
+
+
+create view CurrencySign as
+	extract
+		dictionaries 'CurrencySignDict'
+		on D.text   
+        as currency
+		from Doc D;
+
+create view CountryAbbrevInvalid as
+select CA.*
+from CountryAbbrevCandidate CA,
+	 CurrencySign C
+where FollowsTok(CA.country, C.currency, 0, 0);
+
+create view CountryAbbrev as
+	(select CA.* from CountryAbbrevCandidate CA)
+	minus
+	(select CA.* from CountryAbbrevInvalid CA);
+	
+create view AdditionalCities as
+	extract 
+		dictionaries 
+			'location/cities/majorCities-iraq.dict'
+		and 'location/cities/majorCities-alghanistan.dict'	
+		and 'location/cities/majorCities-morocco.dict'	
+		and 'location/cities/majorCities-czech.dict'	
+		and 'location/cities/majorCities-netherlands.dict'	
+		and 'location/cities/majorCities-argentina.dict'
+		and 'location/cities/majorCities-palestine.dict'
+		and 'location/cities/majorCities-bosnia.dict'
+		and 'location/cities/majorCities-romania.dict'
+		and 'location/cities/majorCities-israel.dict'
+		and 'location/cities/majorCities-slovakia.dict'
+		and 'location/cities/majorCities-hungary.dict'
+		and 'location/cities/majorCities-austria.dict'
+		and 'location/cities/towns-uk.dict'
+		and 'location/cities/majorCities-japan.dict'
+		and 'location/cities/majorCities-colombia.dict'
+		on D.text
+		as city
+		from Doc D
+		having MatchesRegex(/\p{Lu}\p{M}*.+/, city);
+
+
+create view AdditionalStates as
+	extract 
+		dictionaries 
+			'location/statesOrProvinces/counties-england.dict' 
+    	and 'location/statesOrProvinces/provinces-argentina.dict'
+    	and 'location/statesOrProvinces/republics-russia.dict'
+    	and 'location/statesOrProvinces/provinces-netherlands.dict' 
+		and 'location/statesOrProvinces/departments-colombia.dict' 
+		on D.text
+		as state
+		from Doc D
+		having MatchesRegex(/\p{Lu}\p{M}*.+/, state);
+
+create view AdditionaLocationCandidate as
+	(select C.match as loc from MajorCity C where MatchesRegex(/\p{Lu}\p{M}*.+/, C.match))
+	union all
+	(select C.match as loc from USCity C where MatchesRegex(/(\p{Lu}\p{M}*\.?\s?)+/, C.match))
+	union all
+	(select C.match as loc from GermanCities C where MatchesRegex(/\p{Lu}\p{M}*.+/, C.match))
+	union all
+	(select C.match as loc from CoNLL2003MissingLocationExact C)
+	union all
+	(select C.match as loc from CoNLL2003MissingLocationAllCaps C)
+	union all
+	(select S.match as loc from StateStrongAbbrevAll S)
+	union all
+	(select C.country as loc from CountryAbbrev C)
+	union all
+	(select C.city as loc from AdditionalCities C)
+	union all
+	(select C.state as loc from AdditionalStates C)
+	union all
+	(select S.match as loc from StatesFromMajorCountries S);
+			
+create view AdditionaLocationInvalid1 as
+select R.loc as loc
+from   AdditionaLocationCandidate R,
+	   PersonFinalAllWithoutDots P
+where  Contains(P.person, R.loc)
+  and  Not(Equals(P.person, R.loc));      
+
+create view AdditionaLocationInvalid2 as
+select R.loc as loc
+from   AdditionaLocationCandidate R,
+	   FinalOrgConsolidatedWithoutDots O 
+where  Contains(O.org, R.loc)
+  and  Not(Equals(O.org, R.loc));   
+
+create view AdditionaLocationInvalid3 as
+select R.loc as loc
+from   AdditionaLocationCandidate R,
+	   FinalOrgConsolidatedWithoutDots O 
+where  Overlaps(O.org, R.loc)
+  and  Not(Contains(O.org, R.loc));
+  		
+create view AdditionaLocationInvalid as
+	(select A.* from  AdditionaLocationInvalid1 A)
+	union all
+	(select A.* from  AdditionaLocationInvalid2 A)
+	union all
+	(select A.* from  AdditionaLocationInvalid3 A)
+	union all
+	(select L.match as loc from CoNLL2003WrongLocation L);
+-----------------------------------------------------
+
+-- create individual locations based on the definition of the standard datasets (i.e. do not merge "state, country" etc)
+create view LocationAll as
+	(select A.address as loc from MapLocation A)
+	union all
+	(select C.city as loc from MapLocation C where MatchesRegex(/.*\p{Lu}\p{M}*.+/, C.city))
+	union all
+	(select C.county as loc from MapLocation C where MatchesRegex(/.+/, C.county))
+	 union all
+	(select C.stateorprovince as loc from MapLocation C)
+	union all
+	(select C.country as loc from MapLocation C)
+	 union all
+	(select C.continent as loc from MapLocation C)
+	union all
+	(select C.match as loc from RegionValid  C)
+	union all
+	(select C.facility as loc from Facility C)
+	-----------------------------------------------	
+	union all
+	(select C.loc as loc from AdditionaLocationCandidate C);
+	---------------------------------------------------
+---------------------------------------------------
+-- Customization for CoNLL2005 (same done for ACE2005)
+-- Laura: added on 11/20/2009
+	
+	create dictionary IntlBranch as(
+		'International'
+	);
+	
+	create view RegionalBranch as
+		(select C.match from CountryCandidate C)
+		union all
+		(select C.match from Continents C)
+		union all
+		(extract dictionary 'IntlBranch' with flags 'Exact' on D.text as match from Doc D);
+				
+	create view OrgWithRegionalBranch as
+	extract pattern <O.organization> (<R.match>)
+		return group 0 as organization
+		   and group 1 as wrongloc
+	from RegionalBranch R,  OrganizationFull O
+	having Not(ContainsRegex(/[\n\r\t]{2,}/, organization)); 
+---------------------------------------------------
+	
+------------------------------------------------
+-- Additional customization - remove invalid candidate 
+------------------------------------------------
+create view LocationInvalid as
+(
+select L.loc as loc 
+from LocationAll L,
+	 AdditionaLocationInvalid W
+where Equals(L.loc, W.loc)
+)
+union all
+(select O.wrongloc as loc from OrgWithRegionalBranch O);
+--------------------------------------------
+
+   create view LocationValid as
+	(select L.loc as loc from LocationAll L)
+	minus
+	(select L.loc as loc from LocationInvalid L);
+
+create view LocationConsolidated as
+select C.loc as loc
+from LocationValid C
+consolidate on C.loc
+using 'LeftToRight';
+
+create view PersonNameAsCity as 
+extract
+		dictionaries 'names/conll2003/missingPerson_nameAsCity_conll2003.dict'
+		on D.text   
+        as person
+		from Doc D
+		having MatchesRegex(/\p{Lu}\p{M}*.+/, person);
+		
+------------------------------------------------------
+-- Customization for CoNLL2003
+------------------------------------------------------
+create view FamousePeople as
+	extract
+		dictionaries 'names/famous/worldLeaders03-08.dict'
+			    and  'names/famous/uspresidents.dict'
+			    and  'names/famous/greatestAmerican.dict'
+			    and  'names/famous/famousPeople.dict'
+			    and  'names/famous/leaders_russia.dict'
+	    	    and  'names/famous/leaders_china.dict'
+	       	    and  'names/famous/leaders_india.dict'
+	       	    and  'names/famous/leaders_japan.dict'
+	       	    and  'names/famous/leaders_cambodia.dict'
+	       	    and  'names/famous/leaders_un.dict'
+	       	    and  'names/famous/leaders_iran.dict'
+	       	    and  'names/famous/fifa_100.dict'	
+	       	    and  'names/famous/irhof_inductee.dict'	
+	       	    and  'names/famous/topPlayer_male_tennis.dict'	
+	       	    and  'names/famous/topPlayer_female_tennis.dict'
+	       	    and  'names/famous/topPlayer_cyclist.dict'	
+	       	    and  'names/famous/topPlayer_golfer.dict'
+	       	    and  'names/famous/topPlayer_baseball.dict'
+	       	   	and  'names/famous/goldgloveaward_winner.dict'
+	       	    and  'names/famous/allstar_baseball_player.dict'
+	       	    and  'names/famous/topPlayer_F1.dict'
+	       	    and  'names/famous/topPlayer_cricket_pakistan.dict'
+	       	    and  'names/famous/topPlayer_cricket_india.dict'
+	       	    and  'names/famous/topPlayer_cricket_australia.dict'
+	       	    and  'names/famous/topPlayer_cricket_newzealand.dict'
+	       	    and  'names/famous/topPlayer_cricket_srilanka.dict'
+	       	    and  'names/famous/topPlayer_ski.dict'
+	       	    and  'names/famous/topPlayer_soccer_100cup.dict'
+	       	    and  'names/famous/1996olympics_medalist.dict'
+	       	    and  'names/famous/2000olympics_medalist.dict'
+	       	    and  'names/famous/2002olympics_medalist.dict'
+	       	    and  'names/famous/2002olympics_icehockey_player.dict'
+	       	    and  'names/famous/champions_usopen.dict'
+	       	    and  'names/famous/football_southAfrica.dict'
+	       	    and  'names/famous/football_argentina.dict'
+	       	    and  'names/famous/football_england.dict'
+	       	    and  'names/famous/football_italy.dict'
+	       	    and  'names/famous/islamicMovement_leaders.dict'
+		on D.text   
+        as person
+		from Doc D;
+
+create view MissingPersonCoNLL2003 as
+	extract
+		dictionaries 'names/conll2003/missingPerson_fullname_conll2003.dict'
+		on D.text   
+        as person
+		from Doc D;
+
+---------------------------------------------
+-- Union all candidates found
+---------------------------------------------
+create view StrongPersonCandidates as
+	(select P.person as person from PersonNameAsCity P)
+	--union all
+	--(select P.person as person from MissingSingleTokenPersonCoNLL2003 P)
+	union all
+	(select P.person as person from FamousePeople P)
+	union all
+    (select P.person as person from MissingPersonCoNLL2003 P)
+	;
+
+
+-- remove Person candidates identified using core rules that overlap with the strong person candidates
+create view PersonWithAttrAllValidOverlap as
+select P1.person as person 
+from PersonWithAttrAllValid P1,
+	 StrongPersonCandidates P2
+where Overlaps(P1.person, P2.person)
+ and  Not(Contains(P1.person,P2.person))
+ and  Not(Equals(P1.person, P2.person));
+
+create view PersonWithAttrAllValidNonOverlap as
+	(select P.person as person from PersonWithAttrAllValid P)
+	minus
+	(select P.person as person from PersonWithAttrAllValidOverlap P);
+
+create view StrongPersonCandidatesTokens as
+	(select R.match as person from Regex(/[^\s\.]{2,}(\s+[^\s\.]{2,})?/, StrongPersonCandidates.person) R)
+	union all
+	(select R.match as person from Regex(/[^\s\.]{2,}/, StrongPersonCandidates.person) R)
+	union all
+	(select P.person as person from PersonWithAttrAllValidNonOverlap P);
+		
+create view StrongPersonCandidatesTokensDedup as
+select GetText(PT.person) as person
+from StrongPersonCandidatesTokens PT
+group by GetText(PT.person);
+
+create view StrongPersonTokenCandidates as
+select CW.name as person
+from StrongPersonCandidatesTokensDedup SP,
+	ValidCapsPersonCandidates CW
+where equalsIgnoreCaseNormalized(SP.person, CW.name);
+--where Equals(GetText(SP.person), GetText(CW.name));
+
+output view StrongPersonTokenCandidates;
+
+create view PersonCandidatesAll as
+	(select P.person as person from PersonWithAttrAllValidNonOverlap P)
+	union all
+	(select P.person as person from StrongPersonCandidates P)
+	union all
+	(select P.person as person from StrongPersonTokenCandidates P);
+
+
+---------------------------------------------------
+create view WrongPersonCoNLL2003 as
+	extract
+		dictionaries 'names/conll2003/wrongPerson_conll2003.dict'
+		and 'names/conll2003/car_name.dict'
+		with flags 'Exact'
+		on D.text   
+        as person
+		from Doc D;
+		
+-----------------------------------------------------
+-- Identify false positives due to sport team names
+----------------------------------------------------
+-- based on pattern "Player (country) team 1:54.754"
+-- or "Player (country) team "
+create view SportsTeam1 as
+select C.person as person
+from PersonCandidatesAll C
+where MatchesRegex(/.*\)\s*,?\s*/, LeftContext(C.person, 5))
+  and MatchesRegex(/,?\s*(\d:)?\d{2}\.\d{3}.*/, RightContext(C.person, 20));
+   
+ -- based on pattern "Ferrari F40 167"
+create view SportsTeam2 as
+select C.person as person
+from PersonCandidatesAll C
+where MatchesRegex(/\s*((F(I|1)\s+GTR)|(F|LM\d{1,2}|911))[ ]+\d{3}.*/, RightContext(C.person, 20));
+
+-- based on pattern: 
+-- 1. Williams 149 points 
+-- 2. Benetton 55 
+create view SportsTeam3 as
+select C.person as person
+from PersonCandidatesAll C
+where MatchesRegex(/.*[\r\n]\d{1,2}\s*\.\s*/, LeftContext(C.person, 5))
+	and MatchesRegex(/\s+\d{2,3}\s*[\r\n].*/, RightContext(C.person, 20));
+
+
+-- car name
+create view SportsTeam4 as
+select C.person as person
+from PersonCandidatesAll C
+where MatchesRegex(/.*\s+(in|driving|drove)\s+(a|an)\s+/, LeftContext(C.person, 10))
+	and MatchesRegex(/\s*(\.|and)\s*\.*/, RightContext(C.person, 5));
+
+-- Bowling : Streak
+create view SportsTeam5 as
+select C.person as person
+from PersonCandidatesAll C
+where MatchesRegex(/.*[\r\n]\s*/, LeftContext(C.person, 5))
+  and MatchesRegex(/\s*:.*/, RightContext(C.person, 5));
+
+
+--Crewe v [Watford] 
+create view SportsTeam6 as
+select C.person as person
+from PersonCandidatesAll C
+where MatchesRegex(/.*\s+(v\.?)\s+/, LeftContext(C.person, 5))
+  and MatchesRegex(/\s*[,\r\n].*/, RightContext(C.person, 5));
+  
+-- Birmingham v Barnsley , [Bradford v] 
+create view SportsTeam7 as
+select C.person as person
+from PersonCandidatesAll C
+where MatchesRegex(/.+\s+v/, C.person);
+
+-- football result: Petra Drnovice 3 1 1 1 7 5 4
+create view SportsTeam8 as
+select C.person as person
+from PersonCandidatesAll C
+where MatchesRegex(/\s*(\d\s+){7}[^\d]*/, RightContext(C.person, 15));
+
+-- Oldham 21 8 1 12 439 656 17  (at the beginning of a sentence)
+create view SportsTeam9 as
+select C.person as person
+from PersonCandidatesAll C
+where MatchesRegex(/.*[\r\n]\s*/, LeftContext(C.person,2))
+  and MatchesRegex(/\s*\d{2}\s+(\d\s+){2}\d{2}\s+(\d{3}\s+){2}\d{2}\s*[\r\n].*/, RightContext(C.person, 25))
+  and Not(ContainsRegex(/[\r\n]/, RightContext(C.person, 15)));
+
+-- Samsung 47 5 55 .463 15
+-- [Lotte] 44 6 53 .456 15 1/2
+create view SportsTeam10 as
+select C.person as person
+from PersonCandidatesAll C
+where MatchesRegex(/.*[\r\n]\s*/, LeftContext(C.person,2))
+  and MatchesRegex(/\s*\d{2}\s+\d\s+\d{2}\s+\.\d{3}\s+\d{2}(\s+\d[\/]\d)?\s*[\r\n].*/, RightContext(C.person, 25))
+  and Not(ContainsRegex(/[\r\n]/, RightContext(C.person, 15)));
+
+-- wrong person based on context clue
+create view WrongPersonLeftClue as
+	extract
+		dictionaries 'names/conll2003/wrongPerson_clue_left.dict'
+		on D.text   
+        as clue
+		from Doc D;
+
+create view WrongPersonRighttClue as
+	extract
+		dictionaries 'names/conll2003/wrongPerson_clue_right.dict'
+		and 'organization_suffix.dict'
+		and 'location/facilities/suffix-building.dict'
+		and 'location/facilities/suffix-commericalPlace.dict'
+		and 'location/facilities/suffix-structure.dict'
+		and 'location/facilities/suffix-publicPlace.dict'
+		on D.text   
+        as clue
+		from Doc D;
+
+create view WrongPerson1 as
+select P.person as person 
+from  PersonCandidatesAll P,
+	  WrongPersonLeftClue LC
+where FollowsTok(LC.clue, P.person, 0, 1)
+  and MatchesRegex(/\s*,?\s*/,SpanBetween(LC.clue, P.person));
+  
+create view WrongPerson2 as
+select P.person as person 
+from  PersonCandidatesAll P,
+	  WrongPersonRighttClue RC
+where FollowsTok(P.person, RC.clue,  0, 1)
+  and MatchesRegex(/\s*,?\s*/,SpanBetween(P.person, RC.clue));
+  
+-- remove person contained by city/state/country
+--- create view WrongPerson3 as
+--select P.person as person 
+--from PersonCandidatesAll P,
+--     CityStateCountryValid L
+--where Contains(L.reference, P.person)
+--  and Not(Equals(L.reference, P.person));
+
+-- remove person appears in quotation mark
+create view WrongPerson4 as
+select P.person as person
+from PersonCandidatesAll P
+where MatchesRegex(/.*"\s*/, LeftContext(P.person,2))
+  and MatchesRegex(/.*"\s*/, RightContext(P.person,2));
+
+-- remove person appears in location
+create view WrongPerson5 as
+select P.person as person
+from PersonCandidatesAll P,
+     LocationConsolidated L
+where Contains(L.loc, P.person)
+  and Not(Equals(L.loc, P.person));
+  
+output view WrongPerson5;
+
+/*
+--The following rule does not work well, as the OrgAll is not very precise
+-- remove person contained by organization candidate
+create view WrongPerson4 as 
+select P.person as person
+from PersonCandidatesAll P,
+	 OrgAll O
+where Contains(O.org, P.person)
+  and Not(Equals(O.org, P.person));
+  
+output view WrongPerson4;
+*/
+
+create view WrongPerson as
+	(select P.person as person from WrongPersonCoNLL2003 P)
+	union all
+	(select P.person as person from SportsTeam1 P)
+	union all
+	(select P.person as person from SportsTeam2 P)
+	--union all
+	--(select P.person as person from SportsTeam3 P)
+	union all
+	(select P.person as person from SportsTeam4 P)
+	union all
+	(select P.person as person from SportsTeam5 P)
+	union all
+	(select P.person as person from SportsTeam6 P)
+	union all
+	(select P.person as person from SportsTeam7 P)
+	union all
+	(select P.person as person from SportsTeam8 P)
+	union all
+	(select P.person as person from SportsTeam9 P)
+	union all
+	(select P.person as person from SportsTeam10 P)
+	union all
+	(select P.pos as person from Position P)
+	union all
+	(select P.person as person from WrongPerson1 P)
+	union all
+	(select P.person as person from WrongPerson2 P)
+--	union all
+--	(select P.person as person from WrongPerson3 P)
+	union all
+	(select P.person as person from WrongPerson4 P)
+	union all
+	(select P.person as person from WrongPerson5 P);
+	
+create view WrongPersonTokenCandidates as
+select CW.name as person
+from WrongPerson WP,
+	 ValidCapsPersonCandidates CW
+where equalsIgnoreCaseNormalized(WP.person, CW.name);
+
+create view WrongPersonToken as 
+	(select P.* from WrongPersonTokenCandidates P)
+	union all
+	(select P.* from WrongPerson P);	
+----------------------------------------------------
+	
+
+create view PersonCandidatesValidAll as
+	(select P.person as person from PersonCandidatesAll P)
+	minus
+	(select P.person as person from WrongPersonToken P);
+	
+-- find person that are in a list i
+-- 1. in between two names
+create view PersonCandidateInList1 as
+select L.name as person
+from   AllPersonCandidate L,
+       PersonCandidatesValidAll P1,
+       PersonCandidatesValidAll P2
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  FollowsTok(P1.person, L.name, 1, 5)
+  and  MatchesRegex(/\s*(\(([\p{Upper}]?[\p{Lower}]*\.?\s*)+\))?\s*,\s*/, SpanBetween(P1.person, L.name))
+  and  FollowsTok(L.name, P2.person, 1, 5)
+  and  MatchesRegex(/\s*((\(([\p{Upper}]?[\p{Lower}]*\.?\s*)+\)))|((\(([\p{Upper}]?[\p{Lower}]*\.?\s*)+\))?\s*(,|and))\s*/, SpanBetween(L.name, P2.person));
+  
+-- 2. after two names 
+create view PersonCandidateInList2 as
+select L.name as person
+from   AllPersonCandidate L,
+       PersonCandidatesValidAll P1,
+       PersonCandidatesValidAll P2
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  FollowsTok(P1.person, P2.person, 1, 5)
+  and  MatchesRegex(/\s*(\(([\p{Upper}]?[\p{Lower}]*\.?\s*)+\))?\s*,\s*/, SpanBetween(P1.person, P2.person))
+  and  FollowsTok(P2.person, L.name, 1, 5)
+  and  MatchesRegex(/\s*((\(([\p{Upper}]?[\p{Lower}]*\.?\s*)+\)))|((\(([\p{Upper}]?[\p{Lower}]*\.?\s*)+\))?\s*(,|and))\s*/, SpanBetween(P2.person, L.name));
+  
+--create view PersonCandidateInList2 as
+--select CombineSpans(I.word, CP.name) as person
+--from   InitialWord I,
+--       CapsPerson CP,
+--       PersonCandidatesValidAll P1,
+--       PersonCandidatesValidAll P2
+--where  FollowsTok(I.word, CP.name, 0, 2)
+--  and  MatchesRegex(/\s+([a-zA-Z]{3,}\s+){0,2}/, SpanBetween(I.word, CP.name))
+--  and  Not(ContainsRegex(/[\r\n\t]/, SpanBetween(I.word, CP.name)))
+--  and  FollowsTok(P1.person, I.word, 1, 1)
+--  and  MatchesRegex(/\s*,\s*/, SpanBetween(P1.person, I.word))
+--  and  FollowsTok(CP.name, P2.person, 1, 1)
+--  and  MatchesRegex(/\s*(,|and)\s*/, SpanBetween(CP.name, P2.person));
+
+create view PersonCandidatesValid as
+	(select P.* from PersonCandidatesValidAll P)
+	union all
+	(select P.* from PersonCandidateInList1 P)
+	union all
+	(select P.* from PersonCandidateInList2 P);
+	
+------------------------------------------------------	
+	
+create view PersonConsolidated as
+select P.* 
+from PersonCandidatesValid P
+consolidate on P.person;
+--using 'LeftToRight';
+
+-- extend in the pattern of ,<name><CapsPerson>, or ,<CapsPerson> <name>,
+create view PersonConsolidatedExtended1 as
+select CombineSpans(P.person, C.name) as person
+from PersonConsolidated P,
+     CapsPerson C
+where FollowsTok(P.person, C.name, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(P.person, C.name)))
+  and MatchesRegex(/\s+([^a-zA-Z\s]| and ).*/,RightContext(C.name, 10))
+  and MatchesRegex(/.*[\r\n,]\s*/, LeftContext(P.person, 2));
+  
+create view PersonConsolidatedExtended2 as
+select CombineSpans(C.name, P.person) as person
+from PersonConsolidated P,
+     CapsPerson C
+where FollowsTok(C.name, P.person, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(C.name, P.person)))
+  and MatchesRegex(/\s+([^a-zA-Z]| and).*/,RightContext(P.person, 10))
+  and MatchesRegex(/.*[\r\n,]\s*/, LeftContext(C.name, 2));
+
+-- combine names next to each other together on the same line, when one of them is single token
+create view PersonConsolidatedExtended3 as
+select CombineSpans(P1.person, P2.person) as person
+from PersonConsolidated P1,
+     PersonConsolidated P2
+where FollowsTok(P1.person, P2.person, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(P1.person, P2.person)))
+  and Or(Not(ContainsRegex(/[\s]/, P1.person)),
+         Not(ContainsRegex(/[\s]/, P2.person)));
+         
+-- extend to the right Name-lowercaseWord
+create view PersonConsolidatedRightContext as
+select RightContext(P.person, 10) as lc
+from PersonConsolidated P;
+
+create view PersonConsolidatedRightContextSelect as
+extract 
+	regex/^(-[a-z]+)\s+.*/
+	   on C.lc 
+    	return group 1 as name
+from PersonConsolidatedRightContext C;
+
+create view PersonConsolidatedExtended4 as
+select CombineSpans(P.person, C.name) as person
+from PersonConsolidated P,
+     PersonConsolidatedRightContextSelect C
+where FollowsTok(P.person, C.name, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(P.person, C.name)));
+
+create view PersonConsolidatedAll as
+ 	(select P.* from PersonConsolidated P)
+ 	union all
+ 	(select P.* from PersonConsolidatedExtended1 P)
+ 	union all
+ 	(select P.* from PersonConsolidatedExtended2 P)
+ 	union all
+ 	(select P.* from PersonConsolidatedExtended3 P)
+ 	 union all
+ 	(select P.* from PersonConsolidatedExtended4 P);
+
+
+-- removed names that have a capitalized word next to it
+-- Yunyao: added to CoNLL2003
+create view PersonConsolidatedAllInvalid as
+select P.* 
+from PersonConsolidatedAll P
+where MatchesRegex(/^\s+[A-Z][a-z]+\s+.*/, RightContext(P.person, 10))
+  and Not(ContainsRegex(/[\r\n]/,  RightContext(P.person, 10)));
+         
+
+create view PersonConsolidatedAllValid as
+	(select P.* from PersonConsolidatedAll P)
+	minus
+	(select P.* from PersonConsolidatedAllInvalid P);
+
+create view PersonConsolidatedAllConsolidated as
+select P.* 
+from PersonConsolidatedAllValid P
+consolidate on P.person;
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Output section <<<<<<<<<<<<<<<<
+-- ===========================================================================		
+
+-----------------------------------------------------
+-- customization for CoNLL2003
+-----------------------------------------------------
+
+-- Customization 1: Nationality + Org Governmental = Organization
+create view NationalityAndOrgGov as
+extract 
+	pattern <N.match> <O.organization> as organization
+from Nationalities N, OrganizationFull O
+having Not(ContainsRegex(/[\n\r\t]{2,}/, organization));
+
+-- Customization 2: Location/Nationality + 'Stock/Securities Exchange' = Organization
+create dictionary Exchange as(
+	'Exchange', 'Stock Exchange', 'Securities Exchange', 'Monetary Exchange', 'Petroleum Exchange',
+	'Financial Futures Exchange', 'Securities & Derivatives Exchange', 'Metal Exchange',
+	'Commodities', 'Secondary Market', 'Securities'
+);
+
+create view StockEx as
+extract dictionary 'Exchange' 
+	on D.text as match 
+from Doc D
+having MatchesRegex(/\p{Lu}\p{M}*.+/, SubSpanTok(match,0,1));
+
+
+create view LocationStockEx as
+select CombineSpans(L.loc, S.match)  as organization
+--TODO: verify why the following does not work
+--	extract pattern <L.loc> /\p{Lu}\p{M}*([\p{Ll}\p{Lo}]\p{M}*)+/ <S.match>
+--	as organization
+--	with inline_match on Doc.text
+from LocationConsolidated L, StockEx S
+where FollowsTok(L.loc, S.match, 0, 1)
+  and MatchesRegex(/\s+(\p{Lu}\p{M}*([\p{Ll}\p{Lo}]\p{M}*)+\s+)?/, SpanBetween(L.loc, S.match))
+  and Not(ContainsRegex(/[\n\r\t]{2,}/, SpanBetween(L.loc, S.match)));
+
+create view NationalityStockEx as
+select CombineSpans(N.match, S.match)  as organization
+from Nationalities N, StockEx S
+where FollowsTok(N.match, S.match, 0, 0)
+  and Not(ContainsRegex(/[\n\r\t]{2,}/, SpanBetween(N.match, S.match)));
+
+create view StockExchangeOrg as
+( select O.organization from LocationStockEx O)
+union all
+( select O.organization from NationalityStockEx O); 
+
+
+-- Customization 3: the + NewspaperSuffix = ORG; NewspaperSuffix + article/column/editorial/reports... = ORG
+create dictionary OrgNewspaperAdditional as(
+	'Economist'
+);
+
+
+create view NewspaperAbbrv as
+(select * from OrgNewspaperSuffix)
+union all
+(extract dictionary 'OrgNewspaperAdditional' with flags 'Exact' on D.text as match from Doc D);
+
+
+create view NewspaperClue1 as
+extract pattern ('The'|'the'|'printed') (<N.match>)
+	return group 2 as organization
+	with inline_match on Doc.text
+from NewspaperAbbrv N;
+
+create view NewspaperClue2 as
+extract pattern (<N.match>) ('article'|'column'|'editorial'|'reports'|'reported'|'said'|'quoted')
+	return group 1 as organization
+	with inline_match on Doc.text
+from NewspaperAbbrv N;
+
+create view NewspaperShortForm as
+(select * from NewspaperClue1)
+union all
+( select * from NewspaperClue2);	
+
+
+
+-- Customization 4: remove final dot from match of the form "<Org> ."
+create view OrgWithSpaceDot as
+select O.organization as invalidorg, SpanBetween(LeftContext(O.organization,0), O.finaldot) as validorg
+from
+(
+	extract O.organization as organization,
+		regex /\s+\.\z/ on O.organization as finaldot
+	from OrganizationFull O
+) O;
+
+
+
+
+
+-- Customization 5: add missing entries
+create view OrgCoNLL2003Missing as
+	extract
+		dictionaries 'orgs/conll2003/conll2003MissingOrganization.dict'
+		with flags 'Exact'
+		on D.text
+		as match
+		from Doc D;	
+
+		
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Perform Value-Based Join for Organization <<<<<<<<<<<<<<<<
+-- ===========================================================================
+
+include 'GenericNE/Organization-ValueBasedJoin-for-CoNLL2003.aql';
+
+--4.13 Organization
+create view  OrganizationUnsorted as
+(select O.organization as organization, O.type as type, O.reference as reference from OrganizationFull O )
+union all
+(select O.organization as organization, '' as type, O.organization as reference from OrganizationVBJ O)
+union all
+(select O.organization as organization, '' as type, O.organization as reference from NationalityAndOrgGov O)
+union all
+(select O.organization as organization, '' as type, O.organization as reference from StockExchangeOrg O)
+union all
+(select O.organization as organization, '' as type, O.organization as reference from OrgWithRegionalBranch O)
+union all
+(select O.organization as organization, '' as type, O.organization as reference from NewspaperShortForm O)
+union all
+(select O.validorg as organization, '' as type, O.validorg as reference from OrgWithSpaceDot O)
+union all
+(select O.match as organization, '' as type, O.match as reference from OrgTerrorist O)
+union all
+(select O.match as organization, '' as type, O.match as reference from OrgIslamicMovement O)
+union all
+(select O.match as organization, '' as type, O.match as reference from OrgNewsAgency O)
+--union all
+--(select O.match as organization, '' as type, O.match as reference from OrgPoliticalParty O)
+union all
+(select O.match as organization, '' as type, O.match as reference from OrgByCountry O)
+union all
+(select O.match as organization, '' as type, O.match as reference from OrgCoNLL2003Partial O);
+--union all
+--(select O.match as organization, '' as type, O.match as reference from OrgCoNLL2003Missing O);
+
+create view OrganizationInvalid1 as
+select O.invalidorg as organization from OrgWithSpaceDot O;
+
+create dictionary OrgInvalidSportsDict as(
+    --Golf
+	'NEC', 'Firestone', 'Toshiba', 
+	--Racing
+	'Mitshubishi', 'Toyota', 'Ford', 'Subaru', 'Porsche',
+	--Soccer
+	'Lada',
+	--Athletics
+	'Regis',
+	--Baseball
+	'GM',
+	--Cycling
+	'Quigley', 'IN STYLE', 'sprint', 'SPRINT'
+);
+
+create dictionary SportsNewsClue as(
+	'WORLD SERIES OF GOLF', 'TOSHIBA CLASSIC', 
+	'FIRST DIVISION RESULTS', 'PREMIER DIVISION RESULTS', 'FIRST DIVISION SUMMARIES',
+	'RALYING', 'RALLYING', 'MOTOR RACING', 'LEADING RESULTS',
+	'BASEBALL', 'CYCLING', 'SOCCER', 'ATHLETICS'
+);
+
+create view OrganizationInvalid2 as
+select O.organization as organization 
+from Doc D, OrganizationUnsorted O
+where MatchesDict('OrgInvalidSportsDict', O.organization)
+  and ContainsDict('SportsNewsClue', D.text);
+
+
+create dictionary OrgInvalidExactDict as(
+	'Dow Jones', 'Dow', 'NASDAQ', 'Nasdaq',
+	'Commonwealth of Independent States', 'CIS', 
+	'Parliament', 'Government', 'Tuesday morning'
+);
+
+create dictionary OrgInvalidPartialDict as(
+	'Division'
+);
+
+create view OrganizationInvalid3 as
+select O.organization as organization 
+from Doc D, OrganizationUnsorted O
+where Or(MatchesDict('OrgInvalidExactDict', 'Exact', O.organization),
+         ContainsDict('OrgInvalidPartialDict', 'Exact', O.organization)
+         );
+
+
+-- Orgs completely contained within CoNLL2003MissingLocationExact
+create view OrganizationInvalid4 as
+select O.organization as organization 
+from CoNLL2003MissingLocationExact L, OrganizationUnsorted O
+where Contains(L.match, O.organization);
+  
+
+create view OrganizationInvalid as
+(select * from OrganizationInvalid1)
+union all
+(select * from OrganizationInvalid2)
+union all
+(select * from OrganizationInvalid3)
+union all
+(select * from OrganizationInvalid4);
+
+--output view OrganizationInvalid4;
+
+create view OrgUnsortedFiltered as
+(select O.organization as organization from OrganizationUnsorted O)
+minus
+(select * from OrganizationInvalid O);
+
+
+create view Organization as
+select * 
+from OrgUnsortedFiltered O 
+consolidate on O.organization
+order by O.organization;
+
+output view Organization;
+
+
+--------------------------------------------------------
+-------------------------------------------------------
+
+--create view Location
+
+create view WrongLocationClueLeft as
+	extract
+		dictionaries 'location/conll2003/wrongLocation_clue_left.dict'
+		      and    'names/conll2003/sports_related_positions.dict'
+		on D.text
+		as clue
+		from Doc D;		
+
+create view WrongLocationClueRight as
+	extract
+		dictionaries 'location/conll2003/wrongLocation_clue_right.dict'
+		and    'names/conll2003/sports_related_positions.dict'
+		on D.text
+		as clue
+		from Doc D;	
+
+create view WrongLocation1 as
+select L.match as loc
+from WrongLocationClueLeft C,
+	 CapsPlaceOnetoTwo L
+where FollowsTok(C.clue, L.match, 0, 0)
+  and Not(ContainsRegex(/\n\t/, SpanBetween(C.clue, L.match)));
+
+create view WrongLocation2 as
+select L.match as loc
+from WrongLocationClueRight C,
+         CapsPlaceOnetoTwo L
+where NotNull(C.clue)
+ and FollowsTok(L.match, C.clue, 0, 0)
+ and Not(ContainsRegex(/\r\n\t/, SpanBetween(L.match, C.clue)));
+
+-- left context match certain pattern 
+-- (e.g. U.S.-based: this can be used as dictionary as well, but got strange error)
+create view WrongLocation3_1 as
+select L.match as loc
+from CapsPlaceOnetoTwo L
+where MatchesRegex(/^-[a-z]{2,}/, RightContext(L.match, 5));
+
+-- "At [Cardiff] : [Kent] 255-3" or "[Gloucestershire] 280" 
+-- or "[NEW YORK] 74 58 .561 "
+create view WrongLocation3_2 as
+select L.match as loc
+from CapsPlaceOnetoTwo L
+where MatchesRegex(/^\s*\d{1,3}[^\d].*/, RightContext(L.match, 10));   
+
+create view WrongLocation4 as
+select L.loc as loc
+from OrganizationConsolidated O,
+     LocationConsolidated L
+where Contains(O.organization, L.loc);
+
+create view WrongLocation5 as
+select L.loc as loc
+from OrgTokenCandSportsTeams  O,
+     LocationConsolidated L
+where Contains(O.organization, L.loc);
+-- as ORG is not very precise yet
+-- and  Not(Equals(O.organization, L.loc));
+
+create view WrongLocation6 as
+select L.match as loc
+from CapsPlaceOnetoTwo L,
+     The T,
+     CapsPlace C
+where FollowsTok(T.match, L.match, 0, 0)
+  and FollowsTok(L.match, C.match, 0, 0);
+  
+create view WrongLocation7 as
+select L1.match as loc 
+from  CapsPlaceOnetoTwo L1,
+      CapsPlaceOnetoTwo L2
+where FollowsTok(L1.match, L2.match, 1, 1)
+  and MatchesRegex(/\s*at\s*/, SpanBetween(L1.match, L2.match));
+
+create view WrongLocation8 as
+select L.loc as loc
+from LocationConsolidated L
+where MatchesRegex(/^[ ]*[A-Z][a-z]+.*/, RightContext(L.loc, 5));
+  
+create view WrongLocation9 as
+select L.loc as loc
+from LocationConsolidated L
+where MatchesRegex(/.*\(\s*/, LeftContext(L.loc, 5))
+  and MatchesRegex(/^\s*\).*/, RightContext(L.loc, 5))
+  and Not(ContainsDict('country.dict', L.loc));
+
+output view WrongLocation9;
+
+create view WrongLocation as
+	(select L.loc as loc from WrongLocation1 L)
+	union all
+	(select L.loc as loc from WrongLocation2 L)
+	union all
+	(select L.loc as loc from WrongLocation3_1 L)
+ 	union all
+	(select L.loc as loc from WrongLocation3_2 L)
+	union all
+	(select L.loc as loc from WrongLocation4 L)
+	union all
+	(select L.loc as loc from WrongLocation5 L)
+	union all
+	(select L.loc as loc from WrongLocation6 L)
+	union all
+	(select L.loc as loc from WrongLocation7 L)
+	union all
+	(select L.loc as loc from WrongLocation8 L)
+	union all
+	(select L.loc as loc from WrongLocation9 L);
+	
+output view WrongLocation;
+------------------------------------------------------------
+-- Additional customization - extend with "City" and "State" 
+------------------------------------------------------------
+create view CityExtended as	
+select CombineSpans(C.loc, CR.match) as loc
+from
+	LocationConsolidated C, 
+	CityRightClue CR
+where FollowsTok(C.loc, CR.match, 0, 0);
+
+create dictionary StateSuffixDict as
+('State');
+
+create view StateSuffix as
+select D.match as match
+from   Dictionary('StateSuffixDict', 'Exact', Doc.text) D;
+
+create view StateExtended as	
+select CombineSpans(C.loc, S.match) as loc
+from
+	LocationConsolidated C, 
+	StateSuffix S
+where FollowsTok(C.loc, S.match, 0, 0)
+  and Not(ContainsRegex(/[\n\r\t]/, SpanBetween(C.loc, S.match)));
+
+create view LocationExtended as
+	(select C.loc as loc from LocationValid C)
+	union all
+	(select C.loc as loc from CityExtended C)
+	union all
+	(select C.loc as loc from StateExtended C);
+
+create view LocationExtendedValid as
+	(select C.* from LocationExtended C)
+	minus
+	(select C.* from WrongLocation C);
+
+create view LocationExtendedValidAll as
+	(select C.loc from LocationExtendedValid C)
+	union all
+	(select C.loc as loc from PatternBasedLocation C);
+
+output view LocationExtendedValidAll;
+
+create view LocationFinal as
+select C.loc as loc
+from LocationExtendedValidAll C
+consolidate on C.loc;
+
+create view Location as
+select C.loc as loc
+from LocationFinal C
+order by C.loc;
+
+output view Location;
+
+create view Person as
+select P.person as name
+--, P.first as first, P.middle as middle, P.last as last, P.reference as reference
+--from PersonWithAttrAllValid P;
+from PersonConsolidatedAllConsolidated P;
+
+--4.12 Person
+output view Person;
+

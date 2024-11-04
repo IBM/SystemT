@@ -1,0 +1,21 @@
+--create view CountryCandidate as
+--select
+--	D.match as match
+--from
+--	Dictionary('country.dict', Doc.text) D
+--where MatchesRegex(/\p{Lu}\p{M}*.+/, D.match);
+
+
+create view CountryCandidate  as
+ extract 
+ 	dictionaries 
+ 		--'country.dict' and
+ 		'loc_world_countries_en.dict' and
+ 		-- Bogdan: customize for Romanian
+ 		--'location/countries-ro.dict' and
+ 		'location/loc_world_countries_ro.dict' and
+ 		--'location/countries-ro-noD.dict'
+ 		'location/loc_world_countries_noDiac_ro.dict'
+ 	on D.text as match     
+   from Doc D
+   having MatchesRegex(/\p{Lu}\p{M}*.+/, match);

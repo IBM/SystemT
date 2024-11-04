@@ -1,0 +1,372 @@
+module genericModule;
+
+
+create function FormatDate(
+  year Text  ,month Text  ,day Text)
+return Text
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.DateUDF!formatDate'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create function isDayOne(
+  day Text)
+return Boolean
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.DateUDF!isDayOne'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create function isValidDate(
+  year Text  ,month Text  ,day Text  ,url Text  ,ruleId String)
+return Boolean
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.DateUDF!isValidDate'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create view DateAllWithLevel as
+  (select  Op.year as year,
+            Op.month as month,
+            Op.day as day,
+            Op.level as level,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__2__TempOp__0 Op)
+  union all
+  (select  Op.year as year,
+            Op.month as month,
+            Op.day as day,
+            Op.level as level,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__2__TempOp__1 Op)
+  union all
+  (select  Op.year as year,
+            Op.month as month,
+            Op.day as day,
+            Op.level as level,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__2__TempOp__2 Op)
+  union all
+  (select  Op.year as year,
+            Op.month as month,
+            Op.day as day,
+            Op.level as level,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__2__TempOp__3 Op)
+  union all
+  (select  Op.year as year,
+            Op.month as month,
+            Op.day as day,
+            Op.level as level,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__2__TempOp__4 Op)
+  union all
+  (select  Op.year as year,
+            Op.month as month,
+            Op.day as day,
+            Op.level as level,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__2__TempOp__5 Op)
+  union all
+  (select  Op.year as year,
+            Op.month as month,
+            Op.day as day,
+            Op.level as level,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__2__TempOp__6 Op)
+  union all
+  (select  Op.year as year,
+            Op.month as month,
+            Op.day as day,
+            Op.level as level,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__2__TempOp__7 Op)
+  union all
+  (select  Op.year as year,
+            Op.month as month,
+            Op.day as day,
+            Op.level as level,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__2__TempOp__8 Op)
+  union all
+  (select  Op.year as year,
+            Op.month as month,
+            Op.day as day,
+            Op.level as level,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__2__TempOp__9 Op)
+  union all
+  (select  Op.year as year,
+            Op.month as month,
+            Op.day as day,
+            Op.level as level,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__2__TempOp__10 Op)
+  union all
+  (select  Op.year as year,
+            Op.month as month,
+            Op.day as day,
+            Op.level as level,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__2__TempOp__11 Op);
+
+output view DateAllWithLevel;
+
+create view DateWithMaxLevel as
+  select  Op.year as year,
+          Op.month as month,
+          Op.day as day,
+          Op.level as level,
+          AutoID() as __auto__id
+  from  __Base__DateWithMaxLevel__Temp Op;
+
+output view DateWithMaxLevel;
+
+create view Date as
+  select  FormatDate(T.year, T.month, T.day) as date,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as DateWithMaxLevel_____sep_____T____id
+  from  DateWithMaxLevel T;
+
+output view Date;
+
+create view __Base__DateWithMaxLevel__Temp as
+  select  D.year as year,
+          D.month as month,
+          D.day as day,
+          D.level as level
+  from  DateAllWithLevel D,
+
+        (select  Max(D.level) as max
+        from  DateAllWithLevel D
+        ) M
+  where Equals(D.level, M.max);
+
+output view __Base__DateWithMaxLevel__Temp;
+
+create view __Union__2__TempOp__0 as
+  select  D.year as year,
+          D.month as month,
+          D.day as day,
+          6 as level,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as DateStampDate_____sep_____D____id,
+          -1 as Document_____sep_____P____id
+  from  DateStampDate D,
+        Document P
+  where isValidDate(D.year, D.month, D.day, P.label, 'DateStamp')
+     and Not(isDayOne(D.day));
+
+output view __Union__2__TempOp__0;
+
+create view __Union__2__TempOp__1 as
+  select  D.year as year,
+          D.month as month,
+          D.day as day,
+          0 as level,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as DateStampDate_____sep_____D____id,
+          -1 as Document_____sep_____P____id
+  from  DateStampDate D,
+        Document P
+  where isValidDate(D.year, D.month, D.day, P.label, 'DateStamp (day=1)')
+     and isDayOne(D.day);
+
+output view __Union__2__TempOp__1;
+
+create view __Union__2__TempOp__10 as
+  select  D.year as year,
+          D.month as month,
+          D.day as day,
+          1 as level,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as MetadcdateDate_____sep_____D____id,
+          -1 as Document_____sep_____P____id
+  from  MetadcdateDate D,
+        Document P
+  where isValidDate(D.year, D.month, D.day, P.label, 'Metadcdate')
+     and Not(isDayOne(D.day));
+
+output view __Union__2__TempOp__10;
+
+create view __Union__2__TempOp__11 as
+  select  D.year as year,
+          D.month as month,
+          D.day as day,
+          -5 as level,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as MetadcdateDate_____sep_____D____id,
+          -1 as Document_____sep_____P____id
+  from  MetadcdateDate D,
+        Document P
+  where isValidDate(D.year, D.month, D.day, P.label, 'Metadcdate (day=1)')
+     and isDayOne(D.day);
+
+output view __Union__2__TempOp__11;
+
+create view __Union__2__TempOp__2 as
+  select  D.year as year,
+          D.month as month,
+          D.day as day,
+          5 as level,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as MetaDescriptionDate_____sep_____D____id,
+          -1 as Document_____sep_____P____id
+  from  MetaDescriptionDate D,
+        Document P
+  where isValidDate(D.year, D.month, D.day, P.label, 'MetaDescription')
+     and Not(isDayOne(D.day));
+
+output view __Union__2__TempOp__2;
+
+create view __Union__2__TempOp__3 as
+  select  D.year as year,
+          D.month as month,
+          D.day as day,
+          -1 as level,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as MetaDescriptionDate_____sep_____D____id,
+          -1 as Document_____sep_____P____id
+  from  MetaDescriptionDate D,
+        Document P
+  where isValidDate(D.year, D.month, D.day, P.label, 'MetaDescription (day=1)')
+     and isDayOne(D.day);
+
+output view __Union__2__TempOp__3;
+
+create view __Union__2__TempOp__4 as
+  select  D.year as year,
+          D.month as month,
+          D.day as day,
+          4 as level,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as UrlDateDate_____sep_____D____id,
+          -1 as Document_____sep_____P____id
+  from  UrlDateDate D,
+        Document P
+  where isValidDate(D.year, D.month, D.day, P.label, 'UrlDate')
+     and Not(isDayOne(D.day));
+
+output view __Union__2__TempOp__4;
+
+create view __Union__2__TempOp__5 as
+  select  D.year as year,
+          D.month as month,
+          D.day as day,
+          -2 as level,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as UrlDateDate_____sep_____D____id,
+          -1 as Document_____sep_____P____id
+  from  UrlDateDate D,
+        Document P
+  where isValidDate(D.year, D.month, D.day, P.label, 'UrlDate (day=1)')
+     and isDayOne(D.day);
+
+output view __Union__2__TempOp__5;
+
+create view __Union__2__TempOp__6 as
+  select  D.year as year,
+          D.month as month,
+          D.day as day,
+          3 as level,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as MetaIBMEffectiveDate_____sep_____D____id,
+          -1 as Document_____sep_____P____id
+  from  MetaIBMEffectiveDate D,
+        Document P
+  where isValidDate(D.year, D.month, D.day, P.label, 'MetaIBMEffective')
+     and Not(isDayOne(D.day));
+
+output view __Union__2__TempOp__6;
+
+create view __Union__2__TempOp__7 as
+  select  D.year as year,
+          D.month as month,
+          D.day as day,
+          -3 as level,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as MetaIBMEffectiveDate_____sep_____D____id,
+          -1 as Document_____sep_____P____id
+  from  MetaIBMEffectiveDate D,
+        Document P
+  where isValidDate(D.year, D.month, D.day, P.label, 'MetaIBMEffective (day=1)')
+     and isDayOne(D.day);
+
+output view __Union__2__TempOp__7;
+
+create view __Union__2__TempOp__8 as
+  select  D.year as year,
+          D.month as month,
+          D.day as day,
+          2 as level,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as MetaDCDateDate_____sep_____D____id,
+          -1 as Document_____sep_____P____id
+  from  MetaDCDateDate D,
+        Document P
+  where isValidDate(D.year, D.month, D.day, P.label, 'MetaDCDate')
+     and Not(isDayOne(D.day));
+
+output view __Union__2__TempOp__8;
+
+create view __Union__2__TempOp__9 as
+  select  D.year as year,
+          D.month as month,
+          D.day as day,
+          -4 as level,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as MetaDCDateDate_____sep_____D____id,
+          -1 as Document_____sep_____P____id
+  from  MetaDCDateDate D,
+        Document P
+  where isValidDate(D.year, D.month, D.day, P.label, 'MetaDCDate (day=1)')
+     and isDayOne(D.day);
+
+output view __Union__2__TempOp__9;
+

@@ -1,0 +1,37 @@
+module createDictNoFlagMatchesDictTest;
+
+-- No explicit flag during creation
+create dictionary NamesDict 
+  from file 'names.dict';
+  
+-- Base view
+create view AllNameMentions as
+  extract dictionary 'NamesDict'
+  on D.text as name
+  from Document D;
+
+-- No explicit flag 
+create view NameMentions_NoFlag as
+  select A.name
+  from AllNameMentions A
+  where MatchesDict('NamesDict', A.name);
+
+output view NameMentions_NoFlag; 
+
+-- Exact flag
+create view NameMentions_Exact as
+  select A.name
+  from AllNameMentions A
+  where MatchesDict('NamesDict', 'Exact', A.name);
+
+output view NameMentions_Exact; 
+
+-- IgnoreCase flag
+create view NameMentions_IgnoreCase as
+  select A.name
+  from AllNameMentions A
+  where MatchesDict('NamesDict', 'IgnoreCase', A.name);
+
+output view NameMentions_IgnoreCase;
+ 
+  

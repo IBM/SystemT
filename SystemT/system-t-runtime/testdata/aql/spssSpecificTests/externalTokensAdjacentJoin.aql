@@ -1,0 +1,74 @@
+
+-- Force tokenization
+
+create dictionary DictExample as 
+( 'this','see','into');
+
+create view AllTokens as
+extract regex /.*/ on 1 token in D.text as match
+from Document D;
+
+create view LineDelimiters as 
+extract 
+	regex /(\n)/ on D.text as newline
+from Document D;
+
+create view WordsFromDict as
+extract 
+	dictionary 'DictExample' on D.text as word
+from Document D; 
+
+
+create view ExtractedWord as
+extract
+	regex /(is)|(a)/ on D.text as word
+from Document D;
+
+create view FollowedWord as
+select E.word as firstWord, E2.word as secondWord, CombineSpans(E.word, E2.word) as bothWords
+from ExtractedWord E, ExtractedWord E2
+where 
+  FollowsTok(E.word, E2.word, 0, 1);
+  --And(FollowsTok(E.word, E2.word, 0, 1));
+
+create view FollowedWord_exactly_0_toks as
+select E.word as firstWord, E2.word as secondWord, CombineSpans(E.word, E2.word) as bothWords
+from ExtractedWord E, ExtractedWord E2
+where 
+  FollowsTok(E.word, E2.word, 0, 0);
+  --And(FollowsTok(E.word, E2.word, 0, 0));
+
+create view FollowedWord_exactly_1_toks as
+select E.word as firstWord, E2.word as secondWord, CombineSpans(E.word, E2.word) as bothWords
+from ExtractedWord E, ExtractedWord E2
+where 
+  FollowsTok(E.word, E2.word, 1, 1);
+  --And(FollowsTok(E.word, E2.word, 1, 1));
+
+create view FollowedWord_exactly_2_toks as
+select E.word as firstWord, E2.word as secondWord, CombineSpans(E.word, E2.word) as bothWords
+from ExtractedWord E, ExtractedWord E2
+where 
+  FollowsTok(E.word, E2.word, 2, 2);
+  --And(FollowsTok(E.word, E2.word, 2, 2));
+
+
+-- Declare an external view that is populated at runtime
+create external view Word(match Span, xtype Text) 
+external_name 'Word'; 
+
+-- Select the contents of the external view
+create view WordAll as 
+select W.* 
+from Word W, Document D; 
+
+output view ExtractedWord;
+output view WordAll;
+output view WordsFromDict;
+output view LineDelimiters;
+output view FollowedWord;
+output view FollowedWord_exactly_0_toks;
+output view FollowedWord_exactly_1_toks;
+output view FollowedWord_exactly_2_toks;
+
+output view AllTokens;

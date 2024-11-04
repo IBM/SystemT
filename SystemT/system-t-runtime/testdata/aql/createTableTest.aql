@@ -1,0 +1,84 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test cases for associating AQL Doc comments with the right create table 
+-- statement when there are no ParseExceptions.
+--
+-------------------------------------------------------------------------------
+
+/* A comment spanning a single line. Will be ignored.*/
+
+/*
+A comment spanning
+multiple lines.
+Will be ignored.
+*/
+
+
+/** An AQL Doc comment for Test1 on a single line. Should be attached to Test1.*/
+create table Test1 (name Integer)
+as values
+(1);
+
+
+/** An AQL Doc comment for Test2 
+on two lines. Should be parsed and attaced to Test2.*/
+create table Test2 (name Integer)
+as values
+(1);
+
+
+/** 
+ * An AQL Doc comment for Test3 
+ * on multiple lines. 
+ * Should be parsed and attached to Test3.
+ */
+create table Test3 (name Integer)
+as values
+(1);
+
+
+/** 
+ * Some AQL Doc comment. Should be parsed but not attached to the next view.
+ * Instead, the next view will be paired with the following AQL doc comment. 
+ */
+/** 
+ * An AQL Doc comment for Test4. Should be parsed and attached to Test4.
+ */
+create table Test4 (name Integer)
+as values
+(1);
+
+
+/** 
+ * An AQL Doc comment for Test5. Should be parsed and attached to Test5. 
+ * The next multiline comment and single line comments will be ignored.
+ */
+/* 
+ * A multiline comment. Should be ignored.
+ */
+-- A single line comment. Should be ignored.
+create table Test5 (name Integer)
+as values
+(1);
+
+
+/** 
+ * An AQL Doc comment for Test6. Should be parsed and attached to Test6. 
+ * The next single line comment will be ignored.
+ */
+-- A single line comment. Should be ignored.
+create table Test6 (name Integer)
+as values
+(1);
+
+/** 
+ * An AQL Doc comment for Test7. Should be parsed and attached to Test7. 
+ * The next multiline comment will be ignored.
+ */
+/* 
+ * A multiline comment. Should be ignored.
+ */
+create table Test7 (name Integer)
+as values
+(1);
+

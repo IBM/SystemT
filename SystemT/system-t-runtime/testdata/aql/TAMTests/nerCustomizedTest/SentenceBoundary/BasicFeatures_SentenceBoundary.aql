@@ -1,0 +1,41 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module SentenceBoundary; 
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText;
+
+require document with columns
+text Text;
+
+-- Line with all CAPS words - subsumed by HeadlineMixedCaps annotator
+
+create view HeadlineAllCaps as
+extract regex /^([^(\p{Ll}\p{M}*)\n\r]+)([\n\r]+)/ 
+	with flags 'MULTILINE'
+	on D.text
+	return group 1 as headline
+	   and group 2 as boundary
+from DocumentText D
+having Not(MatchesRegex(/\s+/, headline));
+
+create view CapsToken as 
+extract regex  
+	-- Individual unicodes used, for Java 5 compatibility
+	/[&.?!:;,\|\/\p{Pd}\u0093\u0094\u2018\u2019\u0022\u0027\u00AB\u00BB\u201A\u201B\u201C\u201D\u201E\u301D\u301E\u301F(\p{Lu}\p{M}*)\d].*/
+	on 1 token in D.text as match
+from DocumentText D;
+

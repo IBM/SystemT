@@ -1,0 +1,273 @@
+module genericModule;
+
+
+create view URLAllCand as
+  select  NMD.dedupString as url3,
+          NMD.moreNormalizedURL as url2,
+          NMD.normalizedURL as url1,
+          U.url as url0,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          NMD.__auto__id as NormMoreNormDedup_____sep_____NMD____id,
+          U.__auto__id as PageMainUrls_____sep_____U____id
+  from  NormMoreNormDedup NMD,
+        PageMainUrls U;
+
+output view URLAllCand;
+
+create view URLSpecialDedup as
+  select  U.url3 as url3,
+          U.url2 as url2,
+          U.url1 as url1,
+          U.url0 as url0,
+          D.id as specialDedup,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URLAllCand_____sep_____U____id,
+          D.__auto__id as URLDedupSpecial_____sep_____D____id
+  from  URLAllCand U,
+        URLDedupSpecial D;
+
+output view URLSpecialDedup;
+
+create view URLDefaultDedup as
+  select  Op.url3 as url3,
+          Op.url2 as url2,
+          Op.url1 as url1,
+          Op.url0 as url0,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__449__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__449__TempOp__1 Op,
+        __Minus__449__Temp __t
+  where Equals(Op.url3, __t.url3)
+     and Equals(Op.url2, __t.url2)
+     and Equals(Op.url1, __t.url1)
+     and Equals(Op.url0, __t.url0);
+
+output view URLDefaultDedup;
+
+create view URLAll as
+  (select  Op.url3 as url3,
+            Op.url2 as url2,
+            Op.url1 as url1,
+            Op.url0 as url0,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__450__TempOp__0 Op)
+  union all
+  (select  Op.url3 as url3,
+            Op.url2 as url2,
+            Op.url1 as url1,
+            Op.url0 as url0,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__450__TempOp__1 Op);
+
+output view URLAll;
+
+create view URLHashAll as
+  select  GenerateHashCode(GetString(U.url3)) as url3_hash,
+          GenerateHashCode(GetString(U.url2)) as url2_hash,
+          GenerateHashCode(GetString(U.url1)) as url1_hash,
+          GenerateHashCode(GetString(U.url0)) as url0_hash,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URLAll_____sep_____U____id
+  from  URLAll U;
+
+output view URLHashAll;
+
+create view URLHashNotNormalized as
+  select  U.url3_hash as url3_hash,
+          U.url2_hash as url2_hash,
+          U.url1_hash as url1_hash,
+          U.url0_hash as url0_hash,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URLHashAll_____sep_____U____id
+  from  URLHashAll U
+  where Equals(U.url1_hash, 0);
+
+output view URLHashNotNormalized;
+
+create view URLHashNormalized as
+  select  Op.url3_hash as url3_hash,
+          Op.url2_hash as url2_hash,
+          Op.url1_hash as url1_hash,
+          Op.url0_hash as url0_hash,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__451__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__451__TempOp__1 Op,
+        __Minus__451__Temp __t
+  where Equals(Op.url3_hash, __t.url3_hash)
+     and Equals(Op.url2_hash, __t.url2_hash)
+     and Equals(Op.url1_hash, __t.url1_hash)
+     and Equals(Op.url0_hash, __t.url0_hash);
+
+output view URLHashNormalized;
+
+create view URLHash as
+  (select  Op.url3_hash as url3_hash,
+            Op.url2_hash as url2_hash,
+            Op.url1_hash as url1_hash,
+            Op.url0_hash as url0_hash,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__452__TempOp__0 Op)
+  union all
+  (select  Op.url3_hash as url3_hash,
+            Op.url2_hash as url2_hash,
+            Op.url1_hash as url1_hash,
+            Op.url0_hash as url0_hash,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__452__TempOp__1 Op);
+
+output view URLHash;
+
+create view __Minus__449__Temp as
+  select  __t.url3 as url3,
+          __t.url2 as url2,
+          __t.url1 as url1,
+          __t.url0 as url0
+  from  
+    ((select  Op.url3 as url3,
+              Op.url2 as url2,
+              Op.url1 as url1,
+              Op.url0 as url0
+      from  __Minus__449__TempOp__1 Op)
+    minus
+    (select  Op.url3 as url3,
+              Op.url2 as url2,
+              Op.url1 as url1,
+              Op.url0 as url0
+      from  __Minus__449__TempOp__2 Op)
+    ) __t
+  group by __t.url3, __t.url2, __t.url1, __t.url0;
+
+output view __Minus__449__Temp;
+
+create view __Minus__449__TempOp__1 as
+  select  U.url3 as url3,
+          U.url2 as url2,
+          U.url1 as url1,
+          U.url0 as url0,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URLAllCand_____sep_____U____id
+  from  URLAllCand U;
+
+output view __Minus__449__TempOp__1;
+
+create view __Minus__449__TempOp__2 as
+  select  U.url3 as url3,
+          U.url2 as url2,
+          U.url1 as url1,
+          U.url0 as url0,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URLSpecialDedup_____sep_____U____id
+  from  URLSpecialDedup U;
+
+output view __Minus__449__TempOp__2;
+
+create view __Minus__451__Temp as
+  select  __t.url3_hash as url3_hash,
+          __t.url2_hash as url2_hash,
+          __t.url1_hash as url1_hash,
+          __t.url0_hash as url0_hash
+  from  
+    ((select  Op.url3_hash as url3_hash,
+              Op.url2_hash as url2_hash,
+              Op.url1_hash as url1_hash,
+              Op.url0_hash as url0_hash
+      from  __Minus__451__TempOp__1 Op)
+    minus
+    (select  Op.url3_hash as url3_hash,
+              Op.url2_hash as url2_hash,
+              Op.url1_hash as url1_hash,
+              Op.url0_hash as url0_hash
+      from  __Minus__451__TempOp__2 Op)
+    ) __t
+  group by __t.url3_hash, __t.url2_hash, __t.url1_hash, __t.url0_hash;
+
+output view __Minus__451__Temp;
+
+create view __Minus__451__TempOp__1 as
+  select  URLHashAll.url3_hash as url3_hash,
+          URLHashAll.url2_hash as url2_hash,
+          URLHashAll.url1_hash as url1_hash,
+          URLHashAll.url0_hash as url0_hash,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          URLHashAll.__auto__id as URLHashAll_____sep_____URLHashAll____id
+  from  URLHashAll URLHashAll;
+
+output view __Minus__451__TempOp__1;
+
+create view __Minus__451__TempOp__2 as
+  select  URLHashNotNormalized.url3_hash as url3_hash,
+          URLHashNotNormalized.url2_hash as url2_hash,
+          URLHashNotNormalized.url1_hash as url1_hash,
+          URLHashNotNormalized.url0_hash as url0_hash,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          URLHashNotNormalized.__auto__id as URLHashNotNormalized_____sep_____URLHashNotNormalized____id
+  from  URLHashNotNormalized URLHashNotNormalized;
+
+output view __Minus__451__TempOp__2;
+
+create view __Union__450__TempOp__0 as
+  select  GetString(U.specialDedup) as url3,
+          GetString(U.url2) as url2,
+          GetString(U.url1) as url1,
+          GetString(U.url0) as url0,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URLSpecialDedup_____sep_____U____id
+  from  URLSpecialDedup U;
+
+output view __Union__450__TempOp__0;
+
+create view __Union__450__TempOp__1 as
+  select  GetString(U.url3) as url3,
+          GetString(U.url2) as url2,
+          GetString(U.url1) as url1,
+          GetString(U.url0) as url0,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URLDefaultDedup_____sep_____U____id
+  from  URLDefaultDedup U;
+
+output view __Union__450__TempOp__1;
+
+create view __Union__452__TempOp__0 as
+  select  U.url3_hash as url3_hash,
+          U.url2_hash as url2_hash,
+          U.url1_hash as url1_hash,
+          U.url0_hash as url0_hash,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URLHashNormalized_____sep_____U____id
+  from  URLHashNormalized U;
+
+output view __Union__452__TempOp__0;
+
+create view __Union__452__TempOp__1 as
+  select  U.url0_hash as url3_hash,
+          U.url0_hash as url2_hash,
+          U.url0_hash as url1_hash,
+          U.url0_hash as url0_hash,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URLHashNotNormalized_____sep_____U____id
+  from  URLHashNotNormalized U;
+
+output view __Union__452__TempOp__1;
+

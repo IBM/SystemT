@@ -1,0 +1,99 @@
+module URL;
+
+
+create view UrlWithAttr as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    U.__auto__id as URLAll_____sep_____U____id,
+    regex /^((\p{L}\p{M}*)+):.+$/
+    with flags 'DOTALL'
+    on U.annot
+    return group 0 as reference
+       and group 1 as protocol
+  from URLAll U;
+
+output view UrlWithAttr;
+
+create view UrlWithoutAttr as
+  select  Op.reference as reference,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__57__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__57__TempOp__1 Op,
+        __Minus__57__Temp __t
+  where Equals(Op.reference, __t.reference);
+
+output view UrlWithoutAttr;
+
+create view UrlWithAttrAll as
+  (select  Op.url as url,
+            Op.protocol as protocol,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__58__TempOp__0 Op)
+  union all
+  (select  Op.url as url,
+            Op.protocol as protocol,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__58__TempOp__1 Op);
+
+output view UrlWithAttrAll;
+
+create view __Minus__57__Temp as
+  select  __t.reference as reference
+  from  
+    ((select  Op.reference as reference
+      from  __Minus__57__TempOp__1 Op)
+    minus
+    (select  Op.reference as reference
+      from  __Minus__57__TempOp__2 Op)
+    ) __t
+  group by __t.reference;
+
+output view __Minus__57__Temp;
+
+create view __Minus__57__TempOp__1 as
+  select  U.annot as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URLAll_____sep_____U____id
+  from  URLAll U;
+
+output view __Minus__57__TempOp__1;
+
+create view __Minus__57__TempOp__2 as
+  select  U.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as UrlWithAttr_____sep_____U____id
+  from  UrlWithAttr U;
+
+output view __Minus__57__TempOp__2;
+
+create view __Union__58__TempOp__0 as
+  select  U.reference as url,
+          U.protocol as protocol,
+          U.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as UrlWithAttr_____sep_____U____id
+  from  UrlWithAttr U;
+
+output view __Union__58__TempOp__0;
+
+create view __Union__58__TempOp__1 as
+  select  U.reference as url,
+          '' as protocol,
+          U.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as UrlWithoutAttr_____sep_____U____id
+  from  UrlWithoutAttr U;
+
+output view __Union__58__TempOp__1;
+

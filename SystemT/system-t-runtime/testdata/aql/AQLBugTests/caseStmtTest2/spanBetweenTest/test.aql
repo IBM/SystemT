@@ -1,0 +1,31 @@
+ module spanBetweenTest;
+
+require document with columns text Text;
+
+ create view AAA as
+  extract
+    regex /aaa/ on d.text as match
+  from Document d
+;
+
+create view BBB as
+  extract
+    regex /bbb/ on d.text as match
+  from Document d
+;
+
+create view Test as
+  select a.match as match1, b.match as match2,
+      -- Span b occurs before Span a
+    case when GreaterThan(GetBegin(a.match), GetBegin(b.match))
+      then SpanBetween(b.match, a.match)
+      -- Span a occurs before Span b
+      else SpanBetween(a.match, b.match)
+      as match
+  from
+    AAA a,
+    BBB b
+;
+
+output view Test; 
+export view Test;

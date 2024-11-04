@@ -1,0 +1,151 @@
+-------------------------------------------------------------------------------
+-- Date.aql  
+--
+--
+-- Depends on DateFeatures.aql
+--
+-- Based on Huiayu's original Java implementation.
+-------------------------------------------------------------------------------
+
+include 'localAnalysis/DateFeatures.aql';
+
+
+--UDF for formating date string
+create function FormatDate(year Text, month Text, day Text)
+return String
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.DateUDF!formatDate'
+language java
+deterministic
+return null on null input;
+
+
+--UDF checking whether day = 1
+create function isDayOne(day Text)
+return Boolean
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.DateUDF!isDayOne'
+language java
+deterministic
+return null on null input;
+
+
+--UDF checking date validity 
+--Include document URL and rule id for logging invalid dates to the console.
+create function isValidDate(year Text, month Text, day Text, url Text, ruleId String)
+return Boolean
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.DateUDF!isValidDate'
+language java
+deterministic
+return null on null input;
+
+---------------------------------------------------------------------------------
+-- Priority rules.  Starting with A1, A2, A3, ...
+-- Calcualte B1=A1, C1=B1, B2=A2-C1, C2=C1+B2, B3=A3-C2, C3=C2+B3.
+
+/*
+-- Date0 = DateStampDate > MetaDescriptionDate
+create view Date0_ as
+select R2.*
+from MetaDescriptionDate R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from DateStampDate) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Date0 as (select * from DateStampDate) union all (select * from Date0_);
+
+
+-- Date1 = DateStampDate > MetaDescriptionDate > UrlDateDate 
+create view Date1_ as
+select R2.*
+from UrlDateDate R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Date0) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Date1 as (select * from Date0) union all (select * from Date1_);
+
+
+-- Date2 = DateStampDate > MetaDescriptionDate > UrlDateDate > MetaIBMEffectiveDate 
+create view Date2_ as
+select R2.*
+from MetaIBMEffectiveDate R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Date1) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Date2 as (select * from Date1) union all (select * from Date2_);
+
+
+-- Date3 = DateStampDate > MetaDescriptionDate > UrlDateDate > MetaIBMEffectiveDate > MetaDCDateDate 
+create view Date3_ as
+select R2.*
+from MetaDCDateDate R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Date2) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Date3 as (select * from Date2) union all (select * from Date3_);
+
+
+-- Date4 = DateStampDate > MetaDescriptionDate > UrlDateDate > MetaIBMEffectiveDate > MetaDCDateDate > MetadcdateDate
+create view Date4_ as
+select R2.*
+from MetadcdateDate R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Date3) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Date4 as (select * from Date3) union all (select * from Date4_);
+*/
+
+-- Laura 7/29: Implemented priority rules in a different way because
+-- in the Java flow the priority of a date with day = 1 is downgraded below all dates with day > 1 
+-- and this was difficult to express in AQL using the priority rule format commented out above
+-- The priority is: 
+-- 1. High priority: If day > 1, DateStampDate > MetaDescriptionDate > UrlDateDate > MetaIBMEffectiveDate > MetaDCDateDate > MetadcdateDate
+-- 2. Lower priority than any of the above: if day == 1, DateStampDate > MetaDescriptionDate > UrlDateDate > MetaIBMEffectiveDate > MetaDCDateDate > MetadcdateDate
+-- ALso, note that we check date validity, as in the Java flow.
+create view DateAllWithLevel as
+(select D.*, 6 as level from DateStampDate D, Document P where isValidDate(D.year, D.month, D.day, P.label, 'DateStamp') and Not(isDayOne(D.day)))
+union all
+(select D.*, 0 as level from DateStampDate D, Document P where isValidDate(D.year, D.month, D.day, P.label, 'DateStamp (day=1)') and isDayOne(D.day))
+union all
+(select D.*, 5 as level from MetaDescriptionDate D, Document P where isValidDate(D.year, D.month, D.day, P.label, 'MetaDescription') and Not(isDayOne(D.day)))
+union all
+(select D.*, -1 as level from MetaDescriptionDate D, Document P where isValidDate(D.year, D.month, D.day, P.label, 'MetaDescription (day=1)') and isDayOne(D.day))
+union all
+(select D.*, 4 as level from UrlDateDate D, Document P where isValidDate(D.year, D.month, D.day, P.label, 'UrlDate') and Not(isDayOne(D.day)))
+union all
+(select D.*, -2 as level from UrlDateDate D, Document P where isValidDate(D.year, D.month, D.day, P.label, 'UrlDate (day=1)') and isDayOne(D.day))
+union all
+(select D.*, 3 as level from MetaIBMEffectiveDate D, Document P where isValidDate(D.year, D.month, D.day, P.label, 'MetaIBMEffective') and Not(isDayOne(D.day)))
+union all
+(select D.*, -3 as level from MetaIBMEffectiveDate D, Document P where isValidDate(D.year, D.month, D.day, P.label, 'MetaIBMEffective (day=1)') and isDayOne(D.day))
+union all
+(select D.*, 2 as level from MetaDCDateDate D, Document P where isValidDate(D.year, D.month, D.day, P.label, 'MetaDCDate') and Not(isDayOne(D.day)))
+union all
+(select D.*, -4 as level from MetaDCDateDate D, Document P where isValidDate(D.year, D.month, D.day, P.label, 'MetaDCDate (day=1)') and isDayOne(D.day))
+union all
+(select D.*, 1 as level from MetadcdateDate D, Document P where isValidDate(D.year, D.month, D.day, P.label, 'Metadcdate') and Not(isDayOne(D.day)))
+union all
+(select D.*, -5 as level from MetadcdateDate D, Document P where isValidDate(D.year, D.month, D.day, P.label, 'Metadcdate (day=1)') and isDayOne(D.day));
+
+create view DateWithMaxLevel as
+select D.*
+from DateAllWithLevel D, (select Max(D.level) as max from DateAllWithLevel D) M
+where Equals(D.level, M.max);
+
+create view Date as 
+select FormatDate(T.year, T.month, T.day) as date
+from DateWithMaxLevel T;
+
+

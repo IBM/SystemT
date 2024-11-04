@@ -1,0 +1,103 @@
+module Region;
+
+import view StatesFromMajorCountries from module CommonFeatures as StatesFromMajorCountries;
+import view CityAll from module CommonFeatures as CityAll;
+import view CapsPlace from module Linguistics as CapsPlace;
+import view CountryCandidateConsolidated from module Country as CountryCandidateConsolidated;
+
+
+-- 1. Identify major international regions such as Korean Peninsula 
+-- 2. Identify major general regions such as New England (excluding City, State, Country)
+-- 3. Identify landmarks such as Wall Street and Time Square
+
+
+-- Direction
+
+create view Direction as
+select D.match as match
+from   DirectionCandidate D
+consolidate on D.match;
+
+-- International Region
+
+create view InternationalRegionExtended as
+select CombineSpans(D.match, R.match) as match
+from Direction D,
+	 InternationalRegionCandidate R
+where FollowsTok(D.match, R.match, 0, 0);
+
+create view InternationalRegionAll as
+	(select R.match as match from InternationalRegionCandidate R)
+	union all
+	(select R.match as match from InternationalRegionExtended R);
+	
+create view InternationalRegion as
+select R.match as match
+from InternationalRegionAll R
+consolidate on R.match
+using 'LeftToRight';
+
+-- direction + country is a region
+
+-- Domestic Region
+
+create view DomesticRegion2 as
+select CombineSpans(D.match, C.match) as match
+from   Direction D, 
+	   CountryCandidateConsolidated C
+where  FollowsTok(D.match, C.match, 0, 0) 
+   and Not(ContainsRegex(/[\n\r]/, SpanBetween(D.match, C.match)))
+   -- Avoid matches such as "North Korea, South"
+   and Not(ContainsRegex(/[,]/, C.match));
+   
+-- direction + state/province is a region
+create view DomesticRegion3 as
+select CombineSpans(D.match, S.match) as match
+from   Direction D,
+       StatesFromMajorCountries S
+where  FollowsTok(D.match, S.match, 0, 0)
+and Not(ContainsRegex(/[\n\r]/, SpanBetween(D.match, S.match)));
+
+-- direction + city is a region 
+create view DomesticRegion4 as
+select CombineSpans(D.match, C.match) as match
+from   Direction D,
+	   CityAll C
+where  FollowsTok(D.match, C.match, 0, 0)
+and Not(ContainsRegex(/[\n\r]/, SpanBetween(D.match, C.match)));
+
+create view DomesticRegionAll as
+	(select D.match as match from DomesticRegion1 D)
+	union all
+	(select D.match as match from DomesticRegion2 D)
+	union all
+	(select D.match as match from DomesticRegion3 D)
+	union all
+	(select D.match as match from DomesticRegion4 D);
+	
+create view DomesticRegion as
+select D.match as match
+from   DomesticRegionAll D
+consolidate on D.match;
+
+create view RegionWithClue as
+select C.match as match
+from CapsPlace C,
+     RegionClue R
+where FollowsTok(C.match, R.match, 0, 0)
+  --and Not(MatchesRegex(/\p{Lu}.*/, RightContextTok(C.match, 1)));
+  and Not(MatchesRegex(/\p{Lu}\p{M}*.*/, RightContextTok(C.match, 1)));
+
+create view RegionCandidateAll as
+	(select R.match as match from InternationalRegion R)
+	union all
+	(select R.match as match from DomesticRegion R)
+	union all
+	(select L.match as match from Landmark L)
+	union all
+	(select R.match as match from RegionWithClue R);
+	
+create view RegionCandidate as
+select R.match as match
+from   RegionCandidateAll R
+consolidate on R.match;

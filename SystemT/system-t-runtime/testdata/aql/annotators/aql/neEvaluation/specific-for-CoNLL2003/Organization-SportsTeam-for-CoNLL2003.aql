@@ -1,0 +1,1703 @@
+--Find blocks of 1 to 5 caps words
+create view CapsWordOnetoFive as
+  select R.block as match
+  from BlockTok(0,1,5,AnyCapsOrg.match) R;
+  
+----------------------------------------------------------
+-- DICTIONARY MATCHING 
+----------------------------------------------------------
+/*
+american_football_clubs_with_location.txt
+american_football_clubs_without_location.txt
+baseball_clubs_with_location.txt
+baseball_clubs_without_location.txt
+basketball_clubs_with_location.txt
+basketball_clubs_without_location.txt
+*/
+
+create dictionary SportClue as(
+	'SOCCER', 'CRICKET', 'RUGBY', 'BASEBALL', 'BASKETBALL', 'CYCLING', 'RALLYING', 'RACING', 
+	'FOOTBALL', 'RACING', 'TENNIS', 'GOLF', 'AUSTRALIAN RULES',
+	'MOTORCYCLING', 'MOTOCROSS', 'MOTOR', 'VOLLEYBALL', 'NFL', 'NHL', 'NBA', 'ICE HOCKEY', 'BOXING', 
+	'BADMINTON', 'ATHLETICS', 'ROWING', 'SWIMMING',
+	'SPORT', 'OLYMPICS'
+);
+
+
+create view SportDoc as
+select D.text as text, SubSpanTok(D.text, 0, 2) as clue
+from Doc D
+where ContainsDict('SportClue', SubSpanTok(D.text, 0, 2));
+
+
+create view NonSportDoc as
+(select D.text as text from Doc D)
+minus
+(select D.text as text from SportDoc D);
+
+
+create dictionary SoccerClue as(
+	'SOCCER'
+);
+
+create view SoccerDoc as
+select D.text as text
+from Doc D
+where MatchesDict('SoccerClue', SubSpanTok(D.text, 0,1));
+
+
+create dictionary CricketClue as(
+	'CRICKET'
+);
+
+create view CricketDoc as
+select D.text as text
+from Doc D
+where MatchesDict('CricketClue', SubSpanTok(D.text, 0,1));
+
+create dictionary RugbyClue as(
+	'RUGBY'
+);
+
+create view RugbyDoc as
+select D.text as text
+from Doc D
+where MatchesDict('RugbyClue', SubSpanTok(D.text, 0,1));
+
+create dictionary BaseballClue as(
+	'BASEBALL'
+);
+
+create view BaseballDoc as
+select D.text as text
+from Doc D
+where MatchesDict('BaseballClue', SubSpanTok(D.text, 0,1));
+
+
+create dictionary BasketballClue as(
+	'NBA', 'BASKETBALL'
+);
+
+create view BasketballDoc as
+select D.text as text
+from Doc D
+where MatchesDict('BasketballClue', SubSpanTok(D.text, 0,1));
+
+
+create dictionary HockeyClue as(
+	'NHL', 'ICE HOCKEY'
+);
+
+create view HockeyDoc as
+select D.text as text
+from Doc D
+where ContainsDict('HockeyClue', SubSpanTok(D.text, 0,2));
+
+
+create dictionary AmericanFootballClue as(
+	'NFL', 'FOOTBALL'
+);
+
+create view AmericanFootballDoc as
+select D.text as text
+from Doc D
+where MatchesDict('AmericanFootballClue', SubSpanTok(D.text, 0,1));
+
+
+create dictionary WorldSportsCompetitionDict as(
+	'NATIONS CUP', 'WORLD CUP'
+);
+
+
+create dictionary RallyingClue as(
+	'RALLYING'
+);
+
+create view RallyingDoc as
+select D.text as text
+from Doc D
+where MatchesDict('RallyingClue', SubSpanTok(D.text, 0,1));
+
+
+create dictionary MotorRacingClue as(
+	'MOTOR RACING'
+);
+
+create view MotorRacingDoc as
+select D.text as text
+from Doc D
+where MatchesDict('MotorRacingClue', SubSpanTok(D.text, 0,2));
+
+
+create view SoccerTeamStrong as
+extract 
+	    dictionary 'orgs/conll2003/sports/uefa_football_club_list_fullnames.dict'
+	           and 'orgs/conll2003/sports/uefa_football_club_list_shortnames_strong.dict'
+               and 'orgs/conll2003/sports/mls_football_club_with_location.dict'       
+        on D.text as org
+from Doc D
+having MatchesRegex(/[\p{Lu}\p{M}*\d].+/, org)
+consolidate on org;
+
+create view SoccerTeamWeak as
+extract 
+	    dictionary 'orgs/conll2003/sports/uefa_football_club_list_shortnames_weak.dict'
+               and 'orgs/conll2003/sports/conll2003_football_clubs_correct.dict'
+               and 'orgs/conll2003/sports/international_football_club.dict'
+               and 'orgs/conll2003/sports/mls_football_club_without_location.dict'
+               and 'orgs/conll2003/sports/mls_football_club_with_location_only.dict'        
+        on D.text as org
+from SoccerDoc D
+having MatchesRegex(/[\p{Lu}\p{M}*\d].+/, org)
+consolidate on org;
+
+
+create view SoccerTeamFromDict as
+(select * from SoccerTeamStrong)
+union all
+(select * from SoccerTeamWeak);
+
+create view SoccerClubClue as
+extract dictionary 'orgs/conll2003/sports/uefa_football_club_clue.dict'
+	with flags 'Exact'
+	on D.text as match
+from Doc D;
+
+create dictionary SoccerTeamNegClueDict as(
+	'based', 'run', 'champions', 'leaders', 'rivals', 'winners', 'part-timers', 
+	'newcomers', 'holders', 'hopefuls', 'qualifiers', 'runners-up', 'pace-setters',
+	'finalists', 'standings',
+	'also'
+);
+
+
+create view SoccerTeamWithPrefix as
+select CombineSpans(C.match, O.match) as org, O.match as shortname
+from SoccerClubClue C, CapsWordOnetoFive O
+where FollowsTok(C.match, O.match, 0, 0);
+
+create view SoccerTeamWithSuffix as
+select CombineSpans(O.match, C.match) as org, O.match as shortname
+from SoccerClubClue C, CapsWordOnetoFive O
+where FollowsTok(O.match, C.match, 0, 0);
+
+create view SoccerTeamFromClue as
+select O.org as org, O.shortname as shortname
+from
+(
+	(select * from SoccerTeamWithPrefix)
+	union all
+	(select * from SoccerTeamWithSuffix)
+) O
+where Not(ContainsRegex(/[\n\r]/, O.org))
+  and Not(ContainsDict('SoccerTeamNegClueDict', O.org))
+  and Not(ContainsDict('pos/preps-list', O.org))
+  and Not(ContainsDict('pos/conjs-list', O.org))
+  --require at least one lower case lettr, to avoid matches in report title
+  and ContainsRegex(/\p{Ll}\p{M}*/, O.org)
+consolidate on O.org;
+
+--output view SoccerClubClue;
+--output view SoccerTeamWithPrefix;
+--output view SoccerTeamWithSuffix;
+--output view SoccerTeamFromClue;
+
+create view SoccerTeam as
+(select * from SoccerTeamFromDict)
+union all
+(select O.org from SoccerTeamFromClue O);
+
+
+
+create view CricketTeam as
+extract 
+	    dictionary 'orgs/conll2003/sports/cricket_england.dict'
+        on D.text as org
+from CricketDoc D
+consolidate on org;
+
+
+create view RugbyTeam as
+extract 
+	    dictionary 'orgs/conll2003/sports/rugby_international.dict'
+        on D.text as org
+from RugbyDoc D
+having MatchesRegex(/\p{Lu}\p{M}*.+/, org)
+consolidate on org;
+
+
+
+create view BaseballTeamStrong as
+extract 
+	    dictionary 'orgs/conll2003/sports/baseball_clubs_with_location.dict'
+        on D.text as org
+from Doc D
+consolidate on org;
+
+create view BaseballTeamWeak as
+extract 
+	    dictionary 'orgs/conll2003/sports/baseball_clubs_without_location.dict'
+               and 'orgs/conll2003/sports/baseball_clubs_with_location_only.dict'
+        on D.text as org
+from BaseballDoc D
+consolidate on org;
+
+
+create view BaseballTeam as
+(select * from BaseballTeamStrong)
+union all
+(select * from BaseballTeamWeak);
+
+
+
+create view BasketballTeamStrong as
+extract 
+	    dictionary 'orgs/conll2003/sports/basketball_clubs_with_location.dict'
+        on D.text as org
+from Doc D
+consolidate on org;
+
+
+create view BasketballTeamWeak as
+extract 
+	    dictionary 'orgs/conll2003/sports/basketball_clubs_without_location.dict'
+	           and  'orgs/conll2003/sports/basketball_clubs_with_location_only.dict'
+               and 'orgs/conll2003/sports/basketball_european.dict'
+        on D.text as org
+from BasketballDoc D
+consolidate on org;
+
+
+create view BasketballTeam as
+(select * from BasketballTeamStrong)
+union all
+(select * from BasketballTeamWeak);
+
+
+create view HockeyTeamStrong as
+extract 
+	    dictionary 'orgs/conll2003/sports/hockey_clubs_with_location.dict'
+        on D.text as org
+from Doc D
+consolidate on org;
+
+create view HockeyTeamWeak as
+extract 
+	    dictionary 'orgs/conll2003/sports/hockey_clubs_without_location.dict'
+	           and 'orgs/conll2003/sports/hockey_clubs_with_location_only.dict'
+        on D.text as org
+from HockeyDoc D
+consolidate on org;
+
+
+create view HockeyTeam as
+(select * from HockeyTeamStrong)
+union all
+(select * from HockeyTeamWeak);
+
+
+create view AmericanFootballTeamStrong as
+extract 
+	    dictionary 'orgs/conll2003/sports/american_football_clubs_with_location.dict'
+        on D.text as org
+from Doc D
+consolidate on org;
+
+create view AmericanFootballTeamWeak as
+extract 
+	    dictionary 'orgs/conll2003/sports/american_football_clubs_without_location.dict'
+	           and 'orgs/conll2003/sports/american_football_clubs_with_location_only.dict'
+        on D.text as org
+from AmericanFootballDoc D
+consolidate on org;
+
+create view AmericanFootballTeam as
+(select * from AmericanFootballTeamStrong)
+union all
+(select * from AmericanFootballTeamWeak);
+
+
+create view MiscTeam as
+extract 
+	    dictionary 'orgs/conll2003/sports/sports_team_misc.dict'
+        on D.text as org
+from Doc D
+having MatchesRegex(/\p{Lu}\p{M}*.+/, org)
+consolidate on org;
+
+
+
+----------------------------------------------------------
+-- Patterns to identify Sports teams
+----------------------------------------------------------
+
+
+-- based on pattern "Player (country) team 1:54.754"
+-- Gianluca Corini ( Italy ) Aki same time
+-- Lance Armstrong ( U.S. ) Motorola 9
+-- Peter Meinert ( Denmark ) Telekom 14 seconds behind 
+-- Marco Lietti ( Italy ) MG-Technogym 1 minute 14 seconds
+create view OrgSportsTeam1Cand as
+extract 
+	regex /\)[ ]+(\p{Lu}\p{M}*(\p{L}\p{M}*)+((-|\s+)\p{Lu}\p{M}*(\p{L}\p{M}*)+)?)\s+(((\d:)?\d{2}\.\d{3})|\d{1,2}:\d{2}|(all )?same[ ]time|(one|\d{1,2}\s+(lap(s)?|minute|(second(s)?( behind)?)))|\d{1,2}[ ][\n\r]+)/
+		on D.text 
+		return group 1 as org
+from Doc D;
+
+create dictionary SportsTeamNegClueDict1 as(
+	'RALLYING'
+);
+
+create view OrgSportsTeam1Doc as
+select D.text
+from Doc D
+where Not(MatchesDict('SportsTeamNegClueDict1', SubSpanTok(D.text, 0, 1)));
+
+create view OrgSportsTeam1 as
+select O.org
+from OrgSportsTeam1Cand O, OrgSportsTeam1Doc D;
+
+--******************************************************
+
+--create view OrgSportsTeam2Token as
+--extract regex 
+
+
+-- based on pattern "Ferrari F40 167"
+--Laura: replaced for performance
+/*
+create view OrgSportsTeam2 as
+extract 
+	regex /(\p{Lu}\p{M}*(\p{L}\p{M}*)+(\s+\p{Lu}\p{M}*(\p{L}\p{M}*)+)?)\s+((F(I|1)\s+GTR)|(F|LM\d{1,2}|911))[ ]+\d{3}/
+	   on D.text 
+    	return group 0 as match
+    	    and group 1 as org
+from Doc D
+having MatchesRegex(/[ ]+\d{3}/, LeftContextTok(org,1));
+*/
+
+create view OrgSportsTeam2Clue as
+select Chomp(LeftContextTok(C.clue, 2)) as lc
+from
+(
+	extract
+		regex /((F(I|1)\s+GTR)|(F|LM\d{1,2}|911))[ ]+\d{3}/
+		   on D.text as clue
+	from Doc D
+) C;
+
+create view OrgSportsTeam2 as
+extract
+	regex /\p{Lu}\p{M}*(\p{L}\p{M}*)+(\s+\p{Lu}\p{M}*(\p{L}\p{M}*)+)?/ 
+    	on C.lc as org
+from OrgSportsTeam2Clue C
+consolidate on org;
+
+
+-- based on pattern: 
+-- Constructors \' championship :
+-- 1. Williams 149 points 
+-- 2. Benetton 55 
+
+create dictionary ConstructorChampionship as(
+	'Constructors \' championship', 'Constructors\' championship'
+);
+
+
+create view OrgSportsTeam3 as
+extract
+	regex /[\r\n]\d{1,2}\.\s*(\p{Lu}\p{M}*(\p{L}\p{M}*)+(\s+\p{Lu}\p{M}*(\p{L}\p{M}*)+)?)\s+\d{1,3}\s/
+	   on D.text 
+    	return group 1 as org
+from Doc D
+having ContainsDict('ConstructorChampionship', LeftContextTok(org,120));
+
+
+
+-- Based on pattern: Crewe v Watford 
+-- TODO: relax to allow new lines in team names
+/*
+create view OrgSportsTeam67 as
+extract
+	regex /[-,:\n]\s*(\p{Lu}\p{M}*(\p{L}\p{M}*)+([ ]('s)|\/)?(([ ]+\p{Lu}\p{M}*(\p{L}\p{M}*)+){1,2})?)\s++v\.?\s+(\p{Lu}\p{M}*(\p{L}\p{M}*)+([ ]('s)|\/)?(([ ]+\p{Lu}\p{M}*(\p{L}\p{M}*)+){1,2})?)/
+	   	on D.text 
+    	return group 1 as org1
+    	   and group 8 as org2 
+from Doc D;
+--having ContainsRegex(/,/, LeftContext(org1, 2))
+ --  and ContainsRegex(/,/, RightContext(org2, 2));
+*/
+
+-- TODO: to consolidate this with other regexes using the same pattern for performance
+create view TeamCand as
+extract
+	regex --/\p{Lu}\p{M}*(\p{L}\p{M}*)+([ ]('s)|\/)?(([ ]+\p{Lu}\p{M}*(\p{L}\p{M}*)+){1,2})?/ --'
+	        /\p{Lu}\p{M}*(\p{L}\p{M}*)+([ ]('s)|-|\/)?(([ ]+\p{Lu}\p{M}*(\p{L}\p{M}*)+){1,2})?/ --'
+	   	--on between 1 and 5 tokens in D.text 
+	   	on D.text
+    	as match
+from Doc D;
+
+
+create view OrgSportsTeam67 as
+select O1.match as org1, O2.match as org2
+from TeamCand O1, TeamCand O2
+where FollowsTok(O1.match, O2.match, 1,2)
+  and MatchesRegex(/\s++v\.?\s+/, SpanBetween(O1.match, O2.match))
+  and ContainsRegex(/[-,:\n]\s*/, LeftContextTok(O1.match, 1));
+
+
+--output view OrgSportsTeam67;  
+ 
+create view OrgSoccerCand as
+extract regex
+   			/((\p{Lu}\p{M}*\.){2}[ ])?((St\.)|O[ ])?\p{Lu}\p{M}*(\p{L}\p{M}*)+([ ]?(('s)|(da)|-|\/))?(([ ]?\p{Lu}\p{M}*(\p{L}\p{M}*)+){1,2})?( \( (\p{Lu}\p{M}*){1,2} \))?/ --'
+			on between 1 and 14 tokens in D.text
+			as org
+from Doc D
+consolidate on org;
+   
+
+-- Based on soccer results patterns: 
+-- Petra Drnovice 3 1 1 1 7 5 4
+-- Oldham 21 8 1 12 439 656 17 
+-- St. Gallen 9 4 4 1 6 5 16 
+-- Vasco da Gama 4 2 0 2 6 7 6 
+-- Admira / Wacker 6 0 3 3 5 10 3 
+-- F.C. National Bucharest 4 2 1 1 7 6 7 
+-- Mladost ( BJ ) 3 0 1 2 2 6 1
+--Laura: replaced for performance 
+/*
+create view OrgSportsTeam89 as
+extract
+	regex /[\r\n]((\p{Lu}\p{M}*\.){2}[ ])?(((St\.)|O[ ])?\p{Lu}\p{M}*(\p{L}\p{M}*)+([ ]?(('s)|(da)|-|\/))?(([ ]+\p{Lu}\p{M}*(\p{L}\p{M}*)+){1,2})?( \( (\p{Lu}\p{M}*){1,2} \))?)[ ]+(\d{1,4}[ ]+){6}/ --'
+	  on D.text 
+    	return group 1 as org 
+from Doc D;
+*/
+
+create view OrgSportsTeam89 as
+select O.org as org
+from OrgSoccerCand O
+where ContainsRegex(/[\n\r]/,LeftContextTok(O.org, 1))
+  and MatchesRegex(/([ ]+\d{1,4}){6}/, RightContextTok(O.org,6));
+
+-- Extended Pattern 89 to handle:
+-- 1. Ujpest TE 3 3 - - 10 2 9 
+-- 2. MTK 3 3 - - 7 1 9 
+--15. Stadler FC 3 - 1 2 2 6 1 
+--Laura: optimized
+/*
+create view OrgSportsTeam89_a as
+select Chomp(O.org) as org
+from
+(
+	extract
+		regex /[\r\n]\d{1,2}\.[ ](\p{Lu}\p{M}*[\p{L}\p{M}*\.\'-']+[ ]*([\p{L}\p{M}*\.\'-']+[ ]*){1,2})((\d{1,2}|-)[ ]){6}/ --'
+		   on D.text 
+	    	return group 1 as org 
+	from Doc D
+) O;
+*/
+  
+create view OrgSportsTeam89_aClue as
+select LeftContextTok(C.clue, 10) as lc
+from
+(
+	extract
+		regex /((\d{1,2}|-)[ ]){6}/ --'
+		   on D.text as clue
+	from Doc D
+) C;
+
+create view OrgSportsTeam89_a as
+extract
+	regex /(\p{Lu}\p{M}*[\p{L}\p{M}*\.\'-']+[ ]*([\p{L}\p{M}*\.\'-']+[ ]*){1,2})[ ]*\z/ 
+    	on C.lc as org
+from OrgSportsTeam89_aClue C
+having ContainsRegex(/[\r\n]\d{1,2}\./,LeftContextTok(org, 3));
+
+
+-- Based on patterns: S. Korea soccer
+-- Samsung 47 5 55 .463 15
+-- Lotte 44 6 53 .456 15 1/2
+--Laura: optimized
+/*
+create view OrgSportsTeam10 as
+extract
+	regex /[\r\n](\p{Lu}\p{M}*(\p{L}\p{M}*)+([ ]('s)|-|\/)?(([ ]+\p{Lu}\p{M}*(\p{L}\p{M}*)+){1,2})?)\s*\d{2}\s+\d\s+\d{2}\s+\.\d{3}\s+(-|\d{1,2})(\s+\d[\/]\d)?/ --'
+	   on D.text 
+    	return group 1 as org
+from Doc D;
+*/
+
+
+-- Based on patterns: (Baseball)
+--NEW YORK 72 54 .571 - 
+--BALTIMORE 67 59 .532 5 
+--TORONTO 59 69 .461 14 
+--DETROIT 45 82 .354 27 1/2 
+--Laura: optimized
+/*
+create view OrgSportsTeam11 as
+extract
+	regex /[\r\n](\p{Lu}\p{M}*(\p{L}\p{M}*)+([ ]('s)|-|\/)?(([ ]+\p{Lu}\p{M}*(\p{L}\p{M}*)+){1,2})?)\s*\d{2}\s+\d{2}\s+\.\d{3}\s+(-|\d{1,2})?(\s+\d[\/]\d)?/ --'
+	   on D.text 
+    	return group 1 as org
+from Doc D;
+*/
+
+create view OrgSporstTeam10_11Clue as
+select LeftContextTok(C.match, 5) as lc
+from
+(
+	(extract regex /\d{2}\s+\d\s+\d{2}\s+\.\d{3}\s+(-|\d{1,2})(\s+\d[\/]\d)?/ on between 6 and 9 tokens in D.text as match from Doc D)
+	union all
+	(extract regex /\d\s+\d{2}\s+\.\d{3}\s+(-|\d{1,2})(\s+\d[\/]\d)?/ on between 5 and 8 tokens in D.text as match from Doc D)
+) C;
+
+create view OrgSportsTeam10_11 as
+extract regex /\p{Lu}\p{M}*(\p{L}\p{M}*)+([ ]('s)|-|\/)?(([ ]+\p{Lu}\p{M}*(\p{L}\p{M}*)+){1,2})?/ --'
+	on C.lc as org
+from OrgSporstTeam10_11Clue C
+having ContainsRegex(/[\n\r]/, LeftContextTok(org, 1));
+
+
+
+-- Based on patterns (Cricket):
+/*
+At Weston-super-Mare : Durham 326 ( D. Cox 95 not out , 
+S. Campbell 69 ; G. Rose 7-73 ) . 
+Somerset 298-6 ( M. Lathwell 85 , 
+R. Harden 65 ) . 
+Second day 
+At Colchester : Gloucestershire 280 ( J. Russell 63 , A. Symonds 
+52 ; A. Cowan 5-68 ) . 
+Essex 194-0 ( G. Gooch 105 not out , D. Robinson 
+72 not out ) . 
+At Cardiff : Kent 255-3 ( D. Fulton 64 , M. Walker 59 , C. Hooper 
+52 not out ) v Glamorgan . 
+At Leicester : Leicestershire 343-8 ( P. Simmons 108 , P. Nixon 
+67 not out ) v Hampshire . 
+At Northampton : Sussex 389 ( N. Lenham 145 , V. Drakes 59 , 
+A. Wells 51 ; A. Penberthy 4-36 ) . 
+Northamptonshire 160-4 ( K. Curran 
+79 not out ) . 
+At Trent Bridge : Nottinghamshire 392-6 ( G. Archer 143 not 
+out , M. Dowman 107 ) v Surrey . 
+At Worcester : Warwickshire 310 ( A. Giles 83 , T. Munton 54 not 
+out , W. Khan 52 ; R. Illingworth 4-54 , S. Lampitt 4-90 ) . 
+Worcestershire 10-0 . 
+At Headingley : Yorkshire 529-8 declared ( C. White 181 , 
+*/
+
+create dictionary CricketCountry as (
+	'India', 'England', 'Pakistan'
+);
+
+
+-- Worcestershire 10-0 .
+-- At Worcester : [Warwickshire] 310 ( 
+-- At Headingley : [Yorkshire] 529-8 declared (
+/*
+create view OrgSportsTeam12_a as
+extract
+	regex /((\:[ ])|(\.[\r\n]))(\p{Lu}\p{M}*(\p{L}\p{M}*)+)[ ]+\d{2,3}(-\d)?[ ]+(\.|\(|(declared)|v)/ --'
+	   on D.text 
+    	return group 4 as org
+from Doc D
+having Not(MatchesDict('CricketCountry', org));
+*/
+
+create view OrgSportsTeam12_aClue as
+extract
+	regex /\d{2,3}(-\d)?[ ]+(\.|\(|(declared)|v)/ --'
+	   on D.text as clue
+from Doc D;
+
+create view OrgSportsTeam12_a as
+extract
+	pattern ( /(\p{Lu}\p{M}*(\p{L}\p{M}*)+)/ ) <C.clue> 
+    	return group 1 as org
+    	with inline_match on Doc.text
+from OrgSportsTeam12_aClue C
+having MatchesRegex(/(\:[ ])|(\.[\r\n])/,LeftContextTok(org, 1))
+   and Not(MatchesDict('CricketCountry', org));
+
+--output view OrgSportsTeam12_a;
+
+
+-- ) v [Glamorgan] .
+-- , [Northamptonshire] 123-4 (  
+create view OrgSportsTeam12_b as
+extract
+	regex /\)[ ]v[ ](\p{Lu}\p{M}*(\p{L}\p{M}*)+)[ ]+(\.|[\n\r]|(\d{2,3}(-\d)?[ ]))/ --'
+	   on D.text 
+    	return group 1 as org
+from Doc D
+having Not(MatchesDict('CricketCountry', org));
+
+create view OrgSportsTeam12_c as
+extract
+	regex /\)[ ],[ ](\p{Lu}\p{M}*(\p{L}\p{M}*)+)[ ]+(\.|(\d{2,3}(-\d)?[ ]))/ --'
+	   on D.text 
+    	return group 1 as org
+from Doc D
+having Not(MatchesDict('CricketCountry', org));
+
+
+-- Based on patterns:
+-- [Nice] 1 ( Debbah 39th ) [Bastia] 1 ( Drobnjak 82nd )  
+-- [Marseille] 1 ( Gravelaine 24th ) [Metz] 2 ( Traore 65th , Bombarda 69th ) 
+-- [Strasbourg] 1 ( Zitelli 80th ) [Le Havre] 0 
+
+create view Goal as
+extract pattern 
+	/\d{1,2}((st)|(nd)|(rd)|(th))/ ('pen'|'-pen'|'penalty')? ('minute'|'min')? (','|'and')?
+	return group 0 as match
+	with inline_match on Doc.text
+from Document D
+consolidate on match;
+
+/*
+create view ScorerClue as
+extract pattern <G.match>{1,3}
+	with inline_match on Doc.text
+from Goal G
+consolidate on match;
+
+create view Scorer as
+extract pattern 
+	/(\p{L}\p{M}*)+/{1,3} <G.match>{1,3}
+	return group 0 as match
+	with inline_match on Doc.text
+from Goal G
+consolidate on match;
+*/
+
+create view ScorerClue as
+select G.clue as clue, LeftContextTok(G.clue, 3) as lc
+from
+(
+	extract pattern <G.match>{1,3} as clue
+	from Goal G
+	consolidate on clue
+) G;
+
+create view Scorer as
+select CombineSpans(S.match, S.clue) as match
+from
+(
+	extract S.clue as clue, S.lc as lc,
+		regex /((\p{L}\p{M}*)+\s+){1,3}/ on between 1 and 3 tokens in S.lc as match
+	from ScorerClue S
+	having Equals(GetEnd(match), GetEnd(lc))
+	consolidate on match
+) S;
+
+create view ScorerGroup as
+extract blocks
+    with count between 1 and 5
+    and separation between 0 and 1 tokens
+    on S.match as match
+from Scorer S
+consolidate on match;
+
+
+
+
+create view OrgSportsTeam13 as
+extract 
+	pattern (<T1.match>) /\d/ (/\(/ <S1.match> /\)/)? (<T2.match>) /\d/ (/\(/ <S2.match> /\)/)?
+	return group 1 as org1
+	   and group 3 as org2
+	with inline_match on Doc.text
+from TeamCand T1, TeamCand T2, ScorerGroup S1, ScorerGroup S2;
+
+--output view Goal;
+--output view Scorer;
+--output view ScorerGroup;
+--output view TeamCand;
+
+
+
+--Based on patterns: Baseball
+--[CALIFORNIA] AT [BALTIMORE]
+--[OAKLAND] AT [NEW YORK]
+--[CINCINNATI] AT [FLORIDA] ( doubleheader ) 
+
+create view AllCapsToken as 
+extract regex /(\p{Lu}\p{M}*)+/ on 1 token in D.text as match from Doc D
+having Not(MatchesRegex(/AT/, match));
+
+create view AllCapsTokenOneToTwo as
+extract blocks
+    with count between 1 and 2
+    and separation 0 tokens
+    on S.match as match
+from AllCapsToken S
+having Not(ContainsRegex(/[\n\r]/, match))
+consolidate on match;
+
+create view OrgSportsTeam14 as
+extract pattern (<T1.match>) <'AT'[with case exact]> (<T2.match>)
+	return group 0 as match
+	   and group 1 as org1
+	   and group 2 as org2
+	with inline_match on Doc.text
+from AllCapsTokenOneToTwo T1, AllCapsTokenOneToTwo T2
+having Not(ContainsRegex(/[\n\r]/, match))
+   and MatchesRegex(/\s[\n\r\(-]/, RightContext(match, 2));
+
+
+-- Based on patterns:
+-- Portsmouth 1 Queens Park Rangers 2 
+-- Tranmere 3 Grimsby 2
+-- COLORADO 10 St Louis 5 
+-- Lotte 1 OB 0* 
+-- Mladost ( L ) 0 Zemun 0 
+/*
+create view OrgSportsTeam15 as
+extract
+	regex /[\r\n](((\p{Lu}\p{M}*\.){2}[ ])?((St\.)|O[ ])?\p{Lu}\p{M}*(\p{L}\p{M}*)+([ ]?(('s)|(da)|-|\/))?(([ ]?\p{Lu}\p{M}*(\p{L}\p{M}*)+){1,2})?( \( (\p{Lu}\p{M}*){1,2} \))?)[ ]+\d{1,2}[ ]+(((\p{Lu}\p{M}*\.){2}[ ])?\p{Lu}\p{M}*(\p{L}\p{M}*)+([ ]?(('s)|(da)|-|\/))?(([ ]?\p{Lu}\p{M}*(\p{L}\p{M}*)+){1,2})?( \( (\p{Lu}\p{M}*){1,2} \))?)[ ]+\d{1,2}/
+        on D.text 
+    	return group 0 as match
+    	   and group 1 as org1
+    	   and group 16 as org2 
+from Doc D
+having Not(MatchesDict('month.dict', org1))
+   and Not(MatchesDict('month.dict', org2));*/
+   --and MatchesRegex(/\s|\*/, RightContext(match,1));
+
+   
+
+create view OrgSportsTeam15Cand as
+select O.org as org
+from OrgSoccerCand O
+where Not(MatchesDict('month.dict', O.org))
+  and MatchesRegex(/[ ]+\d{1,2}/, RightContextTok(O.org, 1));
+
+create view OrgSportsTeam15 as
+select O1.org as org1, O2.org as org2
+from OrgSportsTeam15Cand O1, OrgSportsTeam15Cand O2
+where FollowsTok(O1.org, O2.org, 1, 1)
+and ContainsRegex(/[\r\n]/, LeftContextTok(O1.org,1));
+
+
+-- Based on patterns (soccer and basketball):
+-- Flamurtari Vlore ( Albania ) 0 Chemlon Humenne ( Slovakia ) 2
+-- AEK Larnaca ( Cyprus ) 5 Kotaik Abovyan ( Armenia ) 0 
+-- Cibona Zagreb ( Croatia ) 81 Estudiantes ( Spain ) 66 
+
+create dictionary CountryAdditionalDict as(
+	'Moldova', 'Latvia', 'Azerbaijan', 'Scotland', 'Yugoslavia', 
+	'Czech Republic', 'Northern Ireland', 'Faroe Islands', 'Israel',
+	'Czech Rep', 'Cameroun', ' Reunion',  'Zaire',
+	'Wales', 'England',
+	-- misspellings
+	'Senagal', 'Demnark'
+);
+
+create view CountryAdditional as
+(extract dictionary 'CountryAdditionalDict' on D.text as match from Doc D)
+union all
+(select C.match as match from CountryCandidate C);
+
+
+create view CountryForFiltering as
+extract dictionary 'CountryAdditionalDict' 
+        and 'orgs/conll2003/sports/country-for-sport-teams.dict' on D.text as match from Doc D;
+
+
+
+create view OrgSportsTeam16 as
+extract pattern (<T1.match>) /\(/ <C1.match> /\)/ /\d{1,2}/ (<T2.match>) /\(/ <C2.match> /\)/? /\d{1,2}/ 
+	return group 1 as org1
+	   and group 2 as org2
+	with inline_match on Doc.text
+from TeamCand T1, CountryAdditional C1, TeamCand T2, CountryAdditional C2;
+
+
+
+create view CapsToken as 
+extract
+regex /\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}/ --'
+on between 1 and 4 tokens in D.text as match
+from Doc D;
+
+
+create view CapsTokenOneToThree as
+extract blocks
+    with count between 1 and 3
+    and separation 0 tokens
+    on S.match as match
+from CapsToken S
+having Not(ContainsRegex(/[\n\r]/, match));
+--consolidate on match;
+
+
+create view CountryOfTeam as
+extract pattern ('of' | 'from') <C.match> as match
+	with inline_match on Doc.text
+from CountryCandidate C;
+
+create view Team1beatTeam2Cand as
+extract pattern (<CW1.match> ) <CT1.match>? ('beat'|'defeat'|'defeated'|'stopped'|'have beaten'|'have defeated') ( <CW2.match> ) <CT2.match>? (/\d{1,3}/ '-' /\d{1,3}/)
+	return group 1 as org1
+	   and group 3 as org2
+	   and group 4 as score
+	   and group 0 as match
+	with inline_match on Doc.text
+from CapsTokenOneToThree CW1, CountryOfTeam CT1, CapsTokenOneToThree CW2, CountryOfTeam CT2
+having Not(ContainsRegex(/[\n\r]/, score))
+   and Not(ContainsRegex(/[\n\r]/, org1))
+   and Not(ContainsRegex(/[\n\r]/, org2));
+
+create dictionary Team1beatTeam2NegClueDict as(
+	'CYCLING', 'TENNIS', 'ICE HOCKEY', 'NHL', 'GOLF', 'ATHLETICS'
+);
+
+create view Team1beatTeam2Doc as
+select D.text
+from Doc D
+where Not(ContainsDict('Team1beatTeam2NegClueDict', SubSpanTok(D.text, 0, 2)));
+
+create view Team1beatTeam2 as
+select O.org1, O.org2
+from Team1beatTeam2Doc D, Team1beatTeam2Cand O;
+
+
+
+create view OrgFromTeam1beatTeam2_Cand as
+(select O.org1 as org from Team1beatTeam2 O)
+union all
+(select O.org2 as org from Team1beatTeam2 O);
+
+create view NewsReportTitle as
+extract regex/\A\s*([^\n\r]+)[\n\r]/ on D.text 
+	return group 1 as title
+from Doc D;
+
+-- Candidates in title
+create view OrgFromTeam1beatTeam2_Invalid1 as
+select O.* 
+from OrgFromTeam1beatTeam2_Cand O, NewsReportTitle T
+where Contains(T.title, O.org);
+
+-- Candidates contained in a country match
+create view OrgFromTeam1beatTeam2_Invalid2 as
+select O.* 
+from OrgFromTeam1beatTeam2_Cand O, CountryCandidate C
+where Contains(C.match, O.org);
+
+create dictionary TeamBeatFilterDict as(
+	'The', 'They', 'Champions'
+);
+
+-- Other invalid candidates
+create view OrgFromTeam1beatTeam2_Invalid3 as
+select O.*
+from OrgFromTeam1beatTeam2_Cand O
+where Or(ContainsDict('nationality.dict', O.org),
+		 ContainsDict('TeamBeatFilterDict', O.org)
+         );
+
+-- All invalid candidates
+create view OrgFromTeam1beatTeam2_Invalid as
+(select * from OrgFromTeam1beatTeam2_Invalid1)
+union all
+(select * from OrgFromTeam1beatTeam2_Invalid2)
+union all
+(select * from OrgFromTeam1beatTeam2_Invalid3);
+
+
+create view OrgFromTeam1beatTeam2 as
+(select * from OrgFromTeam1beatTeam2_Cand)
+minus
+(select * from OrgFromTeam1beatTeam2_Invalid);
+
+
+
+create dictionary LCClue as
+('champions', 'side', 'leaders', 'transferred to', 'rivals', 'winners', 'part-timers', 
+'newcomers', 'holders', 'hopefuls', 'qualifiers', 'runners-up', 'win over', 
+'victory over', 'tie against', 'scored for', 'pace-setters',
+'defeat of', 'finalists');
+
+create view LCTeamClue as
+extract
+dictionary 'LCClue' on D.text as match
+from Team1beatTeam2Doc D;
+
+--Laura: optimized
+/*
+create view OrgSportsTeam17 as
+select C1.match as org, TC.match as context
+from CapsTokenOneToThree C1, LCTeamClue TC
+where FollowsTok(TC.match, C1.match, 0, 0);
+  and Not(MatchesDict('wkday.dict', C1.match));
+ */
+create view OrgSportsTeam17Cand as
+select C1.match as org, TC.match as context
+from CapsTokenOneToThree C1, LCTeamClue TC
+where FollowsTok(TC.match, C1.match, 0, 0);
+ 
+
+create view OrgSportsTeam17 as
+select O.*
+from OrgSportsTeam17Cand O
+where Not(MatchesDict('wkday.dict', O.org));
+
+create dictionary RCClue as
+(
+ 'players', 'player', 'goalkeeper', 'keeper', '\' keeper', --'
+ 'defender', 'defence', 'midfielder', 'coach', 'trainer', 'strikers', 'striker', 'starter'
+ );
+
+create view RCTeamClue as
+extract
+dictionary 'RCClue' with flags 'Exact'
+	on D.text as match
+from Doc D;
+
+create dictionary TeamFilterDict as(
+	'Olympic', 'Cup', 'NHL', 'NFL', 'European', 'Our', 'Atlantic', 'England', 'NPC', 'Internet', 'International'
+);
+
+create dictionary TeamFilterLCClueDict as(
+	'"','--'
+);
+
+/*
+create view OrgSportsTeam17_a_Cand as
+select C1.match as org, TC.match as context, CombineSpans(C1.match, TC.match) as fullmatch
+from RCTeamClue TC, CapsTokenOneToThree C1 
+where FollowsTok(C1.match, TC.match, 0, 0)
+  and Not(ContainsDict('nationality.dict', C1.match))
+  and Not(ContainsDict('orgs/conll2003/sports/country-for-sport-teams.dict', C1.match))
+  and Not(ContainsDict('TeamFilterDict', C1.match))
+  and Not(MatchesRegex(/"/, LeftContextTok(C1.match,1)))
+  and Not(MatchesRegex(/--/, LeftContextTok(C1.match,2)));
+*/
+
+create view OrgSportsTeam17_a_Cand1 as
+select C1.match as org, TC.match as context, CombineSpans(C1.match, TC.match) as fullmatch
+from RCTeamClue TC, CapsTokenOneToThree C1 
+where FollowsTok(C1.match, TC.match, 0, 0);
+
+create view OrgSportsTeam17_a_Cand as
+select C1.*
+from OrgSportsTeam17_a_Cand1 C1
+where Not(ContainsDict('nationality.dict', C1.org))
+  and Not(ContainsDict('orgs/conll2003/sports/country-for-sport-teams.dict', C1.org))
+  and Not(ContainsDict('TeamFilterDict', C1.org))
+  and Not(MatchesRegex(/"/, LeftContextTok(C1.org,1))) --"
+  and Not(MatchesRegex(/--/, LeftContextTok(C1.org,2))); 
+  
+-- Candidates at the beginning of a sentence
+create view OrgSportsTeam17_a_Invalid1 as
+select O.*
+from OrgSportsTeam17_a_Cand O, SentenceBoundary B
+where FollowsTok(B.boundary, O.org, 0, 0);
+
+-- Candidates in title
+create view OrgSportsTeam17_a_Invalid2 as
+select O.* 
+from OrgSportsTeam17_a_Cand O, NewsReportTitle T
+where Contains(T.title, O.org);
+
+-- Candidates at the beginning of a sentence
+create view OrgSportsTeam17_a_Invalid3 as
+select O.*
+from OrgSportsTeam17_a_Cand O, NewsReportSecondLine L
+where FollowsTok(L.line, O.org, 0, 0);
+
+-- All invalid candidates
+create view OrgSportsTeam17_a_Invalid as
+(select * from OrgSportsTeam17_a_Invalid1)
+union all
+(select * from OrgSportsTeam17_a_Invalid2)
+union all
+(select * from OrgSportsTeam17_a_Invalid3);
+
+
+create view OrgSportsTeam17_a as
+(select * from OrgSportsTeam17_a_Cand)
+minus
+(select * from OrgSportsTeam17_a_Invalid);
+
+
+--******************************************************************
+-- Patterns for CYCLING
+--******************************************************************
+
+create dictionary CyclingScoreDict as(
+	'same time', 'both same time', 'all same time'
+);
+
+-- 3 hours 53 minutes 27 seconds
+create view TimeVerbose as
+extract pattern 
+		(((/\d{1,3}/|'one') ('hour'|'hours'))? (/\d{1,2}/|'one') ('minute'|'min'|'minutes'|'mins'))? (/\d{1,2}/|'one') ('second'|'sec'|'seconds'|'secs') as match
+		with inline_match on Doc.text
+from Doc D
+consolidate on match;
+
+--output view TimeVerbose;
+
+
+-- Pattern for cycling
+-- 8. Roberto Pistore ( Italy ) [MG] 
+-- also works for Motor racing
+--1. Alessandro Zanardi ( Italy ) , [Reynard Honda] , 83
+create view OrgSportsTeam18 as
+extract pattern /\(/ <C.match> /\)/ ','? (<CW.match>) 
+	return group 0 as match
+	   and group 1 as org
+	with inline_match on Doc.text
+from CountryCandidate C, CapsWordOnetoFive CW
+having ContainsRegex(/([\n\r]+)|( ,)/, RightContext(match, 2)) and
+       ContainsRegex(/\d{1,2}\./, LeftContextTok(match, 7));
+
+
+-- Pattern for NHL
+-- NEW ENGLAND 2 2 0 79 66
+-- NY JETS 0 4 0 46 101 
+/*
+create view OrgSportsTeam19 as
+select Chomp(O.org) as org
+from
+(
+	extract regex /(((\p{Lu}\p{M}*)+\s){1,3})\d \d \d \d{1,3} \d{1,3} ?[\n\r]/ 
+	    on D.text
+		return group 1 as org
+	from Doc D
+) O;
+*/
+       
+create view OrgSporstTeam19Clue as
+extract regex /\d \d \d \d{1,3} \d{1,3}/ on D.text as match
+from Doc D
+having ContainsRegex(/[\n\r]/, RightContextTok(match, 1));
+
+create view OrgSportsTeam19 as
+extract pattern (/(\p{Lu}\p{M}*)+/{1,3}) <C.match>
+	return group 1 as org
+	with inline_match on Doc.text
+from OrgSporstTeam19Clue C;
+
+-- Pattern for Australian Football League
+--Brisbane 21 15 1 5 2123 1631 130.2 62 
+--  Sydney 21 15 1 5 2067 1687 122.5 62 
+-- Fitzroy 21 1 0 20 1381 2778 49.7 4 
+/*
+create view OrgSportsTeam20 as
+select Chomp(O.org) as org
+from
+(
+	extract regex /((\p{Lu}\p{M}*(\p{Ll}\p{M}*)+\s){1,3})\d{2} \d{1,2} \d \d{1,2} \d{4} \d{4} \d{2,3}\.\d \d{1,2}/ on D.text
+		return group 1 as org
+	from Doc D
+) O;
+*/
+
+create view OrgSporstTeam20Clue as
+extract regex /\d{2} \d{1,2} \d \d{1,2} \d{4} \d{4} \d{2,3}\.\d \d{1,2}/ on D.text as match
+from Doc D;
+
+create view OrgSportsTeam20 as
+extract pattern (/\p{Lu}\p{M}*(\p{Ll}\p{M}*)/{1,3}) <C.match>
+	return group 1 as org
+	with inline_match on Doc.text
+from OrgSporstTeam20Clue C;
+
+
+--- Pattern <Sportsteam> ( <Country> ) for certain team sports
+
+create view SoccerBasketballDoc as
+(select * from SoccerDoc)
+union all
+(select * from BasketballDoc);
+
+create dictionary InvalidSoccerCountryDict as (
+	'Monaco'
+);
+
+create dictionary RefereeDict as (
+	'Referee'
+);
+
+create view CountryForSoccerBasketball as
+extract pattern (/\(/) (<C.match>) (/\)/) 
+	return group 0 as match
+	   and group 1 as para1
+	   and group 2 as country
+	   and group 3 as para2
+	with inline_match on SoccerBasketballDoc.text
+from CountryAdditional C
+having MatchesRegex(/[ ]+/, SpanBetween(para1, country))
+   --and MatchesRegex(/ /, SpanBetween(country, para2));
+   and Not(ContainsDict('InvalidSoccerCountryDict', match));
+   
+create view OrgSportsTeam21 as
+select O.match, O.org as org
+from
+(
+	extract pattern (<T.match>) <C.match>
+		return group 0 as match
+		   and group 1 as org
+	from CapsTokenOneToThree T, CountryForSoccerBasketball C
+	consolidate on match
+) O
+where Not(ContainsDict('RefereeDict', LeftContextTok(O.match, 6)));
+   
+
+create dictionary NegClue22 as(
+	'The'
+);
+
+
+-- Pattern for US soccer league
+-- D.C. United [( 14-16 )] . 
+-- San Jose Clash [( 14-16 )]
+create view OrgSportsTeam22 as
+extract pattern (<CW.match>) /\(/ /\d{1,2}/ /-/ /\d{1,2}/ /\)/
+	return group 1 as org
+	with inline_match on SoccerDoc.text
+from CapsTokenOneToThree CW
+having Not(ContainsDict('NegClue22',org));
+
+
+-- Pattern for soccer
+-- Darlington v Rochdale , Doncaster v Leyton Orient , Hereford v Scarborough 
+create view OrgSportsTeam23Cand as
+extract pattern (<CW1.match>) 'v' (<CW2.match>)
+	return group 1 as org1
+	   and group 2 as org2
+	   and group 0 as match
+	with inline_match on SoccerDoc.text
+from CapsTokenOneToThree CW1, CapsTokenOneToThree CW2;
+
+create dictionary NegClue23Dict as(
+	'Teams', 'Latest', 'Add', 'The', 'Standings'
+)
+;
+
+create view OrgSportsTeam23 as
+select O.org as org
+from
+(
+	(select O.org1 as org from OrgSportsTeam23Cand O)
+	union all
+	(select O.org2 as org from OrgSportsTeam23Cand O)
+) O
+where Not(ContainsDict('NegClue23Dict', O.org))
+consolidate on O.org;
+
+
+
+-- pattern for Formula 1:
+-- Did not start ( failed to complete one lap ) : 
+-- Olivier Panis ( France ) Ligier 
+-- Johnny Herbert ( Britain ) Sauber 
+create view OrgSportsTeam24 as
+extract pattern ')' (<CW.match>)
+	return group 1 as org
+	with inline_match on MotorRacingDoc.text
+from CapsTokenOneToThree CW
+having ContainsRegex(/[\n\r]/, RightContextTok(org, 1));
+
+
+-- Pattern for Soccer:
+--Scorers :
+--Hearts - Dave McPherson ( 44th )
+--Red Star - Vinko Marinovic ( 59th )
+--Chemlon Humenne win 3-0 on aggregate  
+create view SoccerDocWithScorers as
+extract D.text as text,
+	regex /[\n\r]\s*Scorers\s*:[ ]*[\n\r]/ on D.text as match
+from Doc D;
+
+create view OrgSportsTeam25 as
+extract pattern (<CW.match>) ('-'|'win'|'won')
+	return group 1 as org
+	with inline_match on SoccerDocWithScorers.text
+from CapsTokenOneToThree CW
+having ContainsRegex(/[\n\r]/, LeftContextTok(org,1))
+consolidate on org;
+
+create view OrgSportsTeam26 as
+extract pattern /\(/ (<CW.match>) /\)/
+	return group 1 as org
+	with inline_match on FootballPlayerGroup.list
+from CapsTokenOneToThree CW;
+
+-- Relaxed pattern for Cricket
+-- Glamorgan 73-3 v [Durham] .
+-- Warwickshire 255-9 ( A. Giles 57 not out , W. Khan 52 ) v [Worcestershire] 
+create view OrgSportsTeam27 as
+extract pattern 'v' (<CW.match>)
+	return group 1 as org
+	with inline_match on CricketDoc.text
+from CapsTokenOneToThree CW
+having Not(ContainsRegex(/[\n\r]/, org));
+
+
+--output view OrgSportsTeam27;
+
+create view OrgSportsTeamFromPattern as
+(select O.org as org from OrgSportsTeam1 O)
+union all
+(select O.org as org from OrgSportsTeam2 O)
+union all
+(select O.org as org from OrgSportsTeam3 O)
+union all
+(select O.org1 as org from OrgSportsTeam67 O)
+union all
+(select O.org2 as org from OrgSportsTeam67 O)
+union all
+(select O.org as org from OrgSportsTeam89 O)
+union all
+(select O.org as org from OrgSportsTeam89_a O)
+union all
+(select O.org as org from OrgSportsTeam10_11 O)
+--union all
+--(select O.org as org from OrgSportsTeam11 O)
+union all
+(select O.org as org from OrgSportsTeam12_a O)
+union all
+(select O.org as org from OrgSportsTeam12_b O)
+union all
+(select O.org as org from OrgSportsTeam12_c O)
+union all
+(select O.org1 as org from OrgSportsTeam13 O)
+union all
+(select O.org2 as org from OrgSportsTeam13 O)
+union all
+(select O.org1 as org from OrgSportsTeam14 O)
+--union all
+--(select O.org2 as org from OrgSportsTeam14 O)
+union all
+(select O.org1 as org from OrgSportsTeam15 O)
+union all
+(select O.org2 as org from OrgSportsTeam15 O)
+union all
+(select O.org1 as org from OrgSportsTeam16 O)
+union all
+(select O.org2 as org from OrgSportsTeam16 O)
+union all
+(select O.org as org from OrgFromTeam1beatTeam2 O)
+union all
+(select O.org as org from OrgSportsTeam17 O)
+union all
+(select O.org as org from OrgSportsTeam17_a O)
+union all
+(select O.org as org from OrgSportsTeam18 O)
+union all
+(select O.org as org from OrgSportsTeam19 O)
+union all
+(select O.org as org from OrgSportsTeam20 O)
+union all
+(select O.org as org from OrgSportsTeam21 O)
+union all
+(select O.org as org from OrgSportsTeam22 O)
+union all
+(select O.org as org from OrgSportsTeam23 O)
+union all
+(select O.org as org from OrgSportsTeam24 O)
+union all
+(select O.org as org from OrgSportsTeam25 O)
+union all
+(select O.org as org from OrgSportsTeam26 O)
+union all
+(select O.org as org from OrgSportsTeam27 O);
+
+--output view OrgSportsTeam1;
+--output view OrgSportsTeam2;
+--output view OrgSportsTeam3;
+--output view OrgSportsTeam67;
+--output view OrgSportsTeam89;
+--output view OrgSportsTeam89_a;
+--output view OrgSportsTeam10;
+--output view OrgSportsTeam11;
+--output view OrgSportsTeam12_a;
+--output view OrgSportsTeam12_b;
+--output view OrgSportsTeam12_c;
+--output view OrgSportsTeam13;
+--output view OrgSportsTeam14;
+--output view OrgSportsTeam15;
+--output view OrgSportsTeam16;
+
+
+--output view SoccerTeam;
+--output view OrgSportsTeam17;
+--output view OrgSportsTeam17_a;
+--output view OrgSportsTeam18;
+--output view OrgSportsTeam19;
+--output view OrgSportsTeam20;
+--output view OrgSportsTeam21;
+--output view OrgSportsTeam22;
+
+
+--output view Team1beatTeam2;
+--output view NewsReportTitle;
+--output view OrgFromTeam1beatTeam2;
+
+
+
+----------------------------------------------------------------
+-- COMBINE ALL CANDIDATES
+----------------------------------------------------------------
+
+
+create view OrgSportsTeamCand as
+select O.org as org
+from
+(
+	(select * from OrgSportsTeamFromPattern O)
+    union all
+	(select O.org from SoccerTeam O)
+	union all
+	(select O.org from CricketTeam O)
+	union all
+	(select O.org from RugbyTeam O)
+	union all
+	(select O.org from BaseballTeam O)
+	union all
+	(select O.org from BasketballTeam O)
+	union all
+	(select O.org from HockeyTeam O)
+	union all
+	(select O.org from AmericanFootballTeam O)
+	union all
+	(select O.org from MiscTeam O)
+) O
+consolidate on O.org;
+
+--output view OrgSportsTeamCand;
+
+create view OrgSoccerTeam as
+select O.org as org 
+from OrgSportsTeamCand O, SoccerDoc D 
+where Contains(D.text, O.org);
+
+
+--output view OrgSoccerTeam;
+
+
+-- Filter out country names only if mentioned in the context of a world competition
+-- Otherwise we have false negatives: Monaco (soccer), Jordan (Formula 1)
+create view OrgSportsTeamInvalid1 as
+select O.org as org
+from OrgSportsTeamCand O, CountryForFiltering C
+where Equals(O.org, C.match);
+ -- and ContainsDict('WorldSportsCompetitionDict',D.text);
+
+
+create view OrgSportsTeamInvalid2 as
+select O.org as org
+from OrgSportsTeamCand O, NonSportDoc D
+where Contains(D.text, O.org);
+
+
+create dictionary LocationClueDict as(
+	'in', 'at', 'into'
+);
+
+create view OrgSportsTeamInvalid3 as
+select O.org as org
+from OrgSportsTeamCand O
+where MatchesDict('LocationClueDict', LeftContextTok(O.org,1));
+
+
+create dictionary InvalidSportsTeamDict as(
+	'Halftime', 'Final'
+);
+
+create view OrgSportsTeamInvalid4 as
+select O.org as org
+from OrgSportsTeamCand O
+where ContainsDict('InvalidSportsTeamDict', O.org);
+
+-- Matches in the 2nd line of the document
+create view OrgSportsTeamInvalid5 as
+select O.org as org
+from OrgSportsTeamCand O, NewsReportSecondLine N
+where Contains(N.line, O.org);
+
+
+-- Matches Contained within a strong Sports Person
+-- Removed all Person patterns of the form <Person> (<Country>) because of conflict with sports teams patterns
+create view PersonSportsStrong as
+(select * from SoccerPlayerCandidateConsolidated)
+union all
+(select * from FootballPlayerCandidate)
+union all
+(select * from GolfPlayerCandidateConsolidated)
+--union all
+--(select * from RankedPerson1)
+--union all
+--(select * from RankedPerson1_1)
+union all
+(select * from RankedPerson2)
+--union all
+--(select * from RankedPerson3)
+--union all
+--(select * from RankedPerson4)
+--union all
+--(select * from RankedPerson4_2)
+union all
+(select * from RankedPerson5)
+union all
+(select * from RankedPerson6)
+union all
+(select * from RankedPerson7)
+union all
+(select * from RankedPerson8)
+union all
+(select * from RankedPerson9)
+--union all
+--(select * from RankedPerson10_1)
+--union all
+--(select * from RankedPerson10_2)
+union all
+(select * from RankedPerson11)
+union all
+(select * from RankedPerson12)
+union all
+(select * from RankedPerson13)
+union all
+(select * from RankedPerson14)
+union all
+(select * from RankedPerson15)
+union all
+(select * from RankedPerson16);
+
+create view OrgSportsTeamInvalid6 as
+select O.org as org
+from OrgSportsTeamCand O,  PersonSportsStrong P
+where Contains(P.person, O.org);
+
+
+create view OrgSportsTeamInvalid as
+(select * from OrgSportsTeamInvalid1)
+--no need to filter, as the patterns are strong and the dictionaries are matched on selected documents
+--union all
+--(select * from OrgSportsTeamInvalid2)
+union all
+(select * from OrgSportsTeamInvalid3)
+union all
+(select * from OrgSportsTeamInvalid4)
+union all
+(select * from OrgSportsTeamInvalid5)
+union all
+(select * from OrgSportsTeamInvalid6);
+
+--output view OrgSportsTeamInvalid6;
+
+
+create view OrgSportsTeamValid as
+(select O.org from OrgSportsTeamCand O)
+minus
+(select * from OrgSportsTeamInvalid);
+
+
+------------------------------------------------------------------
+-- VALUE BASED JOIN FOR SPORTS TEAMS
+------------------------------------------------------------------
+
+--TODO: dedup OrgSportsTeamValid
+
+-- For certain types of sports, we use tokens for VBJ too
+create view OrgSportsTeamCandForTokens as
+(
+	(select O.org from SoccerTeamFromDict O)
+	union all
+	(select O.shortname as org from SoccerTeamFromClue O)
+)
+minus
+(select * from OrgSportsTeamInvalid);
+
+create view OrgSportsTeamToken as
+(select SubSpanTok(O.org, 0, 1) as org from OrgSportsTeamCandForTokens O )
+union all
+(select SubSpanTok(O.org, 0, 2) as org from OrgSportsTeamCandForTokens O )
+union all
+(select SubSpanTok(O.org, 0, 3) as org from OrgSportsTeamCandForTokens O )
+union all
+(select SubSpanTok(O.org, 0, 4) as org from OrgSportsTeamCandForTokens O )
+union all
+(select SubSpanTok(O.org, 1, 2) as org from OrgSportsTeamCandForTokens O )
+union all
+(select SubSpanTok(O.org, 1, 3) as org from OrgSportsTeamCandForTokens O )
+union all
+(select SubSpanTok(O.org, 1, 4) as org from OrgSportsTeamCandForTokens O )
+union all
+(select SubSpanTok(O.org, 1, 5) as org from OrgSportsTeamCandForTokens O );
+
+
+create view OrgSportsTeamValidForVBJ as
+(select * from OrgSportsTeamValid)
+union all
+--adding soccer shortnames as candidates
+(select O.shortname as org from SoccerTeamFromClue O)
+union all
+-- selected tokens are candidates
+(select * from OrgSportsTeamToken O 
+ where Not(Equals(GetText(O.org), ''))
+   and Not(MatchesDict('orgs/conll2003/sports/uefa_football_club_clue.dict', O.org))
+   and ContainsRegex(/[\p{L}\d]\z/, O.org)
+);
+
+
+create view OrgSportsTeamValidDedup as
+select toUpperCase(O.org) as normOrg, O.org as org 
+from 
+(
+	select GetText(O.org) as org
+	from OrgSportsTeamValidForVBJ O
+	group by GetText(O.org)
+) O;
+
+create view CapsTokenVBJCand as
+select CW.match as match, toUpperCase(CW.match) as normMatch
+from
+(
+	(select CW.match from CapsWordOnetoFive CW)
+	union all
+	(select CW.match from CapsTokenOneToThree CW)
+) CW
+consolidate on CW.match using 'ExactMatch';
+
+-- Additional Value-Based Join for  Sports teams
+-- to add back after filtering the all other VBJ matches as usual
+create view OrgTokenCandSportsTeams as
+select O.original, O.organization
+from
+(
+	-- split original Or predicate into two statements, for performance
+	(
+	  select O.org as original, CW.match as organization
+  	  from CapsTokenVBJCand CW,  
+  		   OrgSportsTeamValidDedup O
+	  where Equals(GetText(CW.match),GetText(O.org))
+	)
+	union all
+	(
+		select O.org as original, CW.match as organization
+  	  	from CapsTokenVBJCand CW,  
+  		   	 OrgSportsTeamValidDedup O
+	  	where Equals(GetText(CW.match),GetText(O.normOrg))
+	)
+) O
+where   --Not(MatchesRegex(/\s*\d{4}-\d{2}-\d{2}\s*[\r\n].*/,  RightContextTok(O.organization, 6)))
+        --Not(MatchesRegex(/\s*AT\s*/,  LeftContextTok(O.organization, 1)))
+        Not(MatchesDict('LocationClueDict', LeftContextTok(O.organization,1)))
+        and Not(MatchesDict('location/regions/internationalRegions.dict', O.organization))
+        and Not(MatchesDict('location/regions/regions-canada.dict', O.organization))
+        and Not(MatchesDict('location/regions/regions-china.dict', O.organization))
+        and Not(MatchesDict('location/regions/regions-india.dict', O.organization))
+        and Not(MatchesDict('location/regions/regions-russia.dict', O.organization))
+        and Not(MatchesDict('location/regions/regions-US.dict', O.organization))
+        and Not(MatchesDict('orgs/conll2003/sports/country-for-sport-teams.dict', O.organization))
+        -- require first capitalized letter or digit
+        and MatchesRegex(/[\p{Lu}\p{M}*\d].*/, O.organization)
+consolidate on O.organization; 
+
+  
+ /* 
+-- Additional Value-Based Join for  Sports teams
+-- to add back after filtering the VBJ matches as usual
+create view OrgTokenCandSportsTeams as
+  select CN.org as original, CW.match as organization
+  from 	CapsWordOnetoFive CW,  
+  		OrgSportsTeamValid CN
+  where Or(Equals(GetText(CW.match),GetText(CN.org)),
+  		   Equals(GetText(CW.match),toUpperCase(CN.org))
+  		   )
+        and 
+consolidate on CW.match; 
+*/
+
+create view OrgTokenCandSportsTeamsVBJ as
+(select O.organization as org from OrgTokenCandSportsTeams O)
+minus
+(select O.org as org from OrgSportsTeamValid O);
+
+create view OrgTokenCandSportsTeamsOverVBJ as
+(select O.org as org from OrgSportsTeamValid O)
+minus
+(select O.organization as org from OrgTokenCandSportsTeams O);
+
+
+
+create view OrgSportsTeamAll as
+(select O.org as org from OrgSportsTeamValid O)
+union all
+(select O.organization as org from OrgTokenCandSportsTeams O);
+
+
+-- Matches in the 2nd line of the document
+create view OrgSportsTeamAllInvalid1 as
+select O.org as org
+from OrgSportsTeamAll O, NewsReportSecondLine N
+where Contains(N.line, O.org);
+
+-- Dictionary filter
+create dictionary WrongSportsTeam as(
+	'Cup', 'Halftime'
+);
+
+create view OrgSportsTeamAllInvalid2 as
+select O.org as org
+from OrgSportsTeamAll O
+where ContainsDict('WrongSportsTeam', O.org);
+
+-- avoid matching soccer club prefix and suffixes such as F.C., AC alone
+create view OrgSportsTeamAllInvalid3 as
+select O.org as org
+from OrgSportsTeamAll O, SoccerClubClue C
+where Contains(C.match, O.org);
+
+create view OrgSportsTeamAllInvalid as
+(select * from OrgSportsTeamAllInvalid1)
+union all
+(select * from OrgSportsTeamAllInvalid2)
+union all
+(select * from OrgSportsTeamAllInvalid3);
+
+--output view OrgSportsTeamAllInvalid;
+
+create view OrgSportsTeam as
+(select * from OrgSportsTeamAll)
+minus
+(select * from OrgSportsTeamAllInvalid);
+
+
+--output view OrgSportsTeam;
+
+create dictionary RestrictionClue as(
+	--'CYCLING'
+	--'VOLLEYBALL'
+	--'NFL', 'FOOTBALL'
+    --'NHL', 'ICE HOCKEY'
+    --'SOCCER'
+    --'MOTOCROSS'
+    'BASKETBALL'
+);
+
+create view OrgSportsTeamValidRestricted as
+select O.*
+from OrgSportsTeam O, Doc D
+where ContainsDict('RestrictionClue', SubSpanTok(D.text, 0, 2));
+
+
+--output view OrgSportsTeamInvalid;
+--output view OrgSportsTeamValid;
+--output view OrgTokenCandSportsTeamsVBJ;
+--output view OrgTokenCandSportsTeamsOverVBJ;
+--output view OrgSportsTeamAll;
+--output view OrgTokenCandSportsTeams;
+--output view OrgSportsTeam;
+--output view OrgSportsTeamValidRestricted;
+--output view BasketballDoc;

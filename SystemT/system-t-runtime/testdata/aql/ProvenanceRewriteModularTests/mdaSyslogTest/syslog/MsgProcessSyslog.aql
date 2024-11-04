@@ -1,0 +1,30 @@
+module syslog;
+
+create view MsgProcessBoundaries as 
+select SpanBetween(DT.span, E.span) as span
+from MsgDateTimeOutput DT, ErrorSyslogOutput E;
+	
+create view MsgProcess as 
+	extract D.span as span,
+	regex /:\s+(([a-zA-Z_]*)\[?(\d{0,7})\]?)\s*\:/ on D.span 
+	return group 2 as appName
+	and group 3 as procId
+	and group 1 as match
+	from MsgProcessBoundaries D;	
+
+
+create view MsgProcesswithOnlyId as
+select  D.procId as small_extent, D.appName, D.procId, D.match
+from MsgProcess D
+where MatchesRegex(/\d{0,7}/,D.match);
+
+create view MsgProcesswithName as
+select  D.appName as small_extent, D.appName, D.procId, D.match
+from MsgProcess D
+where MatchesRegex(/[^\d{0,7}].*/,D.match);
+
+
+create view MsgProcessMatch as
+(select  * from MsgProcesswithName M)
+union all
+(select  * from MsgProcesswithOnlyId M);

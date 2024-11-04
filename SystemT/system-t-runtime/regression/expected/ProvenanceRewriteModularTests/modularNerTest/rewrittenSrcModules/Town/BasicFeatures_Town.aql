@@ -1,0 +1,65 @@
+module Town;
+
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText
+;
+
+
+import dictionary TownsPositiveCluesInLeftContext from module Dictionaries as TownsPositiveCluesInLeftContext
+;
+
+
+import dictionary TownsPositiveCluesInRightContext from module Dictionaries as TownsPositiveCluesInRightContext
+;
+
+
+require document with columns
+  text Text;
+
+create dictionary "LeftClueTownDict"
+with case insensitive
+as (
+  'town of',
+  'suburb of'
+);
+
+
+create view TownLeftClue as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__53__Temp_____sep_____D____id
+  from  __Subquery__53__Temp D;
+
+output view TownLeftClue;
+
+create view TownRightClue as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__54__Temp_____sep_____D____id
+  from  __Subquery__54__Temp D
+  where MatchesRegex(/\p{Lu}\p{M}*.*/, D.match);
+
+output view TownRightClue;
+
+create view __Subquery__53__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'TownsPositiveCluesInLeftContext'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__53__Temp;
+
+create view __Subquery__54__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'TownsPositiveCluesInRightContext'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__54__Temp;
+

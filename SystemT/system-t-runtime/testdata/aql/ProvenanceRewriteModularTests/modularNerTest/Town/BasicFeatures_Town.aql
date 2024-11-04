@@ -1,0 +1,24 @@
+module Town;
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText;
+
+import dictionary TownsPositiveCluesInLeftContext from module Dictionaries as TownsPositiveCluesInLeftContext;
+import dictionary TownsPositiveCluesInRightContext from module Dictionaries as TownsPositiveCluesInRightContext;
+
+require document with columns
+text Text;
+
+create dictionary LeftClueTownDict as
+('town of', 'suburb of');
+
+create view TownLeftClue as
+	select D.match as match
+	from 
+		(extract dictionary 'TownsPositiveCluesInLeftContext' on D.text as match from DocumentText D) D;
+
+create view TownRightClue as
+	select D.match as match
+	from 
+		(extract dictionary 'TownsPositiveCluesInRightContext' on D.text as match from DocumentText D) D
+	where MatchesRegex(/\p{Lu}\p{M}*.*/, D.match);
+	

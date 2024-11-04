@@ -1,0 +1,176 @@
+module scoringFnTest;
+
+--------------------------------------------------------------------------------
+-- MODULE scoringFnTest
+--
+-- Low-level test of the function behind AQL model scoring support.
+--
+-- This function uses the built-in table UDF API.  The function reads PMML from
+-- the jar file that the table UDF API adds to the classpath.  Input and output
+-- schemas are inferred from declared table function arguments.
+--------------------------------------------------------------------------------
+
+-- Declare an instance of the function that will score a logistic regression
+-- model over the iris data set.
+-- This version only outputs the predicted class labels.
+create function IrisScore(
+    params table(
+        sepal_length Float,
+        sepal_width Float,
+        petal_length Float,
+        petal_width Float
+    ) as locator
+)
+return table( class Text )
+external_name
+    -- Path relative to module root
+    '../../../../../regression/actual/TableFnTests/scoringFnTest/iris.jar:com.ibm.systemt.pmml.TestFunc!eval'
+language java;
+
+
+-- External view to hold the input records
+create external view IrisData(
+    sepal_length Float,
+    sepal_width Float,
+    petal_length Float,
+    petal_width Float,
+    actual_class Text
+)
+external_name 'IrisData';
+
+create view IrisDataWithoutClass as
+select D.sepal_length, D.sepal_width, D.petal_length, D.petal_width
+from IrisData D;
+
+
+-- Run the data through the table function.
+create view IrisClassPredictions as 
+select * 
+from IrisScore(IrisDataWithoutClass);
+
+output view IrisClassPredictions;
+
+
+-- Create a second version of the function with an extra argument that gets
+-- ignored.
+create function IrisScoreExtraArg(
+    params table(
+        sepal_length Float,
+        sepal_width Float,
+        petal_length Float,
+        petal_width Float,
+        extra_arg Integer
+    ) as locator
+)
+return table( class Text )
+external_name
+    -- Path relative to module root
+    '../../../../../regression/actual/TableFnTests/scoringFnTest/iris.jar:com.ibm.systemt.pmml.TestFunc!eval'
+language java;
+
+create view IrisDataPlusExtraArg as
+select D.*, 42 as extra_arg
+from IrisDataWithoutClass D;
+
+create view IrisPredictionsExtraArg as
+select * from IrisScoreExtraArg(IrisDataPlusExtraArg);
+
+output view IrisPredictionsExtraArg;
+
+-- Create a third version of the function that is missing one of the JPMML
+-- inputs.
+create function IrisScoreMissingArg(
+    params table(
+        sepal_length Float,
+        sepal_width Float,
+        petal_length Float
+        -- Note missing fourth argument
+    ) as locator
+)
+return table( class Text )
+external_name
+    -- Path relative to module root
+    '../../../../../regression/actual/TableFnTests/scoringFnTest/iris.jar:com.ibm.systemt.pmml.TestFunc!eval'
+language java;
+
+
+create view IrisDataMissingArg as
+select D.sepal_length, D.sepal_width, D.petal_length
+from IrisData D;
+
+create view IrisPredictionsMissingArg as
+select * from IrisScoreMissingArg(IrisDataMissingArg);
+
+output view IrisPredictionsMissingArg;
+
+
+-- Create a fourth version of the function that passes through the canonical
+-- class label.
+create function IrisScorePassthrough(
+    params table(
+        sepal_length Float,
+        sepal_width Float,
+        petal_length Float,
+        petal_width Float,
+        actual_class Text
+    ) as locator
+)
+return table( class Text, actual_class Text )
+external_name
+    -- Path relative to module root
+    '../../../../../regression/actual/TableFnTests/scoringFnTest/iris.jar:com.ibm.systemt.pmml.TestFunc!eval'
+language java;
+
+create view IrisPredictionPassthrough as
+select * from IrisScorePassthrough(IrisData);
+
+output view IrisPredictionPassthrough;
+
+-- Declare a second scoring function using a different PMML file
+-- model over the iris data set.
+create function IrisKMeans(
+    params table(
+        sepal_length Float,
+        sepal_width Float,
+        petal_length Float,
+        petal_width Float,
+        actual_class Text
+    ) as locator
+)
+return table( class Text, actual_class Text )
+external_name
+    -- Path relative to module root
+    '../../../../../regression/actual/TableFnTests/scoringFnTest/irisKmeans.jar:com.ibm.systemt.pmml.KMeans!eval'
+language java;
+
+create view IrisKMeansOutput as
+select * from IrisKMeans(IrisData);
+
+output view IrisKMeansOutput;
+
+-- Create another scoring function, using the new "create function from pmml"
+-- syntax
+create function IrisDecisionTree(
+    params table(
+        sepal_length Float,
+        sepal_width Float,
+        petal_length Float,
+        petal_width Float,
+        actual_class Text
+    ) as locator
+)
+return table( class Text, actual_class Text,
+    -- This PMML file also defines additional output fields
+    "Probability_Iris-setosa" Float,
+    "Probability_Iris-versicolor" Float,
+    "Probability_Iris-virginica" Float)
+external_name 'IrisTree.xml'
+language pmml;
+
+create view IrisDecisionTreeOutput as
+select * from IrisDecisionTree(IrisData);
+
+output view IrisDecisionTreeOutput;
+
+
+

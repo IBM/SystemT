@@ -1,0 +1,44 @@
+require document with columns text Text;
+
+create dictionary FirstNames
+as
+(
+'John', 'Mary', 'Will'
+);
+
+create dictionary LastNames
+as
+(
+'Smith', 'Davis', 'Doe'
+);
+
+create view FirstNamesDict as
+extract dictionary 'FirstNames'
+on D.text as first
+from Document D;
+
+create view LastNamesDict as
+extract dictionary 'LastNames'
+on D.text as last
+from Document D;
+
+-- Test a join with group by clause
+create view JoinGroup as
+select F.first, L.last
+from FirstNamesDict F, LastNamesDict L
+where FollowsTok(F.first, L.last, 0, 1)
+group by F.first, L.last;
+
+output view JoinGroup;
+
+-- Test a join with consolidate clause 
+-- IMP: Where the target column does not appear in the select list NOR in the predicate (i.e.
+-- appears ONLY in the consolidate clause) 
+create view JoinConsolidate as
+select F.first
+from FirstNamesDict F, LastNamesDict L
+consolidate on L.last;
+
+output view JoinConsolidate;
+
+

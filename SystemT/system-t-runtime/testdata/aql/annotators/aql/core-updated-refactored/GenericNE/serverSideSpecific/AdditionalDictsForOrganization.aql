@@ -1,0 +1,27 @@
+create view OrganizationFortune1000_2000_2008_Case as
+	select
+		D.match as match
+	from
+		--Dictionary('orgs/organization_fortune1000_2000_2008.case.dict', 'Exact', Doc.text) D;
+		--Dictionary('orgs/org_top_abbrevFull_case_en_short.dict', 'Exact', Doc.text) D;
+		(extract dictionary 'orgs/org_top_abbrevFull_case_en_short.dict' 
+			with flags 'Exact'
+			on D.text as match 
+			from Doc D) D;
+		
+		
+create view OrganizationFortune1000_2000_2008 as
+	--extract dictionary 'orgs/organization_fortune1000_2000_2008.dict'
+	extract dictionary 'orgs/org_top_abbrevFull_en_long.dict'
+		on D.text as match
+	from Doc D
+	-- enforce Caps letter or digit at the beginning
+	having MatchesRegex(/[\p{Lu}\p{M}*\d].+/, match);
+	
+
+create view OrganizationFortune1000_2000_2008_NoCase as
+	--extract dictionary 'orgs/organization_fortune1000_2000_2008.nocase.dict'
+	extract dictionary 'orgs/org_top_en.dict'
+		on D.text as match
+	from Doc D;
+		

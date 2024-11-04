@@ -1,0 +1,25 @@
+module schemaValidationTest3;
+require document with columns text Text;
+
+-- Third test of schema validation for table functions.  Triggers error
+-- conditions that are masked by the errors in the first two tests.
+
+-- Declare a simple table function, with an output schema that will pass the
+-- compile-time validation but will fail
+create function MyTableFunc1( intArg Integer )
+return table( wrongType Boolean, realVal Float )
+external_name 
+    -- Path relative to module root; udfjars is inside <project root>/testdata
+    '../../../../udfjars/tableFnTestsUDFs.jar:com.ibm.test.udfs.BasicTableFunc!eval'
+language java
+deterministic
+called on null input;
+
+
+-- Create a view that calls the function, so that the compiler won't skip it.
+create view TabFuncOutput1 as
+select * from MyTableFunc1(3);
+
+output view TabFuncOutput1;
+
+

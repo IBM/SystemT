@@ -1,0 +1,168 @@
+create view PrivilegedDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/privileged/email.privileged.dict', Document.text) D;	
+
+
+
+create view PrivilegedObjectDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/privileged/objects.dict', Document.text) D;	
+
+
+create view PrivilegedObjectQualifierDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/privileged/objectQualifier.dict', Document.text) D;	
+
+
+create view PrivilegedDataObjectDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/privileged/dataObjects.dict', Document.text) D;	
+
+
+create view PrivilegedDataObjectQualifierDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/privileged/dataObjectQualifier.dict', Document.text) D;	
+
+create view PrivilegedNegatedObjectDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/privileged/negatedObjects.dict', Document.text) D;	
+
+create view PrivilegedNegatedObjectQualifierDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/privileged/negatedObjectQualifier.dict', Document.text) D;	
+
+
+create view PrivilegedNegatedMWObjectDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/privileged/negatedMWObjects.dict', Document.text) D;	
+
+create view PrivilegedNegatedMWObjectQualifierDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/privileged/negatedMWObjectQualifier.dict', Document.text) D;	
+
+-- VERB FORMS: "keep privileged", "maintain privilegedity"
+create view Privileged1 as
+	select
+ 		CombineSpans(coqd.match, cod.match) as match
+	from
+		PrivilegedObjectDict cod,
+		PrivilegedObjectQualifierDict coqd
+ 	where  
+ 		FollowsTok(coqd.match, cod.match, 0, 3);
+
+
+-- VERB FORMS: "not tell anybody", "not make public", "not leak"
+create view Privileged2 as
+	select
+ 		CombineSpans(cnoqd.match, cnod.match) as match
+	from
+		PrivilegedNegatedObjectDict cnod,
+		PrivilegedNegatedObjectQualifierDict cnoqd
+ 	where  
+ 		FollowsTok(cnoqd.match, cnod.match, 0, 3);
+
+
+
+
+-- NOUN FORMS: "not open ..public", "never open... public"
+create view Privileged3 as
+	select
+ 		CombineSpans(cnmwoqd.match, cnmwod.match) as match
+	from
+		PrivilegedNegatedMWObjectDict cnmwod,
+		PrivilegedNegatedMWObjectQualifierDict cnmwoqd
+ 	where  
+ 		FollowsTok(cnmwoqd.match, cnmwod.match, 0, 3);
+
+
+
+-- NOUN FORMS: "proprietary data", "condifential information", "privileged information"
+create view Privileged4 as
+	select
+ 		CombineSpans(cdoqd.match, cdod.match) as match
+	from
+		PrivilegedDataObjectDict cdod,
+		PrivilegedDataObjectQualifierDict cdoqd
+ 	where  
+ 		FollowsTok(cdoqd.match, cdod.match, 0, 3);
+
+
+create view Privileged5 as
+	select
+		R.match as match
+	from
+		Regex(/(privileged.{1,20}for.{1,20}only)/, Document.text) R;
+
+
+create view Privileged6 as
+	select
+		R.match as match
+	from
+		Regex(/(sign.{1,20}CDA)/, Document.text) R;
+
+
+
+create view Privileged7 as
+	select
+		R.match as match
+	from
+		Regex(/(disclosure.{1,20}prohibited)/, Document.text) R;
+
+create view Privileged9 as
+	select
+		R.match as match
+	from
+		Regex(/(mail{1,20}((privileged)|(PRIVILEGED)).{1,20}((confidential)|(CONFIDENTIAL)))/, Document.text) R;
+
+create view Privileged10 as
+	select
+		R.match as match
+	from
+		Regex(/(mail{1,20}((confidential)|(CONFIDENTIAL)).{1,20}((privileged)|(PRIVILEGED)))/, Document.text) R;
+
+-- create view Privileged8 as select POD.match as match from Signature S, PrivilegedObjectDict POD where Contains(S.block, POD.match);
+
+
+create view PrivilegedAll as 
+     (select C.match as match from Privileged1 C)
+     union all
+     (select C.match as match from Privileged2 C)
+     union all
+     (select C.match as match from Privileged3 C)
+     union all
+     (select C.match as match from Privileged4 C)
+     union all
+     (select C.match as match from Privileged5 C)
+     union all
+     (select C.match as match from Privileged6 C)
+     union all
+     (select C.match as match from Privileged7 C)
+     union all
+     (select C.match as match from Privileged9 C)
+     union all
+     (select C.match as match from Privileged10 C)
+     union all
+--     (select C.match as match from Privileged8 C)
+--     union all
+     (select C.match as match from PrivilegedDict C);
+
+
+-- Skipped: "privileged...for....only"

@@ -1,0 +1,158 @@
+
+
+create view FMReport as
+  select FM.year as year, FM.quarter as quarter, FM.period as period, FM.metric as metric, CA.amountrange1 as amountrange1, CA.amountrange2 as amountrange2, CA.amountrange as amountrange, CombineSpans(FM.match,CA.amountrange) as value
+  from FinancialMetricOptionalPeriod FM, CurrencyAmountOptionalRangePair CA
+  where FollowsTok(FM.match,CA.amountrange,0,3);
+
+--create view FMReportPastEvent as
+--  select R.value as value
+--  from FMReport R
+--  where ContainsDict('companyanalystannouncement/pasteventclue.dict',LeftContext(R.value,10));
+
+--create view FMReportFutureEvent as
+--  select R.value as value
+--  from FMReport R
+--  where ContainsDict('companyanalystannouncement/futureeventclue.dict',LeftContext(R.value,10));
+
+create view ConsensusClue as
+  --extract dictionary 'companyanalystannouncement/consensusclue.dict'
+  extract dictionary 'companyanalystannouncement/fin_announce_consensus_posClue_en.dict'
+  on D.text as match
+  from Doc D;
+
+create view ConsensusEstimate1 as
+  select CA.amountrange as range, CombineSpans(C.match, CA.amountrange) as match
+  from ConsensusClue C, CurrencyAmountOptionalRange CA
+  where FollowsTok(C.match, CA.amountrange,0,2);
+
+create view ConsensusEstimate2 as
+  select CA.amountrange as range, CombineSpans( CA.amountrange, C.match) as match
+  from ConsensusClue C, CurrencyAmountOptionalRange CA
+  where FollowsTok( CA.amountrange,C.match,0,2);
+
+create view ConsensusEstimate as
+  (select R.range as range, R.match as match from ConsensusEstimate1 R) 
+  union all
+  (select R.range as range, R.match as match from ConsensusEstimate2 R);
+
+create view FMReportAndEstimate as
+  select FM.year as year, FM.quarter as quarter, FM.period as period, FM.metric as metric, FM.amountrange1 as amountrange1, FM.amountrange2 as amountrange2,CE.range as estimaterange, CombineSpans(FM.value, CE.match) as match
+  from FMReport FM, ConsensusEstimate CE
+  where FollowsTok(FM.value, CE.match,0,10);
+
+create view FMReportOptionalEstimateCandidates as
+  (select R.year as year, R.quarter as quarter, R.period as period, R.metric as metric, R.amountrange1 as amountrange1, R.amountrange2 as amountrange2, R.estimaterange as estimaterange, R.match as match from FMReportAndEstimate R)
+  union all
+  (select R.year as year, R.quarter as quarter, R.period as period, R.metric as metric, R.amountrange1 as amountrange1, R.amountrange2 as amountrange2, RightContext(R.amountrange,0) as estimaterange, R.value as match from FMReport R);
+
+create view FMReportOptionalEstimate as
+  select R.year as year, R.quarter as quarter, R.period as period, R.metric as metric, R.amountrange1 as amountrange1, R.amountrange2 as amountrange2, R.estimaterange as estimaterange, R.match as match
+  from FMReportOptionalEstimateCandidates R
+  consolidate on R.match;
+
+create view CompanyInfoAnnouncementCandidates as
+select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match
+from CompanyInfo C
+--where Not(ContainsDict('companyanalystannouncement/companyannouncementnegativelc.dict',LeftContextTok(C.companyname,2))) and
+where Not(ContainsDict('companyanalystannouncement/fin_announce_negClue_ctxtLeft_en.dict',LeftContextTok(C.companyname,2))) and
+	  --Not(ContainsDict('companyanalystannouncement/companyannouncementnegativerc.dict',RightContextTok(C.companyname,2))) and
+	  Not(ContainsDict('companyanalystannouncement/fin_announce_negClue_ctxtRight_en.dict',RightContextTok(C.companyname,2))) and
+	  Not(ContainsRegex(/[\r\n]/,RightContext(C.match,5))) and
+	  Not(ContainsRegex(/[-:]/,RightContextTok(C.match,2)));
+
+create view FMReportOptionalEstimateWithCompanyDirectCandidates as
+  select FM.year as year, FM.quarter as quarter, FM.period as period, FM.metric as metric, FM.amountrange1 as amountrange1, FM.amountrange2 as amountrange2, FM.estimaterange as estimaterange,C.companyname as companyname, C.exchange as exchange, C.ticker as ticker, CombineSpans(C.companyname, FM.match) as match
+  from FMReportOptionalEstimate FM, CompanyInfoAnnouncementCandidates C
+  where FollowsTok(C.ticker, FM.match, 0, 5);
+  
+create view FMReportOptionalEstimateWithCompanyDirectToDelete as
+  select R.year as year, R.quarter as quarter, R.period as period, R.metric as metric, R.amountrange1 as amountrange1, R.amountrange2 as amountrange2, R.estimaterange as estimaterange,R.companyname as companyname, R.exchange as exchange, R.ticker as ticker, R.match as match
+  from FMReportOptionalEstimateWithCompanyDirectCandidates R, CompanyInfoAnnouncementCandidates C
+  where Contains(R.match, C.companyname) and FollowsTok(R.companyname, C.companyname,0,100);
+
+create view FMReportOptionalEstimateWithCompanyDirect as
+(select R.year as year, R.quarter as quarter, R.period as period, R.metric as metric, R.amountrange1 as amountrange1, R.amountrange2 as amountrange2, R.estimaterange as estimaterange,R.companyname as companyname, R.exchange as exchange, R.ticker as ticker, R.match as match
+from FMReportOptionalEstimateWithCompanyDirectCandidates R )
+minus 
+(select R.year as year, R.quarter as quarter, R.period as period, R.metric as metric, R.amountrange1 as amountrange1, R.amountrange2 as amountrange2, R.estimaterange as estimaterange,R.companyname as companyname, R.exchange as exchange, R.ticker as ticker, R.match as match
+from FMReportOptionalEstimateWithCompanyDirectToDelete R);
+  
+create view FMReportOptionalEstimateWithCompanyExpandedCandidate as
+  select FM.year as year, FM.quarter as quarter, FM.period as period, FM.metric as metric, FM.amountrange1 as amountrange1, FM.amountrange2 as amountrange2, FM.estimaterange as estimaterange,FMC.companyname as companyname, FMC.exchange as exchange, FMC.ticker as ticker,  FMC.match as previousmatch, CombineSpans(FMC.match, FM.match) as match
+  from FMReportOptionalEstimate FM, FMReportOptionalEstimateWithCompanyDirect FMC 
+  where FollowsTok(FMC.match, FM.match, 0, 5);
+
+create view FMReportOptionalEstimateWithCompanyExpandedToDelete as
+  select FMC.year as year, FMC.quarter as quarter, FMC.period as period, FMC.metric as metric, FMC.amountrange1 as amountrange1, FMC.amountrange2 as amountrange2, FMC.estimaterange as estimaterange,FMC.companyname as companyname, FMC.exchange as exchange, FMC.ticker as ticker, C.companyname as overlappingcompany, FMC.match as match
+  from FMReportOptionalEstimateWithCompanyExpandedCandidate FMC,  CompanyInfoAnnouncementCandidates C 
+  where Contains(FMC.match, C.companyname) and FollowsTok(FMC.previousmatch, C.companyname, 0, 100);
+
+create view FMReportOptionalEstimateWithCompanyExpanded as
+ ( select FMC.year as year, FMC.quarter as quarter, FMC.period as period, FMC.metric as metric, FMC.amountrange1 as amountrange1, FMC.amountrange2 as amountrange2, FMC.estimaterange as estimaterange,FMC.companyname as companyname, FMC.exchange as exchange, FMC.ticker as ticker, FMC.match as match from FMReportOptionalEstimateWithCompanyExpandedCandidate FMC )
+  minus
+  (select FMC.year as year, FMC.quarter as quarter, FMC.period as period, FMC.metric as metric, FMC.amountrange1 as amountrange1, FMC.amountrange2 as amountrange2,FMC.estimaterange as estimaterange,FMC.companyname as companyname, FMC.exchange as exchange, FMC.ticker as ticker, FMC.match as match from FMReportOptionalEstimateWithCompanyExpandedToDelete FMC );
+
+create view FMReportOptionalEstimateWithCompany as
+ ( select FMC.year as year, FMC.quarter as quarter, FMC.period as period, FMC.metric as metric, FMC.amountrange1 as amountrange1, FMC.amountrange2 as amountrange2, FMC.estimaterange as estimaterange,FMC.companyname as companyname, FMC.exchange as exchange, FMC.ticker as ticker, FMC.match as match from FMReportOptionalEstimateWithCompanyDirect FMC )
+  union all
+  (select FMC.year as year, FMC.quarter as quarter, FMC.period as period, FMC.metric as metric, FMC.amountrange1 as amountrange1, FMC.amountrange2 as amountrange2, FMC.estimaterange as estimaterange,FMC.companyname as companyname, FMC.exchange as exchange, FMC.ticker as ticker, FMC.match as match from FMReportOptionalEstimateWithCompanyExpanded FMC );
+
+--create view FMReportOptionalEstimateWithCompanyPast as
+--  select R.metric as metric, R.amountrange1 as amountrange1, R.amountrange2 as amountrange2, R.estimaterange as estimaterange,R.companyname as companyname, R.exchange as exchange, R.ticker as ticker, R.match as match
+--  from FMReportOptionalEstimateWithCompany R
+--  where ContainsDict('companyanalystannouncement/pasteventclue.dict',SpanBetween(R.ticker, R.metric)) ;
+
+create view FMReportOptionalEstimateWithCompanyFutureAll as
+  select R.year as year, R.quarter as quarter, R.period as period, R.metric as metric, R.amountrange1 as amountrange1, R.amountrange2 as amountrange2, R.estimaterange as estimaterange,R.companyname as companyname, R.exchange as exchange, R.ticker as ticker, R.match as match
+  from FMReportOptionalEstimateWithCompany R
+  --where Or(ContainsDict('companyanalystannouncement/futureeventclue.dict',SpanBetween(R.companyname, R.metric)),
+  where Or(ContainsDict('companyanalystannouncement/fin_announce_future_posClue_en.dict',SpanBetween(R.companyname, R.metric)),
+         --ContainsDict('companyanalystannouncement/guidancemetricclue.dict',RightContext(R.metric,10))) ;
+         ContainsDict('companyanalystannouncement/fin_announce_guide_posClue_en.dict',RightContext(R.metric,10))) ;
+
+
+create view FMReportOptionalEstimateWithCompanyFuture1 as
+  select R.year as year, R.quarter as quarter,R.period as period, R.metric as metric, R.amountrange1 as originalamountrange, R.amountrange2 as newamountrange, R.estimaterange as estimaterange,R.companyname as companyname, R.exchange as exchange, R.ticker as ticker, R.match as match
+  from FMReportOptionalEstimateWithCompanyFutureAll R
+  where ContainsRegex(/.+/,R.amountrange2);
+ 
+create view FMReportOptionalEstimateWithCompanyFuture2 as
+  select R.year as year, R.quarter as quarter, R.period as period, R.metric as metric, '' as originalamountrange, R.amountrange1 as newamountrange, R.estimaterange as estimaterange,R.companyname as companyname, R.exchange as exchange, R.ticker as ticker, R.match as match
+  from FMReportOptionalEstimateWithCompanyFutureAll R
+  where Not(ContainsRegex(/.+/,R.amountrange2));
+ 
+create view FMReportOptionalEstimateWithCompanyFuture as
+(select R.year as year, R.quarter as quarter, R.period as period, R.metric as metric, R.originalamountrange as originalamountrange, R.newamountrange as newamountrange, R.estimaterange as estimaterange,R.companyname as companyname, R.exchange as exchange, R.ticker as ticker, R.match as match from FMReportOptionalEstimateWithCompanyFuture1 R)
+union all
+(select R.year as year, R.quarter as quarter, R.period as period, R.metric as metric, R.originalamountrange as originalamountrange, R.newamountrange as newamountrange, R.estimaterange as estimaterange,R.companyname as companyname, R.exchange as exchange, R.ticker as ticker, R.match as match from FMReportOptionalEstimateWithCompanyFuture2 R);
+  
+create view FMReportOptionalEstimateWithCompanyPast as
+(select R.year as year, R.quarter as quarter, R.period as period, R.metric as metric, R.amountrange1 as amountrange1, R.amountrange2 as amountrange2, R.estimaterange as estimaterange,R.companyname as companyname, R.exchange as exchange, R.ticker as ticker, R.match as match  from FMReportOptionalEstimateWithCompany R)
+minus 
+(select R.year as year, R.quarter as quarter, R.period as period, R.metric as metric, R.amountrange1 as amountrange1, R.amountrange2 as amountrange2, R.estimaterange as estimaterange,R.companyname as companyname, R.exchange as exchange, R.ticker as ticker, R.match as match  from FMReportOptionalEstimateWithCompanyFutureAll R);
+
+--output view CurrencyAmount;
+--output view CurrencyAmountWithDenomination;
+--output view CurrencyAmountOptionalDenomination;
+--output view CurrencyAmountRange;
+--output view FinancialMetric;
+--output view FinancialMetricWithPeriod;
+--output view FMReport;
+--output view FMReportPastEvent;
+--output view FMReportFutureEvent;
+--output view ConsensusClue;
+--output view ConsensusEstimate;
+--output view FMReportAndEstimate;
+--output view FinancialMetricOptionalPeriod;
+--output view StockExchangeAndTicker;
+--output view CompanyInfo;
+--output view FMReportOptionalEstimate;
+--output view FMReportOptionalEstimateWithCompanyDirect;
+--output view FMReportOptionalEstimateWithCompany;
+--output view FMReportOptionalEstimateWithCompanyPast;
+--output view FMReportOptionalEstimateWithCompanyFuture;
+--output view FMReportOptionalEstimateWithCompanyExpandedCandidate;
+--output view FMReportOptionalEstimateWithCompanyExpandedToDelete;
+--output view FMReportOptionalEstimateWithCompanyExpanded;
+

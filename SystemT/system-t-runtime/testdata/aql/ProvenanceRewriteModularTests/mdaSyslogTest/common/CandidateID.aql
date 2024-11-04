@@ -1,0 +1,74 @@
+module common;
+
+create view IDCharNumSymBase as 
+select 
+	R.match as match
+from 
+	Regex(/(([a-zA-Z\d])+([a-zA-Z\d-!\^])*\d([a-zA-Z\d-!\^])*){6,20}/,
+        Document.text) R;
+	
+create view IDCharNumSym as
+    select D.match 
+    from IDCharNumSymBase D
+    where ContainsRegex(/[a-zA-Z]/,D.match);
+   -- and Not(ContainsRegex(/(http)|(com)/, D.match));
+
+create view NumsFollowLetters as
+    select D.match
+    from IDCharNumSym D
+  where MatchesRegex(/[a-zA-Z]([-!]|[a-zA-Z]){3,}(\d|[-!])+/,D.match);
+
+ create view IDCharNumSymFiltered as 
+    (  
+    select D.match 
+    from IDCharNumSym D
+    )
+    minus
+    (
+    select D.match
+    from NumsFollowLetters D
+    );
+ 
+create view IDNumOnly as 
+select 
+	R.match as match
+from 
+	Regex(/\d{10,}/, Document.text) R;
+	
+
+create view IDBuildingBlock as
+    (
+    select D.match
+    from IDCharNumSymFiltered D
+    )
+union all
+    (
+    select D.match
+    from IDNumOnly D
+    );
+    
+
+create view IDBuildingBlockConsolidated as
+select C.match as match
+from IDBuildingBlock C
+consolidate on C.match 
+using 'ContainedWithin';  
+
+-- View used by syslog rules
+export view IDBuildingBlockConsolidated;
+  
+-- FINAL OUTPUTS 
+create view CandId4RecSplit as 
+select C.match as match
+from IDBuildingBlockConsolidated C;
+
+create view IDInterim as 
+select D.match as Id_Span, GetText(D.match) as Id_Text
+from IDBuildingBlockConsolidated D;
+
+create view IDOutput as
+select D.Id_Span as span, D.Id_Text as text, GetString('ID') as field_type
+from IDInterim D;
+
+export view IDOutput;
+

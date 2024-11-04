@@ -1,0 +1,245 @@
+create view GPECandidate as
+	(select A.address as loc from MapLocation A where Not(MatchesRegex(//, A.address)))
+	union all
+	(select C.city as loc from MapLocation C where Not(MatchesRegex(//, C.city)))
+	union all
+	(select C.county as loc from MapLocation C where Not(MatchesRegex(//, C.county)))
+	union all
+	(select C.stateorprovince as loc from MapLocation C where Not(MatchesRegex(//, C.stateorprovince)))
+	union all
+	(select C.country as loc from MapLocation C where Not(MatchesRegex(//, C.country)))
+	-- union all
+	--(select C.continent as loc from MapLocation C where Not(MatchesRegex(//, C.continent)))
+	union all
+	(select C.loc as loc from AdditionaLocationCandidate C where Not(MatchesRegex(//, C.loc)))
+	union all
+	(select C.match as loc from InternationalRegion  C where Not(MatchesRegex(//, C.match)))
+	union all
+	(select C.match as loc from DomesticRegion  C where Not(MatchesRegex(//, C.match)))
+	union all
+	(select C.match as loc from Landmark_Political C where Not(MatchesRegex(//, C.match)))
+	union all
+	(select C.match as loc from ContinentWithDirection C)
+	union all
+	(select N.match as loc from NationalityWithDirection N)
+	union all
+	(extract pattern ('near'|'in'|'from'|'south of'|'capital')(<C.match>)/([.,]|[a-z]+)/ return group 2 as loc from CapsPlace C)
+	union all
+	(extract regex /[tT]he[ ]+(North)\b/ on 2 token in D.text return group 1 as loc from Doc D)
+	union all
+	(select T.match as loc from TownConsolidated T);
+		
+create dictionary WrongGPEDict as (
+	'Iraqis', 'Americans', 'grave', 'Mon', 'Kurds', 'Kurdish', 'Arab', 'English','Spanish', 'Jewish','Orlando',
+	'State', 'Turks', 'mo', 'muslim'
+);	
+
+create dictionary WrongGPELeftClueDict as (
+	'these', 'parts of northern', 'raids into western', 'heroes of the new', 'Iraqi', 'Mid-'
+);
+
+create view WrongGPELeftClue as
+extract
+	dictionaries 
+		'WrongGPELeftClueDict'
+	on D.text
+	as clue
+from Doc D;
+
+create view WrongGPE1 as
+select R.*
+from WrongGPELeftClue C, GPECandidate R 
+where FollowsTok(C.clue, R.loc, 0, 0); 
+
+create view WrongGPE2 as
+select R.*
+from Ethnic C, GPECandidate R 
+where FollowsTok(C.match, R.loc, 0, 0); 
+
+create dictionary WrongGPERightClueDict as (
+	--'forces', 
+	'had', '-language','$', 'African-American', 'opinion', 'American', 'Americans', 'Army', 'Central Command',
+	'Post', 'spokesman'
+);
+
+create view WrongGPERightClue as
+extract
+	dictionaries 
+		'WrongGPERightClueDict'
+	on D.text
+	as clue
+from Doc D;
+
+create view WrongGPE3 as
+select R.*
+from WrongGPERightClue C, GPECandidate R 
+where FollowsTok(R.loc, C.clue, 0, 0); 
+
+create view WrongGPE4 as
+select R.*
+from GPECandidate R
+where MatchesRegex(/[A-Z].*/, LeftContextTok(R.loc, 1))
+  and MatchesRegex(/[A-Z].*/, RightContextTok(R.loc, 1));
+
+create view StateAsTeam1 as
+select C.stateorprovince as loc 
+from MapLocation C
+where Not(MatchesRegex(//, C.stateorprovince))
+  and MatchesRegex(/\s*(must|beat|is|ranked|held|hate|\d{1,2})\s*/, LeftContextTok(C.stateorprovince, 1));
+  
+create view StateAsTeam2 as
+select C.stateorprovince as loc 
+from MapLocation C
+where Not(MatchesRegex(//, C.stateorprovince))
+  and MatchesRegex(/\s*(must|beat|was|game|won|has|football|fan|team|played|led|scored|win|acknowledged|wanted|implied)\s*/, RightContextTok(C.stateorprovince, 1));
+
+create view StateAsTeam3 as
+select C.stateorprovince as loc 
+from MapLocation C
+where Not(MatchesRegex(//, C.stateorprovince))
+  and MatchesRegex(/\s*((-\s*[A-Z].*)|([A-Z][^\s*]\s*[.]))/, RightContextTok(C.stateorprovince, 2));
+  
+create view StateAsTeam4 as
+select C.stateorprovince as loc 
+from MapLocation C
+where Not(MatchesRegex(//, C.stateorprovince))
+  and MatchesRegex(/[A-Z][^\s]*\s*-\s*/, LeftContextTok(C.stateorprovince, 2));
+
+  
+output view StateAsTeam1;
+output view StateAsTeam2;
+output view StateAsTeam3;
+output view StateAsTeam4;
+   
+create view WrongGPE as
+	  (select G.* from GPECandidate G, Organization O where Contains(O.organization, G.loc))
+	  union all
+	  (select L.* from Location L)
+	  union all
+	  (select G.* from GPECandidate G, Facility F where Overlaps(F.facility, G.loc))
+	  union all
+	  (extract dictionaries 'WrongGPEDict'  with flags 'Exact' on D.text as loc from Doc D)
+	  union all
+	  (select G.* from WrongGPE1 G)
+	  union all
+	  (select G.* from WrongGPE2 G)
+	  union all
+	  (select G.* from WrongGPE3 G)
+	  union all
+	  (select G.* from WrongGPE4 G)
+	  union all
+	  (select S.* from StateAsTeam1 S)
+	  union all
+	  (select S.* from StateAsTeam2 S)
+	  union all
+	  (select S.* from StateAsTeam3 S)
+	  union all
+	  (select S.* from StateAsTeam4 S)
+	  union all
+	  (select G.* from GPECandidate G, Person P where Contains(P.name, G.loc))
+	  union all
+	  (extract pattern ('a'|'an')(<G.loc>)/[,.;]/ return group 2 as loc from GPECandidate G)
+	  union all
+	 (select G.* from GPECandidate G, WhiteHouse W where Overlaps(W.loc, G.loc));
+
+create view GPEAll as
+	(select G.* from GPECandidate G)
+	minus
+	(select G.* from GPECandidate G, WrongGPE W where Contains(W.loc, G.loc));
+	  
+create view GPEAllMerged1 as
+select CombineSpans(G1.loc, G2.loc) as loc
+from GPEAll G1, GPEAll G2
+where FollowsTok(G1.loc, G2.loc, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(G1.loc, G2.loc)));
+
+create view GPEAllMerged2 as
+extract
+	pattern <G1.loc>(<'State'[with case exact]>|<'-l'[with case exact]>|<'City'[with case exact]>)
+	as loc 
+from GPEAll G1;
+
+output view GPEAll;
+
+output view GPEAllMerged2;
+
+create view GPEAllMerged3 as
+extract
+	pattern /(Fort|New|Great|Al|Republic[ ]+of)/<G1.loc>
+	as loc
+	with inline_match on Doc.text
+from GPEAll G1;
+
+
+create view GPEPatternBased1 as
+extract
+	pattern (',')(<C.match>)(',')(<S.match>)
+	return group 2 as loc
+	   and group 4 as state
+from StateWeakAbbrev S,
+     CapsPlace C;
+     
+output view GPEPatternBased1;
+
+create view GPEPatternBased2Candidate as
+extract
+	pattern ('from')(<C.match>)
+	return group 2 as loc
+from CapsPlace C
+having MatchesRegex(/([\r\n]{2,}|[.]).*/, RightContext(loc, 4));
+
+create view GPEPatternBased2 as
+extract regex /([^.]+)[.]?/ 
+on between 1 and 3 tokens in G.loc 
+return group 1 as loc 
+from GPEPatternBased2Candidate G;
+
+output view GPEPatternBased2;
+
+create dictionary GPERightClueDict as (
+	'presidential palace', 'plant'
+);
+
+create view GPERightClue as
+extract
+	dictionaries 'GPERightClueDict' 
+	on D.text as clue
+from Doc D;
+
+create view GPEPatternBased3 as
+extract
+	pattern ('the')(<C.match>)<G.clue>
+	return group 2 as loc 
+from CapsPlace C,
+     GPERightClue G;
+     
+output view GPEPatternBased3;
+
+create view GPEAllExtended as
+	(select G.* from GPEAll G)
+	union all
+	(select G.* from GPEAllMerged1 G)
+	union all
+	(select G.* from GPEAllMerged2 G)
+	union all
+	(select G.* from GPEAllMerged3 G)
+	union all
+	(select G.loc as loc from GPEPatternBased1 G)
+	union all
+	(select G.state as loc from GPEPatternBased1 G)
+	union all
+	-- removing tailing dot
+	(extract regex /([^.]+)[.]?/ on between 1 and 3 tokens in G.loc as loc from GPEPatternBased2 G)
+	union all
+	(select G.* from GPEPatternBased3 G)
+	union all
+	(extract dictionaries 'location/ace2005/ace2005missingGPE.dict' on D.text as loc from Doc D 
+	 having Not(ContainsDict('WrongGPERightClueDict', RightContextTok(loc, 2))));  
+
+	  
+	
+create view GPE as
+select G.* 
+from GPEAllExtended G
+consolidate on G.loc
+using 'LeftToRight'; 

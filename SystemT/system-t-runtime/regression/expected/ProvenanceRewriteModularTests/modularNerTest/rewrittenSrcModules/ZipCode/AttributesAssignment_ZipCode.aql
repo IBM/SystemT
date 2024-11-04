@@ -1,0 +1,104 @@
+module ZipCode;
+
+
+import view Country_ from module Country as Country_
+;
+
+
+import view Zipcode from module CommonFeatures as Zipcode
+;
+
+
+require document with columns
+  text Text;
+
+create view ZipCodeCountry as
+  select  Z.match as zip,
+          C.country as country,
+          Z.match as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          Z.__auto__id as Zipcode_____sep_____Z____id,
+          C.__auto__id as Country______sep_____C____id
+  from  Zipcode Z,
+        Country_ C
+  where FollowsTok(Z.match, C.country, 0, 1)
+     and MatchesRegex(/\s*[,]?\s*/, SpanBetween(Z.match, C.country))
+     and Not(ContainsRegex(/[\n\r]/, SpanBetween(Z.match, C.country)));
+
+output view ZipCodeCountry;
+
+create view ZipCodeAll as
+  (select  Op.zip as zip,
+            Op.country as country,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__373__TempOp__0 Op)
+  union all
+  (select  Op.zip as zip,
+            Op.country as country,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__373__TempOp__1 Op);
+
+output view ZipCodeAll;
+
+create view ZipCode_ as
+  select  __t2.zip as zip,
+          __t2.reference as reference,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__374__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__374__Temp__1 __t1,
+        __Consolidate__374__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.zip, __t2.reference;
+
+output view ZipCode_;
+
+create view __Consolidate__374__Temp__1 as
+  select  Z.zip as zip,
+          Z.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          Z.__auto__id as ZipCodeAll_____sep_____Z____id,
+          Z.zip as __consolidate__target
+  from  ZipCodeAll Z;
+
+output view __Consolidate__374__Temp__1;
+
+create view __Consolidate__374__Temp__2 as
+  select  __t1.zip as zip,
+          __t1.reference as reference,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__374__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__374__Temp__2;
+
+create view __Union__373__TempOp__0 as
+  select  Z.zip as zip,
+          Z.country as country,
+          Z.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          Z.__auto__id as ZipCodeCountry_____sep_____Z____id
+  from  ZipCodeCountry Z;
+
+output view __Union__373__TempOp__0;
+
+create view __Union__373__TempOp__1 as
+  select  Z.match as zip,
+          '' as country,
+          Z.match as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          Z.__auto__id as Zipcode_____sep_____Z____id
+  from  Zipcode Z;
+
+output view __Union__373__TempOp__1;
+

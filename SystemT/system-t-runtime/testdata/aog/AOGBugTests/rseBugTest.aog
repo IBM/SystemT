@@ -1,0 +1,88 @@
+###############################################################################
+# rseBug.aog
+#
+# AOG plan for a query that was causing a problem with the RSE join.
+###############################################################################
+
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+CreateDict(
+    "name" => "dictionaries/first.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+$FirstName =
+Project(
+  (
+    "D.match" => "name"
+  ),
+  Select(
+    And(
+      MatchesRegex(
+        RegexConst(/\A[A-Z][a-z]*\Z/, "JavaRegex"),
+        GetCol("D.match")
+      )
+    ),
+    Project(
+      (
+        "match" => "D.match",
+        "text" => "D.text"
+      ),
+      Dictionary(
+        "dictionaries/first.dict" => "IgnoreCase",
+        "text",
+        $Document
+      )
+    )
+  )
+);
+
+
+$PhonePersonTok =
+Project(
+  (
+    "F.name" => "name",
+    "P.match" => "num",
+    "FunctionCall39" => "phoneperson"
+  ),
+  ApplyFunc(
+    CombineSpans(
+      GetCol("P.match"),
+      GetCol("F.name")
+    ) => "FunctionCall39",
+    RSEJoin(
+      FollowedByTok(
+        GetCol("F.name"),
+        GetCol("P.match"),
+        IntConst(2),
+        IntConst(10)
+      ),
+      Project(
+        (
+          "name" => "F.name"
+        ),
+        $FirstName
+      ),
+      Project(
+        (
+          "match" => "P.match",
+          "text" => "P.text"
+        ),
+        RegexTok(
+          /\+?\([1-9]\d{2}\)\d{3}-\d{4}|\+?[Xx]\.?\d{4,5}/, (0 => "match"), "DOTALL", 7,
+          "text",
+          $Document
+        )
+      )
+    )
+  )
+);
+
+Output: $PhonePersonTok;
+

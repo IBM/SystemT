@@ -1,0 +1,36 @@
+module module2;
+
+
+import view CapsWord from module module1 as CapsWord
+;
+
+
+require document with columns
+  label Text;
+
+create view First as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /[A-Z][a-z]+(\-[A-Z][a-z]+)?/
+    with flags 'DOTALL'
+    on D.label
+    return group 0 as match
+  from Document D;
+
+output view First;
+
+create view Pair as
+  select  F.match as first,
+          C.match as caps,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          F.__auto__id as First_____sep_____F____id,
+          C.__auto__id as CapsWord_____sep_____C____id
+  from  First F,
+        CapsWord C;
+
+output view Pair;
+
+
+

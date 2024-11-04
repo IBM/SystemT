@@ -1,0 +1,302 @@
+----------------------------------------------------
+-- High precision rules: no need for filtering
+----------------------------------------------------
+create view LongCapsPlace as
+select CombineSpans(CP1.match, CP2.match) as match
+from CapsPlace CP1,
+     CapsPlace CP2
+where FollowsTok(CP1.match, CP2.match, 0, 1)
+	-- Sudarshan regex : 10/13/2011 - backreference on lines 10, 11, 18 and 28
+  and MatchesRegex(/\s*(-|de)?\s*/, SpanBetween(CP1.match, CP2.match))
+  and Not(MatchesRegex(/([tT]he|an?)/, CP1.match));  
+  
+create view HyphenatedLongCapsPlace1 as
+select CombineSpans(CP1.match, CP2.match) as match
+from CapsPlace CP1,
+     CapsPlace CP2
+where FollowsTok(CP1.match, CP2.match, 3, 3)
+  and MatchesRegex(/-(\p{L}\p{M}*)+-/, SpanBetween(CP1.match, CP2.match));
+
+create view HyphenatedLongCapsPlace2 as
+select CombineSpans(LeftContextTok(CP.match, 2), CP.match) as match
+from CapsPlace CP
+where MatchesRegex(/al-/, LeftContextTok(CP.match, 2));
+
+  
+create view CapsInitial as
+extract
+	regex /(\p{Lu}\p{M}*\.?){1,2}/
+	on between 1 and 4 tokens in D.text
+	as word
+from Doc D;  
+  
+create view CapsPlaceWithInitial1 as
+select CombineSpans(I.word, CP.match) as match
+from   CapsInitial I,
+       CapsPlace CP
+where FollowsTok(I.word, CP.match, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(I.word, CP.match)));
+  
+create view CapsPlaceWithInitial2 as
+select CombineSpans(CP.match, I.word) as match
+from CapsInitial I,
+     CapsPlace CP
+where FollowsTok(CP.match, I.word, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(I.word, CP.match)));
+  
+create view AllCapsPlace as
+extract
+	-- Sudarshan regex : 10/13/2011 - backreference on line 50
+	regex	/(\p{Lu}\p{M}*){2,}/
+		on 1 token in D.text
+		as match
+from Doc D
+having MatchesRegex(/\s*,/, RightContextTok(match, 1))
+   and MatchesRegex(/[\r\n]/, LeftContext(match, 1));
+  
+create view RelaxedCapsPlaceAll as
+	(select CP.* from CapsPlace CP)
+	union all
+	(select CP.* from LongCapsPlace CP)
+	union all
+	(select CP.* from HyphenatedLongCapsPlace1 CP)
+	union all
+	(select CP.* from HyphenatedLongCapsPlace2 CP)
+	union all
+	(select CP.* from CapsPlaceWithInitial1 CP)
+	union all
+	(select CP.* from CapsPlaceWithInitial2 CP)
+	union all
+	(select O.* from AllCapsPlace O);
+	
+create view RelaxedCapsPlace as
+select CP.*
+from RelaxedCapsPlaceAll CP
+--where Not(ContainsDict('pos/preps-list', SubSpanTok(CP.match, 1, 1)))
+where Not(ContainsDict('pos/lang_preps_en.dict', SubSpanTok(CP.match, 1, 1)))
+  --and Not(MatchesDict('pos/dets-list', CP.match));
+  and Not(MatchesDict('pos/lang_detrmnrs_en.dict', CP.match));
+
+create view ExtraLongCapsPlace as
+select CombineSpans(CP1.match, CP2.match) as match
+from RelaxedCapsPlace CP1,
+     RelaxedCapsPlace CP2
+where FollowsTok(CP1.match, CP2.match, 1, 1)
+  and MatchesRegex(/\s*de\s*/, SpanBetween(CP1.match, CP2.match));
+  
+create view AllRelaxedCapsPlace as
+	(select CP.* from RelaxedCapsPlace CP)
+	union all
+	(select CP.* from ExtraLongCapsPlace CP);
+	
+create view OneToTwoAllCapsWord as 
+extract 
+	-- Sudarshan regex : 10/13/2011 - backreference on line 93
+    regex /(\p{Lu}\p{M}*){2,}([ ](\p{Lu}\p{M}*){2,})?/
+        on between 1 and 2 tokens in D.text 
+        as match 
+from Doc D;
+
+create view RelaxedCapsPlaceOnetoTwo as
+	(select W.* from OneToTwoAllCapsWord W)
+	union all
+	(select W.* from CapsPlaceOnetoTwo W);
+
+-- for cases like "traveling to"
+/*create dictionary LocationLeftClueDict as
+(
+    'traveling to', 'city of', 'comes from', 'flown to',
+    'west of', 'east of', 'north of', 'south of', 'outside of', 'near',
+    'located in', 'arrived at','visit to','outside', 'head to', 'depart for',
+    'district of', 'town of', 'municipality of', 'village of', 'outskirts of',
+    'sent to', 'bound for', 'suburb of', 'mayor of', 'provinces of', 'port of'
+);*/
+
+create view LocationLeftClue as
+extract
+    --dictionary 'LocationLeftClueDict'
+    dictionary 'location/clues/loc_posClue_ctxtLeft_en.dict'
+        on D.text   
+        as clue
+from Doc D;
+	
+create view PatternBasedLocation4 as
+select CP.match as loc
+from LocationLeftClue C,
+	 CapsPlaceOnetoTwo CP
+where FollowsTok(C.clue, CP.match, 0, 0)
+-- avoid matching month
+  and Not(MatchesRegex(/\s*\d+/, RightContextTok(CP.match, 1)));
+
+--output view PatternBasedLocation4;
+
+-- for cases like  'at ***.'
+/*create dictionary LocationWeakLeftClueDict as
+(
+    --'at', 
+    'streets in', 'centre of', 'move to','capital of', 'into', 'state of'
+);*/
+
+create view LocationWeakLeftClue as
+extract
+	--dictionary 'LocationWeakLeftClueDict'
+	dictionary 'location/clues/loc_posClue_weak_ctxtLeft_en.dict'
+		on D.text
+		as clue
+from Doc D;
+
+create view PatternBasedLocation5 as
+select CP.match as loc
+from LocationWeakLeftClue L,
+	 AllRelaxedCapsPlace CP
+where FollowsTok(L.clue, CP.match, 0, 0)
+	-- Sudarshan regex : 10/13/2011 - backreference on lines 150, 178 and 179
+    and MatchesRegex(/[ ]*([\r\n.;:(,]|(\p{Ll}\p{M}*)+|--).*/, RightContextTok(CP.match, 2));
+  
+--output view PatternBasedLocation5;  
+  
+-- for cases like "Van province"
+/*create dictionary LocationRightClueDict as
+(	
+	'province', 'subdivision', 'suburb', 'village'
+);*/
+
+create view LocationRightClue as
+extract
+    --dictionary 'LocationRightClueDict'
+    dictionary 'location/clues/loc_posClue_ctxtRight_en.dict'
+        on D.text   
+        as clue
+from Doc D;
+	
+create view PatternBasedLocation6 as
+select CP.match as loc
+from CapsPlaceOnetoTwo CP,
+	 LocationRightClue C	 
+where FollowsTok(CP.match, C.clue, 0, 0);
+
+--output view PatternBasedLocation6;
+
+create view PatternBasedLocation7 as
+select CP.match as loc
+from CapsPlace CP
+where MatchesRegex(/(in)\s+/, LeftContextTok(CP.match, 1))
+  and MatchesRegex(/\s+,\s*(an?)/, RightContextTok(CP.match, 2))
+  --and Not(ContainsDict('month.dict', CP.match))
+  and Not(ContainsDict('time_months_en.dict', CP.match))
+  --and Not(ContainsDict('misc/denomination.dict', CP.match));
+  and Not(ContainsDict('misc/fin_curr_denoms_en.dict', CP.match));
+  
+-- in City, State
+create view StateClue as
+	(select S.* from StateWeakAll S)
+	union all
+	(select S.* from StateStrongAll S);
+	
+create view PatternBasedLocation8 as
+select CP.match as loc
+from RelaxedCapsPlace CP,
+     StateClue S
+where FollowsTok(CP.match, S.match, 1, 1)
+	-- Sudarshan regex : 10/13/2011 - backreference on line 195
+  and MatchesRegex(/(in|\.|and)\s+/, LeftContextTok(CP.match, 1))
+  and MatchesRegex(/\s*,\s*/, SpanBetween(CP.match, S.match))
+  -- Sudarshan regex : 10/13/2011 - changed regex on line 198 to 199 - unicode equivalent + detection of combination marks
+  --and MatchesRegex(/[A-Z].*/, S.match);
+  and MatchesRegex(/\p{Lu}\p{M}*.*/, S.match);
+
+--output view PatternBasedLocation8;
+
+create view PatternBasedLocation9 as
+select CP.match as loc
+from RelaxedCapsPlace CP
+where MatchesRegex(/[Ii]n\s*/, LeftContextTok(CP.match, 1))
+  and MatchesRegex(/\s*[:,]/, RightContextTok(CP.match, 1))
+  --and Not(ContainsDict('month.dict', CP.match))
+  and Not(ContainsDict('time_months_en.dict', CP.match))
+  --and Not(ContainsDict('misc/denomination.dict', CP.match));
+  and Not(ContainsDict('misc/fin_curr_denoms_en.dict', CP.match));
+  
+--output view PatternBasedLocation9;
+
+create view PatternBasedLocation10 as
+select CP.match as loc
+from CapsPlace CP
+where MatchesRegex(/from\s*/, LeftContextTok(CP.match, 1))
+  and MatchesRegex(/\s*to/, RightContextTok(CP.match, 1))
+  --and Not(ContainsDict('month.dict', CP.match));
+  and Not(ContainsDict('time_months_en.dict', CP.match));
+
+--output view PatternBasedLocation10;
+
+-- ***, 80 miles ...
+create view PatternBasedLocation12 as
+select CP.match as loc
+from CapsPlace CP
+	-- Sudarshan regex : 10/13/2011 - backreference on lines 227, 241, 262 and 263
+where MatchesRegex(/\s*,\s(about\s+)?\d{1,2}\s+(miles|kms).*/, RightContextTok(CP.match, 4));
+
+--output view PatternBasedLocation12;
+
+-- "east of ... "
+create view DirectionAll as
+select D.match as match
+--from   Dictionary('direction.dict', Doc.text) D;
+from  (extract dictionary 'loc_directn_case_en.dict' on D.text as match from Doc D) D;
+
+create view PatternBasedLocation13 as
+select CP.match as loc
+from RelaxedCapsPlace CP,
+     DirectionAll D
+where FollowsTok(D.match, CP.match, 1, 2)
+  and MatchesRegex(/\s*of\s+(the)?\s*/, SpanBetween(D.match, CP.match))
+  --and Not(ContainsDict('misc/ethnicGroup.dict', CP.match));
+  and Not(ContainsDict('misc/per_ethnicities_global_en.dict', CP.match)); 
+  
+-- the *** border
+/*create dictionary LocationWeakRightClueDict as
+(	
+	'area', 'border', 'treaty'
+);*/
+
+create view PatternBasedLocation14 as
+select CP.match as loc
+from RelaxedCapsPlace CP
+where MatchesRegex(/the\s*/, LeftContextTok(CP.match, 1))
+  and ContainsDict('location/clues/loc_posClue_weak_ctxtRight_en.dict', RightContextTok(CP.match, 1))
+  --and Not(ContainsDict('misc/ethnicGroup.dict', CP.match))
+  and Not(ContainsDict('misc/per_ethnicities_global_en.dict', CP.match))
+  --and Not(ContainsDict('nationality.dict', CP.match));
+  and Not(ContainsDict('per_nationalities_en.dict', CP.match));
+  
+-- through *** in
+create view PatternBasedLocation16 as
+select CP.match as loc, LeftContextTok(CP.match, 1) as lc, RightContextTok(CP.match, 1) as rc
+from RelaxedCapsPlaceAll CP
+where MatchesRegex(/(through|in|at)\s*/, LeftContextTok(CP.match, 1))
+  and MatchesRegex(/\s*(in|near|at|outside)/, RightContextTok(CP.match, 1));
+  
+create view PatternBasedLocation as
+	(select P.* from PatternBasedLocation4 P)
+	union all
+	(select P.* from PatternBasedLocation5 P)
+	union all
+	(select P.* from PatternBasedLocation6 P)
+	union all
+	(select P.* from PatternBasedLocation7 P)
+	union all
+	(select P.* from PatternBasedLocation8 P)
+	union all
+	(select P.* from PatternBasedLocation9 P)
+	union all
+	(select P.* from PatternBasedLocation10 P)
+	union all
+	(select P.* from PatternBasedLocation13 P)
+	union all
+	(select P.* from PatternBasedLocation14 P)
+	union all
+	(select P.loc from PatternBasedLocation16 P);
+--	union all
+--	(select P.match as loc from StateStrongAll P);
+	
+--output view PatternBasedLocation;

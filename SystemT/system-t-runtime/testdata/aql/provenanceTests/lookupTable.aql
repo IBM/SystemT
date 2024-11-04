@@ -1,0 +1,36 @@
+-- Test case for provenance rewrite on lookup tables.
+
+create table LookupTable (str Text, label Integer) as 
+values
+	( 'ÃLAND ISLANDS',0 ),
+	( 'Bookmarks', 1 ),
+	( 'B\'ookmarks', 2 ); --'
+
+-- Create the dictionary from the lookup table
+create dictionary LookupDict from table LookupTable
+with entries from str;
+
+-- Use the dictionary for extraction
+create view ExtractLookup as
+extract dictionary 'LookupDict' on D.text as match
+from Document D;
+
+-- Do a select over the lookup table
+create view SelectLookup as
+select *
+from LookupTable;
+
+output view ExtractLookup;
+output view SelectLookup;
+
+-- Test case from Saurabh
+create table FirstSegMappingTable (str Text, label Text) as 
+values
+     ( 'Community Source', 'sites_communitysource' )
+;
+ 
+create view Test as
+select F.label from FirstSegMappingTable F;
+ 
+output view Test;
+

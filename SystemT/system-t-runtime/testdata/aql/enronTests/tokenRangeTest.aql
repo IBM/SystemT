@@ -1,0 +1,68 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- tokenRangeTest.aql
+--
+-- Test cases for queries that use the TokenRange function
+
+
+-- Test 1:
+-- Test case for TokenRange
+
+create view FirstNames as
+extract dictionary 'dictionaries/first.dict' on D.text as first
+from Document D;
+
+create view LastNames as
+extract dictionary 'dictionaries/last.dict' on D.text as last
+from Document D;
+
+create view Person as
+select F.first as first, L.last as last, 
+	   CombineSpans(F.first, L.last) as person,
+	   CombineSpans(LeftContext(F.first,1), RightContext(L.last,1)) as personnotontokboundary
+from FirstNames F, LastNames L
+where FollowsTok(F.first, L.last, 0, 0);
+
+create view TokenRangeOnBoundary as
+select SubSpanTok(P.person, 1, 1) as one2one, 
+       SubSpanTok(P.person, 2, 2) as two2two,
+       SubSpanTok(P.person, 1, 2) as one2two,
+       P.person as match
+from Person P;
+
+create view TokenRangeNonsenseOnBoundary as
+select SubSpanTok(P.person, 0, 1) as zero2one, 
+       SubSpanTok(P.person, 1, 0) as one2zero,
+       SubSpanTok(P.person, 0, 0) as zero2zero,
+       SubSpanTok(P.person, 2, 3) as two2three,
+       SubSpanTok(P.person, 3, 3) as three2three,
+       SubSpanTok(P.person, 3, 4) as three2four,
+       SubSpanTok(P.person, 4, 1) as four2one,
+       SubSpanTok(P.person, 0, 3) as zero2three,
+       P.person as match
+from Person P;
+
+create view TokenRangeNonBoundary as
+select SubSpanTok(P.personnotontokboundary, 1, 1) as one2one, 
+       SubSpanTok(P.personnotontokboundary, 2, 2) as two2two,
+       SubSpanTok(P.personnotontokboundary, 1, 2) as one2two,
+       P.personnotontokboundary as match
+from Person P;
+
+create view TokenRangeNonsenseNonBoundary as
+select SubSpanTok(P.personnotontokboundary, 0, 1) as zero2one, 
+       SubSpanTok(P.personnotontokboundary, 1, 0) as one2zero,
+       SubSpanTok(P.personnotontokboundary, 0, 0) as zero2zero,
+       SubSpanTok(P.personnotontokboundary, 2, 3) as two2three,
+       SubSpanTok(P.personnotontokboundary, 3, 3) as three2three,
+       SubSpanTok(P.personnotontokboundary, 3, 4) as three2four,
+       SubSpanTok(P.personnotontokboundary, 4, 1) as four2one,       
+       SubSpanTok(P.personnotontokboundary, 0, 3) as zero2three,
+       P.personnotontokboundary as match
+from Person P;
+
+output view TokenRangeOnBoundary;
+output view TokenRangeNonsenseOnBoundary;
+output view TokenRangeNonBoundary;
+output view TokenRangeNonsenseNonBoundary;

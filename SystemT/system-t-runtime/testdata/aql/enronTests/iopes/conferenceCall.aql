@@ -1,0 +1,130 @@
+-- include 'forwardBlock.aql'
+
+/*******************************************************************************
+* conferenceCall.aql
+*
+* A version of the 'conferenceCall' annotator that uses the Avatar operator
+* framework.
+*
+* This file is written based on ConferenceCallRecognizer.xml
+*******************************************************************************/
+
+/*******************************************************************************
+* REGULAR EXPRESSIONS OVER DOCUMENTS
+*
+* Identify strong conference call candidates by regular expression matching
+* 
+* Each regex is evaluated as a selection over $Document, producing 'Raw' tuples
+* with the schema: <doc, ConferenceCallCandidates>
+*
+* The union of the candidates are then consolidated: any candidate that is
+* contained by another is discarded
+*******************************************************************************/
+
+create view ConferenceCallCandidates1 as
+select R.match as annot
+from Regex(/((((call|dial)-?in)|(toll)|(p\/c))\s*((#|number)|(.{0,10}:))\s*.{0,10}\s*\(?\s*\d{3,}(-|\d|\.| |\)){0,10})/, 'CASE_INSENSITIVE|DOTALL', Document.text) R;
+
+create view ConferenceCallCandidates2 as
+select R.match as annot  
+from Regex(/(([Pp]aticipant|[Hh]ost|[Mm]oderator)\s*(pin)?\s*(access)?\s*code\s*.{0,10}\s*\d{3,}(-|\d|\.){0,10})/,'CASE_INSENSITIVE|DOTALL', Document.text) R;
+
+create view ConferenceCallCandidates3 as
+select R.match as annot  
+from Regex(/((pass|conference)\s?code\s*.{0,2}\s*\d{3,}(-|\d|\.){0,10})/, 'CASE_INSENSITIVE|DOTALL',Document.text) R;
+
+create view ConferenceCallCandidates4 as
+select R.match as annot 
+from Regex(/(conference\s+call.{0,10}\s*\(?\s*\d{3,}(-|\d|\.| |\)){0,10})/, 'CASE_INSENSITIVE|DOTALL',Document.text) R;
+
+/*
+Consolidate all conference call candidates
+*/
+create view ConferenceCallCandidatesAll as 
+     (select CCC1.annot as annot from ConferenceCallCandidates1 CCC1)
+     union all
+     (select CCC2.annot as annot from ConferenceCallCandidates2 CCC2)
+     union all
+     (select CCC3.annot as annot from ConferenceCallCandidates3 CCC3)
+     union all
+     (select CCC4.annot as annot from ConferenceCallCandidates4 CCC4);    
+ 
+create view ConferenceCallCandidates as
+select CCC.annot as annot
+--into ConferenceCallCandidates
+from ConferenceCallCandidatesAll CCC   
+consolidate on CCC.annot;
+
+/*******************************************************************************
+* REGULAR EXPRESSIONS OVER DOCUMENTS
+*
+* Identify week conference call candidates by regular expression matching
+* 
+* Each regex is evaluated as a selection over $Document, producing 'Raw' tuples
+* with the schema: <doc, WeakConferenceCallCandidates>
+*
+*******************************************************************************/
+create view WeakConferenceCallCandidates as
+select R.match as annot
+--into WeakConferenceCallCandidates
+from Regex(/((Tie|(T\/L)|TL|PC|Intl|International|Domestic|number|Toll|Call-in\s+(information|info)|dial|info|password))(.{0,10}\s*(-|\d|\.| |\(|\)){4,15})*/, 'CASE_INSENSITIVE|DOTALL',Document.text) R;
+
+/********************************************************************************
+* CREATE BLOCKS OF DIRECTION
+*
+* All blocks satisfying the conditions are created. 
+*
+* First of all, we identify all the blocks containing at least one conference call candidates, 
+* which can be strong direction candidates or week direction candidates.
+*
+* Then only the blocks contain at least one strong direction candidates are kept
+*
+********************************************************************************/
+
+create view AllConferenceCallCandidates as
+ 	  (select CCC.annot as annot from ConferenceCallCandidates CCC)
+ 	  union all
+ 	  (select WCCC.annot as annot from WeakConferenceCallCandidates WCCC);
+
+create view AllConferenceCallBlockCandidates as
+select B.block as annot
+--into AllConferenceCallBlockCandidates
+from Block(100, 1, AllConferenceCallCandidates.annot) B;
+
+create view ConferenceCallBlockCandidates as
+select ACCBC.annot as annot
+--into ConferenceCallBlockCandidates
+from AllConferenceCallBlockCandidates ACCBC, ConferenceCallCandidates CCC
+where Contains(ACCBC.annot, CCC.annot);
+
+/********************************************************************************
+* SELECT CONFERENCE CALL EXISING IN THE BODY OF EACH EMAIL
+*
+* $ConferenceCallBlockCandidates generated earlier contains all the possible conference 
+* call blocks, 
+* Here all $ConferenceCallBlockCandidates contain $ForwardBlock are discarded such that
+* Direction contained emails are seperated by forward blocks. 
+*
+* In addition, all the $ConferenceCallBlockCandidates that are contained by others are
+* discarded as well
+*
+* This process is divided into three steps:
+* Step 1: Identifying all the $ConferenceCallBlockCandidates that contain $ForwardBlock
+* Step 2: Discard all the $ConferenceCallBlockCandidates identified at Step 1
+* Step 3: Discard all the remaining $ConferenceCallBlockCandidates contained by others 
+********************************************************************************/
+create view WrongConferenceCallBlocks as
+select CCBC.annot as annot
+--into WrongConferenceCallBlocks
+from ConferenceCallBlockCandidates CCBC, ForwardBlock FB
+where Contains(CCBC.annot, FB.annot);
+
+create view CorrectConferenceCallBlocks as
+	(select CCBC.annot as annot from ConferenceCallBlockCandidates CCBC)
+		minus
+	(select WCCB.annot as annot from WrongConferenceCallBlocks WCCB);
+	
+select CCCB.annot as annot
+into ConferenceCall
+from CorrectConferenceCallBlocks CCCB
+consolidate on CCCB.annot;     

@@ -1,0 +1,49 @@
+-------------------------------------------------------------------------------
+-- 
+-- Text case for Span/Text interactions
+-- A UDF expects a span input, and is given either a span, a text or a combination of them.
+--
+-------------------------------------------------------------------------------
+require document with columns text Text;
+
+-- UDF that combines spans
+create function udfCombineSpans(p1 Span, p2 Span)
+return Span like p1
+external_name 'udfjars/udfs.jar:com.ibm.test.udfs.udf1!combineSpans'
+language java 
+deterministic
+return null on null input;
+
+-- UDF that comparing spans
+create function udfSpanGreaterThan(span Span, size Integer)
+return Boolean
+external_name 'udfjars/udfs.jar:com.ibm.test.udfs.udf1!spanGreaterThan'
+language java 
+deterministic;
+
+------------------------------------------
+
+-- Create a dictionary of words
+create dictionary Words as
+('First');
+
+
+-- Find all matches of the words dictionary.
+create view View2 as
+extract
+    dictionary 'Words' on D.text as match
+from Document D;
+
+
+-- Combine the spans
+create view View3 as
+select udfCombineSpans(M.match, M.match) as field2
+from View2 M;
+
+-- Combine the texts
+create view View4 as
+select udfCombineSpans(D.text, D.text) as field2
+from Document D;
+
+output view View3;
+output view View4;

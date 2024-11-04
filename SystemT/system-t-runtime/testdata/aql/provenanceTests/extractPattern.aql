@@ -1,0 +1,49 @@
+-------------------------------------------------------------------------------
+-- Test case for verifying that EXTRCAT PATTERN statements with pass through 
+-- attributes do not break the provenance rewrite 
+-- (all EXTRACT PATTERN statements are considered as base views).
+-------------------------------------------------------------------------------
+
+-- Find capitalized words using sequence pattern which 
+-- is not supported by the provenance rewrite, 
+-- therefore it will be marked as base view
+create view CapsWord as 
+extract 'CapsWord' as type,
+	pattern /[A-Z][a-z]+/ as match
+from Document D;
+
+create dictionary NameDict as (
+	'Anna', 'John'
+);
+
+create view FirstName as
+extract 'First' as type,
+	dictionary 'NameDict' on D.text as match 
+from Document D;
+
+-- Combine FirstName and CapsWord using the SELECT statement
+create view PersonSelect as
+select 'Full' as type, CombineSpans(F.match, C.match) as match
+from FirstName F, CapsWord C
+where FollowsTok(F.match, C.match, 0, 0);
+
+output view PersonSelect;
+
+-- Combine FirstName and CapsWord using the EXTRACT PATTERN statement
+create view PersonPattern as
+extract
+	'Full' as type, F.type as ftype, C.type as ctype,
+	pattern <F.match> <C.match> as match
+from FirstName F, CapsWord C;
+
+output view PersonPattern;
+
+-- Union statement with extract pattern
+create view PersonSingleToken as
+(select * from FirstName)
+union all
+( select * from PersonSelect)
+union all
+(select P.type as type, P.match as match from PersonPattern P);
+
+output view PersonSingleToken;

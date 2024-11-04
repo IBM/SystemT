@@ -1,0 +1,348 @@
+require document with columns text Text;
+ 
+ create dictionary OrgConjDict as
+(
+	'&','and','und'
+);
+ 
+ create dictionary OrgPrepDict as
+(
+	 'of','for'
+);
+
+create dictionary TheDict as
+(
+	 'The'
+);
+ 
+ create dictionary FilterPersonDict as
+(
+	'Travel', 'Fellow', 'Sir', 'IBMer', 'Researcher', 'All',
+	'Friends', 'Friend', 'Colleague', 'Colleagues', 'Managers',
+	'Customer', 'Users', 'User', 'Valued', 'Executive', 'Chairs',
+	'New', 'Owner', 'Conference', 'Please', 'Outlook', 'Lotus', 'Notes'
+);
+ 
+ create view OrgConj as
+	select
+		D.match as match
+	from
+		Dictionary('OrgConjDict', Document.text) D;
+		
+ create view OrgPrep as
+	select
+		D.match as match
+	from
+		Dictionary('OrgPrepDict', Document.text) D;
+		
+ create view The as
+	select
+		D.match as match
+	from
+		Dictionary('TheDict', Document.text) D;
+ 
+create view sentence as
+extract 
+    split using B.boundary 
+        retain right split point
+        on B.text
+        as sentence
+from (
+    extract 
+        D.text as text,
+        regex /(?:(?:[\;\.\?!]+\s)|(\n\s*\n))/ on D.text as boundary 
+        from Document D
+    having Not(ContainsDict('dictionaries/abbreviations.dict', 
+    CombineSpans(LeftContextTok(boundary, 1), boundary)))
+) B;
+
+ create view CapsOrg as
+	select
+		R.match as match
+	from
+		Regex(/\b\p{Upper}[\p{Lower}\&\.\-\,]+\b/, Document.text) R;
+	 
+ create view DotCom as
+	select
+		R.match as match
+	from
+		Regex(/[\w\&\-]+\.com\b/, Document.text) R;
+	 
+ create view OrgClueStInd as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/sekar/industry_types_retained.dict', Document.text) D;
+		
+ create view OrgClueStSuffix as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/sekar/organization_suffixes.dict', Document.text) D;
+		
+ create view OrgClueStIndCaps as 
+ 	select OCSI.match as match 
+ 	from OrgClueStInd OCSI
+	where 
+		MatchesRegex(/\p{Upper}[\p{Lower}\&\.\-\,]+/, OCSI.match);	
+		
+ create view OrgClueStSuffixCaps as 
+ 	select OCSS.match as match 
+ 	from OrgClueStSuffix OCSS
+	where 
+		MatchesRegex(/\p{Upper}[\p{Lower}\&\.\-\,]+/, OCSS.match);	
+		
+ create view OrgClueStCaps
+ as
+	(select OCSIC.match as match from OrgClueStIndCaps OCSIC)
+ union all
+    (select OCSSC.match as match from OrgClueStSuffixCaps OCSSC);
+    
+ create view OrgFullCase as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/sekar/organization_full_case.dict', 'Exact', Document.text) D;
+		
+ create view OrgFullNoCase as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/sekar/organization_full_nocase.dict', Document.text) D;
+		
+		
+ create view OrgFull
+	as 
+	 (select R.match as match from OrgFullNoCase R)
+	union all 
+	 (select R.match as match from OrgFullCase R);
+		
+  create view CoCo as
+	select
+ 		CombineSpans(co1.match, co2.match) as match
+	from
+		CapsOrg co1,
+		CapsOrg co2
+ 	where
+		FollowsTok(co1.match, co2.match, 0, 0);		
+		
+  create view CoCoCo as
+	select
+ 		CombineSpans(coco.match, co.match) as match
+	from
+		CoCo coco,
+		CapsOrg co
+ 	where
+		FollowsTok(coco.match, co.match, 0, 0);	
+		
+   create view Coonetotwo
+	as 
+	 (select R.match as match from CapsOrg R)
+	union all 
+	 (select R.match as match from CoCo R);
+	 
+   create view Coonetothree
+	as 
+	 (select R.match as match from Coonetotwo R)
+	union all 
+	 (select R.match as match from CoCoCo R);
+		
+-- rule 7
+		
+	create view CoOcscOpCo as
+	select
+ 		CombineSpans(coco1.match, coco2.match) as match
+	from
+		Coonetotwo coco1,
+		OrgClueStCaps ocsc,
+		OrgPrep op,
+		Coonetotwo coco2
+ 	where
+		FollowsTok(coco1.match, ocsc.match, 0, 0) and
+		FollowsTok(ocsc.match, op.match,0, 0) and
+		FollowsTok(op.match, coco2.match, 0, 0);	
+
+-- rule 10
+
+  create view CoOcsic as
+	select
+ 		CombineSpans(coco.match, ocsic.match) as match
+	from
+		Coonetothree coco,
+		OrgClueStIndCaps ocsic 
+ 	where
+		FollowsTok(coco.match, ocsic.match, 0, 0) ;	
+
+--rule 9
+
+  create view CoOcssc as
+	select
+ 		CombineSpans(coco.match, ocssc.match) as match
+	from
+		Coonetothree coco,
+		OrgClueStSuffixCaps ocssc 
+ 	where
+		FollowsTok(coco.match, ocssc.match, 0, 1) and
+		ContainsRegex(/^\s*,\s*$/, SpanBetween(coco.match,ocssc.match));	
+		
+-- rule 5
+  create view OcscOpCoOcCo as
+	select
+ 		CombineSpans(ocsc.match, coco2.match) as match
+	from
+		OrgClueStCaps ocsc,
+		OrgPrep op,
+		Coonetotwo coco1,
+		OrgConj oc,
+		Coonetotwo coco2
+	 	where
+			FollowsTok(ocsc.match, op.match, 0, 0) and
+			FollowsTok(op.match, coco1.match, 0, 0) and
+			FollowsTok(coco1.match, oc.match, 0, 0) and
+			FollowsTok(oc.match, coco2.match, 0, 0);
+   
+   create view CoOcscOpCoOcCo as 
+  	  select 
+  	  		CombineSpans(coco.match, R1.match) as match
+  	  from 
+  	  		Coonetotwo coco,
+  	  		OcscOpCoOcCo R1
+  	  where 
+  	  		FollowsTok(coco.match,R1.match,0,0);
+		
+ -- R5, R7, R9, R10
+ 
+ 	create view Org57910
+	as 
+	 (select R.match as match from  CoOcscOpCoOcCo R)
+	union all 
+	 (select R.match as match from OcscOpCoOcCo R)
+	union all 
+	 (select R.match as match from  CoOcsic R)
+	union all 
+	 (select R.match as match from CoOcssc R)
+	union all 
+	 (select R.match as match from  CoOcscOpCo R)
+	 ;
+ 		
+	 create view TheOrg57910 as 
+  	  select 
+  	  		CombineSpans(the.match, org57910.match) as match
+  	  from 
+  	  		The  the,
+  	  		Org57910 org57910
+  	  where 
+  	  		FollowsTok(the.match,org57910.match,0,0);
+  	  		
+-- R1
+
+	create view OfCo as
+		select 
+			CombineSpans(of.match,coco.match) as match
+		from
+			OrgFull of,
+			Coonetotwo coco
+		where
+			FollowsTok(of.match,coco.match,0,0);
+	  	  		
+	 create view OfCozerototwo as
+	 	(select R.match as match from OrgFull R)
+	 union all
+	    (select R.match as match from OfCo R);
+	    
+	 create view OfCoOcsc as
+	     select
+	     	CombineSpans(of.match,ocsc.match) as match
+	     from
+	     	OfCozerototwo of,
+	     	OrgClueStCaps ocsc
+	     where
+	     	FollowsTok(of.match,ocsc.match,0,0);
+	     	
+-- R2
+
+	create view CoOc as
+	     select
+	     	CombineSpans(co.match,oc.match) as match
+	     from
+	     	Coonetotwo co,
+	     	OrgConj oc
+	     where
+	     	FollowsTok(co.match,oc.match,0,0);
+	     	
+	create view CoOcCo as
+	     select
+	     	CombineSpans(cooc.match,co.match) as match
+	     from
+	     	CoOc cooc,
+	     	Coonetotwo co
+	     where
+	     	FollowsTok(cooc.match,co.match,0,0);
+
+	create view CoOcCozerototwo as
+		(select R.match as match from CoOc R)
+	union all 
+		(select R.match as match from CoOcCo R); 
+
+	create view CoOcCozerototwoOcscOpCo as
+		select
+	     	CombineSpans(coocco.match,co.match) as match
+	     from
+	     	CoOcCozerototwo coocco,
+	     	OrgClueStCaps ocsc,
+	     	OrgPrep op,
+	     	Coonetotwo co
+	     where
+	     	FollowsTok(coocco.match, ocsc.match,0,0) and
+	     	FollowsTok(ocsc.match,op.match,0,0) and
+	     	FollowsTok(op.match,co.match,0,0);
+		
+
+		-- ===========================================================================
+-- >>>>>>>>>>>>>>> Aggregation/Consolidation section <<<<<<<<<<<<<<<<
+-- ===========================================================================
+
+-- Merge all the different rules.
+create view OrgAll
+as 
+	 (select R.match as org from DotCom R)
+union all 
+	 (select R.match as org from OrgFull R)
+union all
+	 (select R.match as org from Org57910 R)
+union all
+	 (select R.match as org from TheOrg57910 R)
+union all
+     (select R.match as org from OfCoOcsc R)
+union all 
+	 (select R.match as org from CoOcCozerototwoOcscOpCo R);
+ 
+-- ------------------------------------------
+-- Consolidation:
+-- For now, we just remove annotations that are completely
+-- contained within other annotations.
+
+create view OrgSentence as
+	select OA.org as org	 
+	from
+		sentence S, OrgAll OA
+	where
+		Contains(S.sentence, OA.org) and
+		Not(ContainsDict('FilterPersonDict', OA.org));
+				 
+create view OrgConsolidated as
+select C.org as org
+from OrgSentence C
+consolidate on C.org;
+--Consolidate(OrgSentence.org) C;
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Output section <<<<<<<<<<<<<<<<
+-- ===========================================================================		
+-- Output
+select O.org as org
+into Organization
+from OrgConsolidated O;
+
+		
+ 

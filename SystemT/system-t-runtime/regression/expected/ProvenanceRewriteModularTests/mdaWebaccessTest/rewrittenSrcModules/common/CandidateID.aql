@@ -1,0 +1,199 @@
+module common;
+
+
+create view IDCharNumSymBase as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__1__Temp_____sep_____R____id
+  from  __Subquery__1__Temp R;
+
+output view IDCharNumSymBase;
+
+create view IDCharNumSym as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as IDCharNumSymBase_____sep_____D____id
+  from  IDCharNumSymBase D
+  where ContainsRegex(/[a-zA-Z]/, D.match);
+
+output view IDCharNumSym;
+
+create view NumsFollowLetters as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as IDCharNumSym_____sep_____D____id
+  from  IDCharNumSym D
+  where MatchesRegex(/[a-zA-Z]([-!]|[a-zA-Z]){3,}(\d|[-!])+/, D.match);
+
+output view NumsFollowLetters;
+
+create view IDCharNumSymFiltered as
+  select  Op.match as match,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__2__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__2__TempOp__1 Op,
+        __Minus__2__Temp __t
+  where Equals(Op.match, __t.match);
+
+output view IDCharNumSymFiltered;
+
+create view IDNumOnly as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__3__Temp_____sep_____R____id
+  from  __Subquery__3__Temp R;
+
+output view IDNumOnly;
+
+create view IDBuildingBlock as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__4__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__4__TempOp__1 Op);
+
+output view IDBuildingBlock;
+
+create view IDBuildingBlockConsolidated as
+  select  __t2.match as match,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__5__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__5__Temp__1 __t1,
+        __Consolidate__5__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.match;
+
+output view IDBuildingBlockConsolidated;
+
+export view common.IDBuildingBlockConsolidated;
+
+
+
+
+create view IDInterim as
+  select  D.match as Id_Span,
+          GetText(D.match) as Id_Text,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as IDBuildingBlockConsolidated_____sep_____D____id
+  from  IDBuildingBlockConsolidated D;
+
+output view IDInterim;
+
+create view IDOutput as
+  select  D.Id_Span as span,
+          D.Id_Text as text,
+          GetString('ID') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as IDInterim_____sep_____D____id
+  from  IDInterim D;
+
+output view IDOutput;
+
+export view common.IDOutput;
+
+
+create view __Consolidate__5__Temp__1 as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as IDBuildingBlock_____sep_____C____id,
+          C.match as __consolidate__target
+  from  IDBuildingBlock C;
+
+output view __Consolidate__5__Temp__1;
+
+create view __Consolidate__5__Temp__2 as
+  select  __t1.match as match,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__5__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__5__Temp__2;
+
+create view __Minus__2__Temp as
+  select  __t.match as match
+  from  
+    ((select  Op.match as match
+      from  __Minus__2__TempOp__1 Op)
+    minus
+    (select  Op.match as match
+      from  __Minus__2__TempOp__2 Op)
+    ) __t
+  group by __t.match;
+
+output view __Minus__2__Temp;
+
+create view __Minus__2__TempOp__1 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as IDCharNumSym_____sep_____D____id
+  from  IDCharNumSym D;
+
+output view __Minus__2__TempOp__1;
+
+create view __Minus__2__TempOp__2 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as NumsFollowLetters_____sep_____D____id
+  from  NumsFollowLetters D;
+
+output view __Minus__2__TempOp__2;
+
+create view __Subquery__1__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____Document____id,
+    regex /(([a-zA-Z\d])+([a-zA-Z\d-!\^])*\d([a-zA-Z\d-!\^])*){6,20}/
+    with flags 'DOTALL'
+    on Document.text
+    return group 0 as match
+  from Document Document;
+
+output view __Subquery__1__Temp;
+
+create view __Subquery__3__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____Document____id,
+    regex /\d{10,}/
+    with flags 'DOTALL'
+    on Document.text
+    return group 0 as match
+  from Document Document;
+
+output view __Subquery__3__Temp;
+
+create view __Union__4__TempOp__0 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as IDCharNumSymFiltered_____sep_____D____id
+  from  IDCharNumSymFiltered D;
+
+output view __Union__4__TempOp__0;
+
+create view __Union__4__TempOp__1 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as IDNumOnly_____sep_____D____id
+  from  IDNumOnly D;
+
+output view __Union__4__TempOp__1;
+

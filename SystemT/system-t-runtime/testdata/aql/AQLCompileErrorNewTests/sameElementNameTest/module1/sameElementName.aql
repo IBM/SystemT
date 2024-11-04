@@ -1,0 +1,146 @@
+/*
+ * Test to verify that all elements with the same name compile as designed 
+ * Specifically, view, table, external view, and detag output all share the same namespace,
+ * so these four items should throw a ParseException.
+ */
+
+module module1;
+
+---------------------------------------------------------------------------------------
+---------- View
+---------------------------------------------------------------------------------------
+create view foo as
+	select D.label as label, D.text as text
+	from Document D;
+
+
+---------------------------------------------------------------------------------------
+---------- Dictionary
+---------------------------------------------------------------------------------------
+create dictionary foo as  
+(
+  'foo', 'bar', 'baz'
+);
+
+
+---------------------------------------------------------------------------------------
+---------- Table
+---------------------------------------------------------------------------------------
+create table foo (name Text, location Text) as
+values 
+	('IBM', 'USA'), 
+	('Enron', 'Hell'), 
+	('Yahoo', 'Santa Clara'),
+	('Acme Fake Company Names', 'Somewhere');
+	
+
+---------------------------------------------------------------------------------------
+---------- Function
+---------------------------------------------------------------------------------------
+
+create function foo (inputText String)
+return String
+external_name 'StringUtil.jar:com.ibm.udf.test.StringUtil!toUpperCase'
+language java
+deterministic
+return null on null input;
+
+
+---------------------------------------------------------------------------------------
+---------- External View
+---------------------------------------------------------------------------------------
+create external view foo (name Text)
+external_name 'foo_name';
+
+---------------------------------------------------------------------------------------
+---------- Detag
+---------------------------------------------------------------------------------------
+detag Document.text into foo
+annotate 
+	element 'title' as Title;
+
+---------------------------------------------------------------------------------------
+---------- Another view, to generate the special "declared twice" error message
+---------------------------------------------------------------------------------------
+create view foo as
+	select D.label as label, D.text as text
+	from Document D;
+	
+---------------------
+--- Now a table clash
+---------------------
+create table bar (name Text, location Text) as
+values 
+	('IBM', 'USA'), 
+	('Enron', 'Hell'), 
+	('Yahoo', 'Santa Clara'),
+	('Acme Fake Company Names', 'Somewhere');
+	
+create view bar as
+	select D.label as label, D.text as text
+	from Document D;	
+	
+create external view bar (name Text)
+external_name 'bar_name';
+
+detag Document.text into bar
+annotate 
+	element 'title' as Title;
+	
+create table bar (name Text, location Text) as
+values 
+	('IBM', 'USA'), 
+	('Enron', 'Hell'), 
+	('Yahoo', 'Santa Clara'),
+	('Acme Fake Company Names', 'Somewhere');
+	
+	
+------------------------------
+--- And an external view clash
+------------------------------
+create external view baz (name Text)
+external_name 'baz_name';
+
+create view baz as
+	select D.label as label, D.text as text
+	from Document D;	
+	
+create external view baz (name Text)
+external_name 'baz_name';
+
+detag Document.text into baz
+annotate 
+	element 'title' as Title;
+	
+create table baz (name Text, location Text) as
+values 
+	('IBM', 'USA'), 
+	('Enron', 'Hell'), 
+	('Yahoo', 'Santa Clara'),
+	('Acme Fake Company Names', 'Somewhere');
+	
+--------------------------------
+--- Finally a detag clash
+--------------------------------
+
+detag Document.text into qux
+annotate 
+	element 'title' as Title;
+
+create view qux as
+	select D.label as label, D.text as text
+	from Document D;	
+	
+create external view qux (name Text)
+external_name 'baz_name';
+
+detag Document.text into qux
+annotate 
+	element 'title' as Title;
+	
+create table qux (name Text, location Text) as
+values 
+	('IBM', 'USA'), 
+	('Enron', 'Hell'), 
+	('Yahoo', 'Santa Clara'),
+	('Acme Fake Company Names', 'Somewhere');

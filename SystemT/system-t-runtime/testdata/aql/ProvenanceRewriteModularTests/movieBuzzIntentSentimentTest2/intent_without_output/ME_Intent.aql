@@ -1,0 +1,183 @@
+module intent_without_output;
+
+import view MET_AllBuzz_OnlyText from module buzz as MET_AllBuzz_OnlyText;
+import view MET_AllBuzz from module buzz as MET_AllBuzz;
+
+import dictionary MET_Negation_Dict from module common_dict as MET_Negation_Dict;
+
+create dictionary ME_IntentVerb_Dict as (
+'wanna','want to','gonna','gotta','gunna','going to','will','I\'ll','dying to','can\'t wait','cant wait','cannot wait','got to','gotta','love to',
+'planning to','plan to','plan on','head to','about to','heading to','who wants','need to',
+'off to','go','take me to','taking me to','want to go','can','going with me','agree','come','have to','I\'m','am','ready to',
+'someone to'
+);
+
+create dictionary ME_ActionVerb_Dict as (
+'go to','see','watch','seeing','watching'
+);
+
+create dictionary ME_NegativeHint_Dict as (
+'doesnt','dont','wont','don\'t','wont','won\'t','dont think','don\'t think','not'
+);
+
+create dictionary ME_SingleActionHint_Dict as (
+'heading to','head to','going to','out to'
+);
+
+create dictionary ME_IntentTags_Dict as (
+'#movieiwannasee','#wannawatchthatmovie','#imgoingtoseethatmovie',
+'#needtoseethismovie','#movieiwannasee','#havetoseeit','#moviesicantwaittowatch'
+);
+
+/*
+create view  MET_Negation_X as
+	extract D.text as text, dictionary 'MET_Negation_Dict' on D.text as match
+	from MET_AllBuzz_OnlyText D
+	consolidate on text;*/
+	
+create view ME_IntentVerb_X as 
+	extract D.text as text,-- D.name as name_span, D.formal_name as formal_name,
+		dictionary 'ME_IntentVerb_Dict' on D.text as i_vb
+	--from MET_AllBuzz D;
+from  MET_AllBuzz_OnlyText D;
+
+	
+create view ME_NegativeHint_1X as 
+	extract D.text as text, dictionary 'ME_NegativeHint_Dict' on D.text as match
+	from MET_AllBuzz_OnlyText  D;	
+	
+create view ME_ActionVerb_X as 
+	extract D.text as text, dictionary 'ME_ActionVerb_Dict' on D.text as match
+	from MET_AllBuzz_OnlyText  D;
+	
+create view ME_SingleActionHint_X as
+	extract D.text as text, dictionary 'ME_SingleActionHint_Dict' on D.text as match
+	from MET_AllBuzz_OnlyText D;
+	
+create view ME_IntentTags_X as 
+	extract D.text as text, dictionary 'ME_IntentTags_Dict' on D.text as match
+	from MET_AllBuzz_OnlyText  D;
+--------------------------------------
+-- PATH 1: INTENT VERB FOLLOWED BY ACTION VERB ("I'm going to watch")
+--------------------------------------	
+
+
+create view ME_MovieAndIntentVerbFirstFilter as 
+	select D.text as text,  D.name_span as name, D.formal_name as formal_name, I.i_vb as i_vb--, A.match as a_vb
+	from MET_AllBuzz D, ME_IntentVerb_X I
+	where Overlaps(D.text, I.text);
+
+create view ME_MovieAndIntentVerb as
+	select D.text as text,  D.name as name, D.formal_name as formal_name, D.i_vb as i_vb, A.match as a_vb	
+	from ME_MovieAndIntentVerbFirstFilter D, ME_ActionVerb_X A
+	where Overlaps(D.text, A.text)
+	and FollowsTok(D.i_vb, A.match,0,3);
+	
+
+--------------------------------------
+-- PATH 2: SIMPLE CONSTRUCTS (heading to, head to, going to) followed immediately by the movie name
+--------------------------------------		
+create view ME_SingleActionHint as
+	select D.text as text, D.name_span as name, D.formal_name as formal_name, A.match as a_vb
+	from ME_SingleActionHint_X	A, MET_AllBuzz D
+	where Overlaps(A.text, D.text)
+	and FollowsTok(A.match, D.name_span,0,1);
+	
+create view ME_AllIntentHints as
+	(
+	select D.text, D.name, D.formal_name
+	from  ME_MovieAndIntentVerb D
+	)
+	union all
+	(
+	select D.text, D.name, D.formal_name
+	from  ME_SingleActionHint D
+	);
+--------------------------------
+-- SEPARATE THE NEGATIVE HINTS
+--------------------------------
+create view ME_MovieAndIntentVerb_AllNegative as
+	extract D.text as text, D.name as name, D.formal_name as formal_name, D.a_vb as a_vb, D.i_vb as i_vb, dictionary 'ME_NegativeHint_Dict' on D.text as neg_match
+	from ME_MovieAndIntentVerb D;
+	
+create view ME_MovieAndIntentVerb_Negative as 
+	(
+	select D.text as text, D.name as name, D.formal_name as formal_name
+	from ME_MovieAndIntentVerb_AllNegative D
+	where FollowsTok(D.neg_match, D.a_vb,0,1)
+	)
+	union all
+	(
+	select D.text as text, D.name as name, D.formal_name as formal_name
+	from ME_MovieAndIntentVerb_AllNegative D
+	where FollowsTok(D.neg_match, D.i_vb,0,1)
+	);
+
+create view ME_SingleActionHint_AllNegative as
+	extract D.text as text, D.name as name, D.formal_name as formal_name, D.a_vb as a_vb, dictionary 'ME_NegativeHint_Dict' on D.text as neg_match
+	from ME_SingleActionHint D;
+	
+create view ME_SingleActionHint_Negative as
+	select D.text as text, D.name as name, D.formal_name as formal_name
+	from ME_SingleActionHint_AllNegative D
+	where FollowsTok(D.neg_match, D.a_vb,0,1);
+
+create view ME_AllIntent_Negative_Unconsolidated as
+	(
+	select D.text, D.name,  D.formal_name
+	from ME_MovieAndIntentVerb_Negative D
+	)
+	union all
+	(
+	select D.text, D.name,  D.formal_name
+	from ME_SingleActionHint_Negative D
+	);
+
+create view ME_AllIntent_Negation as
+	extract D.text as text, D.name as name,  D.formal_name as formal_name,  dictionary 'MET_Negation_Dict' on D.text as match
+	from ME_AllIntentHints D
+	having Follows(match, name, 1,3);
+	
+
+create view ME_PosIntentPrelim as 
+	(
+	select D.text, D.name, D.formal_name
+	from ME_AllIntentHints D
+	)
+	minus
+	(
+	select D.text, D.name,  D.formal_name
+	from ME_AllIntent_Negation D
+	);
+-------------------------------------
+-- ALL INTENT
+-------------------------------------
+create view ME_Intent as 
+	select D.text, GetString('positive') as polarity, D.name as name_span, GetString(D.name) as name, D.formal_name as formal_name
+	from ME_PosIntentPrelim D
+	consolidate on D.text
+	;
+	
+-- formal_name is for now placeholder, will update with new dictionaries
+create view Intent as 
+	select --D.polarity as polarity, 
+	     D.name_span as movie_span, D.name as name, D.formal_name as formal_name
+	from ME_Intent D;
+	
+
+	
+--output view ME_IntentVerb_X;
+--output view ME_NegativeHint_X;
+--output view ME_MovieAndIntentVerbFirstFilter;
+--output view ME_MovieAndIntentVerb;
+/*
+output view ME_SingleActionHint;
+output view ME_AllIntentHints;
+output view ME_MovieAndIntentVerb_AllNegative;
+output view ME_MovieAndIntentVerb_Negative;
+output view ME_SingleActionHint_AllNegative;
+output view ME_SingleActionHint_Negative;
+output view  ME_AllIntent_Negative_Unconsolidated;
+output view  ME_AllIntent_Negative;
+output view ME_PosIntentPrelim;*/
+--output view ME_Intent;

@@ -1,0 +1,43 @@
+detag Document.text as Doc
+annotate 
+    element 'a' as Anchor
+		with attribute 'href' as target,
+	element 'h1' as H1,
+	element 'h2' as H2,
+	element 'h3' as H3,
+	element 'title' as AllTitle,
+	element 'font' as Font,
+	element 'meta' as Meta
+		with attribute 'name' as name
+		and attribute 'content' as content
+	;
+	
+	
+-- Identify the "start main content" spans in the original document (not the detagged doc)
+create view StartMainContent as
+extract 
+	regex /start main content/ with flags 'CASE_INSENSITIVE' 
+		on D.text 
+		as match
+from Document D;
+
+--output view StartMainContent;
+
+-- Select the contents of the H1 and FONT tags
+create view H1Font as
+(select H.match as match from H1 H)
+union all
+(select F.match as match from Font F);
+
+--output view H1Font;
+
+-- Extract the contents of the first H1 or Font tag occurring after a "start main content" comment
+-- Assumption: the first match is at most 100000 tokens away from "start main comment"...
+create view FirstMainHead as
+select SMC.match as smc, Remap(HF.match) as HF
+from H1Font HF,
+	 StartMainContent SMC
+--where FollowsTok(SMC.match, Remap(HF.match), 0, 100000)
+consolidate on HF.match using 'RetainFirst';
+
+output view FirstMainHead;

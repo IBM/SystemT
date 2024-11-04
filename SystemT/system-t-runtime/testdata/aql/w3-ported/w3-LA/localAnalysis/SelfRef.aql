@@ -1,0 +1,194 @@
+-------------------------------------------------------------------------------
+-- SelfRef.aql from Java Revision No 521 for Java class ResolveRelativeURL.java 
+-- Depends on HTML.aql
+-------------------------------------------------------------------------------
+
+--UDF for creating a URI of link URL 
+create function CreateLinkUrl(link_url_str String)
+return String like link_url_str
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!CreateLinkUrl'
+language java
+deterministic
+return null on null input;
+
+--UDF for creating a URI using various parameter
+create function GenerateURIAll(linkurl String,scheme String,host String,port String )
+return String
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!GenerateURIAll' 
+language java 
+deterministic 
+return null on null input;
+---------------------------------------------------------------------------------------
+--This code is correspond  to resolve_relative_url method of ResolveRelativeURL.java
+--As per Proposed AQL Working this code is correspond  to point 1
+----------------------------------------------------------------------------------------
+
+--Following AQL(CreateLinkUrl)converts link url to URI object and returns the tostring of the URI		
+--Note that this view contains all the anchor tags including those that need to be skipped.
+create view LinkUrl as 
+select D.label as pageurl ,A2.match as anchortext,CreateLinkUrl(GetText(A2.target)) as linkurl
+from ATag A2,Document D
+where NotNull(A2.target);
+--and Not(Equals(GetText(A2.match),''));
+
+--resolve url is null for null linkurl
+--extracting Scheme ,Port, Host of page url and link url
+--input
+--pageurl http://w3.rchland.ibm.com/projects/BEAM-Rochester/BEAM300.php 
+--linkurl-http://w3.ibm.com/download/
+--Output
+--linkhost->w3.ibm.com
+--linkport->-1
+--linkscheme->http
+--pagescheme->http
+--pagehost->w3.rchland.ibm.com
+--pageport->-1
+create view GetScheme as 
+select GetURL(GetText(L.linkurl),1) as linkscheme,GetURL(GetText(L.linkurl),2) as linkhost,GetPort(GetText(L.linkurl)) as linkport,GetURL(GetText(L.pageurl),1) as pagescheme,GetURL(GetText(L.pageurl),2) as pagehost,GetPort(GetText(L.pageurl)) as pageport,L.linkurl as linkurl,L.pageurl as pageurl
+,L.anchortext as anchortext
+from LinkUrl L
+where NotNull(L.linkurl);
+
+--inline dictionary for https scheme
+create dictionary HttpsScheme as
+(
+    'https'
+);
+
+--For non https scheme this view is correspondto 
+--return page_url.resolve(link_url); of Java
+create view NonHttpsResolveUrl as
+select resolveUrl(GetText(L.pageurl),GetText(L.linkurl)) as  resolvurl,
+		L.linkscheme as linkscheme,L.linkhost as linkhost,
+		L.linkport as linkport,
+		L.pagescheme as pagescheme,
+		L.pagehost as pagehost,
+		L.pageport as pageport,
+		L.linkurl as linkurl,
+		L.pageurl as pageurl
+,L.anchortext as anchortext
+from GetScheme L
+where Not(MatchesDict('HttpsScheme',L.linkscheme));
+
+
+--remaining link url which has https scheme 
+--output of this view will always have https as linkscheme
+--for all such linkurl java calls resolve_relative_url_manually method
+create view HttpsLinkUrlResolveManually as
+select L.linkscheme as linkscheme,L.linkhost as linkhost,L.linkport as linkport,L.pagescheme as pagescheme,L.pagehost as pagehost,L.pageport as pageport,L.pageurl as pageurl,L.linkurl as linkurl
+,L.anchortext as anchortext
+from GetScheme L
+where MatchesDict('HttpsScheme',L.linkscheme);
+
+--If link host is Null assign page host to link host following three views do this.
+--extracting tupples which has linkhost as Null and assigning page host to link host, by attribute newlinkhost
+create view HostNull as
+select L.linkscheme as linkscheme,L.linkhost as linkhost,L.pagehost as newlinkhost,L.linkport as linkport,L.pagescheme as pagescheme,L.pagehost as pagehost,L.pageport as pageport,L.linkurl as linkurl,L.pageurl as pageurl
+,L.anchortext as anchortext
+from HttpsLinkUrlResolveManually L
+where Not(NotNull(L.linkhost));
+
+--extracting tupples which has not Null linkhost
+create view NotHostNull as
+(select L.linkscheme as linkscheme,L.linkhost as linkhost,L.linkport as linkport,L.pagescheme as pagescheme,L.pagehost as pagehost,L.pageport as pageport,L.linkurl as linkurl,L.pageurl as pageurl
+,L.anchortext as anchortext
+from HttpsLinkUrlResolveManually L)
+minus
+(select L.linkscheme as linkscheme,L.linkhost as linkhost,L.linkport as linkport,L.pagescheme as pagescheme,L.pagehost as pagehost,L.pageport as pageport,L.linkurl as linkurl,L.pageurl as pageurl
+,L.anchortext as anchortext
+from HostNull L);
+
+--Final value of the Host
+create view HostFinal as
+(select L.linkscheme as linkscheme,L.newlinkhost as linkhost,L.linkport as linkport,L.pagescheme as pagescheme,L.pagehost as pagehost,L.pageport as pageport,L.linkurl as linkurl,L.pageurl as pageurl
+,L.anchortext as anchortext
+from HostNull L)
+union all
+(select L.linkscheme as linkscheme,L.linkhost as linkhost,L.linkport as linkport,L.pagescheme as pagescheme,L.pagehost as pagehost,L.pageport as pageport,L.linkurl as linkurl,L.pageurl as pageurl
+,L.anchortext as anchortext
+from NotHostNull L);
+
+--If link port is -1 assign page port  to link port following three views do this.
+--extracting tupples which has linkport as -1 and assigning page port to link port, by attribute newlinkport
+create view PortNull as
+select L.linkscheme as linkscheme,L.linkhost as linkhost,L.linkport as linkport,L.pageport as newlinkport,L.pagescheme as pagescheme,L.pagehost as pagehost,L.pageport as pageport,L.linkurl as linkurl,L.pageurl as pageurl
+,L.anchortext as anchortext
+from HostFinal L
+where Equals(GetText(L.linkport),'-1');
+
+--extracting tupples, where port is not equal to -1 
+create view NotPortNull as
+(select L.linkscheme as linkscheme,L.linkhost as linkhost,L.linkport as linkport,L.pagescheme as pagescheme,L.pagehost as pagehost,L.pageport as pageport,L.linkurl as linkurl,L.pageurl as pageurl
+,L.anchortext as anchortext
+from HostFinal L)
+minus
+(select L.linkscheme as linkscheme,L.linkhost as linkhost,L.linkport as linkport,L.pagescheme as pagescheme,L.pagehost as pagehost,L.pageport as pageport,L.linkurl as linkurl,L.pageurl as pageurl
+,L.anchortext as anchortext
+from PortNull L)
+;
+
+--Final value of the port
+create view PortFinalCombined as
+(select L.linkscheme as linkscheme,L.linkhost as linkhost,L.newlinkport as linkport,L.pagescheme as pagescheme,L.pagehost as pagehost,L.pageport as pageport,L.linkurl as linkurl,L.pageurl as pageurl
+,L.anchortext as anchortext
+from PortNull L)
+union all
+(select L.linkscheme as linkscheme,L.linkhost as linkhost,L.linkport as linkport,L.pagescheme as pagescheme,L.pagehost as pagehost,L.pageport as pageport,L.linkurl as linkurl,L.pageurl as pageurl
+,L.anchortext as anchortext
+from NotPortNull L)
+;
+
+--if host is null following first part of 'union all' is equal to following java statment
+--link_url = new URI(scheme, link_url.getUserInfo(), host, port, link_url.getPath(), link_url.getQuery(), link_url.getFragment());
+--and then combining the linkurls
+create view ToResolveUrl as
+(select L.linkscheme as linkscheme,L.linkhost as linkhost,L.linkport as linkport,GenerateURIAll(GetText(L.linkurl),GetText(L.linkscheme),GetText(L.linkhost),GetText(L.linkport)) as linkurl,L.pageurl as pageurl
+,L.anchortext as anchortext
+from PortFinalCombined L
+where Not(NotNull(L.linkhost)))
+union all
+(select L.linkscheme as linkscheme,L.linkhost as linkhost,L.linkport as linkport,L.linkurl as linkurl ,L.pageurl as pageurl
+,L.anchortext as anchortext
+from PortFinalCombined L
+where NotNull(L.linkhost));
+
+
+--resolving the link url
+create view HttpsResolveUrl1 as
+select L.linkscheme as linkscheme,
+		L.linkhost as linkhost,
+		L.linkport as linkport,
+		resolveUrl(GetText(L.pageurl),GetText(L.linkurl))  as resolvurl,
+		L.pageurl as pageurl,
+		L.linkurl as linkurl,
+		L.anchortext as anchortext
+from ToResolveUrl L;
+
+
+--creating URI of resolve url 
+create view HttpsResolveUrl as
+select GenerateURIAll(
+		GetText(L.resolvurl),GetText(L.linkscheme),GetText(L.linkhost),GetText(L.linkport)) as resolvurl,
+		L.pageurl as pageurl,
+		L.linkurl as linkurl,
+		L.anchortext as anchortext
+from HttpsResolveUrl1 L
+where NotNull(L.resolvurl);
+
+--combining https and non https 
+create view ResolveRelativeURL as
+(
+	select  L.linkurl as anchorurl,L.pageurl as pageurl,L.resolvurl as resolvurl,L.anchortext as anchortext
+	from HttpsResolveUrl L
+	where NotNull(L.resolvurl)
+)
+union all
+(
+	select  L.linkurl as anchorurl,L.pageurl as pageurl,L.resolvurl as resolvurl,L.anchortext as anchortext
+	from NonHttpsResolveUrl L
+	where NotNull(L.resolvurl)
+);
+
+
+
+

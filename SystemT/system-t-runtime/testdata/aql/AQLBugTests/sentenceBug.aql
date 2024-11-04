@@ -1,0 +1,28 @@
+-------------------------------------------------------------------------------
+-- sentenceBug.aql
+--
+-- A bug in AQL-based sentence boundary detection that cropped up during the
+-- refactoring for multi-lingual tokenization.
+-------------------------------------------------------------------------------
+require document with columns text Text;
+
+
+create view Boundaries as 
+extract 
+    D.text as text,
+    regex /(([\.\?!]+\s)|(\n\s*\n))/ on D.text as boundary
+    from Document D;
+
+create view BoundaryContext as
+select B.boundary as boundary, 
+	LeftContextTok(B.boundary, 1) as context,
+	CombineSpans(LeftContextTok(B.boundary, 1), B.boundary) as testRegion
+from Boundaries B;
+
+create view NotABoundary as
+select C.boundary as boundary
+from BoundaryContext C
+where ContainsDict('dictionaries/abbreviations.dict', C.testRegion);
+
+output view BoundaryContext;
+output view NotABoundary;

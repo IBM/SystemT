@@ -1,0 +1,395 @@
+require document with columns text Text;
+-------------------------------------------------------------------------------
+-- person-org-hotspots.aql
+--
+-- AQL file that isolates just the expensive (more than 2% of running time
+-- with Enron10K data set) views in person-org-minimal.aql.
+-------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- CapsPerson =>    141732 operator invocations in 6.35 sec (11.4 %)
+
+select R.match as name
+into CapsPerson
+from   Regex(
+/\b\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}\b/, 
+    --'
+    Document.text) R 
+where  Not(ContainsDicts(
+            'FilterPersonDict', 
+            'dictionaries/filterPerson_german.dict',
+            'InitialDict',
+            'StrongPhoneVariantDictionary',
+            'dictionaries/stateList.dict',
+            'dictionaries/organization_suffix.dict',
+            --'dictionaries/industry_types_retained.dict',
+            'dictionaries/streetSuffix_forPerson.dict', R.match))
+   and Not(MatchesRegex(/(\p{Lu}\p{M}*)+-.*([\p{Ll}\p{Lo}]\p{M}*).*/, R.match))
+   and Not(MatchesRegex(/.*([\p{Ll}\p{Lo}]\p{M}*).*-(\p{Lu}\p{M}*)+/, R.match));
+
+
+--------------------------------------------------------------------------------
+-- CapsOrg =>    151756 operator invocations in 3.21 sec (5.8 %)
+
+select R.match as match
+into CapsOrg
+from Regex(/\b\p{Lu}\p{M}*[[\p{Ll}\p{Lo}]\p{M}*\&\.'\-\,]+\b/, Document.text) R
+-- '
+where Not(ContainsDict('dictionaries/industryType_prefix.dict', R.match));
+
+-------------------------------------------------------------------------------
+-- WeakInitialWord =>    106299 operator invocations in 1.98 sec (3.6 %)
+
+select R.match as word
+into WeakInitialWord
+from Regex(/\b([\p{Upper}]\.?\s*){1,5}\b/, Document.text) R;
+
+-------------------------------------------------------------------------------
+-- AllCapsOrg =>    106299 operator invocations in 1.94 sec (3.5 %)
+
+select R.match as match
+into AllCapsOrg
+from Regex(/\b(\p{Lu}\p{M}*){2,}\b/, Document.text) R;
+
+-------------------------------------------------------------------------------
+-- InitialWord =>    113817 operator invocations in 1.51 sec (2.7 %)
+
+select R.match as word
+into InitialWord
+from Regex(/\b([\p{Upper}]\.\s*){1,5}\b/, Document.text) R;
+            
+--------------------------------------------------------------------------------
+-- Time4 =>     41535 operator invocations in 1.34 sec (2.4 %)
+
+select R.match as match
+into Time4
+from Regex(/\b(\d{1,2}:\d{2}(:\d{2})?|\d{1,2}-\d{1,2})\s*(A|P)?\b/, 
+    Document.text) R;
+
+--------------------------------------------------------------------------------
+-- TwoDigitsInterval =>     11181 operator invocations in 1.14 sec (2.0 %)
+
+select R.match as match
+into TwoDigitsInterval
+from Regex(/\b((0)|(1)|(2)|(3))?[\d]( )*[\-]( )*((0)|(1)|(2)|(3))?[\d]\b/, 
+    Document.text) R;
+
+-------------------------------------------------------------------------------
+-- StrictCapsPersonR =>     69405 operator invocations in 1.07 sec (1.9 %)
+
+create view CapsPersonNoP as
+select CP.name as name
+from CapsPerson CP
+where Not(ContainsRegex(/'/, CP.name)); -- '
+
+select R.match as name
+into StrictCapsPersonR
+from Regex(/\b\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}\b/, CapsPersonNoP.name) R;
+
+
+-------------------------------------------------------------------------------
+-- StrictCapsPerson =>     69405 operator invocations in 0.77 sec (1.4 %)
+
+select R.name as name
+into StrictCapsPerson
+from StrictCapsPersonR R
+where MatchesRegex(
+    /\b\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){1,20}\b/, R.name);
+
+-------------------------------------------------------------------------------
+-- Person4ar1 =>    243693 operator invocations in 5.55 sec (10.0 %)
+
+-- Find dictionary matches for all first names
+-- Mostly US first names
+create view StrictFirstName1 as
+select D.match as firstname
+from   Dictionary('dictionaries/strictfirst.dict', Document.text) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+-- changed to enable unicode match
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+-- German first names
+create view StrictFirstName2 as
+select D.match as firstname
+from   Dictionary('dictionaries/strictLast_german.dict', Document.text) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+--where  MatchesRegex(/\p{Upper}.{1,20}/, D.match);
+-- changed to enable unicode match
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+-- nick names for US first names
+create view StrictFirstName3 as
+select D.match as firstname
+from   Dictionary('dictionaries/strictNickName.dict', Document.text) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+--where  MatchesRegex(/\p{Upper}.{1,20}/, D.match);
+-- changed to enable unicode match
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);
+
+-- german first name from blue page
+create view StrictFirstName4 as
+select D.match as firstname
+from   Dictionary('dictionaries/strictFirst_german_bluePages.dict', Document.text) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+--where  MatchesRegex(/\p{Upper}.{1,20}/, D.match);
+-- changed to enable unicode match
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+-- union all the dictionary matches for first names
+create view StrictFirstName as
+	(select S.firstname as firstname from StrictFirstName1 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName2 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName3 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName4 S);
+
+-- Relaxed versions of first name
+create view RelaxedFirstName1 as
+select CombineSpans(S.firstname, CP.name) as firstname
+from StrictFirstName S,
+     StrictCapsPerson CP
+where FollowsTok(S.firstname, CP.name, 1, 1)
+  and MatchesRegex(/\-/, SpanBetween(S.firstname, CP.name));
+
+create view RelaxedFirstName2 as
+select CombineSpans(CP.name, S.firstname) as firstname
+from StrictFirstName S,
+     StrictCapsPerson CP
+where FollowsTok(CP.name, S.firstname, 1, 1)
+  and MatchesRegex(/\-/, SpanBetween(CP.name, S.firstname));
+  
+-- all the first names
+create view FirstNameAll as
+	(select N.firstname as firstname from StrictFirstName N)
+	union all
+	(select N.firstname as firstname from RelaxedFirstName1 N)
+	union all
+	(select N.firstname as firstname from RelaxedFirstName2 N);
+
+create view ValidFirstNameAll as
+select N.firstname as firstname
+from FirstNameAll N
+where Not(MatchesRegex(/(\p{Lu}\p{M}*)+-.*([\p{Ll}\p{Lo}]\p{M}*).*/, N.firstname))
+  and Not(MatchesRegex(/.*([\p{Ll}\p{Lo}]\p{M}*).*-(\p{Lu}\p{M}*)+/, N.firstname));
+	
+create view FirstName as
+select C.firstname as firstname
+from ValidFirstNameAll C
+consolidate on C.firstname;
+
+
+select CombineSpans(CP.name, FN.firstname) as person
+into Person4ar1
+from   FirstName FN,
+       CapsPerson CP
+where  FollowsTok(CP.name, FN.firstname, 0, 1)
+and   ContainsRegex(/,/,SpanBetween(CP.name, FN.firstname))
+and   Not(MatchesRegex(
+        /(.|\n|\r)*(\.|\?|!|'|\bat\b|\bin\b)( )*/, LeftContext(CP.name, 10)))
+        --'
+and   Not(MatchesRegex(/(?i)(.+fully)/, CP.name))
+and   GreaterThan(GetBegin(CP.name), 10);
+
+
+--------------------------------------------------------------------------------
+-- Person4Wrong =>     47466 operator invocations in 0.85 sec (1.5 %)
+
+
+-- Find dictionary matches for all last names
+create view StrictLastName1 as
+select D.match as lastname
+from   Dictionary('dictionaries/strictlast.dict', Document.text) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+-- changed to enable unicode match
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+create view StrictLastName2 as
+select D.match as lastname
+from   Dictionary('dictionaries/strictLast_german.dict', Document.text) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+--where  MatchesRegex(/\p{Upper}.{1,20}/, D.match);
+-- changed to enable unicode match
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+create view StrictLastName3 as
+select D.match as lastname
+from   Dictionary('dictionaries/strictLast_german_bluePages.dict', Document.text) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+--where  MatchesRegex(/\p{Upper}.{1,20}/, D.match);
+-- changed to enable unicode match
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);
+
+create view StrictLastName4 as
+select D.match as lastname
+from   Dictionary('dictionaries/uniqMostCommonSurname.dict', Document.text) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+--where  MatchesRegex(/\p{Upper}.{1,20}/, D.match);
+-- changed to enable unicode match
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);
+
+create view StrictLastName as
+	(select S.lastname as lastname from StrictLastName1 S)
+	union all
+	(select S.lastname as lastname from StrictLastName2 S)
+	union all
+	(select S.lastname as lastname from StrictLastName3 S)
+	union all
+	(select S.lastname as lastname from StrictLastName4 S);
+
+-- Relaxed version of last name
+create view RelaxedLastName1 as
+select CombineSpans(SL.lastname, CP.name) as lastname
+from StrictLastName SL,
+     StrictCapsPerson CP
+where FollowsTok(SL.lastname, CP.name, 1, 1)
+  and MatchesRegex(/\-/, SpanBetween(SL.lastname, CP.name));
+
+create view RelaxedLastName2 as
+select CombineSpans(CP.name, SL.lastname) as lastname
+from StrictLastName SL,
+     StrictCapsPerson CP
+where FollowsTok(CP.name, SL.lastname, 1, 1)
+  and MatchesRegex(/\-/, SpanBetween(CP.name, SL.lastname));
+
+-- all the last names
+create view LastNameAll as
+	(select N.lastname as lastname from StrictLastName N)
+	union all
+	(select N.lastname as lastname from RelaxedLastName1 N)
+	union all
+	(select N.lastname as lastname from RelaxedLastName2 N);
+
+create view ValidLastNameAll as
+select N.lastname as lastname
+from LastNameAll N
+-- do not allow partially all capitalized words
+where Not(MatchesRegex(/(\p{Lu}\p{M}*)+-.*([\p{Ll}\p{Lo}]\p{M}*).*/, N.lastname))
+  and Not(MatchesRegex(/.*([\p{Ll}\p{Lo}]\p{M}*).*-(\p{Lu}\p{M}*)+/, N.lastname));
+	
+create view LastName as
+select C.lastname as lastname
+--from Consolidate(ValidLastNameAll.lastname) C;
+from ValidLastNameAll C
+consolidate on C.lastname;
+
+select CombineSpans(FN.firstname, LN.lastname) as person
+into Person4Wrong
+from   FirstName FN,
+       LastName LN
+where  FollowsTok(FN.firstname, LN.lastname, 0, 0)
+   and ContainsRegex(/[\n\r]/, SpanBetween(FN.firstname, LN.lastname))
+   and Equals(GetText(FN.firstname), GetText(LN.lastname));
+
+------------------------------------------------------------------------------
+-- DICTIONARIES:
+
+create dictionary FilterPersonDict as
+(
+	'Travel', 'Fellow', 'Sir', 'IBMer', 'Researcher', 'All','Tell',
+	'Friends', 'Friend', 'Colleague', 'Colleagues', 'Managers','If',
+	'Customer', 'Users', 'User', 'Valued', 'Executive', 'Chairs',
+	'New', 'Owner', 'Conference', 'Please', 'Outlook', 'Lotus', 'Notes',
+	'This', 'That', 'There', 'Here', 'Subscribers', 'What', 'When', 'Where',
+	'With', 'While', 'Thanks', 'Thanksgiving','Senator', 'Platinum',
+        'Perspective',
+	'Manager', 'Ambassador', 'Professor', 'Dear', 'Contact', 'Cheers',
+        'Athelet',
+	'And', 'Act', 'But', 'Hello', 'Call', 'From', 'Center', 'The', 'Take',
+        'Junior',
+	'Both', 'Communities', 'Greetings', 'Hope', 'Restaurants', 'Properties',
+	'Let', 'Corp', 'Memorial', 'You', 'Your', 'Our',  'My', 'His','Her',
+	'Their','Popcorn', 'Name', 'July', 'June','Join',
+	'Business', 'Administrative', 'South', 'Members', 'Address', 'Please',
+        'List',
+	'Public', 'Inc', 'Parkway', 'Brother', 'Buy', 'Then', 'Services',
+        'Statements',
+	'President', 'Commissioner', 'Commitment', 'Commits', 'Hey',
+	'Director', 'End', 'Exit', 'Experiences', 'Finance', 'Elementary',
+        'Wednesday',
+	'Nov', 'Infrastructure', 'Inside', 'Convention',
+	'Judge', 'Lady', 'Friday',  'Project', 'Projected', 
+	'Recalls', 'Regards', 'Recently', 'Administration', 'Independence',
+        'Denied',
+	'Unfortunately', 'Under', 'Uncle', 'Utility', 'Unlike', 'Was', 'Were',
+        'Secretary',
+	'Speaker', 'Chairman', 'Consider', 'Consultant', 'County', 'Court',
+        'Defensive',
+	'Northwestern', 'Place', 'Hi', 'Futures', 'Athlete', 'Invitational',
+        'System',
+	'International', 'Main', 'Online', 'Ideally'
+	-- more entries
+	,'If','Our', 'About', 'Analyst', 'On', 'Of', 'By', 'HR', 'Mkt', 'Pre',
+        'Post',
+	'Condominium', 'Ice', 'Surname', 'Lastname', 'firstname', 'Name',
+        'familyname',
+	-- Italian greeting
+   'Ciao',
+   -- Spanish greeting
+   'Hola',
+   -- French greeting
+   'Bonjour',
+   -- new entries 
+   'Pro','Bono','Enterprises','Group','Said','Says','Assistant','Vice','Warden','Contribution',
+   'Research', 'Development', 'Product', 'Sales', 'Support', 'Manager',
+   'Telephone', 'Phone', 'Contact', 'Information',
+   'Electronics','Managed','West','East','North','South', 
+   'Teaches','Ministry', 'Church', 'Association', 'Laboratories', 'Living', 'Community', 'Visiting',
+   'Officer'
+);
+
+create dictionary InitialDict as
+(
+	'rev.', 'col.', 'reverend', 'prof.', 'professor.', 
+	'lady', 'miss.', 'mrs.', 'mrs', 'mr.', 'pt.', 'ms.',
+	'messrs.', 'dr.', 'master.', 'marquis', 'monsieur',
+	'ds', 'di'
+	--'Dear' (Yunyao: comments out to avoid mismatches such as Dear Member),
+	--'Junior' (Yunyao: comments out to avoid mismatches such as Junior National [team player],
+ 	-- If we can have large negative dictionary to eliminate such mismatches, 
+	-- then this may be recovered 
+	--'Name:' ((Yunyao: comments out to avoid mismatches such as 'Name: Last Name')
+	-- for German names
+	-- TODO: need further test
+	,'herr', 'Fraeulein', 'Doktor', 'Herr Doktor', 'Frau Doktor',
+	'Herr Professor', 'Frau professor', 'Baron', 'graf'
+);
+
+create dictionary StrongPhoneVariantDictionary as (
+	 'phone',
+ 	'cell',
+ 	'contact',
+ 	'direct',
+	'office',
+ 	-- Yunyao: Added new strong clues for phone numbers
+	'tel',
+	'dial',
+	'Telefon',
+	'mobile',
+	'Ph',
+	-- German
+	'Fon',
+	'Telefon Geschaeftsstelle', 
+	'Telefon Gesch�ftsstelle',
+	'Telefon Zweigstelle',
+	'Telefon Hauptsitz',
+	'Telefon (Geschaeftsstelle)', 
+	'Telefon (Gesch�ftsstelle)',
+	'Telefon (Zweigstelle)',
+	'Telefon (Hauptsitz)',
+	'Telefonnummer',
+	'Telefon Geschaeftssitz',
+	'Telefon Gesch�ftssitz',
+	'Telefon (Geschaeftssitz)',
+	'Telefon (Gesch�ftssitz)',
+	'Telefon Pers�nlich',
+	'Telefon persoenlich',
+	'Telefon (Pers�nlich)',
+	'Telefon (persoenlich)',
+	'Handy',
+	'Handy-Nummer',
+	'Telefon arbeit',
+	'Telefon (arbeit)'
+);
+

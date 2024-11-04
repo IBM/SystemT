@@ -1,0 +1,190 @@
+-------------------------------------------------------------------------------
+-- includes.aql
+--
+-- Contains all general purpose UDF declarations and AQL files
+-- used in the w3 LA flow.
+--
+-------------------------------------------------------------------------------
+
+---------------------------------------
+-- Declarations for general-purpose UDFs
+---------------------------------------
+
+create function toLowerCase(span Span)
+return String
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UDF!toLowerCase'
+language java
+deterministic
+return null on null input;
+
+create function toUpperCase(str Text)
+return String
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UDF!toUpperCase'
+language java
+deterministic
+return null on null input;
+
+create function toLowerCaseText(str Text)
+return String
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UDF!toLowerCaseText'
+language java
+deterministic
+return null on null input;
+
+--UDF for retrieving elements from a String List
+create function getElementFromStrList(L ScalarList, index Integer)
+return String
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UDF!getElementFromStrList'
+language java
+deterministic
+return null on null input;
+
+--UDF for retrieving integer elements from a String List
+create function getIntElementfromStrList(L ScalarList, index Integer)
+return Integer
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UDF!getIntElementfromStrList'
+language java
+deterministic
+return null on null input;
+
+--UDF for retrieving elements from an Integer List
+create function getElementFromIntList(L ScalarList, index Integer)
+return Integer
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UDF!getElementFromIntList'
+language java
+deterministic
+return null on null input;
+
+--UDF for Unescaping html characters from Person name.
+create function UnescapeHTML(name String)
+return String
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UDF!UnescapeHTML'
+language java
+deterministic
+return null on null input;
+
+--UDF for concatenating the contents of a list of Spans using a given separator
+create function ListJoin(listOfSpans ScalarList, separator String)
+return String 
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UDF!ListJoin'
+language java
+deterministic
+return null on null input;
+
+--UDF for getting various attribute of URL
+create function GetURL(url String,num Integer)
+return String like scheme
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!GetURL'
+language java
+deterministic
+return null on null input;
+
+--UDF for getting port of URL
+create function GetPort(url String)
+return String
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!GetPort'
+language java
+deterministic
+return null on null input;
+
+--UDF for resolving URL
+create function resolveUrl(baseURL String,anchorURL String )
+return String
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!resolveUrl' 
+language java 
+deterministic 
+return null on null input;
+
+--UDF for replacing punctuation and whitespace from a string with another string
+create function ReplacePunctuation(str String, replacement String)
+return String
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UDF!ReplacePunctuation'
+language java
+deterministic
+return null on null input;
+
+--UDF for normalizing whitespace
+create function NormalizeWhitespace(str String)
+return String
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UDF!NormalizeWhitespace'
+language java
+deterministic
+return null on null input;
+
+--UDF for checking string containment between two spans
+create function containsText(containerSpan Span, containeeSpan Span)
+return Boolean
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UDF!containsText'
+language java
+deterministic
+return null on null input;
+
+
+--UDF for concatenating two strings
+create function StringConcat2(str1 String, str2 String)
+return String
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UDF!StringConcat2'
+language java
+deterministic
+return null on null input;
+
+
+--UDF for concatenating three strings
+create function StringConcat3(str1 String, str2 String, str3 String)
+return String
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UDF!StringConcat3'
+language java
+deterministic
+return null on null input;
+
+
+--UDF for generating a hash code for the input string
+create function GenerateHashCode(str String)
+return Integer
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UDF!GenerateHashCode'
+language java
+deterministic
+return null on null input;
+
+
+---------------------------------------
+-- AQL FILES
+---------------------------------------
+include 'localAnalysis/SkipDocumentBeforeDetag.aql';
+include 'localAnalysis/Detag.aql';
+include 'localAnalysis/HTML.aql';
+include 'localAnalysis/Description.aql';
+include 'localAnalysis/Title.aql';
+include 'localAnalysis/Segment.aql';
+include 'localAnalysis/SelfRef.aql';
+include 'localAnalysis/URL.aql';
+include 'localAnalysis/SelfRef1.aql';
+-- Skip document needs self ref for finding outbound links
+include 'localAnalysis/SkipDocumentAfterDetag.aql';
+include 'localAnalysis/anchorHome.aql';
+-- Special dedup strings (from SFSS patterns)
+include 'localAnalysis/URLDedupSpecial.aql';
+include 'localAnalysis/URLHash.aql';
+include 'localAnalysis/TitlePathHash.aql';
+include 'localAnalysis/OrgChartServlet.aql';
+include 'localAnalysis/OrgChart.aql';
+include 'localAnalysis/SiteServ.aql';
+include 'localAnalysis/URLHome.aql';
+include 'localAnalysis/dicts/semlabel/firstSegPatterns.aql';
+include 'localAnalysis/dicts/semlabel/lastSegPatterns.aql';
+include 'localAnalysis/dicts/semlabel/lastSegBackwardsPatterns.aql';
+include 'localAnalysis/dicts/semlabel/titlePatterns.aql';
+include 'localAnalysis/dicts/semlabel/urlPatterns.aql';
+include 'localAnalysis/HomepageFeatures.aql';
+include 'localAnalysis/SemLabel.aql';
+include 'localAnalysis/PersonTitleHome.aql';
+include 'localAnalysis/PersonTitleHomeCons.aql';
+include 'localAnalysis/Geo.aql';
+include 'localAnalysis/Date.aql';
+include 'localAnalysis/dicts/geo/GeoRankMappingTable.aql';
+include 'localAnalysis/GeoCluster.aql';
+-- ISSI
+include 'localAnalysis/dicts/semlabel/issiPlatform.aql';
+include 'localAnalysis/ISSI.aql';
+-- Soft Errors
+include 'localAnalysis/SoftError.aql';

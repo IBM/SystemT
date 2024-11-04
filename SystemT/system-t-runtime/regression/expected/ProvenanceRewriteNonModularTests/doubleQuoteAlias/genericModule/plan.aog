@@ -1,0 +1,221 @@
+$Document = DocScan(
+  (
+    "text" => "Text",
+    "label" => "Text"
+  )
+);
+CreateDict(
+    "name" => "LastNamesDict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false",
+    "lemma_match" => "false"
+);
+
+CreateDict(
+    "name" => "firstDict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false",
+    "lemma_match" => "false"
+);
+
+$LastName =
+Project(
+  (
+    "@@genericModule@@LastName@@__auto__id" => "__auto__id",
+    "@@genericModule@@LastName@@__stmt__type" => "__stmt__type",
+    "@@genericModule@@LastName@@Document_____sep_____D____id" => "Document_____sep_____D____id",
+    "lastname" => "lastname"
+  ),
+  ApplyFunc(
+    IntConst(
+      -1
+    ) => "@@genericModule@@LastName@@Document_____sep_____D____id",
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_EXTRACT_DICT"
+      ) => "@@genericModule@@LastName@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@LastName@@__auto__id",
+        Dictionary("LastNamesDict" => "Default" , "D.text", "lastname",
+          Project(
+            (
+              "text" => "D.text"
+            ),
+            $Document
+          )
+        )
+      )
+    )
+  )
+);
+
+$__Subquery__1__Temp =
+Project(
+  (
+    "@@genericModule@@__Subquery__1__Temp@@__auto__id" => "__auto__id",
+    "@@genericModule@@__Subquery__1__Temp@@__stmt__type" => "__stmt__type",
+    "@@genericModule@@__Subquery__1__Temp@@Document_____sep_____D____id" => "Document_____sep_____D____id",
+    "firstname" => "firstname"
+  ),
+  ApplyFunc(
+    IntConst(
+      -1
+    ) => "@@genericModule@@__Subquery__1__Temp@@Document_____sep_____D____id",
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_EXTRACT_DICT"
+      ) => "@@genericModule@@__Subquery__1__Temp@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@__Subquery__1__Temp@@__auto__id",
+        Dictionary("firstDict" => "Default" , "D.text", "firstname",
+          Project(
+            (
+              "text" => "D.text"
+            ),
+            $Document
+          )
+        )
+      )
+    )
+  )
+);
+
+$__Subquery__2__Temp =
+Project(
+  (
+    "@@genericModule@@__Subquery__2__Temp@@__auto__id" => "__auto__id",
+    "@@genericModule@@__Subquery__2__Temp@@__stmt__type" => "__stmt__type",
+    "@@genericModule@@__Subquery__2__Temp@@Document_____sep_____D____id" => "Document_____sep_____D____id",
+    "firstname" => "firstname"
+  ),
+  ApplyFunc(
+    IntConst(
+      -1
+    ) => "@@genericModule@@__Subquery__2__Temp@@Document_____sep_____D____id",
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_EXTRACT_DICT"
+      ) => "@@genericModule@@__Subquery__2__Temp@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@__Subquery__2__Temp@@__auto__id",
+        Dictionary("firstDict" => "Default" , "D.text", "firstname",
+          Project(
+            (
+              "text" => "D.text"
+            ),
+            $Document
+          )
+        )
+      )
+    )
+  )
+);
+
+$fromList =
+Project(
+  (
+    "FN.firstname" => "firstname",
+    "Last Name.lastname" => "lastname",
+    "@@genericModule@@fromList@@__auto__id" => "__auto__id",
+    "@@genericModule@@fromList@@__stmt__type" => "__stmt__type",
+    "FN.__auto__id" => "__Subquery__1__Temp_____sep_____FN____id",
+    "Last Name.__auto__id" => "LastName_____sep_____Last Name____id"
+  ),
+  ApplyFunc(
+    StringConst(
+      "STMT_TYPE_SELECT"
+    ) => "@@genericModule@@fromList@@__stmt__type",
+    ApplyFunc(
+      AutoID()
+ => "@@genericModule@@fromList@@__auto__id",
+      SortMergeJoin(
+        Follows(
+          GetCol(
+            "FN.firstname"
+          ),
+          GetCol(
+            "Last Name.lastname"
+          ),
+          IntConst(
+            0
+          ),
+          IntConst(
+            1
+          )
+        ),
+        Project(
+          (
+            "__auto__id" => "FN.__auto__id",
+            "firstname" => "FN.firstname"
+          ),
+          $__Subquery__1__Temp
+        ),
+        Project(
+          (
+            "__auto__id" => "Last Name.__auto__id",
+            "lastname" => "Last Name.lastname"
+          ),
+          $LastName
+        )
+      )
+    )
+  )
+);
+
+$fromListStar =
+Project(
+  (
+    "FN.firstname" => "firstname",
+    "Last Name.lastname" => "lastname",
+    "@@genericModule@@fromListStar@@__auto__id" => "__auto__id",
+    "@@genericModule@@fromListStar@@__stmt__type" => "__stmt__type",
+    "FN.__auto__id" => "__Subquery__2__Temp_____sep_____FN____id",
+    "Last Name.__auto__id" => "LastName_____sep_____Last Name____id"
+  ),
+  ApplyFunc(
+    StringConst(
+      "STMT_TYPE_SELECT"
+    ) => "@@genericModule@@fromListStar@@__stmt__type",
+    ApplyFunc(
+      AutoID()
+ => "@@genericModule@@fromListStar@@__auto__id",
+      SortMergeJoin(
+        Follows(
+          GetCol(
+            "FN.firstname"
+          ),
+          GetCol(
+            "Last Name.lastname"
+          ),
+          IntConst(
+            0
+          ),
+          IntConst(
+            1
+          )
+        ),
+        Project(
+          (
+            "__auto__id" => "FN.__auto__id",
+            "firstname" => "FN.firstname"
+          ),
+          $__Subquery__2__Temp
+        ),
+        Project(
+          (
+            "__auto__id" => "Last Name.__auto__id",
+            "lastname" => "Last Name.lastname"
+          ),
+          $LastName
+        )
+      )
+    )
+  )
+);
+
+Output: $LastName, $__Subquery__1__Temp, $__Subquery__2__Temp, $fromList, $fromListStar;

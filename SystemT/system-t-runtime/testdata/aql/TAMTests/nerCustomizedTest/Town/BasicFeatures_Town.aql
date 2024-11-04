@@ -1,0 +1,40 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module Town;
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText;
+
+import dictionary TownsPositiveCluesInLeftContext from module Dictionaries as TownsPositiveCluesInLeftContext;
+import dictionary TownsPositiveCluesInRightContext from module Dictionaries as TownsPositiveCluesInRightContext;
+
+require document with columns
+text Text;
+
+create dictionary LeftClueTownDict as
+('town of', 'suburb of');
+
+create view TownLeftClue as
+	select D.match as match
+	from 
+		(extract dictionary 'TownsPositiveCluesInLeftContext' on D.text as match from DocumentText D) D;
+
+create view TownRightClue as
+	select D.match as match
+	from 
+		(extract dictionary 'TownsPositiveCluesInRightContext' on D.text as match from DocumentText D) D
+	where MatchesRegex(/\p{Lu}\p{M}*.*/, D.match);
+	

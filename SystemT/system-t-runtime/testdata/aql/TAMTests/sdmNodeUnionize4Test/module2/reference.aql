@@ -1,0 +1,119 @@
+module module2; 
+-- TODO: Add AQL content here 
+
+import module module1A;
+--import dictionary UnitDict from module module1A;
+--import view Number from module module1A;
+--import view Metric from module module1A;
+--import view Unit from module module1A;
+--import table Test1 from module module1A;
+
+/**
+View: NumberUnit
+*/
+select N.match as number, U.match as unit 
+into NumberUnit 
+from module1A.Number N , module1A.Unit U ;
+
+export view NumberUnit;
+
+--export view --Ctrl+Space here
+
+
+/**Identify mentions of absolute amounts as a sequence of '$' character, 
+-- followed by a Number mention, optionally followed by a Unit mention
+-- Example: $7 billion, $11.52
+*/
+create view AmountAbsolute as
+extract pattern /\$/ <N.match> <U.match>?
+return group 0 as match
+from module1A.Number N, module1A.Unit U
+consolidate on match;
+
+
+/** Identify mentions of percentage amounts as a sequence of Number mention 
+-- followed by the token 'percent'
+-- Example: 49 percent, 46.1 percent
+*/
+create view AmountPercent as
+extract pattern <N.match> 'percent' 
+return group 0 as match
+from module1A.Number N;
+
+
+/**Union all absolute and percentage amount candidates
+-- Example: $7 billion, $11.52, 49 percent, 46.1 percent
+*/
+create view AmountCandidate as
+(select R.* from AmountAbsolute R)
+union all
+(select R.* from AmountPercent R);  
+
+
+
+/** Copy :Union all absolute and percentage amount candidates
+-- Example: $7 billion, $11.52, 49 percent, 46.1 percent
+*/
+create view AmountCandidate2 as
+(select AmountAbsolute.* from AmountAbsolute )
+union all
+(select AmountPercent.* from AmountPercent ); 
+
+/** Negative clues that signal a relative amount
+-- Example: increased, decreased, down, up
+*/
+create dictionary AmountNegativeClueDict
+from file 'dictionaries/amount_negativeClue.dict'
+with language as 'en';
+
+create view negativeClue_Amount as extract dictionary 'AmountNegativeClueDict'  on Document.text as match from Document;
+
+output view negativeClue_Amount;
+/** Filter out amounts that are relative (preceded by a negative clue) from 
+-- the set of all Amount candidates
+-- Example: increased 11 percent, down 2 percent
+*/
+create view Amount as
+select R.* 
+from AmountCandidate R
+where Not(MatchesDict('AmountNegativeClueDict', LeftContextTok(R.match,1)));
+
+
+/**Identify candidate indicators as a mention of metric followed within 
+-- 0 to 10 tokens of a mention of amount
+-- Example: Gross profit margin of 46.1 percent, cash flow of $8.7 billion
+*/
+create view IndicatorCandidate as
+select M.match as metric, A.match as amount, CombineSpans(M.match, A.match) as match 
+from module1A.Metric M, Amount A
+where FollowsTok(M.match, A.match, 0, 10);
+
+
+
+create view IndicatorCandidateCopy as
+select M.match as metric, A.match as amount, CombineSpans(M.match, A.match) as match 
+from module1A.Metric M, Amount A
+where FollowsTok(M.match, A.match, 0, 10);
+
+
+output view IndicatorCandidate;
+
+----------------------------------------------------
+/** Copy: Indentify mentions of financial amount units
+-- Example: million, billion
+*/
+create view Unit2 as
+extract dictionary 'module1A.UnitDict' 
+on R.text as match
+from Document R; 
+
+output view Unit2;
+
+create view tableView as select module1A.Test1.name as match from module1A.Test1 ;
+
+
+
+create view Unit3 as
+extract dictionary 'module1A.UnitDict' 
+on R.text as match
+from Document R; 

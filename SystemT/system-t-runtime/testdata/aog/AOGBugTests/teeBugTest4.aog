@@ -1,0 +1,98 @@
+###############################################################################
+# teeBug4.aog
+#
+# Yet *another* test case for a bug in the Tee operator's handling of tuple
+# buffers.
+###############################################################################
+
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+
+CreateDict(
+    "name" => "dictionaries/strictlast.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+CreateDict(
+    "name" => "dictionaries/strictfirst.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+
+# Dicts() operator created through Shared Dictionary Matching
+(
+  $A,
+  $B
+) = 
+Dicts(
+  (
+    "dictionaries/strictlast.dict" => "IgnoreCase",
+    "dictionaries/strictfirst.dict" => "IgnoreCase"
+  ),
+  "text", "match", $Document
+);
+
+
+$C = FastRegex( /yo/, (0 => "match"), "text",  $Document);
+
+
+$D = $A;
+$F = $D;
+$H = $F;
+$I = $H;
+$J = $H;
+$K = Union($I, $J);
+$L = $K;	
+$M = $L;
+
+
+$E = $B;
+$G = $E;
+
+
+$N = Union($G, $M);
+$O = $N;
+$P = $O;
+
+
+$Q = $O;
+
+
+$R = $C;
+$S = $R;
+
+
+$T = Union($C, $F, $P, $Q);
+$U = $T;
+
+
+$V = Union($S, $U);
+
+$W = Difference($V, $G);
+
+$X = Difference($G, $W);
+
+$Y = Union($U,  $X);
+
+$Z = Difference($Y, $S);
+
+$AA = Difference($G, $Z);
+
+$BB = Union($AA,$S);
+
+$CC = $BB;
+
+$DD = Difference($C, $CC);
+
+$EE = Union($DD, $G);
+
+
+Output: $EE;

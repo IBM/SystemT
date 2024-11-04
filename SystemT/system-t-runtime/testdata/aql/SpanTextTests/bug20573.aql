@@ -1,0 +1,58 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test case for selecting a Span column
+--
+-------------------------------------------------------------------------------
+require document with columns text Text;
+
+
+---------- Existin syntax that does not work
+create dictionary AuxVerbDict as
+	('is', 'are');
+
+create view AuxVerb as
+	extract dictionary 'AuxVerbDict' on D.text as verb
+from Document D;
+
+create view AuxVerb1 as
+	select 
+		A.*,
+		case 
+	 		when Equals(GetString(A.verb), GetString('is')) then GetString('true')
+			else GetString('false')
+			as passive
+from AuxVerb A;
+  
+create view AuxVerb2 as
+	select 
+		A.*, 
+		GetString('false') as passive 
+from AuxVerb A;
+
+create view AuxVerbTest as
+	(select P.* from AuxVerb1 P)
+	union all
+	(select P.* from AuxVerb2 P);
+output view AuxVerbTest;
+
+---------- New syntax
+create view AuxVerb1a as
+	select A.*,
+		case 
+	 		when Equals(A.verb, 'is')  then 'true'
+			else 'false'
+			as passive
+from AuxVerb A;
+  
+create view AuxVerb2a as
+	select 
+		A.*, 
+		'false' as passive 
+from AuxVerb A;
+
+create view AuxVerbTesta as
+	(select P.* from AuxVerb1a P)
+	union all
+	(select P.* from AuxVerb2a P);
+
+output view AuxVerbTesta;

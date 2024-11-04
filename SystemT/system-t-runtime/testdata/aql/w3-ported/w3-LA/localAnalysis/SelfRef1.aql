@@ -1,0 +1,76 @@
+-- SelfRef1.aql from Java Revision No 521 for ResolveRelativeURL.java
+
+-- ***********************************************************************
+-- ***                        UDF declarations                        ****
+-- ***********************************************************************
+
+---- UDF for Canonicalize the Anchor Text
+create function Canonicalize_Anchor_Text(t String)
+return String --like str
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!Canonicalize_Anchor_Text'
+language java
+deterministic
+return null on null input;
+
+---- UDF for checking whether the query fragment of a URL is null.
+create function GetIsNullFragment(t String)
+return Integer 
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!GetIsNullFragment'
+language java
+deterministic
+return null on null input;
+
+-- ***********************************************************************
+
+
+-- All Anchor Normalized URLs and with Canonicalized Anchor Text
+-- Used by SelfRef and AnchorHome
+-- Carries forward urlid, it is used in AnchorHome
+-- This view contains all the anchor tags including those that need to be skipped.
+create view AnchorNormURL as
+select  N.normalizedURL as normalizedURL,Canonicalize_Anchor_Text(GetString(N.anchortext)) as anchortext
+,N.urlid as urlid,U.page as page,U.url as url,U.fragment as fragment,U.anchorurl as anchorurl,
+N.anchortext as detaggedAnchorTextSpan
+from NormMoreNormDedupForLinkURLs N, AllURLs U
+where Equals(N.urlid,U.urlid) and NotNull(N.anchortext)  ;
+
+-- Retain only those URLs that shouldn't be skipped for AnchorHome.aql to use
+create view AnchorNormURLAfterSkip as
+select N.normalizedURL as normalizedURL, N.anchortext as anchortext,
+N.urlid as urlid,N.page as page,N.url as url,N.fragment as fragment,N.anchorurl as anchorurl
+from AnchorNormURL N, Anchor A
+where Equals(N.detaggedAnchorTextSpan, A.match);
+
+-- All SelfRef Anchor URLs
+-- Note that we include the URLs with non-null fragments as well so that we
+-- can calculate the outbound links correctly using the SelfRefAllWithFragment view.
+create view SelfRefAllWithFragmentsWithoutGroup as
+select L.anchorurl as url,L.anchortext as anchortext,
+L.detaggedAnchorTextSpan as detaggedAnchorTextSpan
+from AnchorNormURL L,NormMoreNormDedup U
+where Equals(GetText(U.normalizedURL),GetText(L.normalizedURL));
+
+-- SelfRef Anchor URLs deduplicated
+-- This includes the URLs that need to be skipped as well as URLs with fragments.
+-- This will be used by skip document annotation to find outgoing links.
+create view SelfRefAllWithFragments as
+select GetString(L.url) as url,L.anchortext as content, L.detaggedAnchorTextSpan as detaggedAnchorTextSpan
+from SelfRefAllWithFragmentsWithoutGroup L
+group by L.url, L.anchortext, L.detaggedAnchorTextSpan
+limit 1;
+
+--Get rid of those URLs where link_url.fragment is null. Such URLs should not be included
+--in the self ref annotation.
+create view SelfRefAllWithNullFragment  as
+select N.url as url, N.content as content, N.detaggedAnchorTextSpan as detaggedAnchorTextSpan
+from SelfRefAllWithFragments N
+-- Laura 7/7: Replaced WHERE clause so that SelfRef is output
+-- only if the fragment is null, to match Java's behavior.
+--where Equals(GetText(N.fragment),'');
+where Equals(GetIsNullFragment(N.url), 1);
+
+-- Retain only those that need not be skipped
+create view SelfRef as
+select S.url as url, S.content as content
+from SelfRefAllWithNullFragment S, Anchor A
+where Equals(S.detaggedAnchorTextSpan, A.match);

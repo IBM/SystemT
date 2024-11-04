@@ -1,0 +1,101 @@
+module Sentiment; 
+-- TODO: Add AQL content here
+
+create view PositiveSentimentTargetWithDups as
+	(select T.target, T.Pattern, T.PatternCode from TargetDoesPositive T)
+	union all
+	(select T.target, T.Pattern, T.PatternCode from TargetIsPositive T)
+	union all
+	(select T.target, T.Pattern, T.PatternCode from TargetWithPositiveAdjective T)
+	union all
+	(select T.target, T.Pattern, T.PatternCode from SpeakerDoesTargetPositive T);
+	
+create view PositiveSentimentTarget as
+	select S.* from PositiveSentimentTargetWithDups S
+	consolidate on S.target;	
+	
+create view PositiveSentiment as
+	select T.target, S.text, T.Pattern, T.PatternCode
+	from PositiveSentimentTarget T, Sentences S
+	where Contains(S.text,T.target);
+	
+	
+--output view ExtraNegatedActionsAndAgents;		
+	
+create view NegativeSentimentTargetWithDups as
+	(select T.target, T.Pattern, T.PatternCode from TargetDoesNegative T)
+	union all
+	(select T.target, T.Pattern, T.PatternCode from TargetIsNegative T)
+	union all
+	(select T.target, T.Pattern, T.PatternCode from TargetWithNegativeAdjective T)
+	union all
+	(select T.target, T.Pattern, T.PatternCode from TargetNeedXNegative T)
+	union all
+	(select T.target, T.Pattern, T.PatternCode from TargetNeedToBeXNegative T)
+	union all
+	(select T.target, T.Pattern, T.PatternCode from SpeakerDoesTargetNegative T)
+	union all
+	(select T.target, T.Pattern, T.PatternCode from TargetRequestNegative T)
+	union all
+	(select T.target, T.Pattern, T.PatternCode from ActionsWithNegativeAdverbs T)
+	union all
+	(select T.target, T.Pattern, T.PatternCode from ExtraNegatedActionsAndAgents T)
+	union all
+	(select T.target, T.Pattern, T.PatternCode from NoWayToDesiredNegative T)
+	union all
+	(select T.target, T.Pattern, T.PatternCode from TargetDoesntDoExpectedNegative T)
+	;
+	 
+	 
+create view NegativeSentimentWithGoodTgt as
+	(select T.target, T.Pattern, T.PatternCode from TargetDoesNegative T)
+	union all
+	(select T.target, T.Pattern, T.PatternCode from TargetIsNegative T)
+	union all
+	(select T.target, T.Pattern, T.PatternCode from TargetWithNegativeAdjective T)
+	union all
+	(select T.target, T.Pattern, T.PatternCode from TargetNeedXNegative T)
+	union all
+	(select T.target, T.Pattern, T.PatternCode from TargetNeedToBeXNegative T)
+	union all
+	(select T.target, T.Pattern, T.PatternCode from SpeakerDoesTargetNegative T)
+	union all
+	(select T.target, T.Pattern, T.PatternCode from TargetRequestNegative T)
+	union all
+	(select T.target, T.Pattern, T.PatternCode from TargetDoesntDoExpectedNegative T);
+	
+	
+create view NegSentimentWGoodTgtAnaph as 
+ 	select A.NP as target, S.Pattern, S.PatternCode 
+ 	from NegativeSentimentWithGoodTgt S, AmbiguousAnaphora A
+	where Equals(S.target,A.PRON);	 
+	
+create view NegSentWGoodTgt as
+	(select S.target, S.Pattern, S.PatternCode from NegativeSentimentWithGoodTgt S)
+	union all
+	(select S.target, S.Pattern, S.PatternCode from NegSentimentWGoodTgtAnaph S);
+	
+	
+create view NegSentWMaterialTgt as
+	select S.* from NegSentWGoodTgt S	
+	where Not(MatchesDict('SentimentCustom.NonMaterialTarget',S.target));
+	
+output view NegSentWMaterialTgt;
+	 	 
+create view NegativeSentimentTarget as
+	select S.target, S.Pattern, S.PatternCode from NegativeSentimentTargetWithDups S
+	consolidate on S.target;
+	
+--output view NegativeSentimentTarget;
+	
+create view NegativeSentiment as
+	select T.target, S.text, T.Pattern, T.PatternCode
+	from NegativeSentimentTarget T, Sentences S
+	where Contains(S.text,T.target);
+	
+create view NegativeSentimentAnaphora as
+	select S.*, A.NP as refTarget
+	from NegativeSentiment S, Anaphora A
+	where Contains(S.target,A.PRON);
+	
+--output view Anaphora;

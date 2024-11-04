@@ -1,0 +1,1038 @@
+module PersonCandidates;
+
+
+create view PersonWithinUrlEmailPlaceOrg as
+  select  PS.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          PS.__auto__id as PersonSentence_____sep_____PS____id,
+          R.__auto__id as UrlEmailPlaceOrg_____sep_____R____id
+  from  PersonSentence PS,
+        UrlEmailPlaceOrg R
+  where Contains(R.match, PS.person);
+
+output view PersonWithinUrlEmailPlaceOrg;
+
+create view PersonOverlapsWithCities as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonSentence_____sep_____P____id,
+          C.__auto__id as CitiesAll_____sep_____C____id
+  from  PersonSentence P,
+        CitiesAll C
+  where Overlaps(C.match, P.person)
+     and Not(Contains(P.person, C.match))
+     and Not(Contains(C.match, P.person));
+
+output view PersonOverlapsWithCities;
+
+create view PersonEqualsToCities as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonSentence_____sep_____P____id,
+          C.__auto__id as CitiesAll_____sep_____C____id
+  from  PersonSentence P,
+        CitiesAll C
+  where Equals(C.match, P.person);
+
+output view PersonEqualsToCities;
+
+create view PersonOverlapsWithOrgsAll as
+  select  P.person as person,
+          O.org as org,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonSentence_____sep_____P____id,
+          O.__auto__id as FinalOrgConsolidatedWithoutDots_____sep_____O____id
+  from  PersonSentence P,
+        FinalOrgConsolidatedWithoutDots O
+  where Overlaps(O.org, P.person);
+
+output view PersonOverlapsWithOrgsAll;
+
+create view PersonContainsOrgs as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonOverlapsWithOrgsAll_____sep_____P____id
+  from  PersonOverlapsWithOrgsAll P
+  where Contains(P.person, P.org)
+     and Not(Equals(P.person, P.org));
+
+output view PersonContainsOrgs;
+
+create view PersonOverlapsWithOrgs as
+  select  Op.person as person,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__325__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__325__TempOp__1 Op,
+        __Minus__325__Temp __t
+  where Equals(Op.person, __t.person);
+
+output view PersonOverlapsWithOrgs;
+
+create view InvalidPerson as
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__326__TempOp__0 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__326__TempOp__1 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__326__TempOp__2 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__326__TempOp__3 Op);
+
+output view InvalidPerson;
+
+create view InvalidCapsPerson as
+  select  CP.name as name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CP.__auto__id as CapsPerson_____sep_____CP____id,
+          UEP.__auto__id as UrlEmailPlaceOrg_____sep_____UEP____id
+  from  CapsPerson CP,
+        UrlEmailPlaceOrg UEP
+  where Contains(UEP.match, CP.name)
+     and Not(Contains(CP.name, UEP.match));
+
+output view InvalidCapsPerson;
+
+create view ValidPerson as
+  select  Op.person as person,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__327__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__327__TempOp__1 Op,
+        __Minus__327__Temp __t
+  where Equals(Op.person, __t.person);
+
+output view ValidPerson;
+
+create view FinalPersonConsolidated as
+  select  __t2.person as person,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__328__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__328__Temp__1 __t1,
+        __Consolidate__328__Temp__2 __t2
+  where Or(GreaterThan(GetBegin(__t1.__consolidate__target), GetBegin(__t2.__consolidate__target)), Equals(GetBegin(__t1.__consolidate__target), GetBegin(__t2.__consolidate__target)))
+     and Overlaps(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.person;
+
+output view FinalPersonConsolidated;
+
+create view UrlEmailPlaceOrgPerson as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__329__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__329__TempOp__1 Op);
+
+output view UrlEmailPlaceOrgPerson;
+
+create view PersonStrongSingleTokenWithinUrlEmailPlaceOrg as
+  select  PS.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          PS.__auto__id as PersonStrongSingleToken_____sep_____PS____id,
+          R.__auto__id as UrlEmailPlaceOrgPerson_____sep_____R____id
+  from  PersonStrongSingleToken PS,
+        UrlEmailPlaceOrgPerson R
+  where Contains(R.match, PS.person);
+
+output view PersonStrongSingleTokenWithinUrlEmailPlaceOrg;
+
+create view FinalPersonStrongSingleToken as
+  select  Op.person as person,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__330__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__330__TempOp__1 Op,
+        __Minus__330__Temp __t
+  where Equals(Op.person, __t.person);
+
+output view FinalPersonStrongSingleToken;
+
+create view FinalPersonStrongSingleTokenConsolidated as
+  select  __t2.person as person,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__331__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__331__Temp__1 __t1,
+        __Consolidate__331__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.person;
+
+output view FinalPersonStrongSingleTokenConsolidated;
+
+create view PersonStrongSingleTokenOverlaps as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as FinalPersonStrongSingleTokenConsolidated_____sep_____P____id,
+          P1.__auto__id as FinalPersonConsolidated_____sep_____P1____id
+  from  FinalPersonStrongSingleTokenConsolidated P,
+        FinalPersonConsolidated P1
+  where Overlaps(P.person, P1.person);
+
+output view PersonStrongSingleTokenOverlaps;
+
+create view PersonStrongSingleTokenNonOverlaps as
+  select  Op.person as person,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__332__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__332__TempOp__1 Op,
+        __Minus__332__Temp __t
+  where Equals(Op.person, __t.person);
+
+output view PersonStrongSingleTokenNonOverlaps;
+
+create view PersonFinalAllMatches as
+  (select  Op.person as person,
+            Op.type as type,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__333__TempOp__0 Op)
+  union all
+  (select  Op.person as person,
+            Op.type as type,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__333__TempOp__1 Op);
+
+output view PersonFinalAllMatches;
+
+create view InvalidPersonFragments as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__334__Temp_____sep_____D____id
+  from  __Subquery__334__Temp D;
+
+output view InvalidPersonFragments;
+
+create view InvalidPersonFinalAllMatches as
+  select  P.person as person,
+          P.type as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonFinalAllMatches_____sep_____P____id,
+          F.__auto__id as InvalidPersonFragments_____sep_____F____id
+  from  PersonFinalAllMatches P,
+        InvalidPersonFragments F
+  where Overlaps(F.match, P.person);
+
+output view InvalidPersonFinalAllMatches;
+
+create view PersonFinalAllCandidate as
+  select  Op.person as person,
+          Op.type as type,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__335__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__335__TempOp__1 Op,
+        __Minus__335__Temp __t
+  where Equals(Op.person, __t.person)
+     and Equals(Op.type, __t.type);
+
+output view PersonFinalAllCandidate;
+
+create view PersonLeftContext as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'LeftContextFiltersForPerson'
+    on D.text as name
+  from DocumentText D;
+
+output view PersonLeftContext;
+
+create view PersonRightContext as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'RightContextFiltersForPerson'
+    on D.text as name
+  from DocumentText D;
+
+output view PersonRightContext;
+
+create view PersonFinalAllCandidateToDeleteLC as
+  select  P.person as person,
+          P.type as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonFinalAllCandidate_____sep_____P____id,
+          PLC.__auto__id as PersonLeftContext_____sep_____PLC____id
+  from  PersonFinalAllCandidate P,
+        PersonLeftContext PLC
+  where FollowsTok(PLC.name, P.person, 0, 1)
+     and MatchesRegex(/\W*/, SpanBetween(PLC.name, P.person));
+
+output view PersonFinalAllCandidateToDeleteLC;
+
+create view PersonFinalAllCandidateToDeleteLC1 as
+  select  P.person as person,
+          P.type as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonFinalAllCandidate_____sep_____P____id,
+          PLC.__auto__id as PersonLeftContext_____sep_____PLC____id
+  from  PersonFinalAllCandidate P,
+        PersonLeftContext PLC
+  where FollowsTok(PLC.name, P.person, 0, 1)
+     and MatchesRegex(/\W*/, SpanBetween(PLC.name, P.person))
+     and MatchesRegex(/.+(ing)/, PLC.name)
+     and MatchesRegex(/.+,.+/, P.person);
+
+output view PersonFinalAllCandidateToDeleteLC1;
+
+create view PersonFinalAllCandidateToDeleteRC as
+  select  P.person as person,
+          P.type as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonFinalAllCandidate_____sep_____P____id,
+          PRC.__auto__id as PersonRightContext_____sep_____PRC____id
+  from  PersonFinalAllCandidate P,
+        PersonRightContext PRC
+  where FollowsTok(P.person, PRC.name, 0, 1)
+     and MatchesRegex(/[ ]+/, SpanBetween(P.person, PRC.name));
+
+output view PersonFinalAllCandidateToDeleteRC;
+
+create view WrongPersonContextBased as
+  (select  Op.person as person,
+            Op.type as type,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__336__TempOp__0 Op)
+  union all
+  (select  Op.person as person,
+            Op.type as type,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__336__TempOp__1 Op)
+  union all
+  (select  Op.person as person,
+            Op.type as type,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__336__TempOp__2 Op);
+
+output view WrongPersonContextBased;
+
+create view PersonFinalAll as
+  select  Op.person as person,
+          Op.type as type,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__337__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__337__TempOp__1 Op,
+        __Minus__337__Temp __t
+  where Equals(Op.person, __t.person)
+     and Equals(Op.type, __t.type);
+
+output view PersonFinalAll;
+
+create view PersonFinalAllWithDots as
+  select  P.person as person,
+          P.type as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonFinalAll_____sep_____P____id
+  from  PersonFinalAll P
+  where MatchesRegex(/[\.\/]/, LeftContext(P.person, 1))
+     and MatchesRegex(/[\.\/]/, RightContext(P.person, 1))
+     and MatchesRegex(/\p{Lu}\p{M}*+/, P.person);
+
+output view PersonFinalAllWithDots;
+
+create view PersonFinalAllWithoutDots1 as
+  select  Op.person as person,
+          Op.type as type,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__338__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__338__TempOp__1 Op,
+        __Minus__338__Temp __t
+  where Equals(Op.person, __t.person)
+     and Equals(Op.type, __t.type);
+
+output view PersonFinalAllWithoutDots1;
+
+create view PersonTokens as
+  select  R.match as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__339__Temp_____sep_____R____id
+  from  __Subquery__339__Temp R;
+
+output view PersonTokens;
+
+create view ValidCapsPersonCandidates as
+  select  Op.name as name,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__340__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__340__TempOp__1 Op,
+        __Minus__340__Temp __t
+  where Equals(Op.name, __t.name);
+
+output view ValidCapsPersonCandidates;
+
+create view PersonTokenCandidateDedup as
+  select  Op.person as person,
+          AutoID() as __auto__id
+  from  __Base__PersonCandidates__PersonTokenCandidateDedup__Temp Op;
+
+output view PersonTokenCandidateDedup;
+
+create view ValidPersonTokenCandidates as
+  select  CW.name as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          PT.__auto__id as PersonTokenCandidateDedup_____sep_____PT____id,
+          CW.__auto__id as ValidCapsPersonCandidates_____sep_____CW____id
+  from  PersonTokenCandidateDedup PT,
+        ValidCapsPersonCandidates CW
+  where Equals(GetText(PT.person), GetText(CW.name));
+
+output view ValidPersonTokenCandidates;
+
+create view ValidPersonTokenCandidatesExtended1 as
+  select  CombineSpans(I.word, P.person) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          I.__auto__id as InitialWord_____sep_____I____id,
+          P.__auto__id as ValidPersonTokenCandidates_____sep_____P____id
+  from  InitialWord I,
+        ValidPersonTokenCandidates P
+  where FollowsTok(I.word, P.person, 0, 0);
+
+output view ValidPersonTokenCandidatesExtended1;
+
+create view ValidPersonTokenCandidatesExtended2_1 as
+  select  CombineSpans(P1.person, P2.person) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P1.__auto__id as ValidPersonTokenCandidates_____sep_____P1____id,
+          P2.__auto__id as ValidPersonTokenCandidates_____sep_____P2____id
+  from  ValidPersonTokenCandidates P1,
+        ValidPersonTokenCandidates P2
+  where FollowsTok(P1.person, P2.person, 0, 0)
+     and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(P1.person, P2.person)))
+     and Not(ContainsRegex(/\s/, P1.person));
+
+output view ValidPersonTokenCandidatesExtended2_1;
+
+create view ValidPersonTokenCandidatesExtended2_2 as
+  select  CombineSpans(P1.person, P2.person) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P1.__auto__id as ValidPersonTokenCandidates_____sep_____P1____id,
+          P2.__auto__id as ValidPersonTokenCandidates_____sep_____P2____id
+  from  ValidPersonTokenCandidates P1,
+        ValidPersonTokenCandidates P2
+  where FollowsTok(P1.person, P2.person, 0, 0)
+     and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(P1.person, P2.person)))
+     and Not(ContainsRegex(/\s/, P2.person));
+
+output view ValidPersonTokenCandidatesExtended2_2;
+
+create view PersonFinalAllWithoutDots2 as
+  (select  Op.person as person,
+            Op.type as type,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__341__TempOp__0 Op)
+  union all
+  (select  Op.person as person,
+            Op.type as type,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__341__TempOp__1 Op)
+  union all
+  (select  Op.person as person,
+            Op.type as type,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__341__TempOp__2 Op)
+  union all
+  (select  Op.person as person,
+            Op.type as type,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__341__TempOp__3 Op)
+  union all
+  (select  Op.person as person,
+            Op.type as type,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__341__TempOp__4 Op);
+
+output view PersonFinalAllWithoutDots2;
+
+create view PersonFinalAllWithoutDots as
+  select  __t2.person as person,
+          __t2.type as type,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__342__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__342__Temp__1 __t1,
+        __Consolidate__342__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.person, __t2.type;
+
+output view PersonFinalAllWithoutDots;
+
+create view StrongPersonCandidates as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as FamousPeople_____sep_____P____id
+  from  FamousPeople P;
+
+output view StrongPersonCandidates;
+
+create view __Base__PersonCandidates__PersonTokenCandidateDedup__Temp as
+  select  GetText(PT.person) as person
+  from  PersonTokens PT
+  group by GetText(PT.person);
+
+output view __Base__PersonCandidates__PersonTokenCandidateDedup__Temp;
+
+create view __Consolidate__328__Temp__1 as
+  select  C.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as ValidPerson_____sep_____C____id,
+          C.person as __consolidate__target
+  from  ValidPerson C;
+
+output view __Consolidate__328__Temp__1;
+
+create view __Consolidate__328__Temp__2 as
+  select  __t1.person as person,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__328__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'LeftToRight';
+
+output view __Consolidate__328__Temp__2;
+
+create view __Consolidate__331__Temp__1 as
+  select  C.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as FinalPersonStrongSingleToken_____sep_____C____id,
+          C.person as __consolidate__target
+  from  FinalPersonStrongSingleToken C;
+
+output view __Consolidate__331__Temp__1;
+
+create view __Consolidate__331__Temp__2 as
+  select  __t1.person as person,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__331__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__331__Temp__2;
+
+create view __Consolidate__342__Temp__1 as
+  select  P.person as person,
+          P.type as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonFinalAllWithoutDots2_____sep_____P____id,
+          P.person as __consolidate__target
+  from  PersonFinalAllWithoutDots2 P;
+
+output view __Consolidate__342__Temp__1;
+
+create view __Consolidate__342__Temp__2 as
+  select  __t1.person as person,
+          __t1.type as type,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__342__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__342__Temp__2;
+
+create view __Minus__325__Temp as
+  select  __t.person as person
+  from  
+    ((select  Op.person as person
+      from  __Minus__325__TempOp__1 Op)
+    minus
+    (select  Op.person as person
+      from  __Minus__325__TempOp__2 Op)
+    ) __t
+  group by __t.person;
+
+output view __Minus__325__Temp;
+
+create view __Minus__325__TempOp__1 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonOverlapsWithOrgsAll_____sep_____P____id
+  from  PersonOverlapsWithOrgsAll P;
+
+output view __Minus__325__TempOp__1;
+
+create view __Minus__325__TempOp__2 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonContainsOrgs_____sep_____P____id
+  from  PersonContainsOrgs P;
+
+output view __Minus__325__TempOp__2;
+
+create view __Minus__327__Temp as
+  select  __t.person as person
+  from  
+    ((select  Op.person as person
+      from  __Minus__327__TempOp__1 Op)
+    minus
+    (select  Op.person as person
+      from  __Minus__327__TempOp__2 Op)
+    ) __t
+  group by __t.person;
+
+output view __Minus__327__Temp;
+
+create view __Minus__327__TempOp__1 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonSentence_____sep_____P____id
+  from  PersonSentence P;
+
+output view __Minus__327__TempOp__1;
+
+create view __Minus__327__TempOp__2 as
+  select  P1.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P1.__auto__id as InvalidPerson_____sep_____P1____id
+  from  InvalidPerson P1;
+
+output view __Minus__327__TempOp__2;
+
+create view __Minus__330__Temp as
+  select  __t.person as person
+  from  
+    ((select  Op.person as person
+      from  __Minus__330__TempOp__1 Op)
+    minus
+    (select  Op.person as person
+      from  __Minus__330__TempOp__2 Op)
+    ) __t
+  group by __t.person;
+
+output view __Minus__330__Temp;
+
+create view __Minus__330__TempOp__1 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonStrongSingleToken_____sep_____P____id
+  from  PersonStrongSingleToken P;
+
+output view __Minus__330__TempOp__1;
+
+create view __Minus__330__TempOp__2 as
+  select  P1.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P1.__auto__id as PersonStrongSingleTokenWithinUrlEmailPlaceOrg_____sep_____P1____id
+  from  PersonStrongSingleTokenWithinUrlEmailPlaceOrg P1;
+
+output view __Minus__330__TempOp__2;
+
+create view __Minus__332__Temp as
+  select  __t.person as person
+  from  
+    ((select  Op.person as person
+      from  __Minus__332__TempOp__1 Op)
+    minus
+    (select  Op.person as person
+      from  __Minus__332__TempOp__2 Op)
+    ) __t
+  group by __t.person;
+
+output view __Minus__332__Temp;
+
+create view __Minus__332__TempOp__1 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as FinalPersonStrongSingleTokenConsolidated_____sep_____P____id
+  from  FinalPersonStrongSingleTokenConsolidated P;
+
+output view __Minus__332__TempOp__1;
+
+create view __Minus__332__TempOp__2 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonStrongSingleTokenOverlaps_____sep_____P____id
+  from  PersonStrongSingleTokenOverlaps P;
+
+output view __Minus__332__TempOp__2;
+
+create view __Minus__335__Temp as
+  select  __t.person as person,
+          __t.type as type
+  from  
+    ((select  Op.person as person,
+              Op.type as type
+      from  __Minus__335__TempOp__1 Op)
+    minus
+    (select  Op.person as person,
+              Op.type as type
+      from  __Minus__335__TempOp__2 Op)
+    ) __t
+  group by __t.person, __t.type;
+
+output view __Minus__335__Temp;
+
+create view __Minus__335__TempOp__1 as
+  select  P.person as person,
+          P.type as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonFinalAllMatches_____sep_____P____id
+  from  PersonFinalAllMatches P;
+
+output view __Minus__335__TempOp__1;
+
+create view __Minus__335__TempOp__2 as
+  select  P.person as person,
+          P.type as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as InvalidPersonFinalAllMatches_____sep_____P____id
+  from  InvalidPersonFinalAllMatches P;
+
+output view __Minus__335__TempOp__2;
+
+create view __Minus__337__Temp as
+  select  __t.person as person,
+          __t.type as type
+  from  
+    ((select  Op.person as person,
+              Op.type as type
+      from  __Minus__337__TempOp__1 Op)
+    minus
+    (select  Op.person as person,
+              Op.type as type
+      from  __Minus__337__TempOp__2 Op)
+    ) __t
+  group by __t.person, __t.type;
+
+output view __Minus__337__Temp;
+
+create view __Minus__337__TempOp__1 as
+  select  P.person as person,
+          P.type as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonFinalAllCandidate_____sep_____P____id
+  from  PersonFinalAllCandidate P;
+
+output view __Minus__337__TempOp__1;
+
+create view __Minus__337__TempOp__2 as
+  select  P.person as person,
+          P.type as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonFinalAllCandidate_____sep_____P____id,
+          W.__auto__id as WrongPersonContextBased_____sep_____W____id
+  from  PersonFinalAllCandidate P,
+        WrongPersonContextBased W
+  where Contains(W.person, P.person);
+
+output view __Minus__337__TempOp__2;
+
+create view __Minus__338__Temp as
+  select  __t.person as person,
+          __t.type as type
+  from  
+    ((select  Op.person as person,
+              Op.type as type
+      from  __Minus__338__TempOp__1 Op)
+    minus
+    (select  Op.person as person,
+              Op.type as type
+      from  __Minus__338__TempOp__2 Op)
+    ) __t
+  group by __t.person, __t.type;
+
+output view __Minus__338__Temp;
+
+create view __Minus__338__TempOp__1 as
+  select  P.person as person,
+          P.type as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonFinalAll_____sep_____P____id
+  from  PersonFinalAll P;
+
+output view __Minus__338__TempOp__1;
+
+create view __Minus__338__TempOp__2 as
+  select  P.person as person,
+          P.type as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonFinalAllWithDots_____sep_____P____id
+  from  PersonFinalAllWithDots P;
+
+output view __Minus__338__TempOp__2;
+
+create view __Minus__340__Temp as
+  select  __t.name as name
+  from  
+    ((select  Op.name as name
+      from  __Minus__340__TempOp__1 Op)
+    minus
+    (select  Op.name as name
+      from  __Minus__340__TempOp__2 Op)
+    ) __t
+  group by __t.name;
+
+output view __Minus__340__Temp;
+
+create view __Minus__340__TempOp__1 as
+  select  P.name as name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as CapsPerson_____sep_____P____id
+  from  CapsPerson P;
+
+output view __Minus__340__TempOp__1;
+
+create view __Minus__340__TempOp__2 as
+  select  P.name as name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as InvalidCapsPerson_____sep_____P____id
+  from  InvalidCapsPerson P;
+
+output view __Minus__340__TempOp__2;
+
+create view __Subquery__334__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'NegativeCluesForPerson'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__334__Temp;
+
+create view __Subquery__339__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    P.__auto__id as PersonFinalAllWithoutDots1_____sep_____P____id,
+    regex /[^\s\.]{2,}/
+    with flags 'DOTALL'
+    on P.person
+    return group 0 as match
+  from PersonFinalAllWithoutDots1 P;
+
+output view __Subquery__339__Temp;
+
+create view __Union__326__TempOp__0 as
+  select  P1.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P1.__auto__id as PersonWithinUrlEmailPlaceOrg_____sep_____P1____id
+  from  PersonWithinUrlEmailPlaceOrg P1;
+
+output view __Union__326__TempOp__0;
+
+create view __Union__326__TempOp__1 as
+  select  P1.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P1.__auto__id as PersonOverlapsWithCities_____sep_____P1____id
+  from  PersonOverlapsWithCities P1;
+
+output view __Union__326__TempOp__1;
+
+create view __Union__326__TempOp__2 as
+  select  P1.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P1.__auto__id as PersonOverlapsWithOrgs_____sep_____P1____id
+  from  PersonOverlapsWithOrgs P1;
+
+output view __Union__326__TempOp__2;
+
+create view __Union__326__TempOp__3 as
+  select  P1.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P1.__auto__id as PersonEqualsToCities_____sep_____P1____id
+  from  PersonEqualsToCities P1;
+
+output view __Union__326__TempOp__3;
+
+create view __Union__329__TempOp__0 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as UrlEmailPlaceOrg_____sep_____R____id
+  from  UrlEmailPlaceOrg R;
+
+output view __Union__329__TempOp__0;
+
+create view __Union__329__TempOp__1 as
+  select  R.person as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as FinalPersonConsolidated_____sep_____R____id
+  from  FinalPersonConsolidated R;
+
+output view __Union__329__TempOp__1;
+
+create view __Union__333__TempOp__0 as
+  select  P.person as person,
+          'MULTITOKEN' as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as FinalPersonConsolidated_____sep_____P____id
+  from  FinalPersonConsolidated P;
+
+output view __Union__333__TempOp__0;
+
+create view __Union__333__TempOp__1 as
+  select  P.person as person,
+          'SINGLETOKEN' as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonStrongSingleTokenNonOverlaps_____sep_____P____id
+  from  PersonStrongSingleTokenNonOverlaps P
+  where Not(MatchesRegex(/.{1,2}/, P.person));
+
+output view __Union__333__TempOp__1;
+
+create view __Union__336__TempOp__0 as
+  select  P.person as person,
+          P.type as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonFinalAllCandidateToDeleteLC_____sep_____P____id
+  from  PersonFinalAllCandidateToDeleteLC P;
+
+output view __Union__336__TempOp__0;
+
+create view __Union__336__TempOp__1 as
+  select  P.person as person,
+          P.type as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonFinalAllCandidateToDeleteLC1_____sep_____P____id
+  from  PersonFinalAllCandidateToDeleteLC1 P;
+
+output view __Union__336__TempOp__1;
+
+create view __Union__336__TempOp__2 as
+  select  P.person as person,
+          P.type as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonFinalAllCandidateToDeleteRC_____sep_____P____id
+  from  PersonFinalAllCandidateToDeleteRC P;
+
+output view __Union__336__TempOp__2;
+
+create view __Union__341__TempOp__0 as
+  select  P.person as person,
+          P.type as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonFinalAllWithoutDots1_____sep_____P____id
+  from  PersonFinalAllWithoutDots1 P;
+
+output view __Union__341__TempOp__0;
+
+create view __Union__341__TempOp__1 as
+  select  P.person as person,
+          'SINGLETOKEN' as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as ValidPersonTokenCandidates_____sep_____P____id
+  from  ValidPersonTokenCandidates P
+  where Not(MatchesDict('RightContextSuffixesForProperNounNames', P.person));
+
+output view __Union__341__TempOp__1;
+
+create view __Union__341__TempOp__2 as
+  select  P.person as person,
+          'SINGLETOKEN' as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as ValidPersonTokenCandidatesExtended1_____sep_____P____id
+  from  ValidPersonTokenCandidatesExtended1 P;
+
+output view __Union__341__TempOp__2;
+
+create view __Union__341__TempOp__3 as
+  select  P.person as person,
+          'SINGLETOKEN' as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as ValidPersonTokenCandidatesExtended2_1_____sep_____P____id
+  from  ValidPersonTokenCandidatesExtended2_1 P;
+
+output view __Union__341__TempOp__3;
+
+create view __Union__341__TempOp__4 as
+  select  P.person as person,
+          'SINGLETOKEN' as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as ValidPersonTokenCandidatesExtended2_2_____sep_____P____id
+  from  ValidPersonTokenCandidatesExtended2_2 P;
+
+output view __Union__341__TempOp__4;
+

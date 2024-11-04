@@ -1,0 +1,27 @@
+--Specify the input document schema
+require document with columns
+	complaint_text Text
+	and doc_id Integer;
+
+create view speedInd as extract regex /(MPH)/ on R.complaint_text as match
+from Document R;
+
+create view Number as extract regex /d+/ on R.complaint_text as match from Document R;
+create view Unit as extract regex /(dollars)/ on R.complaint_text as match from Document R;
+
+create view AmountAbsolute as
+	extract pattern /\$/ <N.match> <U.match>?  
+	return group 0 as match
+	from  Number N, Unit U
+	consolidate on match;
+
+output view AmountAbsolute;
+
+create view Test2 as
+	extract pattern /\$/ <N.match> <U.match>?  
+	return group 0 as match
+	with inline_match on Document.doc_id
+	from  Number N, Unit U
+	consolidate on match;
+
+output view Test2;

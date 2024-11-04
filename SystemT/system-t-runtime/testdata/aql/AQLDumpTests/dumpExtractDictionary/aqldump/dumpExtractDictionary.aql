@@ -1,0 +1,21 @@
+module aqldump;
+
+create view LastName as
+  extract dictionary 'LastName.dict'
+  with flags 'IgnoreCase'
+  on D.text as lastName
+  from Document D
+having Not(ContainsDict('LastNamesDict', lastname))
+and ContainsDict('LastNamesDict', lastname);
+  
+output view LastName;
+  
+  
+create view Name as
+  extract dictionaries 'first.dict'
+  and 'last.dict'
+  with flags 'Exact'
+  on D.text as name
+from Document D;
+
+output view Name;

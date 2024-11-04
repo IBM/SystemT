@@ -1,0 +1,54 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module LocationCandidates;
+
+-- Filters using modules Region, Person, Organization and filters created above
+	
+create view RegionInvalid2 as
+select R.match as match
+from   RegionCandidate R,
+	   OrganizationFull O 
+where  Contains(O.organization, R.match)
+  and  Not(Equals(O.organization, R.match));   
+
+create view RegionInvalid3 as
+select R.match as match
+from   RegionCandidate R,
+	   OrganizationFull O 
+where  Overlaps(O.organization, R.match)
+  and  Not(Contains(O.organization, R.match));  
+ 
+create view RegionInvalid4 as
+select R.match as match
+from   RegionCandidate R,
+	   CityStateCountryValid O 
+where  Contains(O.loc, R.match);
+
+create view RegionInvalid as
+	(select R.match as match from RegionInvalid1 R)
+	union all 
+	(select R.match as match from RegionInvalid2 R)
+	union all 
+	(select R.match as match from RegionInvalid3 R)
+	union all
+	(select R.match as match from RegionInvalid4 R);
+
+create view RegionValid as
+	(select R.match as match from RegionCandidate R)
+	minus
+	(select R.match as match from RegionInvalid R);
+	

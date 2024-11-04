@@ -1,0 +1,113 @@
+-----------------------------------------------------------------------------
+-- addressBug.aql
+--
+-- Chunk of namedentity.aql that exposed a bug during address collection.
+-----------------------------------------------------------------------------
+
+require document with columns text Text;
+
+
+ 
+--  Place rules begin here
+
+ create view CapsPlace as
+	select
+		R.match as match
+	from
+		--Regex(/\b\p{Upper}[\p{Lower}\&]{1,20}\b/, Document.text) R;
+	 	  Regex(/\b\p{Upper}[\p{Lower}\&\.-\/]{1,20}\b/, Document.text) R;
+	 
+
+ create view CapsPlaceTwo as
+	select
+ 		CombineSpans(cp1.match, cp2.match) as match
+	from
+		CapsPlace cp1,
+		CapsPlace cp2
+ 	where
+		FollowsTok(cp1.match, cp2.match, 0, 0);	
+		
+  create view CapsPlaceOnetoTwo
+	as 
+	 (select R.match as match from CapsPlace R)
+	union all 
+	 (select R.match as match from CapsPlaceTwo R);
+
+	
+  create view StreetSuffixNoCase  as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/lotus/streetSuffixes.dict',  Document.text) D;
+	
+  create view StreetSuffix as 
+ 	select S.match as match 
+ 	from StreetSuffixNoCase S
+	where 
+		MatchesRegex(/^\p{Upper}[\p{Lower}\&]{1,20}.?/, S.match);		
+	
+  create view StreetSuffixWeakNoCase  as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/lotus/streetSuffixesWeak.dict',   Document.text) D;
+		
+	create view StreetSuffixWeak as 
+ 	select S.match as match 
+ 	from StreetSuffixWeakNoCase S
+	where 
+		MatchesRegex(/^\p{Upper}[\p{Lower}\&]{1,20}/, S.match);		
+	
+   create view StreetSuffixAll
+	as
+	(select S.match as match from StreetSuffix S)
+	union all 
+	 (select S.match as match from StreetSuffixWeak S)	;
+	
+	
+
+
+--streetaddress
+    create view NumCP as
+	select
+		R.match as match
+	from
+		Regex(/\b([\d\p{Alpha}\-\,]*\d[\d\p{Alpha}\-\,]*)\s+\p{Upper}[\p{Lower}\&]{1,20}\b/, Document.text) R;
+	
+		
+	create view StreetAddressAll as
+	select
+ 		CombineSpans(nc.match, ssw.match) as match
+	from
+		NumCP nc,
+		StreetSuffixAll ssw
+ 	where
+		FollowsTok(nc.match,ssw.match, 0, 2)  and
+		MatchesRegex(/\s*(\p{Upper}[\p{Lower}\&]+\s*){0,3}/, SpanBetween(nc.match,ssw.match));
+		
+-- unit
+     	
+	create view StreetAddressWithCity as
+	select
+ 		CombineSpans(S.match, cp.match) as match
+	from
+		StreetAddressAll S,
+		CapsPlaceOnetoTwo cp
+ 	where
+		FollowsTok(S.match,cp.match, 0, 5)
+		;
+
+-- Outer operand of the join
+select P.match as loc
+into Outer
+from StreetAddressAll P;
+
+-- Inner operand of the join
+select P.match as loc
+into Inner
+from CapsPlaceOnetoTwo P;
+
+-- Join result
+select P.match as loc
+into Result
+from StreetAddressWithCity P;

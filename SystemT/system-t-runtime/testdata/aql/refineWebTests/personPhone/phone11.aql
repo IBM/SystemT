@@ -1,0 +1,144 @@
+
+  
+-- Strong patterns indicating the existence of a phone number
+create dictionary PhoneVariants as (
+	'+',
+	'phone:',
+	'phone :',
+	'cell:',
+	'cell',
+	'cell :',
+	'contact:',
+	'contact :',
+	'direct:',
+	'direct :',
+	'office:',
+	'office :',
+	-- Yunyao: Added new strong clues for phone numbers
+	'tel #',
+	'dial',
+	'Telefon',
+	'mobile',
+	'Ph',
+	-- German
+	'Fon',
+	'Telefon Geschaeftsstelle', 
+	'Telefon Geschäftsstelle',
+	'Telefon Zweigstelle',
+	'Telefon Hauptsitz',
+	'Telefon (Geschaeftsstelle)', 
+	'Telefon (Geschäftsstelle)',
+	'Telefon (Zweigstelle)',
+	'Telefon (Hauptsitz)',
+	'Telefonnummer',
+	'Telefon Geschaeftssitz',
+	'Telefon Geschäftssitz',
+	'Telefon (Geschaeftssitz)',
+	'Telefon (Geschäftssitz)',
+	'Telefon Persönlich',
+	'Telefon persoenlich',
+	'Telefon (Persönlich)',
+	'Telefon (persoenlich)',
+	'Handy',
+	'Handy-Nummer',
+	'Telefon arbeit',
+	'Telefon (arbeit)'
+);
+ 
+create view PhoneVariant as 
+select D.match as annot
+from   Dictionary('PhoneVariants', DocScan.text) D;
+
+--Match phone numbers with a clue
+--Telephone:  	    	+49 (351) 837480
+create view PhoneR5 as
+select R.match as num
+ 
+from RegexTok(/\(?\d{2,4}[\.\-]?\)?(\s*\(0\)\s*)?(\s*[\-\.]\s*)?(\s*[\s\.\-]\(?\d{1,2}(\s*\d{2}\s*){1,2}\)?)?(\s*[\s\.\-]?\d{2,4})(\s*[\s\.-]?\d{1,4}){1,3}/,10,DocScan.text) R,
+       PhoneVariant Var
+where FollowsTok(Var.annot, R.match, 0, 2)
+  and MatchesRegex(/\s*\.{0,10}\s*/, SpanBetween(Var.annot, R.match));
+
+create view PhoneR1 as
+select R.match as num
+ 
+from RegexTok(/\d{3}\W+\d{3}\W+\d{4}/, 10, DocScan.text) R;
+ 
+create view PhoneR1a as
+select R.match as num
+ 
+from RegexTok(/\d{3}\W+\d{4}/, 10, DocScan.text) R;
+  
+--       Match US phone number +(734) 1231245,       (890)124.4568
+create view PhoneR2 as
+select R.match as num
+ 
+from RegexTok(/(\+\s*)?\(\s*[1-9]\d{2}\s*\)\s*[\-\.]?\d{3}[\-\.\s*]?\d{4}/, 10, DocScan.text) R;
+ 
+--       Match US phone number   +(734) 123-1245  (124)465 7890
+create view PhoneR3 as
+select R.match as num
+ 
+from RegexTok(/(\+\s*)?[1-9]\d{2}\s*[\s\-\.]\d{3}[\-\.\s]\s*\d{4}/, 10, DocScan.text) R;
+ 
+--    Find US numbers begin with country code 1 (1-234-456-8908)
+create view PhoneR4 as
+select R.match as num
+ 
+from RegexTok(/\+?(1[\-\.\s]\s*)?(\(\s*)?[1-9]\d{2}(\s*\))?[\-\. ]\d{3}[\-\. ]\d{4}/, 10, DocScan.text) R;
+
+--capture phone numbers such as 1-800-777-TAXI, 866-41GREEN, 1-800-COMCAST 
+create view PhoneR6 as
+select R.match as num
+ 
+from RegexTok(/(\+?1[\-\.\s]\s*)?8\d{2}\s*[\s\-\.][A-Z\d]{3}[\.\-]?[A-Z]{4}/, 10, DocScan.text) R;
+
+--       Find extension numbers (e.g.,  x12456 )
+create view PhoneR7 as
+select R.match as num
+ 
+from RegexTok(/[Xx][\.\-]?\d{4,5}/, 3, DocScan.text) R;
+ 
+--       Find extension numbers (e.g.,  Ext: 1245)
+create view PhoneR8 as
+select R.match as num
+ from RegexTok(/[Ee]xt\s*[\.\-\:]?\s*\d{3,5}/, 'CASE_INSENSITIVE', 3, DocScan.text) R;
+ 
+--     Identify Indian phone numbers (e.g.,  91-11-1111-1111) 
+create view PhoneR9 as
+select R.match as num
+from RegexTok(/([1-9]\d{1,2}\s*[\(\s\-\.]((\d{2}\s*[\)\s\-\.]\d{8})|(\d{5}\s*[\)\s\-\.]\d{5})|(\d{2}\s*[\)\s\-\.]\d{4}\s*[\s\-\.]\d{4})))/, 10, DocScan.text) R,
+PhoneVariant Var
+where FollowsTok(Var.annot, R.match, 0, 2)
+  and MatchesRegex(/\s*\.{0,10}\s*/, SpanBetween(Var.annot, R.match));
+  
+--     Identify Isael Phone numbers (e.g., 972-89-1234567)
+create view PhoneR10 as
+select R.match as num
+from RegexTok(/(972[\-\.]\d{1,2}[\-\.]\d{7})/, 5, DocScan.text) R;
+
+
+create view PhoneNumber as
+(select P.num as num from PhoneR1 P)
+union all
+(select P.num as num from PhoneR1a P)
+union all
+(select P.num as num from PhoneR2 P)
+union all
+(select P.num as num from PhoneR3 P)
+union all
+(select P.num as num from PhoneR4 P)
+union all
+(select P.num as num from PhoneR5 P)
+union all
+(select P.num as num from PhoneR6 P)
+union all
+(select P.num as num from PhoneR7 P)
+union all
+(select P.num as num from PhoneR8 P)
+union all
+(select P.num as num from PhoneR9 P)
+union all
+(select P.num as num from PhoneR10 P);
+ 
+ 

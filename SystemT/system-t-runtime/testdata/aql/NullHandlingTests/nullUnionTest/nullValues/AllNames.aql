@@ -1,0 +1,30 @@
+module nullValues;
+
+create view AllNames as
+  (
+    select
+      F.match as firstName, null as lastName  -- null span for last name
+    from
+      FirstName F
+  )
+  union all
+  (
+    select
+      null as firstName, L.match as lastName -- null span for first name
+    from
+     LastName L
+  );
+
+output view AllNames;
+
+-- Input to the function in this view can be "null"
+create view NullView_LeftContext as
+select A.firstName, A.lastName, LeftContextTok(A.firstName,2) as leftContext
+from AllNames A; 
+
+create view NullView_CombineSpans as
+select A.firstName, A.lastName, CombineSpans(A.leftContext, A.firstName) as leftFirstName
+from NullView_LeftContext A; 
+
+output view NullView_LeftContext;
+output view NullView_CombineSpans;

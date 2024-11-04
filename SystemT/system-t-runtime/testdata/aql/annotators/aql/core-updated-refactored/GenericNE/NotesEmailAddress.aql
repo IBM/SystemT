@@ -1,0 +1,118 @@
+/**
+ * Rule 2: identifies emails in Lotus Notes format
+ * Examples: 
+ *           John Doe/Almaden/IBM
+ *
+ */
+
+-- Words that should not be contained by a NotesEmail
+-- Yunyao: added on 02/16/2009
+/* create dictionary NotesEmailFilter as
+ ('MBA', 'CPA', 'MPA', 'USA', 'HR');*/
+ 
+ 
+--Non Person email (only one capitalized word before the first slash symbol)
+create view Email2_a as
+select R.match as annot
+--from   Regex(/(([A-Z]\w{1,20}\s+)?([A-Z]\s+)?([A-Z]\w{1,20}\s*[\/]\s*){2,3}[A-Z]{2,20})/, Doc.text) R;
+-- updated to handle non-email address such as USD NG/MMBTU/USD, From NORTHWEST/SOUTHWEST/CALIFORNIA
+--from   Regex(/(([A-Z][a-z]\w{1,20}\s*[\/]\s*)(([A-Z]\w{1,20}\s*){1,2}[\/]\s*){1,2}[A-Z]{2,20})/, Doc.text) R;
+-- updated to disallow number for domain names and capture optional @domain name
+--from   Regex(/\b(([A-Z][a-z]\w{1,20}\s*[\/]\s*)(([A-Z][a-zA-Z]{1,20}\s*){1,2}[\/]\s*){1,2}[A-Z]{2,20}(@[a-zA-Z]{2,20})?)\b/, Doc.text) R;
+-- updated to avoid mistakes such as [Notes/Domino/DWA]/Expeditor products
+--from   Regex(/\b(([A-Z][a-z]\w{1,20}\s*[\/]\s*)(([A-Z][a-zA-Z]{1,20}\s*){1,2}[\/]\s*){1,2}[A-Z]{2,20}(@[a-zA-Z]{2,20})?)(?!\/)\b/, Doc.text) R;
+-- Support for unicode (TODO: whether to do it for '\s', in unicode [\f\n\r\t\v\x85\p{Z}])
+--from   Regex(/\b((\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*[\p{Ll}\p{Lu}\p{Lt}\p{Lo}\p{Nd}\p{Pc}]{1,20}\s*[\/]\s*)((\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}\s*){1,2}[\/]\s*){1,2}(\p{Lu}\p{M}*){2,20}(@(\p{L}\p{M}*){2,20})?)(?!\/)\b/, Doc.text) R;
+--from   RegexTok(/((\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*[\p{Ll}\p{Lu}\p{Lt}\p{Lo}\p{Nd}\p{Pc}]{1,20}\s*[\/]\s*)((\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}\s*){1,2}[\/]\s*){1,2}(\p{Lu}\p{M}*){2,20}(@(\p{L}\p{M}*){2,20})?)/, 15, Doc.text) R
+--Yunyao: updated 05/26/2009, to allow digits in the server names
+-- Sudarshan regex : 10/12/2011 - many backreferences in line 31
+-- Sudarshan regex : 10/12/2011 - line 31 - extended [\p{Ll}\p{Lu}\p{Lt}\p{Lo}\p{Nd}\p{Pc}]{1,20} to [\p{Ll}\p{Lu}\p{Lt}\p{Lo}\p{Nd}\p{Pc}]\p{M}*{1,20} to account for combination marks
+-- from   RegexTok(/((\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*[\p{Ll}\p{Lu}\p{Lt}\p{Lo}\p{Nd}\p{Pc}]{1,20}\s*[\/]\s*)((\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}(\p{Nd}\p{M}*){0,3}\s*){1,2}[\/]\s*){1,2}(\p{Lu}\p{M}*){2,20}(@(\p{L}\p{M}*){2,20})?)/, 15, Doc.text) R
+--from   RegexTok(/((\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*[\p{Ll}\p{Lu}\p{Lt}\p{Lo}\p{Nd}\p{Pc}]\p{M}*{1,20}\s*[\/]\s*)((\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}(\p{Nd}\p{M}*){0,3}\s*){1,2}[\/]\s*){1,2}(\p{Lu}\p{M}*){2,20}(@(\p{L}\p{M}*){2,20})?)/, 15, Doc.text) R
+from (extract regex /((\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*[\p{Ll}\p{Lu}\p{Lt}\p{Lo}\p{Nd}\p{Pc}]\p{M}*{1,20}\s*[\/]\s*)((\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}(\p{Nd}\p{M}*){0,3}\s*){1,2}[\/]\s*){1,2}(\p{Lu}\p{M}*){2,20}(@(\p{L}\p{M}*){2,20})?)/
+		on between 1 and 15 tokens in D.text
+		as match from Doc D) R 
+where  Not(MatchesRegex(/\/|\p{L}|_|\p{Nd}/,RightContext(R.match,1)))
+  --and  Not(ContainsDict('NotesEmailFilter', R.match));
+  and  Not(ContainsDict('misc/filter_misc_email_notes_abbrev_en.dict', R.match));
+
+
+-- Person email (more than one capitalized words before the first '/')
+create view Email2_b as
+select R.match as annot
+--from   Regex(/(([A-Z]\w{1,20}\s+)?([A-Z]\s+)?([A-Z]\w{1,20}\s*[\/]\s*){2,3}[A-Z]{2,20})/, Doc.text) R;
+-- updated to handle non-email address such as USD NG/MMBTU/USD, From NORTHWEST/SOUTHWEST/CALIFORNIA
+--from   Regex(/(([A-Z]\w{1,20}\s+)([A-Z]\s+)?([A-Z][a-z]\w{1,20}\s*[\/]\s*)(([A-Z]\w{1,20}\s*){1,2}[\/]\s*){1,2}[A-Z]{2,20})/, Doc.text) R;
+-- updated to disallow number for domain names and digits for person name can only be at the end
+--from   Regex(/\b(([A-Z]\w{1,20}\s+)([A-Z]\s+)?([A-Z][a-z][a-zA-Z]{0,18}\w{0,2}\s*[\/]\s*)(([A-Z][a-zA-Z]{1,20}\s*){1,2}[\/]\s*){1,2}[A-Z]{2,20}(@[a-zA-Z]{1,20})?)\b/, Doc.text) R;
+-- Updated to be relaxed in similar way as CapsPerson
+--\b\p{Upper}\p{Lower}[\p{Alpha}]{0,10}(['-][\p{Alpha}])?[\p{Alpha}]{1,10}\b
+--from   Regex(/\b((\p{Upper}\p{Lower}[\p{Alpha}]{0,10}(['-][\p{Alpha}])?[\p{Alpha}]{1,10}\s+)([A-Z]\s+)?(\p{Upper}\p{Lower}[\p{Alpha}]{0,10}(['-][\p{Alpha}])?[\p{Alpha}]{1,8}\w{0,2}\s*[\/]\s*)(([A-Z][a-zA-Z]{1,20}\s*){1,2}[\/]\s*){1,2}[A-Z]{2,20}(@[a-zA-Z]{1,20})?)\b/, Doc.text) R;
+--from   Regex(/\b((\p{Upper}\p{Lower}[\p{Alpha}]{0,10}(['-][\p{Alpha}])?[\p{Alpha}]{1,10}\s+)([A-Z]\s+)?(\p{Upper}\p{Lower}[\p{Alpha}]{0,20}(['-][\p{Alpha}][\p{Alpha}]{1,8})?\w{0,2}\s*[\/]\s*)(([A-Z][a-zA-Z]{1,20}\s*){1,2}[\/]\s*){1,2}[A-Z]{2,20}(@[a-zA-Z]{1,20})?)\b/, Doc.text) R;
+-- Support for unicode (TODO: whether to do it for '\s', in unicode [\f\n\r\t\v\x85\p{Z}])
+--from   Regex(/\b(((\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,10}(['-]\p{L}\p{M}*)?(\p{L}\p{M}*){1,10}\s+))?((\p{Lu}\p{M}*\.?){1,2}\s+)?(\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}(['-]\p{L}\p{M}*(\p{L}\p{M}*){1,8})?\w{0,2}\s*[\/]\s*)((\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}\s*){1,2}[\/]\s*){1,2}(\p{Lu}\p{M}*){2,20}(@(\p{L}\p{M}*){1,20})?)(?!\/)\b/, Doc.text) R;
+--from   RegexTok(/((\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,10}(['-]\p{L}\p{M}*)?(\p{L}\p{M}*){1,10}\s+)((\p{Lu}\p{M}*)\s+)?(\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}(['-]\p{L}\p{M}*(\p{L}\p{M}*){1,8})?\w{0,2}\s*[\/]\s*)(((\p{Lu}\p{M}*)(\p{L}\p{M}*){1,20}\s*){1,2}[\/]\s*){1,2}(\p{Lu}\p{M}*){2,20}(@(\p{L}\p{M}*){1,20})?)/, 15, Doc.text) R
+--Yunyao: updated on 05/26/2009, to allow digits in the last portion of person/domain/server name
+-- Sudarshan regex : 10/12/2011 - many backreferences in line 54
+--from   RegexTok(/((\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,10}(['-]\p{L}\p{M}*)?(\p{L}\p{M}*){1,10}\s+)((\p{Lu}\p{M}*)\s+)?(\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}(['-]\p{L}\p{M}*(\p{L}\p{M}*){1,8})?((\p{L}|\p{Nd}|_)\p{M}*){0,2}\s*[\/]\s*)(((\p{Lu}\p{M}*)(\p{L}\p{M}*){1,20}(\p{Nd}\p{M}*){0,3}\s*){1,2}[\/]\s*){1,2}(\p{Lu}\p{M}*){2,20}(@(\p{L}\p{M}*){1,20})?)/, 15, Doc.text) R
+from (extract regex /((\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,10}(['-]\p{L}\p{M}*)?(\p{L}\p{M}*){1,10}\s+)((\p{Lu}\p{M}*)\s+)?(\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}(['-]\p{L}\p{M}*(\p{L}\p{M}*){1,8})?((\p{L}|\p{Nd}|_)\p{M}*){0,2}\s*[\/]\s*)(((\p{Lu}\p{M}*)(\p{L}\p{M}*){1,20}(\p{Nd}\p{M}*){0,3}\s*){1,2}[\/]\s*){1,2}(\p{Lu}\p{M}*){2,20}(@(\p{L}\p{M}*){1,20})?)/
+		on between 1 and 15 tokens in D.text
+		as match from Doc D) R
+where  Not(MatchesRegex(/\/|\p{L}|_|\p{Nd}/,RightContext(R.match,1)))
+  --and  Not(ContainsDict('NotesEmailFilter', R.match));
+  and  Not(ContainsDict('misc/filter_misc_email_notes_abbrev_en.dict', R.match));
+
+--Yunyao: updated on 05/26/2009, to allow lower case in server names when the domain information presents
+-- Person email (more than one capitalized words before the first '/')
+create view Email2_c as
+select R.match as annot
+-- Sudarshan regex : 10/12/2011 - many backreferences in line 64
+--from   RegexTok(/((\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,10}(['-]\p{L}\p{M}*)?(\p{L}\p{M}*){1,10}\s+)((\p{Lu}\p{M}*)\s+)?(\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}(['-]\p{L}\p{M}*(\p{L}\p{M}*){1,8})?((\p{L}|\p{Nd}|_)\p{M}*){0,2}\s*[\/]\s*)(((\p{Lu}\p{M}*)(\p{L}\p{M}*){1,20}(\p{Nd}\p{M}*){0,3}\s*){1,2}[\/]\s*){1,2}(\p{Lu}\p{M}*)(\p{L}\p{M}*){1,20}(@(\p{L}\p{M}*){1,20}))/, 15, Doc.text) R
+from (extract regex /((\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,10}(['-]\p{L}\p{M}*)?(\p{L}\p{M}*){1,10}\s+)((\p{Lu}\p{M}*)\s+)?(\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}(['-]\p{L}\p{M}*(\p{L}\p{M}*){1,8})?((\p{L}|\p{Nd}|_)\p{M}*){0,2}\s*[\/]\s*)(((\p{Lu}\p{M}*)(\p{L}\p{M}*){1,20}(\p{Nd}\p{M}*){0,3}\s*){1,2}[\/]\s*){1,2}(\p{Lu}\p{M}*)(\p{L}\p{M}*){1,20}(@(\p{L}\p{M}*){1,20}))/
+		on between 1 and 15 tokens in D.text
+		as match from Doc D) R
+where  Not(MatchesRegex(/\/|\p{L}|_|\p{Nd}/,RightContext(R.match,1)));
+
+--output view Email2_c;
+ 
+ /**
+  * Output Lotus Notes email addresses
+  */
+
+-- laura 05/04/2009: 
+-- added additional attribute to keep track whether the email is 
+-- personal (at least 2 tokens before first /) or not (single token before first /)
+ create view NotesEmailAddressAll as
+  (select Email2_a.annot as annot, 'NONPERS' as type from Email2_a)
+  union all
+  (select Email2_b.annot as annot, 'PERSONAL' as type from Email2_b)
+  union all
+  (select Email2_c.annot as annot, 'PERSONAL' as type from Email2_c); 
+  
+ 
+-- laura 05/04/2009: filter out emails contained within URL
+ create view WrongNotesEmail as
+ select E.annot as annot, E.type as type 
+ from NotesEmailAddressAll E, URLAll U
+ where Contains(U.annot, E.annot);
+ 
+ 
+ create view NotesEmailCand as
+ (select E.annot as annot, E.type as type from NotesEmailAddressAll E)
+ minus
+ (select E.annot as annot, E.type as type from WrongNotesEmail E);
+ 
+ 
+  create view NotesEmailConsolidated as
+  select E.annot as annot, E.type as type
+  from NotesEmailCand E
+  consolidate on E.annot;
+
+
+--output view Email2_a;
+--output view Email2_b;
+--output view NotesEmailAddressAll;
+--output view NotesEmailConsolidated;
+
+
+ 

@@ -1,0 +1,53 @@
+--4.13 Organization
+create view  OrganizationUnsorted as
+(select O.organization as organization, O.type as type, O.reference as reference from OrganizationFull O )
+union all
+(select O.organization as organization, '' as type, O.organization as reference from OrganizationVBJ O)
+;
+
+
+-- ToDo: update the entries and the ones for governmental organizations
+create dictionary OrgInvalidExactDict as(
+	'Commonwealth of Independent States', 'CIS', 'TO', 'BE', 'Cup'
+);
+
+create view OrganizationInvalid1 as
+select O.organization as organization, O.type as type 
+from OrganizationUnsorted O
+where MatchesDict('OrgInvalidExactDict', 'Exact', O.organization);
+
+-- Orgs with preposition as first token
+create view OrganizationInvalid2 as
+select O.organization as organization, O.type as type 
+from OrganizationUnsorted O
+where MatchesDict('pos/preps-list', SubSpanTok(O.organization, 0,1));
+
+-- Orgs strictly contained in Person
+create view OrganizationInvalid3 as
+select O.organization as organization, O.type as type 
+from OrganizationUnsorted O, PersonBeforeFinalOrgFilter P
+where Contains(P.person, O.organization)
+  and Not(Equals(P.person, O.organization));
+
+create view OrganizationInvalid as
+(select O.organization as organization, O.type as type from OrganizationInvalid1 O)
+union all
+(select O.organization as organization, O.type as type from OrganizationInvalid2 O)
+union all
+(select O.organization as organization, O.type as type from OrganizationInvalid3 O);
+
+
+create view OrgUnsortedFiltered as
+(select O.organization as organization, O.type as type from OrganizationUnsorted O)
+minus
+(select O.organization as organization, O.type as type from OrganizationInvalid O);
+
+-- ToDo: see whether we can add some of them into the main organization dictionary 
+-- extract dictionary 'orgs/conll2003/conll-list-of-orgs.dict'
+	
+   
+create view OrganizationMixed as
+select O.organization as organization, O.type as type 
+from OrgUnsortedFiltered O
+consolidate on O.organization
+order by O.organization;

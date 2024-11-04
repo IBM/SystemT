@@ -1,0 +1,63 @@
+-------------------------------------------------------------------------------
+-- unterminatedTest.aql
+--
+-- A test of how the detagger handles improperly terminated elements
+-------------------------------------------------------------------------------
+
+-- Detag
+-- Strip out tags, retaining information about the <a> tags.
+detag Document.text as DetaggedDoc
+annotate 
+    element 'table' as Table
+		with attribute 'id' as id,
+	element 'tr' as Tr,
+	element 'td' as Td,
+	element 'h1' as H1,
+	element 'h2' as H2,
+	element 'h3' as H3
+	;
+	
+
+output view Table;
+output view Tr;
+output view Td;
+output view H1;
+output view H2;
+output view H3;
+
+-- Remap all spans and text back to the original HTML
+create view TableTag as
+select T.id as id, Remap(T.match) as match
+from Table T;
+
+create view TrTag as
+select Remap(T.match) as match
+from Tr T;
+
+create view TdTag as
+select Remap(T.match) as match
+from Td T;
+
+create view H1Tag as
+select  Remap(H.match) as match
+from H1 H;
+
+create view H2Tag as
+select  Remap(H.match) as match
+from H2 H;
+
+create view H3Tag as
+select  Remap(H.match) as match
+from H3 H;
+
+output view TableTag;
+output view TrTag;
+output view TdTag;
+output view H1Tag;
+output view H2Tag;
+output view H3Tag;
+output view DetaggedDoc;
+
+select D.text as text
+into Doc
+from Document D;

@@ -1,0 +1,50 @@
+module was;
+
+
+create view threadID_base as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /[0-9a-fA-F]{8}/
+    with flags 'DOTALL'
+    on between 1 and 1 tokens in D.text
+    return group 0 as match
+  from Document D;
+
+output view threadID_base;
+
+create view ThreadID as
+  select  C.match as threadID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as threadID_base_____sep_____C____id
+  from  threadID_base C
+  where MatchesRegex(/\s/, LeftContext(C.match, 1))
+     and MatchesRegex(/\s/, RightContext(C.match, 1));
+
+output view ThreadID;
+
+create view ThreadIDOutputInterim as
+  select  D.threadID as threadID_Span,
+          GetText(D.threadID) as threadID_Text,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as ThreadID_____sep_____D____id
+  from  ThreadID D;
+
+output view ThreadIDOutputInterim;
+
+create view ThreadIDOutput as
+  select  D.threadID_Span as span,
+          D.threadID_Text as text,
+          GetString('ThreadIDWS') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as ThreadIDOutputInterim_____sep_____D____id
+  from  ThreadIDOutputInterim D;
+
+output view ThreadIDOutput;
+
+export view was.ThreadIDOutput;
+
+

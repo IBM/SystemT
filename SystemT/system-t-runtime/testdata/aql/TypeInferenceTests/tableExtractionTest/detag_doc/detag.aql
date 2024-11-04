@@ -1,0 +1,75 @@
+module detag_doc;
+
+-- Detagging of input HTML documents
+
+detag Document.text as TempDoc
+detect content_type never
+annotate
+       	element 'title' as Title,
+		element 'body' as Body,
+		element 'li' as ListItem,
+		element 'br' as BR,
+		element 'div' as DivContent,
+		element 'span' as SpanContent
+			with attribute 'style' as spanStyle, 
+		element 'a' as AnchorContent,
+		element 'p' as ParagraphContent, 
+        element 'tr' as TR,
+        element 'td' as TD 
+       	--COLSPAN attribute required for committee table extraction task
+       	with attribute 'colspan' as COLSPAN_Val,
+        element 'table' as TABLE,
+        element 'font' as Font
+		with attribute 'style' as style
+
+	-- used in Notes and Signature
+        , element 'u' as UnderLine
+
+        -- used in Notes
+	, element 'b' as Bold
+	--@aakash: used in RiskFactos summary 
+	, element 'i' as Italics
+	, element 'strong' as Strong
+        
+	--used for fair value table extraction,summary compensation table extraction
+	, element 'th' as TH
+		--COLSPAN attribute required for committee table extraction task
+		with attribute 'colspan' as COLSPAN_Val;
+
+---- Modified the name of this view -- Mauricio
+create view Doc as 
+select D.text as text, 'dummy' as label
+from TempDoc D; 
+
+--output view Doc;
+export view Doc;
+-------------------------------------------------------------------------------
+-- Sentances: Identify sentence boundaries
+-------------------------------------------------------------------------------
+create view Sentences2 as
+extract 
+    split using B.boundary 
+        retain right split point
+        on B.text
+        as sentence
+		from (
+    		extract 
+        		D.text as text,
+        		regex /(([\.\?!]+\s)|(\n\s*\n))/ on D.text as boundary
+        		from Doc D
+				-- Filter the candidate boundaries.
+				having Not(ContainsDict('abbreviation.dict', CombineSpans(LeftContextTok(boundary, 1), boundary)))
+		) B;
+--output view Sentences;
+
+--To export views
+export view Doc;
+export view Title;
+export view TABLE;
+export view TR;
+export view TD;
+export view TH;
+export view ParagraphContent;
+
+--output view TR;
+output view TABLE;

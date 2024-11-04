@@ -1,0 +1,36 @@
+
+create view PlaceConsolidated as
+select C.loc as loc
+--from Consolidate(PlaceSentence.loc) C;
+--from Consolidate(PlaceAll.loc) C;
+from PlaceAll C
+consolidate on C.loc;
+
+create view WrongPlaceConsolidated as
+(select P.loc as loc
+from   PlaceConsolidated P,
+	   Date D 
+where Overlaps(D.match,P.loc))
+union all
+(select P.loc as loc
+from   PlaceConsolidated P,
+	   Time T 
+where Overlaps(T.match,P.loc))
+union all
+(select P.loc as loc
+from   PlaceConsolidated P,
+	   PhoneNumCons T 
+where Overlaps(T.num,P.loc))
+union all
+(select P.loc as loc
+from WrongPlaces P)
+;
+
+create view FinalPlaceConsolidated as
+	(select P.loc as loc from PlaceConsolidated P)
+	minus
+	(select WP.loc as loc from WrongPlaceConsolidated WP);
+
+create view UrlEmailPlace as 
+select R.loc as match 
+from FinalPlaceConsolidated R;

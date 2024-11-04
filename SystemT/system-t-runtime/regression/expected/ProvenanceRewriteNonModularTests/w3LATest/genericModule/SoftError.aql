@@ -1,0 +1,744 @@
+module genericModule;
+
+
+create dictionary "TitleContainsDict" from table "TitleContainsTable"
+with entries from value
+and case insensitive;
+
+create dictionary "TitleStartsWithDict" from table "TitleStartsWithTable"
+with entries from value
+and case insensitive;
+
+create dictionary "TitleEndsWithDict" from table "TitleEndsWithTable"
+with entries from value
+and case insensitive;
+
+create dictionary "TitleExactDict" from table "TitleExactTable"
+with entries from value
+and case insensitive;
+
+create dictionary "URLContainsDict" from table "URLContainsTable"
+with entries from value
+and case insensitive;
+
+create dictionary "URLStartsWithDict" from table "URLStartsWithTable"
+with entries from value
+and case insensitive;
+
+create dictionary "URLEndsWithDict" from table "URLEndsWithTable"
+with entries from value
+and case insensitive;
+
+create dictionary "URLExactDict" from table "URLExactTable"
+with entries from value
+and case insensitive;
+
+create view URLTableAll as
+  (select  Op.value as value,
+            Op.ruleID as ruleID,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__392__TempOp__0 Op)
+  union all
+  (select  Op.value as value,
+            Op.ruleID as ruleID,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__392__TempOp__1 Op)
+  union all
+  (select  Op.value as value,
+            Op.ruleID as ruleID,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__392__TempOp__2 Op)
+  union all
+  (select  Op.value as value,
+            Op.ruleID as ruleID,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__392__TempOp__3 Op);
+
+output view URLTableAll;
+
+create view TitleTableAll as
+  (select  Op.value as value,
+            Op.ruleID as ruleID,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__393__TempOp__0 Op)
+  union all
+  (select  Op.value as value,
+            Op.ruleID as ruleID,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__393__TempOp__1 Op)
+  union all
+  (select  Op.value as value,
+            Op.ruleID as ruleID,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__393__TempOp__2 Op)
+  union all
+  (select  Op.value as value,
+            Op.ruleID as ruleID,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__393__TempOp__3 Op);
+
+output view TitleTableAll;
+
+create view TitleContainsSpansWithID as
+  select  T.match as title,
+          CT.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as __Subquery__394__Temp_____sep_____T____id,
+          -1 as TitleContainsTable_____sep_____CT____id
+  from  __Subquery__394__Temp T,
+        TitleContainsTable CT
+  where Equals(GetText(T.match), GetText(CT.value));
+
+output view TitleContainsSpansWithID;
+
+create view TitleStartsWithCand as
+  select  T.match as match,
+          ST.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as __Subquery__395__Temp_____sep_____T____id,
+          -1 as TitleStartsWithTable_____sep_____ST____id
+  from  __Subquery__395__Temp T,
+        TitleStartsWithTable ST
+  where Equals(GetText(T.match), GetText(ST.value));
+
+output view TitleStartsWithCand;
+
+create view TitleStartsWithSpansWithID as
+  select  T.match as title,
+          T.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as TitleStartsWithCand_____sep_____T____id,
+          F.__auto__id as FirstTitle_____sep_____F____id
+  from  TitleStartsWithCand T,
+        FirstTitle F
+  where Equals(GetBegin(T.match), GetBegin(F.title));
+
+output view TitleStartsWithSpansWithID;
+
+create view TitleEndsWithCand as
+  select  T.match as match,
+          ST.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as __Subquery__396__Temp_____sep_____T____id,
+          -1 as TitleEndsWithTable_____sep_____ST____id
+  from  __Subquery__396__Temp T,
+        TitleEndsWithTable ST
+  where Equals(GetText(T.match), GetText(ST.value));
+
+output view TitleEndsWithCand;
+
+create view TitleEndsWithSpansWithID as
+  select  T.match as title,
+          T.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as TitleEndsWithCand_____sep_____T____id,
+          F.__auto__id as FirstTitle_____sep_____F____id
+  from  TitleEndsWithCand T,
+        FirstTitle F
+  where Equals(GetEnd(T.match), GetEnd(F.title));
+
+output view TitleEndsWithSpansWithID;
+
+create view TitleExactSpansWithID as
+  select  T.match as title,
+          ET.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as __Subquery__397__Temp_____sep_____T____id,
+          -1 as TitleExactTable_____sep_____ET____id
+  from  __Subquery__397__Temp T,
+        TitleExactTable ET
+  where Equals(GetText(T.match), GetText(ET.value));
+
+output view TitleExactSpansWithID;
+
+create view URLContainsSpansWithID as
+  select  T.match as url,
+          CT.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as __Subquery__398__Temp_____sep_____T____id,
+          -1 as URLContainsTable_____sep_____CT____id
+  from  __Subquery__398__Temp T,
+        URLContainsTable CT
+  where Equals(GetText(T.match), GetText(CT.value));
+
+output view URLContainsSpansWithID;
+
+create view URLStartsWithCand as
+  select  T.match as url,
+          ST.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as __Subquery__399__Temp_____sep_____T____id,
+          -1 as URLStartsWithTable_____sep_____ST____id
+  from  __Subquery__399__Temp T,
+        URLStartsWithTable ST
+  where Equals(GetText(T.match), GetText(ST.value));
+
+output view URLStartsWithCand;
+
+create view URLStartsWithSpansWithID as
+  select  U.url as url,
+          U.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URLStartsWithCand_____sep_____U____id,
+          P.__auto__id as PageURL_____sep_____P____id
+  from  URLStartsWithCand U,
+        PageURL P
+  where Equals(GetBegin(U.url), GetBegin(P.url));
+
+output view URLStartsWithSpansWithID;
+
+create view URLEndsWithCand as
+  select  T.match as url,
+          ET.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as __Subquery__400__Temp_____sep_____T____id,
+          -1 as URLEndsWithTable_____sep_____ET____id
+  from  __Subquery__400__Temp T,
+        URLEndsWithTable ET
+  where Equals(GetText(T.match), GetText(ET.value));
+
+output view URLEndsWithCand;
+
+create view URLEndsWithSpansWithID as
+  select  U.url as url,
+          U.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URLEndsWithCand_____sep_____U____id,
+          P.__auto__id as PageURL_____sep_____P____id
+  from  URLEndsWithCand U,
+        PageURL P
+  where Equals(GetEnd(U.url), GetEnd(P.url));
+
+output view URLEndsWithSpansWithID;
+
+create view URLExactSpansWithID as
+  select  U.match as url,
+          ET.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as __Subquery__401__Temp_____sep_____U____id,
+          -1 as URLExactTable_____sep_____ET____id
+  from  __Subquery__401__Temp U,
+        URLExactTable ET
+  where Equals(GetText(U.match), GetText(ET.value));
+
+output view URLExactSpansWithID;
+
+create view TitlePatternsAllWithID as
+  (select  Op.title as title,
+            Op.ruleID as ruleID,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__402__TempOp__0 Op)
+  union all
+  (select  Op.title as title,
+            Op.ruleID as ruleID,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__402__TempOp__1 Op)
+  union all
+  (select  Op.title as title,
+            Op.ruleID as ruleID,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__402__TempOp__2 Op)
+  union all
+  (select  Op.title as title,
+            Op.ruleID as ruleID,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__402__TempOp__3 Op);
+
+output view TitlePatternsAllWithID;
+
+create view URLPatternsAllWithID as
+  (select  Op.url as url,
+            Op.ruleID as ruleID,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__403__TempOp__0 Op)
+  union all
+  (select  Op.url as url,
+            Op.ruleID as ruleID,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__403__TempOp__1 Op)
+  union all
+  (select  Op.url as url,
+            Op.ruleID as ruleID,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__403__TempOp__2 Op)
+  union all
+  (select  Op.url as url,
+            Op.ruleID as ruleID,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__403__TempOp__3 Op);
+
+output view URLPatternsAllWithID;
+
+create view SoftErrorFourRules as
+  select  T.title as title_pattern,
+          U.url as url_pattern,
+          T.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as TitlePatternsAllWithID_____sep_____T____id,
+          U.__auto__id as URLPatternsAllWithID_____sep_____U____id
+  from  TitlePatternsAllWithID T,
+        URLPatternsAllWithID U
+  where Equals(GetText(T.ruleID), GetText(U.ruleID));
+
+output view SoftErrorFourRules;
+
+create view SoftErrorTitleRuleAny as
+  select  Op.title as title,
+          Op.ruleID as ruleID,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__404__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__404__TempOp__1 Op,
+        __Minus__404__Temp __t
+  where Equals(Op.title, __t.title)
+     and Equals(Op.ruleID, __t.ruleID);
+
+output view SoftErrorTitleRuleAny;
+
+create view SoftErrorURLRuleAny as
+  select  Op.url as url,
+          Op.ruleID as ruleID,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__405__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__405__TempOp__1 Op,
+        __Minus__405__Temp __t
+  where Equals(Op.url, __t.url)
+     and Equals(Op.ruleID, __t.ruleID);
+
+output view SoftErrorURLRuleAny;
+
+create view SoftErrorAllWithoutOutput as
+  (select  Op.ruleID as ruleID,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__406__TempOp__0 Op)
+  union all
+  (select  Op.ruleID as ruleID,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__406__TempOp__1 Op)
+  union all
+  (select  Op.ruleID as ruleID,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__406__TempOp__2 Op);
+
+output view SoftErrorAllWithoutOutput;
+
+create view SoftErrorAllWithOutput as
+  select  S.ruleID as ruleID,
+          T.out as out,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as SoftErrorAllWithoutOutput_____sep_____S____id,
+          -1 as SoftErrorOutputTable_____sep_____T____id
+  from  SoftErrorAllWithoutOutput S,
+        SoftErrorOutputTable T
+  where Equals(GetText(S.ruleID), GetText(T.ruleID));
+
+output view SoftErrorAllWithOutput;
+
+create view SoftError as
+  select  S.ruleID as ruleID,
+          S.out as out,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as SoftErrorAllWithOutput_____sep_____S____id
+  from  SoftErrorAllWithOutput S;
+
+output view SoftError;
+
+create view __Minus__404__Temp as
+  select  __t.title as title,
+          __t.ruleID as ruleID
+  from  
+    ((select  Op.title as title,
+              Op.ruleID as ruleID
+      from  __Minus__404__TempOp__1 Op)
+    minus
+    (select  Op.title as title,
+              Op.ruleID as ruleID
+      from  __Minus__404__TempOp__2 Op)
+    ) __t
+  group by __t.title, __t.ruleID;
+
+output view __Minus__404__Temp;
+
+create view __Minus__404__TempOp__1 as
+  select  T.title as title,
+          T.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as TitlePatternsAllWithID_____sep_____T____id
+  from  TitlePatternsAllWithID T;
+
+output view __Minus__404__TempOp__1;
+
+create view __Minus__404__TempOp__2 as
+  select  T.title as title,
+          T.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as TitlePatternsAllWithID_____sep_____T____id,
+          U.__auto__id as URLTableAll_____sep_____U____id
+  from  TitlePatternsAllWithID T,
+        URLTableAll U
+  where Equals(GetText(T.ruleID), GetText(U.ruleID));
+
+output view __Minus__404__TempOp__2;
+
+create view __Minus__405__Temp as
+  select  __t.url as url,
+          __t.ruleID as ruleID
+  from  
+    ((select  Op.url as url,
+              Op.ruleID as ruleID
+      from  __Minus__405__TempOp__1 Op)
+    minus
+    (select  Op.url as url,
+              Op.ruleID as ruleID
+      from  __Minus__405__TempOp__2 Op)
+    ) __t
+  group by __t.url, __t.ruleID;
+
+output view __Minus__405__Temp;
+
+create view __Minus__405__TempOp__1 as
+  select  U.url as url,
+          U.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URLPatternsAllWithID_____sep_____U____id
+  from  URLPatternsAllWithID U;
+
+output view __Minus__405__TempOp__1;
+
+create view __Minus__405__TempOp__2 as
+  select  U.url as url,
+          U.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URLPatternsAllWithID_____sep_____U____id,
+          T.__auto__id as TitleTableAll_____sep_____T____id
+  from  URLPatternsAllWithID U,
+        TitleTableAll T
+  where Equals(GetText(U.ruleID), GetText(T.ruleID));
+
+output view __Minus__405__TempOp__2;
+
+create view __Subquery__394__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    F.__auto__id as FirstTitle_____sep_____F____id,
+    dictionary 'TitleContainsDict'
+    on F.title as match
+  from FirstTitle F;
+
+output view __Subquery__394__Temp;
+
+create view __Subquery__395__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    F.__auto__id as FirstTitle_____sep_____F____id,
+    dictionary 'TitleStartsWithDict'
+    on F.title as match
+  from FirstTitle F;
+
+output view __Subquery__395__Temp;
+
+create view __Subquery__396__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    F.__auto__id as FirstTitle_____sep_____F____id,
+    dictionary 'TitleEndsWithDict'
+    on F.title as match
+  from FirstTitle F;
+
+output view __Subquery__396__Temp;
+
+create view __Subquery__397__Temp as
+  select  T.title as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as FirstTitle_____sep_____T____id
+  from  FirstTitle T
+  where MatchesDict('TitleExactDict', 'IgnoreCase', T.title);
+
+output view __Subquery__397__Temp;
+
+create view __Subquery__398__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    P.__auto__id as PageURL_____sep_____P____id,
+    dictionary 'URLContainsDict'
+    on P.url as match
+  from PageURL P;
+
+output view __Subquery__398__Temp;
+
+create view __Subquery__399__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    P.__auto__id as PageURL_____sep_____P____id,
+    dictionary 'URLStartsWithDict'
+    on P.url as match
+  from PageURL P;
+
+output view __Subquery__399__Temp;
+
+create view __Subquery__400__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    P.__auto__id as PageURL_____sep_____P____id,
+    dictionary 'URLEndsWithDict'
+    on P.url as match
+  from PageURL P;
+
+output view __Subquery__400__Temp;
+
+create view __Subquery__401__Temp as
+  select  P.url as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PageURL_____sep_____P____id
+  from  PageURL P
+  where MatchesDict('URLExactDict', 'IgnoreCase', P.url);
+
+output view __Subquery__401__Temp;
+
+create view __Union__392__TempOp__0 as
+  select  U.value as value,
+          U.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as URLExactTable_____sep_____U____id
+  from  URLExactTable U;
+
+output view __Union__392__TempOp__0;
+
+create view __Union__392__TempOp__1 as
+  select  U.value as value,
+          U.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as URLStartsWithTable_____sep_____U____id
+  from  URLStartsWithTable U;
+
+output view __Union__392__TempOp__1;
+
+create view __Union__392__TempOp__2 as
+  select  U.value as value,
+          U.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as URLEndsWithTable_____sep_____U____id
+  from  URLEndsWithTable U;
+
+output view __Union__392__TempOp__2;
+
+create view __Union__392__TempOp__3 as
+  select  U.value as value,
+          U.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as URLContainsTable_____sep_____U____id
+  from  URLContainsTable U;
+
+output view __Union__392__TempOp__3;
+
+create view __Union__393__TempOp__0 as
+  select  T.value as value,
+          T.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as TitleContainsTable_____sep_____T____id
+  from  TitleContainsTable T;
+
+output view __Union__393__TempOp__0;
+
+create view __Union__393__TempOp__1 as
+  select  T.value as value,
+          T.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as TitleStartsWithTable_____sep_____T____id
+  from  TitleStartsWithTable T;
+
+output view __Union__393__TempOp__1;
+
+create view __Union__393__TempOp__2 as
+  select  T.value as value,
+          T.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as TitleEndsWithTable_____sep_____T____id
+  from  TitleEndsWithTable T;
+
+output view __Union__393__TempOp__2;
+
+create view __Union__393__TempOp__3 as
+  select  T.value as value,
+          T.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as TitleExactTable_____sep_____T____id
+  from  TitleExactTable T;
+
+output view __Union__393__TempOp__3;
+
+create view __Union__402__TempOp__0 as
+  select  T.title as title,
+          T.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as TitleContainsSpansWithID_____sep_____T____id
+  from  TitleContainsSpansWithID T;
+
+output view __Union__402__TempOp__0;
+
+create view __Union__402__TempOp__1 as
+  select  T.title as title,
+          T.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as TitleStartsWithSpansWithID_____sep_____T____id
+  from  TitleStartsWithSpansWithID T;
+
+output view __Union__402__TempOp__1;
+
+create view __Union__402__TempOp__2 as
+  select  T.title as title,
+          T.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as TitleEndsWithSpansWithID_____sep_____T____id
+  from  TitleEndsWithSpansWithID T;
+
+output view __Union__402__TempOp__2;
+
+create view __Union__402__TempOp__3 as
+  select  T.title as title,
+          T.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as TitleExactSpansWithID_____sep_____T____id
+  from  TitleExactSpansWithID T;
+
+output view __Union__402__TempOp__3;
+
+create view __Union__403__TempOp__0 as
+  select  U.url as url,
+          U.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URLContainsSpansWithID_____sep_____U____id
+  from  URLContainsSpansWithID U;
+
+output view __Union__403__TempOp__0;
+
+create view __Union__403__TempOp__1 as
+  select  U.url as url,
+          U.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URLStartsWithSpansWithID_____sep_____U____id
+  from  URLStartsWithSpansWithID U;
+
+output view __Union__403__TempOp__1;
+
+create view __Union__403__TempOp__2 as
+  select  U.url as url,
+          U.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URLEndsWithSpansWithID_____sep_____U____id
+  from  URLEndsWithSpansWithID U;
+
+output view __Union__403__TempOp__2;
+
+create view __Union__403__TempOp__3 as
+  select  U.url as url,
+          U.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as URLExactSpansWithID_____sep_____U____id
+  from  URLExactSpansWithID U;
+
+output view __Union__403__TempOp__3;
+
+create view __Union__406__TempOp__0 as
+  select  S.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as SoftErrorFourRules_____sep_____S____id
+  from  SoftErrorFourRules S;
+
+output view __Union__406__TempOp__0;
+
+create view __Union__406__TempOp__1 as
+  select  S.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as SoftErrorTitleRuleAny_____sep_____S____id
+  from  SoftErrorTitleRuleAny S;
+
+output view __Union__406__TempOp__1;
+
+create view __Union__406__TempOp__2 as
+  select  S.ruleID as ruleID,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as SoftErrorURLRuleAny_____sep_____S____id
+  from  SoftErrorURLRuleAny S;
+
+output view __Union__406__TempOp__2;
+

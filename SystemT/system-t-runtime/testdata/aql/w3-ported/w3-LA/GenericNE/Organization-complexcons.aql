@@ -1,0 +1,83 @@
+create view OrgWithinUrlEmailPlace as
+select O.org as org
+from OrgSentence O, UrlEmailPlace UEP
+where Contains (UEP.match, O.org);
+
+create view OrgOverlapTime as
+select O.org as org
+from OrgSentence O, Times t
+where Overlaps(t.match, O.org);
+
+create view InvalidOrg as
+	(select OP.org as org from OrgWithinUrlEmailPlace OP)
+	union all
+	(select OP.org as org from OrgOverlapTime OP);
+	
+create view ValidOrg as 
+	(select O.org as org from OrgSentence O)
+	minus
+	(select OP.org as org from InvalidOrg OP);
+ 
+create view ValidOrgConsolidated as
+select C.org as org
+--from Consolidate(OrgSentence.org) C;
+--from Consolidate(ValidOrg.org) C;
+from ValidOrg C
+consolidate on C.org;
+
+create view FinalOrgExpanded as
+select CombineSpans(CO.match, C.org) as org
+from ValidOrgConsolidated C,
+	 CapsOrg CO
+where ContainsDict('OrgPartnershipDict', C.org)
+ and FollowsTok(CO.match, C.org, 0, 2)
+ and MatchesRegex(/\s*,?\s*&\s*/, SpanBetween(CO.match, C.org));
+
+create view FinalOrgAll as
+	(select O.org as org from ValidOrgConsolidated O)
+	union all
+	(select O.org as org from FinalOrgExpanded O)
+	union all
+	(select O.match as org from OrgWithinNotesEmail1 O)
+	union all
+	(select O.match as org from OrgWithinNotesEmail2 O);
+
+create view FinalOrgConsolidated as
+select C.org as org 
+--from Consolidate(FinalOrgAll.org) C;
+from FinalOrgAll C
+consolidate on C.org;
+
+-- Yunyao: change made on 03/24/2008 
+--         avoid matches with . on both side
+-- begain block change
+-- Yunyao: removed on 05/12/2008
+--create view FinalOrgConsolidatedWithDots as
+--select O.org as org
+--from FinalOrgConsolidated O
+--where MatchesRegex(/\./, LeftContextTok(O.org,1)) and
+--	  MatchesRegex(/\./, RightContextTok(O.org,1));
+	
+--select O.org as org into
+--FinalOrgConsolidatedWithDotsOutput
+--from FinalOrgConsolidatedWithDots O;
+
+create view FinalOrgConsolidatedWithoutDots as
+select O.org as org from FinalOrgConsolidated O;
+--	(select O.org as org from FinalOrgConsolidated O)
+--	minus
+--	(select O.org as org from FinalOrgConsolidatedWithDots O);	
+	
+-- end block change
+
+create view CitiesAll as 
+	(select S.match as match from USCity S)
+	union all
+	(select S.match as match from GermanCities  S);
+	
+create view UrlEmailPlaceOrg as 
+     (select R.loc as match from FinalPlaceConsolidated R)
+     union all
+     (select R.org as match from FinalOrgConsolidatedWithoutDots R)
+     union all
+     (select R.match as match from CitiesAll R);

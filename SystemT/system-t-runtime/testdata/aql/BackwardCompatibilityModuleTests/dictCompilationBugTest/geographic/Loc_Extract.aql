@@ -1,0 +1,82 @@
+-- Overview: This section of the AQL is used to extract city, state and country information.
+-- This includes aliases and abbreviations from text
+
+
+--------------------------
+-- DICT EXTRACTIONS
+--------------------------
+create view Loc_StateNames as
+extract
+    D.text as fullspan, dictionary 'Loc_StatesDict' on D.text as match
+from Loc_InputText D;
+
+
+create view Loc_CountryNamesNoAlias as
+extract
+    D.text as fullspan, dictionary 'Loc_CountryDict' on D.text as match
+from Loc_InputText D;
+
+-- GET THE ABBREVIATIONS, BUT EXCLUDE HIGHLY AMBIGUOUS ENTRIES: IN
+create view Loc_StateAbbrvNames as
+    extract
+        D.text as fullspan,dictionary 'Loc_StateAbbrvsDict' on D.text as match
+    from Loc_InputText D
+    having Not(MatchesRegex(/(in)|(mi)|(me)|(de)|(or)|(ma)|(In)|(Mi)|(Me)|(De)|(Or)|(Ma)|(al)|(as)|(As)|(La)|(la)/, match));
+  
+
+create view Loc_StateNamesConsolidatedNoAlias as
+    select D.match, D.fullspan as fullspan
+    from Loc_StateNames D
+    consolidate on D.match using 'ContainedWithin';
+
+
+create view Loc_CityNames as
+extract
+   D.text as fullspan, dictionary 'Loc_CitiesDict' on D.text as match
+from Loc_InputText D;
+
+create view Loc_CityNamesAmbiguous as
+extract
+   D.text as fullspan, dictionary 'Loc_AmbiguousCitiesDict' on D.text as match
+from Loc_InputText D;
+
+create view Loc_CityNamesConsolidatedNoAlias as
+    select D.match, D.fullspan as fullspan
+    from Loc_CityNames D
+    consolidate on D.match using 'ContainedWithin';
+    
+  ---- GET THE FOREIGN HIGHLY POPULATED CITIES 
+ create view Loc_PopulousNonUSCitiesNoAlias as
+    extract
+        D.text as fullspan, dictionary 'Loc_PopulousNonUSCitiesDict' on D.text as match
+    from Loc_InputText D;
+
+
+--------------------------
+----- RESOLVE ALIASES
+--------------------------
+
+create view Loc_AliasCountries as
+extract
+    D.text as fullspan, dictionary 'Loc_Alias_Countries_Dict' on D.text as match
+from Loc_InputText D;
+ 
+create view Loc_AliasUSCities as
+extract
+    D.text as fullspan, dictionary 'Loc_Alias_USCities_Dict' on D.text as match
+from Loc_InputText D;
+
+create view Loc_AliasUSStates as
+extract
+    D.text as fullspan, dictionary 'Loc_Alias_USStates_Dict' on D.text as match
+from Loc_InputText D;
+
+create view Loc_Alias_NonUSCities as
+extract
+    D.text as fullspan, dictionary 'Loc_Alias_NonUSCities_Dict' on D.text as match
+from Loc_InputText D; 
+
+create view Loc_Abbrv_USCountry as
+extract
+	D.text as fullspan, dictionary 'Loc_USAbbrvDict' on D.text as match
+from Loc_InputText D;

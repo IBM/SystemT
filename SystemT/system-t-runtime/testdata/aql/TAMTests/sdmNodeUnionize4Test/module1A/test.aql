@@ -1,0 +1,89 @@
+module module1A; 
+-- TODO: Add AQL content here 
+
+/**
+Define a dictionary of financial metrics
+Example: gross profit margin, cash flow, diluted earnings per share
+*/
+create dictionary MetricDict
+from file 'dictionaries/metric.dict'
+with language as 'en';
+
+/** Identify mentions of financial metrics
+Example: gross profit margin, cash flow, diluted earnings per share*/
+create view Metric as
+extract dictionary 'MetricDict' 
+on D.text as match
+from Document D;
+
+output view Metric;
+
+create view MetricCopy as select Metric.* from Metric;
+
+
+export view Metric;
+
+/**Identify mentions of numbers with optional decimals
+Example: 7, 49, 11.2
+*/
+create view Number as
+extract regex /\d+(\.\d+)?/ 
+on R.text as match
+from Document R; 
+
+output view Number;
+
+export view Number;
+
+/** Define a dictionary of financial amount units
+Example: million, billion
+*/
+create dictionary UnitDict
+from file 'dictionaries/unit.dict'
+with language as 'en';
+
+export dictionary UnitDict;
+
+/** Indentify mentions of financial amount units
+-- Example: million, billion
+*/
+create view Unit as
+extract dictionary 'UnitDict' 
+on R.text as match
+from Document R; 
+
+export view Unit;
+output view Unit;
+--------------------------------
+/**
+UDF for CombineSpans function
+
+create function TestUDF (p1 Span,p2 Span)
+return Span like p1
+external_name 'udfs.jar:com.ibm.test.udfs.udf1!CombineSpans'
+language java 
+deterministic
+return null on null input;*/
+----------------------------------------
+
+/** Identify sentence boundaries as either:
+-- 	(a) two new lines separated by 0 or more whitespace, or
+-- 	(b) end of sentence punctuation (.?!) that does not overlap with a common abbreviation
+*/
+create view SentenceBoundary as
+extract regex /(\n\s*\n)|([\.\?!]+\s)/
+on D.text as match
+from Document D
+-- Filter out common abbreviations
+having Not(ContainsDict('dictionaries/abbreviation.dict', 
+CombineSpans(LeftContextTok(match, 1), match)));
+		
+----------------------------------------------------
+/** An AQL Doc comment for Test1 on a single line. Should be attached to Test1.*/
+create table Test1 (name Integer)
+as values
+(1);
+
+---------------------------------------------------------------------
+
+export table Test1;

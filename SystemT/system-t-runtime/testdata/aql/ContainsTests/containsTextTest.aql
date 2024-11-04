@@ -1,0 +1,42 @@
+
+-- Extract span /1(.*)2/
+create view Matched1 as extract regex /1(.*)2/ on D.text return group 1 as match
+from Document D;
+
+
+-- Extract span /3(.*)4/
+create view Matched2 as extract regex /3(.*)4/ on D.text return group 1 as match
+from Document D;
+
+
+-- Test ContainsText(D,S)
+create view MatchedDS as select GetDocText(M1.match) as A, M2.match as B from Matched1 M1, Matched2 M2 where ContainsText(GetDocText(M1.match), M2.match);
+
+-- Test ContainsText(D,T)
+create view MatchedDT as select GetDocText(M1.match) as A, GetText(M2.match) as B from Matched1 M1, Matched2 M2 where ContainsText(GetDocText(M1.match), GetText(M2.match));
+
+-- Test ContainsText(S,S)
+create view MatchedSS as select M1.match as A, M2.match as B from Matched1 M1, Matched2 M2 where ContainsText(M1.match, M2.match);
+
+-- Test ContainsText(S,T)
+create view MatchedST as select M1.match as A, GetText(M2.match) as B from Matched1 M1, Matched2 M2 where ContainsText(M1.match, GetText(M2.match));
+
+-- Test ContainsText(T,S)
+create view MatchedTS as select GetText(M1.match) as A , M2.match as B from Matched1 M1, Matched2 M2 where ContainsText(GetText(M1.match), M2.match);
+
+-- Test ContainsText(T,T)
+create view MatchedTT as select GetText(M1.match) as A, GetText(M2.match) as B from Matched1 M1, Matched2 M2 where ContainsText(GetText(M1.match), GetText(M2.match));
+
+
+
+output view Matched1;
+output view Matched2;
+output view MatchedDS;
+output view MatchedDT;
+output view MatchedSS;
+output view MatchedST;
+output view MatchedTS;
+output view MatchedTT;
+
+
+

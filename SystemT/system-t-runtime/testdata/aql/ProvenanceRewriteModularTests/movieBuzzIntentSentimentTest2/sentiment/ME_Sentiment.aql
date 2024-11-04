@@ -1,0 +1,989 @@
+module sentiment;
+
+import view MET_AllBuzz_OnlyText from module buzz as MET_AllBuzz_OnlyText;
+import view MET_AllBuzz from module buzz as MET_AllBuzz;
+
+import view ME_Intent from module intent_without_output as ME_Intent;
+
+import dictionary GOOD_Dict from module common_dict as GOOD_Dict;
+import dictionary EXCITING_Dict from module common_dict as EXCITING_Dict;
+import dictionary INTERESTING_Dict from module common_dict as INTERESTING_Dict;
+import dictionary SEXY_Dict from module common_dict as SEXY_Dict;
+import dictionary BEAUTIFUL_Dict from module common_dict as BEAUTIFUL_Dict;
+import dictionary BAD_Dict from module common_dict as BAD_Dict;
+import dictionary BORING_Dict from module common_dict as BORING_Dict;
+import dictionary UGLY_Dict from module common_dict as UGLY_Dict;
+import dictionary VB_LIKE_Dict from module common_dict as VB_LIKE_Dict;
+import dictionary VB_DISLIKE_Dict from module common_dict as VB_DISLIKE_Dict;
+import dictionary MET_Negation_Dict from module common_dict as MET_Negation_Dict;
+
+
+create dictionary MET_OtherPositive_Dict as 
+('must see','must watch','thumbs up','can\'t wait','cant wait','the best movie','the movie to see');
+
+create dictionary MET_OtherNegative_Dict as 
+('zero interest','thumbs down','the hell','annoying','fucked up',
+'stupid','dumb','sucks','lame','hated','hate','stupid','stupidest','hell','wtf','wth','no interest');
+------------------------ TAGS ------------------------------------------
+create dictionary MET_ExcludeClues as 
+('rotten tomatoes'); -- "want it so bad"
+create dictionary MET_PositiveTags_Dict as
+('#goseeit','#goseethismovie','#goseenow','#cantwait','#cantwaittoseeit','#cantwaittoseeitwithyou','#bestmovieever',
+'#bestmovieofalltime','#bestmovie','#bestfilm','#bestmovieIveseeninawhile','#best','#lovemovies',
+'#favefilm','#myfavoritemovie','#newfavoritemovie','#awesome',
+'#superfilm','#powerfulmovie',' #goodmovie','#cutestmovie','#cutestmovieever','#americasfuturefavoritemovie','#newfavoritemovie',
+'#lovescarymovies','#favoritemovie','#lovethismovie','#greatfilm','greatfilms','greatmovie','greatmovies',
+'#mustseemovie','#intensemovie','#mustseemoviesof2012','#mustwatchmovie','#somanygoodmovies','#decentfilm','#amazingmovie',
+'#damngoodmovie','#moviestowatch','#suchagoodmovie','#cutestmovieoftheyear','#dope',
+'#movieoftheyear','#perfectmovie','#butsogood','#lovedit','#bigfan', '#highlyrecommended',
+'#bestmoviemade','#bestmoviesequal','#goodassmovie','#badassmovie','#fantastic','#amazing','#fantasticmovie','#countmein' );
+
+create dictionary MET_NegativeTags_Movie_Dict as 
+-- anything #fuck* but not (fucky* or fuckit or fucking*), 
+-- #badmovie*,#badfilem*
+('#worstmovieever','#WorstComicBookMovieEver','#WorstMovies','#noonewantstoseeit','#worstactorever', '#terriblemovies',
+'#shitfilm',' #worldsworstmovie','#badmoviedecisions',
+'#dumbmovie','#dumbmovietitles','#worstmovieever','#dumbassmovie','#worstmovie','#fuckthismovie',
+'#awfulmovie','#badfilms','#badmovie','#badmovies','#badfilm','#moviesruined','#horriblemovie',
+'#filmsihavenointerestinseeing','#bored','#thismoviesucks','#badmoviesequal','#horrific','#wtf',
+'#DontWasteYourMoney','#ThingsThatMakeMeSMH','#lackingcreativity','#stupid','#countmeout');
+-----------------------------------------------------------------------
+create dictionary MET_Confused as (
+'wtf',
+'why would','why do','why does','why they','why not','why did','why the','why even','why everyone','why everybody',
+'why was','why wasn\'t','why wasnt','why even','why is','why on earth','why tho',
+'what happened','who the fuck is',
+'confused','piece of shit','should name',
+'understand why','they should',
+'not get it','don\'t get it','dont get it','not getting it','get why','figure out why',
+'should be named','should be called',
+'about what','who is John Carter','who the fuck is John Carter'
+);
+
+create dictionary MET_VeryNegative as (
+'shittiest','give me a reason','piece of shit','pile of wank','who gives a','wasted','a waste',
+'tired of','so dumb','a dumb','is dumb','trash',
+'zero interest','thumbs down','to hell','annoying','fucked','is crap','of crap','steaming shit','a joke',
+'stupid','dumb','sucks','lame','hated','hate','stupid','stupidest',
+'wtf','wth','no interest','worst','throw up','threw up','ruined it','ruined the'
+);
+
+create dictionary MET_VeryPositiveDict as 
+('must see','must watch','thumbs up','can\'t wait','cant wait','the best movie','the movie to see',
+'best movie','best movies','best film','the best','loved it','loved this movie','loved this film','loved the movie','enjoyed it',
+'excellent','beautiful',
+'not too bad','wasn\t too bad','wasnt too bad','isnt too bad','isn\'t too bad',
+'good movie','good movies','good film','awsome movie',
+'awesome film','dinner and a movie','the shit','brilliant','good ass movie','bad ass movie','must go see','excited that',
+'excited to','so excited','so happy','looks great','looks good','goona rule'
+);
+-- TODO: fan, recommend, money,waste,
+create dictionary MET_PositiveTags_Cast_Dict as
+('#moviestar');
+
+
+create dictionary MET_NegativeTags_Cast_Dict as
+('#worstactorever');
+
+
+	
+create view  MET_NegativeTags_Movie_1X as
+	extract D.text as text, dictionary 'MET_NegativeTags_Movie_Dict' on D.text as match
+	from MET_AllBuzz_OnlyText D
+	consolidate on text;
+	
+create view MET_NegativeTags_Movie_X as	
+	select D.text as text, D.match as match, A.name_span as name_span, A.formal_name as formal_name
+	from MET_AllBuzz A, MET_NegativeTags_Movie_1X D;
+	
+create view  MET_PositiveTags_Movie_1X as
+	extract D.text as text, dictionary 'MET_PositiveTags_Dict' on D.text as match
+	from MET_AllBuzz_OnlyText D
+	consolidate on text;
+	
+create view MET_PositiveTags_Movie_X as	
+	select D.text as text, D.match as match, A.name_span as name_span, A.formal_name as formal_name
+	from MET_AllBuzz A, MET_PositiveTags_Movie_1X D;	
+		
+	
+create view  MET_OtherNegative_X as
+	extract D.text as text, dictionary 'MET_OtherNegative_Dict' on D.text as match
+	from MET_AllBuzz_OnlyText D
+	consolidate on text;
+	
+create view  MET_OtherPositive_X as
+	extract D.text as text, dictionary 'MET_OtherPositive_Dict' on D.text as match
+	from MET_AllBuzz_OnlyText D
+	consolidate on text;			
+	
+--- GENERAL NOTE: THE CHECKS OF OVERLAP(A.TEXT, B.TEXT) IS TO MAKE THIS WORK 
+--- ALSO FOR CASES WHERE WE PROCESS A SET OF STRINGS WITHIN THE SAME DOCUMENT	
+
+
+	---------------------- METHOD DETAILS----------------------------------------------------
+	/*
+	THE OUTPUT WILL RETURN POLARITY "POSITIVE", "NEGATIVE" IS OBJECT IS KNOWN, "POSITIVE_GENERAL", 
+	"NEGATIVE_GENERAL" IF IT'S A GENERAL STATEMENT ABOUT THE TWEET WITH NO OBJECT
+	
+	 1) FOR THE ADS-BASED PATTERNS START WITH CLUES ON POSITIVE/NEGATIVE BASED ON ADJECTIVES, THEN MAKE
+SURE THE RIGHT VERB ("IS" CATEOGRY OR "SEEMS" CATEOGRY) IS CLOSE BEFORE. 
+AFTERWARDS UNIFY WITH THE OBJECT THAT WE GOT FROM BUZZ (TAYOLOR KITCH AS "CAST"). THE CATEGORY THAT
+WAS "GENERAL" FOR BUZZ WILL BE MOVIE BECAUSE THE OBJECT IS THE MENTION OF THE MOVIE NAME. "GENERAL"
+IN THE CONTEXT OF SENTIMENT WILL BE SENTIMENT WITH NO OBJECT IDENTIFIED
+	2) VERB-BASED PATTERNS ARE BASED ON "LIKE/DISLIKE" GROUPS OF VERBS. NOT INCLUDED IN THE FINAL OUTPUT YET
+		
+CLUES ARE ON PURPOSE KEPT SEPARATE ACCORDING TO THEIR SEMANTIC GROUP SO THAT IT WILL BE EASIER TO
+TRANSLATE INTO THE FUTURE FORM BASED ON PARSER, AND TO BE EASRY TO CUSTOMIZE. THE SAME
+FOR VERB CATEGORIES. 
+
+THERE WILL BE DIFFERENT LEVELS OF ACCURACY:
+	A) FOR HIGH ACCURACY THE CLUES AND VERBS ARE ALL IN THE SAME SENTENCE BLOCK (SEE FILE ME_SentenceSubBlocks.aql)
+	B) FOR MEDIUM ACCURACY WE NEED TO LINK USING ANAPHORA ACROSS SENTENCE BLOCKS
+	(A) AND (B) WILL FORM "POSITIVE" AND "NEGATIVE" CLUES
+	
+	C) FOR POLARITY OF THE TYPE "POSITIVE_GENERAL", "NEGATIVE_GENERAL" WE ONLY NEED TO ENSURE THE GENERAL FEEL
+	OF THE INPUT. USE DICTIONARIES AT THE BEGINNING OF THIS FILE AND UNDER dictionaries/Sentiment_*.aql
+	
+	D) INTENT SHOULD BE FOLDED INTO "MOVIE" CATEGORY (POSITIVE/NEGATIVE POLARITY)
+	E) FILTER NEGATIONS (OR REVERSE POLARITY, FOR NOW MAY BE ONLY FILTERING THEM OUT BECAUSE OF AMBIGUITY)
+*/
+	
+------------------------------- GENERATED PATTERNS -------------------------------------------	
+-- EXAMPLE :I liked a @YouTube video http://t.co/IfgOPGtt Mission Impossible 4 - Ghost Protocol - Official Trailer
+create view MET_AutomaticGenPatterns as
+	(
+	select D.text, D.name_span, D.formal_name, 'trailer' as category, 
+		D.name_span as obj, 'positive' as polarity
+	from MET_AllBuzz D
+	where MatchesRegex(/(I liked a @YouTube(.)*)/,'CASE_INSENSITIVE',D.text)
+	)
+	union all
+	(
+	select D.text, D.name_span, D.formal_name, 'watching movie' as category, 
+		D.name_span as obj, 'positive' as polarity
+	from MET_AllBuzz D
+	where MatchesRegex(/(I\'m at(.)+(http)(.)+)/,'CASE_INSENSITIVE',D.text)
+	);
+
+------------------------------- ADJ BASED PATTERNS -------------------------------------------		
+
+-----------------------------
+-- POSTIVIE ADJECTIVES
+-----------------------------
+create view MET_positiveClues_Adj_Unconsolidated as 
+	(
+	extract D.text as text, 'good' as prov, dictionary 'GOOD_Dict' on D.text as match
+	from MET_AllBuzz_OnlyText D
+	)
+	union all
+	(
+	extract D.text as text, 'exciting' as prov, dictionary 'EXCITING_Dict' on D.text as match
+	from MET_AllBuzz_OnlyText D
+	)
+	union all
+	(
+	extract D.text as text, 'interesting' as prov, dictionary 'INTERESTING_Dict' on D.text as match
+	from MET_AllBuzz_OnlyText D
+	)
+	union all
+	(
+	extract D.text as text, 'sexy' as prov, dictionary 'SEXY_Dict' on D.text as match
+	from MET_AllBuzz_OnlyText D
+	)
+	union all
+	(
+	extract D.text as text, 'beautiful' as prov, dictionary 'BEAUTIFUL_Dict' on D.text as match
+	from MET_AllBuzz_OnlyText D
+	)
+	union all
+	(
+	extract D.text as text, 'other' as prov, dictionary 'MET_OtherPositive_Dict' on D.text as match
+	from  MET_AllBuzz_OnlyText D
+	);
+
+create view MET_positiveClues_Adj as
+	select D.* 
+	from MET_positiveClues_Adj_Unconsolidated D
+	consolidate on D.match using 'ContainedWithin';
+	
+	
+-----------------------------
+-- NEGATIVE ADJECTIVES
+-----------------------------	
+create view MET_negativeClues_Adj_Unconsolidated as 
+	(
+	extract D.text as text, 'bad' as prov, dictionary 'BAD_Dict' on D.text as match
+	from MET_AllBuzz_OnlyText D
+	)
+	union all
+	(
+	extract D.text as text, 'boring' as prov, dictionary 'BORING_Dict' on D.text as match
+	from MET_AllBuzz_OnlyText D
+	)
+	union all
+	(
+	extract D.text as text, 'ugly' as prov, dictionary 'UGLY_Dict' on D.text as match
+	from MET_AllBuzz_OnlyText D
+	);	
+	
+-- make sure they are filtered	
+
+create view MET_negativeClues_Adj as
+	select D.* 
+	from MET_negativeClues_Adj_Unconsolidated D
+	consolidate on D.match using 'ContainedWithin';
+
+create view MET_Clues_Adj_Unconsolidated as 
+	(
+	select D.text as text, D.prov as prov, 'positive' as polarity, D.match as match
+	from MET_positiveClues_Adj D
+	)
+	union all
+	(
+	select D.text as text, D.prov as prov, 'negative' as polarity, D.match as match
+	from MET_negativeClues_Adj D
+	);
+
+create view MET_Clues_Adj as 
+	select D.*
+	from MET_Clues_Adj_Unconsolidated D
+	consolidate on D.match using 'ContainedWithin';
+--------------------------
+-- PATTERN [LOOK]---[CLUE][PUNCT/PREP]  "JOHN CARTER LOOKS GOOD", "JOHN CARTER SEEMS LIKE A GOOD MOVIE"
+--------------------------
+
+create view MET_Clues_LookPattern as 
+	extract D.text as text, D.prov as prov, D.polarity as polarity, 
+		D.match as match, regex /((look)|(seem)|(appear)|(might be))[A-Za-z]*/ with flags 'CASE_INSENSITIVE' on D.text as vb
+	from MET_Clues_Adj D
+	having FollowsTok(vb, match, 0,4);
+
+create view MET_Clues_LookPattern_WithAttrs as
+	select D.* , 
+		B.name_span as name_span, B.formal_name as formal_name, B.category as category, B.clue as buzz_clue
+	from MET_Clues_LookPattern D, MET_AllBuzz B
+	where Overlaps(D.text, B.text);
+	
+create view MET_Clues_LookPattern_Final as 
+	(
+	select '1' as final_prov, D.text as text, CombineSpans(D.vb, D.match) as sent_clue, D.polarity as polarity, 
+		D.formal_name as formal_name, D.buzz_clue as obj, GetString(D.category) as category, D.name_span as name_span,D.vb as vb, D.match as match
+	from MET_Clues_LookPattern_WithAttrs D
+	where FollowsTok(D.buzz_clue, D.vb, 0,3)
+	and Not(Equals(GetString(D.category), GetString('general')))
+	)
+	union all
+	(
+	select '2' as final_prov, D.text as text, CombineSpans(D.vb, D.match) as sent_clue,  D.polarity as polarity, 
+		D.formal_name as formal_name, D.buzz_clue as obj, GetString('movie') as category,D.name_span as name_span, D.vb as vb, D.match	as match
+	from MET_Clues_LookPattern_WithAttrs D
+	where FollowsTok(D.name_span, D.vb, 0,3)
+	and Equals(GetString(D.category), GetString('general'))
+	);
+
+-- VIEW USED FOR DEBUG ONLY
+create view MET_Clues_NotLookPattern_Final as
+	(
+	select D.text as text, D.vb as vb, D.match as match, D.name_span as name_span
+	from MET_Clues_LookPattern_WithAttrs D
+	)
+	minus
+	(
+	select D.text as text, D.vb as vb, D.match as match, D.name_span as name_span
+	from MET_Clues_LookPattern_Final D
+	);
+--------------------------
+-- PATTERN [IS]---[CLUE][PUNCT/PREP]   "JOHN CARTER IS REALLY GOOD"
+--------------------------
+
+create view MET_Clues_IsPattern as 
+	extract D.text as text, D.prov as prov, D.polarity as polarity, 
+		D.match as match, regex /\b((\'s)|(is)|(are)|(be)|(was)|(is going to be)|(is gonna be))\b/ with flags 'CASE_INSENSITIVE' on D.text as vb
+	from MET_Clues_Adj D
+	having FollowsTok(vb, match, 0,4);	
+	
+	
+create view MET_Clues_IsPattern_WithAttrs as
+	select D.* , 
+		B.name_span as name_span, B.formal_name as formal_name, B.category as category, B.clue as buzz_clue
+	from MET_Clues_IsPattern D, MET_AllBuzz B
+	where Overlaps(D.text, B.text);
+	
+create view MET_Clues_IsPattern_Final as 
+	(
+	select '1' as final_prov, D.text as text, CombineSpans(D.vb, D.match) as sent_clue, D.polarity as polarity, 
+		D.formal_name as formal_name, D.buzz_clue as obj, GetString(D.category) as category, D.name_span as name_span,D.vb as vb, D.match as match
+	from MET_Clues_IsPattern_WithAttrs D
+	where FollowsTok(D.buzz_clue, D.vb, 0,3)
+	and Not(Equals(GetString(D.category), GetString('general')))
+	)
+	union all
+	(
+	select '2' as final_prov, D.text as text, CombineSpans(D.vb, D.match) as sent_clue,  D.polarity as polarity, 
+		D.formal_name as formal_name, D.buzz_clue as obj, GetString('movie') as category,D.name_span as name_span, D.vb as vb, D.match	as match
+	from MET_Clues_IsPattern_WithAttrs D
+	where FollowsTok(D.name_span, D.vb, 0,3)
+	and Equals(GetString(D.category), GetString('general'))
+	);
+		
+-- patterns of the type "movie is/looks great"	
+create view MET_Clues_IsPattern2WithAttrs as
+	( 
+	extract 'movie' as category, D.text as text, D.polarity as polarity, D.formal_name as formal_name, D.match as vb, D.name_span as name_span,
+		regex /\b((movie)|(film)|(it))\b/ with flags 'CASE_INSENSITIVE' on D.text as match
+	from MET_Clues_IsPattern_WithAttrs D
+	having FollowsTok(match, vb, 0,2)
+	and FollowsTok(name_span, match, 0,20)
+	)
+	union all
+		( 
+	extract 'cast' as category, D.text as text, D.polarity as polarity, D.formal_name as formal_name, D.match as vb, D.name_span as name_span,
+		regex /\b((he)|(she))\b/ with flags 'CASE_INSENSITIVE' on D.text as match
+	from MET_Clues_IsPattern_WithAttrs D
+	having FollowsTok(match, vb, 0,2)
+	and FollowsTok(name_span, match, 0,20)
+	)
+	union all
+	(
+	extract 'movie' as category, D.text as text, D.polarity as polarity, D.formal_name as formal_name, D.match as vb, D.name_span as name_span,
+		regex /\b((movie)|(film)|(it))\b/ with flags 'CASE_INSENSITIVE' on D.text as match
+	from MET_Clues_LookPattern_WithAttrs D
+	having FollowsTok(match, vb, 0,2)
+	and FollowsTok(name_span, match, 0,20)	
+	)
+	union all
+	(
+	extract 'cast' as category, D.text as text, D.polarity as polarity, D.formal_name as formal_name, D.match as vb, D.name_span as name_span,
+		regex /\b((he)|(she))\b/ with flags 'CASE_INSENSITIVE' on D.text as match
+	from MET_Clues_LookPattern_WithAttrs D
+	having FollowsTok(match, vb, 0,1)
+	and FollowsTok(name_span, match, 0,20)	
+	)
+	;
+
+-- pattern of the type "great movie"	
+create view MET_Clues_Adj_Movie as 
+	extract D.text as text, D.polarity as polarity, D.match as match,
+	'movie' as category, regex /\b((movie)|(film))\b/ with flags 'CASE_INSENSITIVE' on D.text as obj
+	from MET_Clues_Adj D
+	having FollowsTok(match, obj, 0,1);
+	
+create view MET_Clues_Adj_Movie_WithAttrs as
+	select D.text as text, D.polarity as polarity,D.match as match,B.name_span as name_span, B.formal_name as formal_name, D.obj as obj,
+	'movie' as category
+	from MET_Clues_Adj_Movie D, MET_AllBuzz B;
+	
+	
+-- pattern of the type "[great cast]"	
+create view MET_Clues_Adj_Category as
+	(
+	select D.match as match, D.polarity, B.clue as clue, GetString('movie')as category, B.formal_name, B.name_span as name_span, B.text
+	from MET_AllBuzz B, MET_Clues_Adj D
+	where FollowsTok(D.match, B.clue, 0,1)
+	and Equals(GetString(B.category),GetString('general'))
+	)
+	union all 
+	(
+	select D.match as match, D.polarity, B.clue as clue, B.category as category, B.formal_name, B.name_span as name_span, B.text
+	from MET_AllBuzz B, MET_Clues_Adj D
+	where FollowsTok(D.match, B.clue, 0,1)
+	and Not(Equals(GetString(B.category),GetString('general')))
+	)	;
+
+	
+
+-- VIEW USED FOR DEBUG ONLY
+create view MET_Clues_NotIsPattern_Final as
+	(
+	select D.text as text, D.vb as vb, D.match as match, D.name_span as name_span
+	from MET_Clues_IsPattern_WithAttrs D
+	)
+	minus
+	(
+	select D.text as text, D.vb as vb, D.match as match, D.name_span as name_span
+	from MET_Clues_IsPattern_Final D
+	);
+	
+------------------------------- VERB-based sentiment -------------------------------------------	
+-- not integrated yet
+----------------------------		
+create view MET_positiveClues_Vb as 
+	extract D.text as text, 'like' as prov, dictionary 'VB_LIKE_Dict' on D.text as match
+	from MET_AllBuzz_OnlyText D
+	consolidate on match using 'ContainedWithin';
+	
+create view MET_negativeClues_Vb as 
+	extract D.text as text, 'dislike' as prov, dictionary 'VB_DISLIKE_Dict' on D.text as match
+	from MET_AllBuzz_OnlyText D
+	consolidate on match using 'ContainedWithin';	
+
+	
+create view MET_positiveClues_Vb_WithAttrs as
+	select B.text as text, B.name_span as name_span, B.formal_name as formal_name, B.category as category, 
+		B.clue as buzz_clue, CombineSpans(D.match, B.clue) as sent_clue, D.match as vb, 'positive' as polarity
+	from MET_positiveClues_Vb D, MET_AllBuzz B
+	where FollowsTok(D.match, B.clue, 0,3);
+	
+create view MET_negativeClues_Vb_WithAttrs as
+	select B.text as text, B.name_span as name_span, B.formal_name as formal_name, B.category as category, 
+		B.clue as buzz_clue, CombineSpans(D.match, B.clue) as sent_clue, D.match as vb, 'positive' as polarity
+	from MET_negativeClues_Vb D, MET_AllBuzz B
+	where FollowsTok(D.match, B.clue, 0,3);	
+
+	
+------------------------------------------------------------------------------------
+--------------------------------------
+-- PUT IT ALL TOGETHER INTO SENTIMENT
+-------------------------------------		
+	
+	
+create view MET_All_SentimentUnfiltered as
+	(
+	select 'ispattern2attrs' as prov, D.text as text, D.name_span as name_span, D.formal_name as formal_name,
+		GetString(D.category) as category, D.match as obj,D.polarity as polarity, CombineSpans(D.match,D.vb) as sent_clue, D.vb as vb
+	from MET_Clues_IsPattern2WithAttrs D
+	)
+	union all 
+	(
+	select 'clues_adj_movie' as prov, D.text as text, D.name_span as name_span, D.formal_name as formal_name, 
+		GetString('movie') as category, D.obj as obj, D.polarity as polarity, CombineSpans(D.match,D.obj) as sent_clue, D.match as vb
+	from MET_Clues_Adj_Movie_WithAttrs D
+	)
+	union all
+	(
+	select 'clues_adj_category' as prov, D.text as text, D.name_span as name_span, D.formal_name as formal_name, 
+		GetString(D.category) as category,D.clue as obj, D.polarity as polarity, CombineSpans(D.match,D.clue) as sent_clue, D.clue as vb
+	from MET_Clues_Adj_Category D
+	)
+	union all
+	(
+	select 'lookpattern' as prov, D.text as text, D.name_span as name_span, D.formal_name as formal_name, GetString(D.category) as category,  
+		D.obj as obj, D.polarity as polarity, D.sent_clue as sent_clue, D.vb as vb
+	from MET_Clues_LookPattern_Final D
+	)
+	union all
+	(
+	select 'ispattern' as prov, D.text as text, D.name_span as name_span, D.formal_name as formal_name, GetString(D.category) as category,  
+		D.obj as obj, D.polarity as polarity, D.sent_clue as sent_clue, D.vb as vb
+	from MET_Clues_IsPattern_Final D
+	)
+	union all
+	(
+	select 'hatepattern' as prov,D.text as text, D.name_span as name_span, D.formal_name as formal_name, GetString(D.category) as category,  
+		D.buzz_clue as obj, D.polarity as polarity, D.sent_clue as sent_clue, D.vb as vb
+	from MET_negativeClues_Vb_WithAttrs D
+	)
+	union all
+	(
+	select 'lovepattern' as prov, D.text as text, D.name_span as name_span, D.formal_name as formal_name, GetString(D.category) as category,  
+		D.buzz_clue as obj, D.polarity as polarity, D.sent_clue as sent_clue, D.vb as vb
+	from MET_positiveClues_Vb_WithAttrs D
+	)
+	;
+--------------	
+-- NOT USED NOW, WILL BE USED TO FILTER OUT CONIDTIONAL AND QUESTIONS. FOR NOW DIDN'T GIVE SIGNIFICANT RESULTS 
+create view MET_All_Sentiment_ToFilter as 
+	(
+	select D.text as text, D.sent_clue as sent_clue
+	from MET_All_SentimentUnfiltered D
+	where ContainsRegex(/\?/, RightContextTok(D.sent_clue, 40))
+	)
+	union all
+	(
+	select D.text as text, D.sent_clue as sent_clue
+	from MET_All_SentimentUnfiltered D
+	where ContainsRegex(/\bif\b/, LeftContextTok(D.sent_clue, 40))
+	);
+
+
+
+-----------------------------------
+-- FOR HIGH PRECISION ENSURE THAT THE CLUE AND THE OBJECT OF SENTIMENT ARE WITHIN A SENTENCE BLOCK
+-----------------------------------	
+create view MET_All_Sentiment_InBlock as 
+	select D.* , B.block
+	from MET_All_SentimentUnfiltered D, MET_SentenceSubBlocks B
+	--where Overlaps(D.text, B.text)
+	where Overlaps(B.block, D.vb)		-- the clue verb should be in a block, and at least part of the title
+	and Overlaps(B.block, D.obj)	-- in cases like "Mission Impossible -- ...Protocol" the title is split over two blocks which we should allow
+	;
+	
+-- VIEW USED FOR DEBUG ONLY
+create view MET_NotInSentiment_InBlock as 
+	(
+	select D.text from MET_All_SentimentUnfiltered D
+	)
+	minus
+	(
+	select D.text from MET_All_Sentiment_InBlock D
+	);	
+
+-- this view is really a placeholder. It will hold results after additional filters.	
+create view MET_All_Sentiment_Unconsolidated as 
+/*	(
+	select 'ispattern2attrs' as prov, D.text as text, D.name_span, D.formal_name as formal_name,
+		GetString(D.category) as category, D.match as obj,GetString(D.polarity) as polarity
+	from MET_Clues_IsPattern2WithAttrs D
+	)
+	union all 
+	(
+	select 'clues_adj_movie' as prov, D.text as text, D.name_span,D.formal_name as formal_name, 
+		GetString('movie') as category,  D.obj as obj, GetString(D.polarity) as polarity
+	from MET_Clues_Adj_Movie_WithAttrs D
+	)
+	union all
+	(
+	select 'clues_adj_category' as prov, D.text as text, D.name_span,D.formal_name as formal_name, 
+		GetString(D.category) as category, D.clue as obj, GetString(D.polarity) as polarity
+	from MET_Clues_Adj_Category D
+	)
+	union all*/
+	(	
+	select 'tags' as prov, D.text, D.name_span, D.formal_name, GetString('movie') as category, 
+		D.name_span as obj, GetString('positive') as polarity
+	from  MET_PositiveTags_Movie_X D 
+	)
+	union all
+	(	
+	select 'tags' as prov, D.text, D.name_span, D.formal_name, GetString('movie') as category, 
+		D.name_span as obj, GetString('negative') as polarity
+	from MET_NegativeTags_Movie_X D
+	)
+	union all
+	(
+	--select D.*, LeftContextTok(D.sent_clue, 40) as l_context
+	select 'pattern' as prov, D.text, D.name_span, D.formal_name, GetString(D.category) as category, 
+		D.name_span as obj, GetString(D.polarity) as polarity
+	from MET_All_Sentiment_InBlock D
+	)
+	union all	-- automatically generated patterns
+	(
+	select 'agp' as prov, D.text, D.name_span, D.formal_name, GetString(D.category) as category, 
+		D.name_span as obj, GetString(D.polarity) as polarity
+	from MET_AutomaticGenPatterns D	
+	)
+	union all	-- from intent
+	(
+	select 'intent' as prov,D.text, D.name_span, D.formal_name, GetString('intent') as category, 
+		D.name_span as obj, GetString(D.polarity) as polarity
+	from ME_Intent D	
+	)
+	union all	-- generally positive from grammatical constructs
+	(
+	select 'op' as prov,D.text, D.name_span, D.formal_name, GetString('movie') as category, 
+		D.name_span as obj, GetString('positive') as polarity
+	from MET_AllBuzz D, MET_OtherPositive_X OP
+	where Equals(GetString(D.text),GetString(OP.text))	
+	)
+	;
+	
+create view MET_All_Sentiment as 
+	select D.*
+	from MET_All_Sentiment_Unconsolidated D;
+	--consolidate on D.text;	
+	
+	
+-- exclude neagation
+create view MET_AllSentiment_Negation as
+	extract D.text as text, D.category as category, D.obj as obj, D.polarity as polarity, D.name_span as name_span,  D.formal_name as formal_name,  dictionary 'MET_Negation_Dict' on D.text as match
+	from MET_All_Sentiment D
+	having Follows(match, obj, 0,7);
+
+	
+	
+create view MET_AllSentiment_Filtered as 
+	(
+	select D.text, D.name_span, D.formal_name, D.category as category, D.obj as obj, D.polarity as polarity
+	from MET_All_Sentiment  D
+	)
+	minus
+	(
+	select D.text, D.name_span, D.formal_name, D.category as category, D.obj as obj, D.polarity as polarity
+	from MET_AllSentiment_Negation D
+	);
+	
+-------------------------------
+-- ADD THE PATH FOR "CONFUSED
+-------------------------------
+create view MET_NotInSentimentTemp as 
+	(
+	select D.text from MET_AllBuzz_OnlyText D
+	)
+	minus
+	(
+	select D.text from MET_AllSentiment_Filtered D
+	);
+
+create view MET_Confused as 
+	extract D.text as text,  dictionary 'MET_Confused' on D.text as match
+	from MET_NotInSentimentTemp D;
+	
+create view MET_ConfusedWithAttrs as
+	select D.text as text, D.match as match, B.name_span as name_span, B.formal_name as formal_name
+	from MET_Confused D, MET_AllBuzz B
+	consolidate on B.name_span;
+	
+	
+create view MET_VeryNegative as 
+	extract D.text as text, dictionary 'MET_VeryNegative' on D.text as match
+	from MET_NotInSentimentTemp D;
+	
+create view MET_VeryNegativeWithAttrsUnfiltered as
+	select D.text as text, D.match as match, B.name_span as name_span, B.formal_name as formal_name
+	from MET_VeryNegative D, MET_AllBuzz B
+	consolidate on B.name_span;	
+	
+create view MET_VeryPositive as 
+	extract D.text as text, dictionary 'MET_VeryPositiveDict' on D.text as match
+	from MET_NotInSentimentTemp D
+	having Not(ContainsRegex(/(best wishes)/,'CASE_INSENSITIVE',text));
+	
+create view MET_VeryPositiveWithAttrsUnfiltered as
+	select D.text as text, D.match as match, B.name_span as name_span, B.formal_name as formal_name
+	from MET_VeryPositive D, MET_AllBuzz B
+	consolidate on B.name_span;	
+	
+-- check for veryPositive and veryNegative to not be preceded closely by negation AND not to be in the same tweet!
+ 
+create view MET_VeryNegative_tofilterfilternegation as
+	extract D.text as text, D.match as match, D.name_span as name_span,  D.formal_name as formal_name,  dictionary 'MET_Negation_Dict' on D.text as neg
+	from MET_VeryNegativeWithAttrsUnfiltered  D
+	having Follows(neg, match, 0,7);
+	
+create view MET_VeryPositive_tofilterfilternegation as
+	extract D.text as text, D.match as match, D.name_span as name_span,  D.formal_name as formal_name,  dictionary 'MET_Negation_Dict' on D.text as neg
+	from MET_VeryPositiveWithAttrsUnfiltered  D
+	having Follows(neg, match, 0,7);
+		
+create view MET_VeryNegativeToFilter as 
+	(
+	select D.text as text, D.match as match, D.name_span as name_span,  D.formal_name as formal_name
+	from MET_VeryNegative_tofilterfilternegation D
+	)
+	union all
+	(
+	select D.text as text, D.match as match, D.name_span as name_span, D.formal_name as formal_name 
+	from MET_VeryNegativeWithAttrsUnfiltered D, MET_VeryPositiveWithAttrsUnfiltered P
+	where Overlaps(D.text, P.text)
+	);
+	
+create view MET_VeryNegativeWithAttrs as 
+	(
+	select D.text as text, D.match as match, D.name_span as name_span, D.formal_name as formal_name 
+	from MET_VeryNegativeWithAttrsUnfiltered D
+	)
+	minus
+	(
+	select D.text as text, D.match as match, D.name_span as name_span, D.formal_name as formal_name 
+	from MET_VeryNegativeToFilter D
+	);
+	
+create view MET_VeryPositiveToFilter as 
+	(
+	select D.text as text, D.match as match, D.name_span as name_span,  D.formal_name as formal_name
+	from MET_VeryPositive_tofilterfilternegation D
+	)
+	union all
+	(
+	select D.text as text, D.match as match, D.name_span as name_span, D.formal_name as formal_name 
+	from MET_VeryPositiveWithAttrsUnfiltered D, MET_VeryPositiveWithAttrsUnfiltered P
+	where Overlaps(D.text, P.text)
+	);
+	
+create view MET_VeryPositiveWithAttrs as 
+	(
+	select D.text as text, D.match as match, D.name_span as name_span, D.formal_name as formal_name 
+	from MET_VeryPositiveWithAttrsUnfiltered D
+	)
+	minus
+	(
+	select D.text as text, D.match as match, D.name_span as name_span, D.formal_name as formal_name 
+	from MET_VeryPositiveToFilter D
+	);
+	
+create view MET_Sentiment_Final as
+	(
+	select 'sent' as prov, D.name_span as name_span, D.formal_name as formal_name, 
+		GetString(D.category) as category,  D.obj as obj, GetString(D.polarity) as polarity, D.text as text
+	from MET_AllSentiment_Filtered D
+	)
+	union all
+	(
+	select 'confused' as prov,D.name_span as name_span, D.formal_name as formal_name, 
+		GetString('confused') as category,  D.name_span as obj, GetString('negative') as polarity, D.text as text
+	from MET_ConfusedWithAttrs D
+	)
+	union all
+	(
+	select 'veryneg' as prov,D.name_span as name_span, D.formal_name as formal_name, 
+		GetString('movie') as category,  D.name_span as obj, GetString('negative') as polarity, D.text as text
+	from MET_VeryNegativeWithAttrs D
+	)
+	union all
+	(
+	select 'verypos' as prov, D.name_span as name_span, D.formal_name as formal_name, 
+		GetString('movie') as category,  D.name_span as obj, GetString('positive') as polarity, D.text as text
+	from MET_VeryPositiveWithAttrs D
+	); 	
+		
+------------------------------
+-- FINAL OUTPUT VIEW, make sure if we have a low-level category we don't have also "movie", eliminate contradictory ambivalent
+-------------------------------	
+create view MET_MovieCategory_Output as 
+	select D.text, D.category
+	from MET_Sentiment_Final D
+	where Equals(GetString('movie'),GetString(D.category));
+	
+create view MET_NotMovieCategory_Output as 
+	(
+	select D.text
+	from MET_Sentiment_Final D
+	)
+	minus
+	(
+	select D.text
+	from MET_MovieCategory_Output D
+	);
+	
+	
+	/*
+create view MET_Sentiment_Output as
+	( -- for non-movie category display all
+	select D.name_span as name_span, D.formal_name as formal_name, 
+		GetString(D.category) as category,  D.obj as category_obj, D.polarity as polarity
+	from MET_Sentiment_Final D, MET_NotMovieCategory_Output
+	where Not(ContainsRegex(/\b((but)|(however)|(although))\b/,'CASE_INSENSITIVE',D.text))
+	)
+	union all
+	( -- for movie cateogy there shouldn't be more granular info
+	select D.name_span as name_span, D.formal_name as formal_name, 
+		GetString(D.category) as category,  D.obj as category_obj, D.polarity as polarity
+	from MET_Sentiment_Final D,MET_MovieCategory_Output
+	where Equals(GetString('movie'),GetString(D.category))
+	and Not(ContainsRegex(/\b((but)|(however)|(although))\b/,'CASE_INSENSITIVE',D.text))
+	
+	);	*/
+	
+create view Sentiment as
+	select D.text as text, D.name_span as name_span, D.formal_name as formal_name, 
+		GetString(D.category) as category,  D.obj as category_obj, D.polarity as polarity
+	from MET_Sentiment_Final D
+	where Not(ContainsRegex(/\b((but)|(however)|(although)|(unless)|(except))\b/,'CASE_INSENSITIVE',D.text));
+	
+/*-- Start of Outer join logic - to remove duplicate tuples that can only be removed 
+-- when two or more fields in the view are considered for the filter process.
+
+create view SentimentA as 
+	select S.* from SentimentFinal S;
+
+create view SentimentB as 
+	select S.* from SentimentFinal S;
+
+-- Duplicates in these tuples are identified by two fields [text and category] both containing
+-- same values for a pair of tuples being considered as a possible instance of duplicate
+
+create view SentimentDuplicates as
+	select SA.* from SentimentA SA, SentimentB SB
+	where Equals(SA.text, SB.text) and Equals(SA.name_span, SB.name_span) and Equals(SA.category, SB.category);
+
+create view SentimentUniquesA as
+	(select SA.* from SentimentA SA)
+	minus
+	(select SD.* from SentimentDuplicates SD);
+
+create view SentimentDuplicatesConsolidated as
+	select SD.* from SentimentDuplicates SD
+	consolidate on SD.text;
+
+create view Sentiment as
+	(select SA.* from SentimentUniquesA SA)
+	union all
+	(select SD.* from SentimentDuplicatesConsolidated SD);
+
+-- End of outer join logic*/
+
+create view MET_Sentiment_Output_Cleansed as
+	select D.name_span as name_span, D.formal_name as formal_name, 
+		GetString(D.category) as category, D.polarity as polarity
+	from MET_Sentiment_Final D;		
+	
+create view MET_Sentiment_Output_Negative as
+		select D.*
+		from Sentiment D
+		where Equals(GetString('negative'), GetString(D.polarity));
+	
+-- for debug
+create view MET_NotInSentiment as 
+	(
+	select D.text from MET_AllBuzz_OnlyText D
+	)
+	minus
+	(
+	select D.text from MET_Sentiment_Final D
+	);
+--------------------- EXPLORE -----------------------
+/*		
+create view MET_Sentiment_ToFilterNegatives as 
+	select D.*, N.match as neg
+	from MET_All_Sentiment_InBlock D, MET_Negation_X  N
+	where Overlaps(N.text, D.text)
+	and Overlaps(N.match, D.l_context);
+*/
+-- VIEW USED FOR DEBUG ONLY
+	
+create view MET_Explore4 as 
+	select D.text
+	from MET_NotInSentiment D
+	where ContainsRegex(/(mean to judge but)|(some kind of)|(is a joke)|(was a joke)|(world doesn't need)/,D.text);	
+
+		
+create view MET_Explore1 as 
+	select D.text
+	from MET_NotInSentiment D
+	where ContainsRegex(/http:/,D.text);	
+	--where ContainsRegex(/\bis\b/,D.text);	
+
+create view MET_Explore2 as 
+	select D.text
+	--from MET_NotInSentiment D
+	from MET_AllBuzz D
+	where Not(ContainsRegex(/http:/,D.text));	
+	--where ContainsRegex(/\bis\b/,D.text);	
+	
+create view MET_ExploreNotIntent as 
+	(
+	select D.text
+	--from MET_NotInSentiment D
+	from MET_AllBuzz D
+	where ContainsRegex(/don\t(.){0,10}((see)|(watch))/,D.text)	
+	)
+	union all
+	(		
+		select D.text
+	--from MET_NotInSentiment D
+	from MET_AllBuzz D
+	where ContainsRegex(/don\t(.){0,10}((care for))/,D.text)
+	)
+	union all
+	(		
+		select D.text
+	--from MET_NotInSentiment D
+	from MET_AllBuzz D
+	where ContainsRegex(/not the best/,D.text)
+	)	;
+	
+create view MET_ExploreConfused as 
+	extract D.text as text, dictionary 'MET_Confused' on D.text as match
+	from MET_NotInSentiment D;
+	
+create view MET_ExploreVeryNegative as 
+	extract D.text as text, dictionary 'MET_VeryNegative' on D.text as match
+	from MET_NotInSentiment D;	
+		
+create view MET_Explore3 as 
+	extract D.text as text, regex /#[A-Za-z]*((get)|(creativ))[A-Za-z]*/ on D.text as match
+	from MET_NotInSentiment D;
+	--having Not(ContainsRegex(/http:/,text));	
+	--where ContainsRegex(/\bis\b/,D.text);	
+	
+create view MET_Explore7 as 
+	extract D.text as text, regex /(i|(\. ))(love[a-z]* (it)?)/ with flags 'CASE_INSENSITIVE' on D.text as match
+	from MET_NotInSentiment D;
+	--having Not(ContainsRegex(/http:/,text));	
+	--where ContainsRegex(/\bis\b/,D.text);	
+	
+create view MET_Explore8 as 
+	extract D.text as text, regex /(question)|(know why)/ on D.text as match
+	from MET_NotInSentiment D;
+	--having Not(ContainsRegex(/http:/,text));	
+	--where ContainsRegex(/\bis\b/,D.text);			
+	
+create view MET_Explore_Cast as
+	select D.text as text
+	from MET_Explore3 D
+	where ContainsRegex(/(actor)|(cast)/, D.match);	
+	
+create view MET_Explore_Plot as
+	select D.text as text
+	from MET_Explore3 D
+	where ContainsRegex(/(plot)|(scene)/, D.match);		
+	
+create view MET_Explore_VFX as
+	select D.text as text
+	from MET_Explore3 D
+	where ContainsRegex(/(vfx)|(effects)/, D.match);
+	
+create view MET_Explore_Movie as
+	select D.text as text
+	from MET_Explore3 D
+	where ContainsRegex(/(movie)|(film)|(recommend)/, D.match);	
+/*	
+	output view MET_Explore7;	
+	output view MET_Explore8;	
+
+output view MET_Explore_VFX;
+output view MET_Explore_Movie;
+output view  MET_Explore_Plot;
+output view MET_Explore_Cast;		
+output view MET_Explore1;
+output view MET_Explore2;
+output view MET_Explore3;
+output view MET_Explore4;
+output view MET_VeryPositive;
+output view MET_VeryPositiveWithAttrs;*/
+
+-------------------------OUTPUT-----------------------------------------
+/*
+output view MET_positiveClues_Adj_Unconsolidated;
+output view MET_positiveClues_Adj;	
+output view MET_negativeClues_Adj;
+output view MET_positiveClues_Vb;
+output view MET_negativeClues_Vb;
+
+
+--output view  MET_SentenceSubBlocks;
+
+output view MET_Clues_LookPattern;
+output view MET_Clues_IsPattern;
+output view MET_Clues_LookPattern_WithAttrs;
+output view MET_Clues_LookPattern_Final;
+output view MET_Clues_Adj;
+
+output view MET_Clues_NotLookPattern_Final;
+output view MET_Clues_IsPattern_Final;
+output view MET_Clues_NotIsPattern_Final;
+
+output view MET_All_Sentiment_InBlock;
+output view MET_NotInSentiment_InBlock;
+--output view MET_Sentiment_ToFilterNegatives;
+output view MET_All_SentimentUnfiltered;
+output view MET_NotInSentiment;
+output view MET_All_Sentiment_ToFilter;
+output view MET_All_Sentiment_Unconsolidated;
+output view MET_All_Sentiment;
+output view MET_AutomaticGenPatterns;
+--output view MET_Sentiment_Output;
+output view MET_OtherNegative_X;
+output view MET_OtherPositive_X;
+
+output view MET_NegativeTags_Movie_X;
+output view MET_PositiveTags_Movie_X;
+output view MET_ExploreNotIntent;
+output view MET_AllSentiment_Negation;
+output view  MET_Confused;
+output view MET_VeryNegative;
+output view MET_Sentiment_Final;
+output view MET_Sentiment_Output_Cleansed;
+output view MET_VeryNegative_tofilterfilternegation;
+output view MET_VeryPositive_tofilterfilternegation;
+
+output view MET_Clues_IsPattern2WithAttrs;
+output view MET_Clues_Adj_Category;
+output view MET_Clues_Adj_Movie;	
+
+output view MET_MovieCategory_Output;	
+output view MET_NotMovieCategory_Output;	
+output view MET_AllSentiment_Filtered;
+output view MET_Sentiment_Output_Negative; */
+	
+output view Sentiment;

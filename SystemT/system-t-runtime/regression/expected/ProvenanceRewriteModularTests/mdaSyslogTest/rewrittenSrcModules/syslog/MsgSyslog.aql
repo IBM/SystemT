@@ -1,0 +1,48 @@
+module syslog;
+
+
+create view SyslogMsgExtended as
+  select  RightContext(D.annot_span, 1000) as msg_extent,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as SyslogProcessInterim_____sep_____D____id
+  from  SyslogProcessInterim D;
+
+output view SyslogMsgExtended;
+
+create view SyslogMsg as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    D.__auto__id as SyslogMsgExtended_____sep_____D____id,
+    regex /^\:([^\r\n]+)/
+    with flags 'DOTALL'
+    on D.msg_extent
+    return group 1 as match
+  from SyslogMsgExtended D;
+
+output view SyslogMsg;
+
+create view SyslogMsgInterim as
+  select  D.match as annot_span,
+          GetString(D.match) as annot_text,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as SyslogMsg_____sep_____D____id
+  from  SyslogMsg D;
+
+output view SyslogMsgInterim;
+
+create view MsgSyslogOutput as
+  select  D.annot_span as span,
+          D.annot_text as text,
+          GetString('MsgSyslog') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as SyslogMsgInterim_____sep_____D____id
+  from  SyslogMsgInterim D;
+
+output view MsgSyslogOutput;
+
+export view syslog.MsgSyslogOutput;
+
+

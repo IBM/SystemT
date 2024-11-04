@@ -1,0 +1,466 @@
+module genericModule;
+
+
+create view FirstTitle as
+  select  Op.title as title,
+          Op.origtitle as origtitle,
+          AutoID() as __auto__id
+  from  __Base__FirstTitle__Temp Op;
+
+output view FirstTitle;
+
+create view TitleHash as
+  select  HashCode(GetText(T.origtitle)) as titleHash,
+          T.origtitle as origtitle,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as FirstTitle_____sep_____T____id
+  from  FirstTitle T
+  where NotNull(T.origtitle);
+
+output view TitleHash;
+
+create view TitleSegWithDelimiter as
+  select  Op.title as title,
+          Op.elem as elem,
+          AutoID() as __auto__id
+  from  __Base__TitleSegWithDelimiter__Temp Op;
+
+output view TitleSegWithDelimiter;
+
+create view TitleSegNoDelimiter as
+  select  T.title as title,
+          Chomp(T.title) as elem,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as FirstTitle_____sep_____T____id
+  from  FirstTitle T
+  where Not(ContainsRegex(/\s*[\|—]\s*|\s*[-:]\s+/, T.title));
+
+output view TitleSegNoDelimiter;
+
+create view TitleSegStartsWithDelimiter as
+  select  T.title as title,
+          Chomp(T.title) as elem,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as FirstTitle_____sep_____T____id
+  from  FirstTitle T
+  where ContainsRegex(/\A\s*[\|—]\s*|\s*[-:]\s+/, T.title);
+
+output view TitleSegStartsWithDelimiter;
+
+create view TitleSeg as
+  select  __t2.title as title,
+          __t2.elem as elem,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__410__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__410__Temp__1 __t1,
+        __Consolidate__410__Temp__2 __t2
+  where Contains(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.title, __t2.elem;
+
+output view TitleSeg;
+
+create view TitleWithName as
+  select  Op.title as title,
+          Op.elem as elem,
+          AutoID() as __auto__id
+  from  __Base__TitleWithName__Temp Op;
+
+output view TitleWithName;
+
+create view TitleWithoutName as
+  select  Op.title as title,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__412__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__412__TempOp__1 Op,
+        __Minus__412__Temp __t
+  where Equals(Op.title, __t.title);
+
+output view TitleWithoutName;
+
+create view TitleAll as
+  (select  Op.title as title,
+            Op.elem as elem,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__413__TempOp__0 Op)
+  union all
+  (select  Op.title as title,
+            Op.elem as elem,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__413__TempOp__1 Op);
+
+output view TitleAll;
+
+create view TitleFinal as
+  select  S.title as content,
+          S.elem as name,
+          Remap(S.title) as content_remap,
+          Remap(S.elem) as name_remap,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as TitleAll_____sep_____S____id
+  from  TitleAll S;
+
+output view TitleFinal;
+
+create view Title as
+  select  GetText(T.content) as content_text,
+          GetBegin(T.content_remap) as content_begin,
+          GetEnd(T.content_remap) as content_end,
+          GetText(T.name) as name_text,
+          GetBegin(T.name_remap) as name_begin,
+          GetEnd(T.name_remap) as name_end,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as TitleFinal_____sep_____T____id
+  from  TitleFinal T;
+
+output view Title;
+
+create view FirstSegs as
+  select  T.elem as seg,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as TitleSeg_____sep_____T____id
+  from  TitleSeg T
+  order by T.elem
+  limit 2;
+
+output view FirstSegs;
+
+create view Seg1Raw as
+  select  S.seg as seg,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as FirstSegs_____sep_____S____id
+  from  FirstSegs S
+  order by S.seg
+  limit 1;
+
+output view Seg1Raw;
+
+create view Seg2 as
+  select  Op.seg as seg,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__414__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__414__TempOp__1 Op,
+        __Minus__414__Temp __t
+  where Equals(Op.seg, __t.seg);
+
+output view Seg2;
+
+create view Seg1StripPrefix as
+  select  Chomp(S.seg) as seg,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as __Subquery__415__Temp_____sep_____S____id
+  from  __Subquery__415__Temp S;
+
+output view Seg1StripPrefix;
+
+create view Seg1 as
+  (select  Op.seg as seg,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__416__TempOp__0 Op)
+  union all
+  (select  Op.seg as seg,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__416__TempOp__1 Op);
+
+output view Seg1;
+
+create view __Base__FirstTitle__Temp as
+  select  Chomp(A.match) as title,
+          A.match as origtitle,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          A.__auto__id as AllTitle_____sep_____A____id
+  from  AllTitle A
+  consolidate on A.match using 'RetainFirst';
+
+output view __Base__FirstTitle__Temp;
+
+create view __Base__TitleSegWithDelimiter__Temp as
+  extract E.title as title,
+    split using E.delim
+    on E.title as elem
+  from 
+(extract T.title as title,
+  regex /\s*[\|—]\s*|\s*[-:]\s+/
+  with flags 'DOTALL'
+  on T.title
+  return group 0 as delim
+from FirstTitle T
+) E;
+
+output view __Base__TitleSegWithDelimiter__Temp;
+
+create view __Base__TitleWithName__Temp as
+  select  S.title as title,
+          S.elem as elem,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as TitleSeg_____sep_____S____id
+  from  TitleSeg S
+  where Not(MatchesRegex(/\s*/, S.elem))
+     and Not(MatchesDict('homepage/skipTail.dict', S.elem))
+  consolidate on S.elem using 'RetainLast';
+
+output view __Base__TitleWithName__Temp;
+
+create view __Consolidate__407__Temp__1 as
+  select  Chomp(A.match) as title,
+          A.match as origtitle,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          A.__auto__id as AllTitle_____sep_____A____id,
+          A.match as __consolidate__target
+  from  AllTitle A;
+
+output view __Consolidate__407__Temp__1;
+
+create view __Consolidate__407__Temp__2 as
+  select  __t1.title as title,
+          __t1.origtitle as origtitle,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__407__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'RetainFirst';
+
+output view __Consolidate__407__Temp__2;
+
+create view __Consolidate__410__Temp__1 as
+  select  S.title as title,
+          S.elem as elem,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as __Subquery__409__Temp_____sep_____S____id,
+          S.elem as __consolidate__target
+  from  __Subquery__409__Temp S
+  where Not(Equals(GetLength(S.elem), 0));
+
+output view __Consolidate__410__Temp__1;
+
+create view __Consolidate__410__Temp__2 as
+  select  __t1.title as title,
+          __t1.elem as elem,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__410__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'NotContainedWithin';
+
+output view __Consolidate__410__Temp__2;
+
+create view __Consolidate__411__Temp__1 as
+  select  S.title as title,
+          S.elem as elem,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as TitleSeg_____sep_____S____id,
+          S.elem as __consolidate__target
+  from  TitleSeg S
+  where Not(MatchesRegex(/\s*/, S.elem))
+     and Not(MatchesDict('homepage/skipTail.dict', S.elem));
+
+output view __Consolidate__411__Temp__1;
+
+create view __Consolidate__411__Temp__2 as
+  select  __t1.title as title,
+          __t1.elem as elem,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__411__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'RetainLast';
+
+output view __Consolidate__411__Temp__2;
+
+create view __Minus__412__Temp as
+  select  __t.title as title
+  from  
+    ((select  Op.title as title
+      from  __Minus__412__TempOp__1 Op)
+    minus
+    (select  Op.title as title
+      from  __Minus__412__TempOp__2 Op)
+    ) __t
+  group by __t.title;
+
+output view __Minus__412__Temp;
+
+create view __Minus__412__TempOp__1 as
+  select  Chomp(T.title) as title,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as FirstTitle_____sep_____T____id
+  from  FirstTitle T;
+
+output view __Minus__412__TempOp__1;
+
+create view __Minus__412__TempOp__2 as
+  select  T.title as title,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as TitleWithName_____sep_____T____id
+  from  TitleWithName T;
+
+output view __Minus__412__TempOp__2;
+
+create view __Minus__414__Temp as
+  select  __t.seg as seg
+  from  
+    ((select  Op.seg as seg
+      from  __Minus__414__TempOp__1 Op)
+    minus
+    (select  Op.seg as seg
+      from  __Minus__414__TempOp__2 Op)
+    ) __t
+  group by __t.seg;
+
+output view __Minus__414__Temp;
+
+create view __Minus__414__TempOp__1 as
+  select  FirstSegs.seg as seg,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          FirstSegs.__auto__id as FirstSegs_____sep_____FirstSegs____id
+  from  FirstSegs FirstSegs;
+
+output view __Minus__414__TempOp__1;
+
+create view __Minus__414__TempOp__2 as
+  select  Seg1Raw.seg as seg,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          Seg1Raw.__auto__id as Seg1Raw_____sep_____Seg1Raw____id
+  from  Seg1Raw Seg1Raw;
+
+output view __Minus__414__TempOp__2;
+
+create view __Subquery__409__Temp as
+  (select  Op.title as title,
+            Op.elem as elem,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__408__TempOp__0 Op)
+  union all
+  (select  Op.title as title,
+            Op.elem as elem,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__408__TempOp__1 Op)
+  union all
+  (select  Op.title as title,
+            Op.elem as elem,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__408__TempOp__2 Op);
+
+output view __Subquery__409__Temp;
+
+create view __Subquery__415__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    S.__auto__id as Seg1Raw_____sep_____S____id,
+    regex /\A(IBM)?(.*)/
+    with flags 'DOTALL'
+    on S.seg
+    return group 2 as seg
+  from Seg1Raw S;
+
+output view __Subquery__415__Temp;
+
+create view __Subquery__417__Temp as
+  extract S.seg as seg,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    S.__auto__id as Seg1StripPrefix_____sep_____S____id,
+    regex /[Ii]ntranet\Z/
+    with flags 'DOTALL'
+    on S.seg
+    return group 0 as delim
+  from Seg1StripPrefix S;
+
+output view __Subquery__417__Temp;
+
+create view __Union__408__TempOp__0 as
+  select  S.title as title,
+          Chomp(S.elem) as elem,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as TitleSegWithDelimiter_____sep_____S____id
+  from  TitleSegWithDelimiter S;
+
+output view __Union__408__TempOp__0;
+
+create view __Union__408__TempOp__1 as
+  select  S.title as title,
+          Chomp(S.elem) as elem,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as TitleSegNoDelimiter_____sep_____S____id
+  from  TitleSegNoDelimiter S;
+
+output view __Union__408__TempOp__1;
+
+create view __Union__408__TempOp__2 as
+  select  S.title as title,
+          Chomp(S.elem) as elem,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as TitleSegStartsWithDelimiter_____sep_____S____id
+  from  TitleSegStartsWithDelimiter S;
+
+output view __Union__408__TempOp__2;
+
+create view __Union__413__TempOp__0 as
+  select  T.title as title,
+          T.elem as elem,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as TitleWithName_____sep_____T____id
+  from  TitleWithName T;
+
+output view __Union__413__TempOp__0;
+
+create view __Union__413__TempOp__1 as
+  select  T.title as title,
+          RightContext(T.title, 0) as elem,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as TitleWithoutName_____sep_____T____id
+  from  TitleWithoutName T;
+
+output view __Union__413__TempOp__1;
+
+create view __Union__416__TempOp__0 as
+  select  S.seg as seg,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as Seg1StripPrefix_____sep_____S____id
+  from  Seg1StripPrefix S
+  where Not(ContainsRegex(/[Ii]ntranet\Z/, S.seg));
+
+output view __Union__416__TempOp__0;
+
+create view __Union__416__TempOp__1 as
+  select  Chomp(SpanIntersection(LeftContext(S.delim, 200), S.seg)) as seg,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as __Subquery__417__Temp_____sep_____S____id
+  from  __Subquery__417__Temp S;
+
+output view __Union__416__TempOp__1;
+

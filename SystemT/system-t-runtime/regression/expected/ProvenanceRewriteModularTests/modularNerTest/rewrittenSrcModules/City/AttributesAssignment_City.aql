@@ -1,0 +1,151 @@
+module City;
+
+
+import view County_ from module County as County_
+;
+
+
+import view AddressFinal from module Address as AddressFinal
+;
+
+
+create view CityCounty as
+  select  CC.match as city,
+          C.county as county,
+          C.stateorprovince as stateorprovince,
+          C.country as country,
+          C.continent as continent,
+          CombineSpans(CC.match, C.reference) as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CC.__auto__id as CityConsolidatedValid_____sep_____CC____id,
+          C.__auto__id as County______sep_____C____id
+  from  CityConsolidatedValid CC,
+        County_ C
+  where FollowsTok(CC.match, C.county, 0, 1)
+     and MatchesRegex(/\s*[,]?\s*/, SpanBetween(CC.match, C.county))
+     and Not(ContainsRegex(/[\n\r]/, SpanBetween(CC.match, C.county)));
+
+output view CityCounty;
+
+create view CityCandidates as
+  (select  Op.city as city,
+            Op.county as county,
+            Op.stateorprovince as stateorprovince,
+            Op.country as country,
+            Op.continent as continent,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__384__TempOp__0 Op)
+  union all
+  (select  Op.city as city,
+            Op.county as county,
+            Op.stateorprovince as stateorprovince,
+            Op.country as country,
+            Op.continent as continent,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__384__TempOp__1 Op)
+  union all
+  (select  Op.city as city,
+            Op.county as county,
+            Op.stateorprovince as stateorprovince,
+            Op.country as country,
+            Op.continent as continent,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__384__TempOp__2 Op);
+
+output view CityCandidates;
+
+create view City_ as
+  select  __t2.city as city,
+          __t2.stateorprovince as stateorprovince,
+          __t2.country as country,
+          __t2.continent as continent,
+          __t2.reference as reference,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__385__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__385__Temp__1 __t1,
+        __Consolidate__385__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.city, __t2.stateorprovince, __t2.country, __t2.continent, __t2.reference;
+
+output view City_;
+
+create view __Consolidate__385__Temp__1 as
+  select  C.city as city,
+          C.stateorprovince as stateorprovince,
+          C.country as country,
+          C.continent as continent,
+          C.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CityCandidates_____sep_____C____id,
+          C.reference as __consolidate__target
+  from  CityCandidates C;
+
+output view __Consolidate__385__Temp__1;
+
+create view __Consolidate__385__Temp__2 as
+  select  __t1.city as city,
+          __t1.stateorprovince as stateorprovince,
+          __t1.country as country,
+          __t1.continent as continent,
+          __t1.reference as reference,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__385__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__385__Temp__2;
+
+create view __Union__384__TempOp__0 as
+  select  C.city as city,
+          '' as county,
+          C.state as stateorprovince,
+          C.country as country,
+          C.continent as continent,
+          C.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CityStateCountryValid_____sep_____C____id
+  from  CityStateCountryValid C
+  where Equals(GetText(C.subtype), 'city');
+
+output view __Union__384__TempOp__0;
+
+create view __Union__384__TempOp__1 as
+  select  A.city as city,
+          '' as county,
+          A.stateorprovince as stateorprovince,
+          '' as country,
+          '' as continent,
+          A.city as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          A.__auto__id as AddressFinal_____sep_____A____id
+  from  AddressFinal A;
+
+output view __Union__384__TempOp__1;
+
+create view __Union__384__TempOp__2 as
+  select  C.city as city,
+          C.county as county,
+          C.stateorprovince as stateorprovince,
+          C.country as country,
+          C.continent as continent,
+          C.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CityCounty_____sep_____C____id
+  from  CityCounty C;
+
+output view __Union__384__TempOp__2;
+

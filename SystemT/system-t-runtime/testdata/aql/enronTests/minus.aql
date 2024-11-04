@@ -1,0 +1,167 @@
+require document with columns text Text;
+
+
+/*
+ * minus.aql
+ * A test of set-difference support in AQL.  Based on time.aql.
+ */ 
+
+create view Sent as
+extract 
+    split using B.boundary 
+        retain right split point
+        on B.text
+        as sentence
+from (
+    extract 
+        D.text as text,
+        regex /(?:(?:[\;\.\?!]+\s)|(\n\s*\n))/ on D.text as boundary 
+        from Document D
+    having Not(ContainsDict('dictionaries/abbreviations.dict', 
+    CombineSpans(LeftContextTok(boundary, 1), boundary)))
+) B;
+
+
+-------------------------------------------------------------------------------
+-- Dictionaries and regular expressions.
+-- Used by the rules below as building blocks.
+
+-- TWODIGITSINTERVAL: Regex for an interval like "10-11"
+-- Original spec: 
+-- <definition name=TWODIGITSINTERVAL>((0)|(1)|(2)|(3))?[\d][\-]((0)|(1)|(2)|(3))?[\d]</definition>
+create view TWODIGITSINTERVAL as
+select R.match as annot
+from Regex(/((0)|(1)|(2)|(3))?[\d][\-]((0)|(1)|(2)|(3))?[\d]/, Document.text) R;
+
+
+-- PRD_WKDAY: A dictionary of terms for days of the week
+create dictionary Weekdays as
+( 
+	'monday', 'mon', 'tuesday', 'tue', 'tues', 'wednesday', 'wed',
+        'thursday',
+ 	'thu', 'thur', 'thurs', 'friday', 'fri', 'saturday', 'sat', 'sunday',
+        'sun'
+);
+
+-- Create a separate view, since this dictionary is used twice.
+create view PRD_WKDAY as
+select D.match as annot
+from Dictionary('Weekdays', Document.text) D;
+
+-- TIMEZONE: A dictionary of timezones like "pst" and terms like "a.m."
+create dictionary TimeZone as
+(
+	'a.m.', 'p.m.', 'a.m', 'p.m', 'am', 'pm', 'GMT', 'gmt', 'G.M.T',
+        'g.m.t',
+	'G.M.T.', 'g.m.t.'
+);
+
+
+-------------------------------------------------------------------------------
+-- RULE 1: Handles time intervals such as  10-11 Sat
+-- 
+-- Original rule:
+-- <rule annotation=Time id=1>
+-- <internal>
+-- <token attribute={etc}>TWODIGITSINTERVAL</token>
+-- <token attribute={etc}PRD:WKDAY{etc}>ANYWORD</token>
+-- </internal>
+-- </rule>
+create view Time1 as
+select 
+	CombineSpans(tdi.annot, wkday.annot) as annot
+from TWODIGITSINTERVAL tdi, PRD_WKDAY wkday, Sent S
+where 
+	FollowsTok(tdi.annot, wkday.annot, 0, 0)
+	and Contains(S.sentence, tdi.annot)
+	and Contains(S.sentence, wkday.annot);
+	
+-------------------------------------------------------------------------------
+-- RULE 2: Handles time intervals such as  Sat 10-11
+--
+-- Original rule:
+-- <rule annotation=Time id=2>
+-- <internal>
+-- <token attribute={etc}PRD:WKDAY{etc}>ANYWORD</token>
+-- <token attribute={etc}>TWODIGITSINTERVAL</token>
+-- </internal>
+-- </rule>
+create view Time2 as
+select 
+	CombineSpans(wkday.annot, tdi.annot) as annot
+from TWODIGITSINTERVAL tdi, PRD_WKDAY wkday,  Sent S
+where 
+	FollowsTok(wkday.annot, tdi.annot, 0, 0)
+	and Contains(S.sentence, tdi.annot)
+	and Contains(S.sentence, wkday.annot);
+
+-------------------------------------------------------------------------------
+-- RULE 3: Handles times according to a watch: 9:00 A.M, 9 AM, 9:00 PM
+-- 
+-- Original rule:
+-- <rule annotation=Time id=3>
+-- <internal>
+-- <token attribute={etc}>[0-9\\:\\.]+</token>
+-- <token attribute={etc}TIMEZONE{etc}>ANYWORD</token>
+-- </internal>
+-- </rule>
+create view Time3 as
+select 
+	CombineSpans(num.match, tz.match) as annot
+from 
+	-- Note that we are evaluating a dictionary and regular expression
+	-- inline here, instead of creating a separate view
+	Regex(/[0-9\:\.]+/, Document.text) num,
+	Dictionary('TimeZone', Document.text) tz,
+	Sent S
+where 
+	FollowsTok(num.match, tz.match, 0, 0)
+	and Contains(S.sentence, num.match)
+	and Contains(S.sentence, tz.match);
+
+
+-------------------------------------------------------------------------------
+-- RULE 4: Handles times of the form: 9:00 
+--
+-- Original rule:
+-- <rule annotation=Time id=4>
+-- <internal>
+-- <token attribute={etc}>\d{1,2}\\:\d{2}(\\:\d{2})?</token>
+-- </internal>
+-- </rule>
+create view Time4 as
+select R.match as annot
+from Regex(/\d{1,2}\:\d{2}(\:\d{2})?/, Document.text) R,
+	Sent S
+where 
+	-- Ignore regex matches that straddle sentence boundaries.
+	Contains(S.sentence, R.match);
+
+
+-------------------------------------------------------------------------------
+-- Consolidate to remove overlap.
+create view TimeAll as
+	(select T1.annot as annot from Time1 T1)
+	union all
+	(select T2.annot as annot from Time2 T2)
+	union all
+	(select T3.annot as annot from Time3 T3)
+	union all
+	(select T4.annot as annot from Time4 T4);
+
+
+/*
+ * Here's where things change: Instead of outputing the Time annotations, we
+ * filter out the matches of rule 3.
+ *
+ * We also use the two-argument version of Consolidate().
+ */
+create view TimeMinus as
+(select C.annot as annot from TimeAll C
+ consolidate on C.annot using 'ContainedWithin')
+minus
+(select T3.annot as annot from Time3 T3);
+
+select TM.annot as annot
+into Time_NoR3
+from TimeMinus TM;

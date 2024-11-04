@@ -1,0 +1,159 @@
+
+-- create individual locations based on the definition of the standard datasets (i.e. do not merge "state, country" etc)
+-- Yunyao: updated on 01/18/2010 to avoid passing through empty annotations
+create view LocationAll as
+	(select A.address as loc from MapLocation_ A where Not(MatchesRegex(//, A.address)))
+	union all
+	(select C.city as loc from MapLocation_ C where MatchesRegex(/.*\p{Lu}\p{M}*.+/, C.city))
+	union all
+	(select C.county as loc from MapLocation_ C where MatchesRegex(/.+/, C.county))
+	 union all
+	(select C.stateorprovince as loc from MapLocation_ C where Not(MatchesRegex(//, C.stateorprovince)))
+	union all
+	(select C.country as loc from MapLocation_ C where Not(MatchesRegex(//, C.country)))
+	 union all
+	(select C.continent as loc from MapLocation_ C where Not(MatchesRegex(//, C.continent)))
+	union all
+	(select C.match as loc from RegionValid  C where Not(MatchesRegex(//, C.match)))
+	union all
+	(select C.facility as loc from Facility C where Not(MatchesRegex(//, C.facility)))
+	union all
+	(select W.match as loc from WaterBody  W)
+	union all
+	(select L.* from PatternBasedLocation L where Not(ContainsRegex(/\n\n/,L.loc)));
+	
+create view LocationConsolidated as
+select C.loc as loc
+from LocationAll C
+consolidate on C.loc
+using 'LeftToRight';
+
+-- Possible customization from CoNLL'03
+--create view WrongLocationClueLeft as
+--create view WrongLocationClueRight as
+-- create view WrongLocation1 as
+-- create view WrongLocation2 as
+
+create view WrongLocation4 as
+select L.loc as loc
+from OrganizationConsolidated O,
+     LocationConsolidated L
+where Contains(O.organization, L.loc);
+
+create view WrongLocation6 as
+select L.match as loc
+from CapsPlaceOnetoTwo L,
+     The T,
+     CapsPlace C
+where FollowsTok(T.match, L.match, 0, 0)
+  and FollowsTok(L.match, C.match, 0, 0);
+  
+create view WrongLocationLeftClue as
+extract dictionaries
+	--'location/clues/wrongLocation_clue_left.dict'
+	'location/clues/loc_negClue_ctxtLeft_mixed.dict'
+	--and 'misc/strong_position.dict'
+	and 'misc/role_imp_org_en.dict'
+	on D.text
+	as clue
+from Doc D;
+
+create view WrongLocation7 as
+select L.loc as loc
+from WrongLocationLeftClue LC,
+     LocationConsolidated L
+where FollowsTok(LC.clue, L.loc, 0, 0);
+
+create view WrongLocationRightClue as
+extract dictionaries
+	--'location/clues/wrongLocation_clue_right.dict'
+	'location/clues/loc_negClue_ctxtRight_mixed.dict'
+	on D.text
+	as clue
+from Doc D;
+
+create view WrongLocation8 as
+select L.*
+from WrongLocationRightClue RC,
+     LocationConsolidated L
+where FollowsTok(L.loc, RC.clue, 0, 0);  
+
+include 'WrongLocation-union.aql';
+------------------------------------------------------------
+-- Additional customization - extend with "City" and "State" 
+------------------------------------------------------------
+-- Sudarshan regex : added 10/12/2011 : line 90 - changed [A-Z] to \p{Lu}\p{M}*
+create view CityExtended as	
+select CombineSpans(C.loc, CR.match) as loc
+from
+	LocationConsolidated C, 
+	CityRightClue CR
+where FollowsTok(C.loc, CR.match, 0, 0)
+  -- and MatchesRegex(/[A-Z].*/, CR.match);
+  and MatchesRegex(/\p{Lu}\p{M}*.*/, CR.match);
+
+
+create view LocationExtendedtoRight as	
+select CombineSpans(C.loc, S.match) as loc
+from
+	LocationConsolidated C, 
+	RightMergeableContext S
+where FollowsTok(C.loc, S.match, 0, 0)
+  and Not(ContainsRegex(/[\n\r\t]/, SpanBetween(C.loc, S.match)));
+
+
+create view LocationExtendedtoLeft as	
+select CombineSpans(S.clue, C.loc) as loc
+from
+	LocationConsolidated C, 
+	LeftMergeableContext S
+where FollowsTok(S.clue, C.loc, 0, 0)
+  and Not(ContainsRegex(/[\n\r\t]/, SpanBetween(S.clue, C.loc)));
+
+-- ToDo: merge two locations next to each other with only white space (as opposed to "-")
+--create view CombinedLocation as
+--select CombineSpans(C1.loc, C2.loc) as loc
+--from   LocationConsolidated C1,
+--       LocationConsolidated C2
+--where  FollowsTok(C1.loc, C2.loc, 0, 1)
+--  and  MatchesRegex(/\s*[\-]?\s*/, SpanBetween(C1.loc, C2.loc))
+--  and  Not(ContainsRegex(/[\r\n\t]/, SpanBetween(C1.loc, C2.loc))); 
+
+create view LocationExtended as
+	(select C.loc as loc from LocationConsolidated C)
+	union all
+	(select C.loc as loc from CityExtended C)
+	union all
+	(select C.loc as loc from LocationExtendedtoRight C)
+	union all
+	(select C.loc as loc from LocationExtendedtoLeft C)
+	union all
+	(select T.match as loc from TownConsolidated T);
+
+create view LocationExtendedConsolidated as
+select L.loc as loc
+from LocationExtended L
+consolidate on L.loc; 
+
+create view LocationExtendedValidAll as
+	(select C.* from LocationExtendedConsolidated C)
+	minus
+	(select C.* from WrongLocation C);
+
+-- Sudarshan regex : added 10/12/2011 : lines 148 and 150 - extended regex to match \p{Lu}\p{M}* from just \p{Lu} 
+create view LocationTokenCandidates as
+select CW.match as loc
+from (select L.loc as loc, toUpperCase(L.loc) as normLoc from LocationExtendedValidAll L) L,
+     (select CW.match as match, toUpperCase(CW.match) as normMatch from CapsPlaceOnetoTwo CW) CW
+where
+	Equals(GetText(L.normLoc), GetText(CW.normMatch))
+  --and Not(MatchesRegex(/\s*\p{Lu}.*/,RightContextTok(CW.match,1)))
+  and Not(MatchesRegex(/\s*\p{Lu}\p{M}*.*/,RightContextTok(CW.match,1)))
+  --and Not(MatchesRegex(/\p{Lu}.*\s*/,LeftContextTok(CW.match,1)))
+  and Not(MatchesRegex(/\p{Lu}\p{M}*.*\s*/,LeftContextTok(CW.match,1)))
+  and Not(MatchesRegex(/\.\s+In/,CombineSpans(LeftContextTok(CW.match,1),CW.match)));
+
+create view LocationTokenCandidatesConsolidated as
+select L.loc as loc
+from LocationTokenCandidates L
+consolidate on L.loc;

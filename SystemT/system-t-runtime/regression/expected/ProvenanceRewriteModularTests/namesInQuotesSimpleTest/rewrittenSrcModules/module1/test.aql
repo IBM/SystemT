@@ -1,0 +1,77 @@
+module module1;
+
+
+create view MyView as
+  select  D.text as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as Document_____sep_____D____id
+  from  Document D;
+
+output view MyView;
+
+export view module1.MyView;
+
+
+create view "view" as
+  select  D.text as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as Document_____sep_____D____id
+  from  Document D;
+
+output view "view";
+
+export view "module1.view";
+
+
+create dictionary "dictionary"
+with case insensitive
+as (
+  'view',
+  'table'
+);
+
+
+create view DictMatchView as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'dictionary'
+    on D.text as match
+  from Document D;
+
+output view DictMatchView;
+
+
+
+create table "table"
+  ("view" Text, "dictionary" Text) as
+  values
+    ('PersonView', 'person.dict'),
+    ('CityView', 'cities.dict'),
+    ('function', 'as');
+
+create view TableView as
+  select  "table"."view" as "view",
+          "table"."dictionary" as "dictionary",
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as table_____sep_____table____id
+  from  "table" "table";
+
+output view TableView;
+
+
+
+create view "$PhoneNumber" as
+  select  D.text as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as Document_____sep_____D____id
+  from  Document D;
+
+output view "$PhoneNumber";
+
+
+

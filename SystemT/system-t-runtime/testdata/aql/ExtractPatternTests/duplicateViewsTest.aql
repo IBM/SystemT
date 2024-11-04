@@ -1,0 +1,49 @@
+
+create view Time4 as
+select 
+	R.match as match
+from 
+	Regex(/((2[0-3]|[0-1][0-9]|[0-9]):([0-5][0-9])(:\d{2}((\.|,|:)\d{3})*)?)/, Document.text) R;
+
+create dictionary TimeZoneDict as(
+'PST', 'EST'
+);
+
+create view TimeZone as
+	select
+		D.match as match
+	from
+		Dictionary('TimeZoneDict', Document.text) D;
+
+
+-- NEW REPLACEMENT RULES:
+
+-- The rule Time4Follows3 above contains a mystery regex, 
+-- /(\s|\)|\s)?([+-](?:2[0-3]|[01]?[0-9])(?::?(?:[0-5]?[0-9])))?\s?([0-9]{4})*\)?/.
+-- The author of this regex didn't document what it is supposed to match,
+-- so I'm just copying it verbatim (in pieces) and hoping for the best.
+-- TODO: FIGURE OUT WHAT THIS REGEX IS SUPPOSED TO DO, document it properly,
+--       and make sure that it actually does what it's supposed to do.
+create view MysteryRegex_part1 as
+extract regex /([+-](?:2[0-3]|[01]?[0-9])(?::?(?:[0-5]?[0-9])))/
+	on D.text as match
+from Document D;
+
+create view MysteryRegex_part2 as
+extract regex /([0-9]{4})+/
+	on D.text as match
+from Document D; 
+
+-- TODO: This rule currently has a lot of "?"'s in it, because I 
+-- duplicated the semantics of the original mystery regex.  Try
+-- and rewrite this rule without so many optional parts.
+create view Time4Follows3 as
+extract pattern <T.match> '('? <TZ.match> ')'? <M1.match>? <M2.match>?
+	return group 0 as match
+from Time4 T, TimeZone TZ, MysteryRegex_part1 M1, MysteryRegex_part2 M2
+consolidate on match;
+
+-- END CHANGE BY FRED
+
+
+output view Time4Follows3; 

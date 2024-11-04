@@ -1,0 +1,274 @@
+ 
+ create dictionary TitlesDict as
+(
+	"rev.", "col.", "reverend", "prof.", "professor.", 
+	"lady", "miss.", "mrs.", "mrs", "mr.", "pt.", "ms.",
+	"messrs.", "dr.", "master.", "marquis", "monsieur",
+	"ds", "junior", "di", "Dear", "Name:"
+);
+ 
+ 
+ create dictionary FilterPersonDict as
+(
+	"Travel", "Fellow", "Sir", "IBMer", "Researcher", "All",
+	"Friends", "Friend", "Colleague", "Colleagues", "Managers",
+	"Customer", "Users", "User", "Valued", "Executive", "Chairs",
+	"New", "Owner", "Conference", "Please", "Outlook", "Lotus", "Notes"
+);
+ 
+create view sentence as
+extract 
+    split using B.boundary 
+        retain right split point
+        on B.text
+        as sentence
+from (
+    extract 
+        D.text as text,
+        regex /(?:(?:[\;\.\?!]+\s)|(\n\s*\n))/ on D.text as boundary 
+        from Document D
+    having Not(ContainsDict('dictionaries/abbreviations.dict', 
+    CombineSpans(LeftContextTok(boundary, 1), boundary)))
+) B;
+ 
+ create view CapsPerson as
+	select
+		R.match as name
+	from
+		Regex(/\b\p{Upper}\p{Lower}[\p{Alpha}]{1,20}\b/, DocScan.text) R;
+	 
+  create view TitleAll as
+	select
+		D.match as initial
+	from
+		Dictionary("TitlesDict", DocScan.text) D;
+	
+  create view Title as
+	select T.initial as initial
+	from Consolidate(TitleAll.initial) T;
+
+ create view StrictFirstName as
+	select
+		D.match as name
+	from
+		Dictionary("dictionaries/strictfirstsekar.dict", DocScan.text) D;
+	
+ create view StrictFirstNameCapsWord as 
+ 	select SFN.name as name 
+ 	from StrictFirstName SFN	
+	where 
+		MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{1,20}/, SFN.name);		
+ 
+ 
+ create view StrictLastName as
+	select
+		D.match as name
+	from
+		Dictionary("dictionaries/strictlastsekar.dict", DocScan.text) D;
+	
+ create view StrictLastNameCapsWord as 
+ 	select SLN.name as name 
+ 	from StrictLastName SLN	
+	where 
+		MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{1,20}/, SLN.name);		
+ 
+ create view AllName as
+	select
+		D.match as name
+	from
+		Dictionary("dictionaries/namessekar.dict", DocScan.text) D;
+	
+ create view AllNameCapsWord as 
+ 	select AN.name as name 
+ 	from AllName AN	
+	where 
+		MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{1,20}/, AN.name);		
+ 
+ create view Initials as
+	select
+		R.match as initials
+	from
+		Regex(/\b([\p{Upper}\s*]\.\s*){1,5}/, DocScan.text) R;
+ 
+ create view TitleCp as
+	select
+ 		cp.name as person
+	from
+		Title title,
+		CapsPerson cp
+ 	where
+		FollowsTok(title.initial, cp.name, 0, 0);
+	 
+  create view TCpICp as
+	select
+ 		CombineSpans(tCp.person, last.name) as person
+	from
+		TitleCp tCp,
+		Initials I,
+		CapsPerson last
+ 	where
+		FollowsTok(tCp.person, I.initials, 0, 0) and
+	 	FollowsTok(I.initials, last.name, 0, 0);
+ 
+  create view TCpCp as
+	select
+ 		CombineSpans(tCp.person, last.name) as person
+	from
+		TitleCp tCp,
+ 		CapsPerson last
+ 	where
+		FollowsTok(tCp.person,last.name, 0, 0);
+    
+   create view TCpCpCp as
+	select
+ 		CombineSpans(tCpCp.person, last.name) as person
+	from
+		TCpCp tCpCp,
+ 		CapsPerson last
+ 	where
+		FollowsTok(tCpCp.person,last.name, 0, 0);
+		
+	create view AncwIAncw as
+	select
+ 		CombineSpans(Ancw.name, Ancw1.name) as person
+	from
+		AllNameCapsWord Ancw,
+ 		Initials I,
+		AllNameCapsWord Ancw1
+ 	where
+		FollowsTok(Ancw.name,I.initials, 0, 0) and
+		FollowsTok(I.initials, Ancw1.name,0, 0);
+		
+	create view SfncwICp as
+	select
+ 		CombineSpans(Sfncw.name, cp.name) as person
+	from
+		StrictFirstNameCapsWord Sfncw,
+ 		Initials I,
+		CapsPerson cp
+ 	where
+		FollowsTok(Sfncw.name,I.initials, 0, 0) and
+		FollowsTok(I.initials, cp.name,0, 0);
+		
+	create view CpISlncw as
+	select
+ 		CombineSpans(cp.name, Slncw.name) as person
+	from
+		CapsPerson cp,
+ 		Initials I,
+		StrictLastNameCapsWord Slncw 
+ 	where
+		FollowsTok(cp.name,I.initials, 0, 0) and
+		FollowsTok(I.initials, Slncw.name,0, 0);
+		
+	create view IAncpCp as
+	select
+ 		CombineSpans(I.initials, cp.name) as person
+	from
+		Initials I,
+		AllNameCapsWord ancp,
+		CapsPerson cp
+ 	where
+		FollowsTok(I.initials, ancp.name,0, 0) and
+		FollowsTok(ancp.name,cp.name,0, 0);
+		
+	create view ICpAncp as
+	select
+ 		CombineSpans(I.initials, ancp.name) as person
+	from
+		Initials I,
+		CapsPerson cp,
+		AllNameCapsWord ancp
+ 	where
+		FollowsTok(I.initials, cp.name,0, 0) and
+		FollowsTok(cp.name,ancp.name,0, 0);
+		
+	create view SfncpCp as
+	select
+ 		CombineSpans(Sfncp.name, cp.name) as person
+	from
+ 		StrictFirstNameCapsWord Sfncp,
+ 		CapsPerson cp
+	where
+		FollowsTok(Sfncp.name, cp.name,0, 0) ;
+		
+	create view CpSlncp as
+	select
+ 		CombineSpans(cp.name, Slncp.name) as person
+	from
+		CapsPerson cp,
+ 		StrictLastNameCapsWord Slncp 
+	where
+		FollowsTok(cp.name,Slncp.name,0, 0) ;
+			
+	create view SlncpCSfncp as
+	select
+ 		CombineSpans(Slncp.name, Sfncp.name) as person
+	from
+ 		StrictLastNameCapsWord Slncp,
+ 		StrictFirstNameCapsWord Sfncp 
+	where
+		FollowsTok(Slncp.name,Sfncp.name,0, 1) and
+		ContainsRegex(/^\s*,\s*$/, SpanBetween(Slncp.name, Sfncp.name));
+ 
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Aggregation/Consolidation section <<<<<<<<<<<<<<<<
+-- ===========================================================================
+
+-- Merge all the different rules.
+create view PersonAll
+as
+	(select SFNCW.name as person from StrictFirstNameCapsWord SFNCW)
+union all 
+	 (select LNCW.name as person from StrictLastNameCapsWord LNCW)
+union all 
+	 (select R.person as person from TCpICp R)
+union all 
+	 (select tCp.person as person from TitleCp tCp)
+union all 
+	 (select tCpCp.person as person from TCpCp tCpCp)
+union all 
+	 (select tCpCpCp.person as person from TCpCpCp tCpCpCp)
+union all 
+	 (select R.person as person from AncwIAncw R)
+union all 
+	 (select R.person as person from SfncwICp R)
+union all 
+	 (select R.person as person from CpISlncw R)
+union all 
+	 (select R.person as person from IAncpCp R)
+union all 
+	 (select R.person as person from ICpAncp R)
+union all 
+	 (select R.person as person from SfncpCp R)
+union all 
+	 (select R.person as person from CpSlncp R)
+union all 
+	 (select R.person as person from SlncpCSfncp R);
+ 
+-- ------------------------------------------
+-- Consolidation:
+-- For now, we just remove annotations that are completely
+-- contained within other annotations.
+
+create view PersonSentence as
+	select PA.person	as person	 
+	from
+		sentence S, PersonAll PA
+	where
+		Contains(S.sentence, PA.person) and
+		Not(ContainsDict("FilterPersonDict", PA.person));
+				 
+
+create view PersonConsolidated as
+select C.person as person
+from Consolidate(PersonSentence.person) C;
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Output section <<<<<<<<<<<<<<<<
+-- ===========================================================================		
+-- Output
+select P.person as person
+into Person
+from PersonConsolidated P;
+

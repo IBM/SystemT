@@ -1,0 +1,50 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- topKTest.aql
+--
+-- Test case for the FETCH FIRST k ROWS ONLY clause
+
+-- Declare a dictionary of first names.
+create dictionary FirstNameDict
+from file 'dictionaries/first.dict'
+with language as 'en';
+
+
+-- Find the first first name in the document.
+create view FirstFirstName as
+extract dictionary FirstNameDict on D.text as name
+from Document D
+limit 1;
+
+
+
+create view FirstName as
+extract dictionary FirstNameDict on D.text as name
+from Document D;
+
+
+-- Find the first 2 first names in the document.
+create view FirstTwoNames as
+select *
+from FirstName F
+order by F.name
+limit 2; 
+
+-- Find the top 3 first names, in alphabetical order
+create view FirstNamesAlpha as
+select *
+from FirstName F
+order by GetText(F.name);
+
+create view First3NamesAlpha as
+select * from FirstNamesAlpha F
+limit 3;
+
+
+output view FirstFirstName;
+output view FirstName;
+output view FirstTwoNames;
+output view FirstNamesAlpha;
+output view First3NamesAlpha;
+

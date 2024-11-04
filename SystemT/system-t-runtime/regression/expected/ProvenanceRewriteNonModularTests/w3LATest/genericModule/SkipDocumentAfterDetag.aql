@@ -1,0 +1,212 @@
+module genericModule;
+
+
+create view SkipDocumentMissingContentAfterDetag as
+  select  'Missing Content : After Detagging' as reason,
+          B.match as content,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as BodyTag_____sep_____B____id
+  from  BodyTag B
+  where GreaterThan(100, GetLengthTok(B.match));
+
+output view SkipDocumentMissingContentAfterDetag;
+
+create view SkipDocumentMissingContentBeforeDetag as
+  select  Op.reason as reason,
+          Op.content as content,
+          AutoID() as __auto__id
+  from  __Base__SkipDocumentMissingContentBeforeDetag__Temp Op;
+
+output view SkipDocumentMissingContentBeforeDetag;
+
+create view SkipDocumentNoTitle as
+  select  Op.reason as reason,
+          Op.content as content,
+          AutoID() as __auto__id
+  from  __Base__SkipDocumentNoTitle__Temp Op;
+
+output view SkipDocumentNoTitle;
+
+create view OutboundLinks as
+  select  Op.detaggedAnchorTextSpan as detaggedAnchorTextSpan,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__390__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__390__TempOp__1 Op,
+        __Minus__390__Temp __t
+  where Equals(Op.detaggedAnchorTextSpan, __t.detaggedAnchorTextSpan);
+
+output view OutboundLinks;
+
+create view SkipDocumentNoOutboundLinks as
+  select  Op.reason as reason,
+          Op.content as content,
+          AutoID() as __auto__id
+  from  __Base__SkipDocumentNoOutboundLinks__Temp Op;
+
+output view SkipDocumentNoOutboundLinks;
+
+create view SkipDocument as
+  (select  Op.reason as reason,
+            Op.content as content,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__391__TempOp__0 Op)
+  union all
+  (select  Op.reason as reason,
+            Op.content as content,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__391__TempOp__1 Op)
+  union all
+  (select  Op.reason as reason,
+            Op.content as content,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__391__TempOp__2 Op)
+  union all
+  (select  Op.reason as reason,
+            Op.content as content,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__391__TempOp__3 Op)
+  union all
+  (select  Op.reason as reason,
+            Op.content as content,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__391__TempOp__4 Op);
+
+output view SkipDocument;
+
+create view __Base__SkipDocumentMissingContentBeforeDetag__Temp as
+  select  'Missing Content : Before Detagging' as reason,
+          D.content as content
+  from  
+    ((select  Remap(B.match) as content
+      from  BodyTag B
+      where GreaterThan(450, GetLength(Remap(B.match))))
+    union all
+    (select  '' as content
+      from  
+        (select  Count(*) as cnt
+        from  BodyTag BodyTag
+        ) B
+      where Equals(B.cnt, 0))
+    ) D;
+
+output view __Base__SkipDocumentMissingContentBeforeDetag__Temp;
+
+create view __Base__SkipDocumentNoOutboundLinks__Temp as
+  select  'No outbound link' as reason,
+          '' as content
+  from  DocumentAfterSkip D,
+
+        (select  Count(*) as cnt
+        from  OutboundLinks OutboundLinks
+        ) C
+  where Not(Equals(GetText(D.text), ''))
+     and Equals(C.cnt, 0);
+
+output view __Base__SkipDocumentNoOutboundLinks__Temp;
+
+create view __Base__SkipDocumentNoTitle__Temp as
+  select  'HashTitlePath: no Title' as reason,
+          'no title' as content
+  from  Document D,
+
+        (select  Count(*) as cnt
+        from  Title Title
+        ) C
+  where Equals(C.cnt, 0);
+
+output view __Base__SkipDocumentNoTitle__Temp;
+
+create view __Minus__390__Temp as
+  select  __t.detaggedAnchorTextSpan as detaggedAnchorTextSpan
+  from  
+    ((select  Op.detaggedAnchorTextSpan as detaggedAnchorTextSpan
+      from  __Minus__390__TempOp__1 Op)
+    minus
+    (select  Op.detaggedAnchorTextSpan as detaggedAnchorTextSpan
+      from  __Minus__390__TempOp__2 Op)
+    ) __t
+  group by __t.detaggedAnchorTextSpan;
+
+output view __Minus__390__Temp;
+
+create view __Minus__390__TempOp__1 as
+  select  A.match as detaggedAnchorTextSpan,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as ATag_____sep_____A____id
+  from  ATag A
+  where NotNull(A.target);
+
+output view __Minus__390__TempOp__1;
+
+create view __Minus__390__TempOp__2 as
+  select  S.detaggedAnchorTextSpan as detaggedAnchorTextSpan,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as SelfRefAllWithFragments_____sep_____S____id
+  from  SelfRefAllWithFragments S;
+
+output view __Minus__390__TempOp__2;
+
+create view __Union__391__TempOp__0 as
+  select  SkipDocumentBeforeDetagging.reason as reason,
+          SkipDocumentBeforeDetagging.content as content,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          SkipDocumentBeforeDetagging.__auto__id as SkipDocumentBeforeDetagging_____sep_____SkipDocumentBeforeDetagging____id
+  from  SkipDocumentBeforeDetagging SkipDocumentBeforeDetagging;
+
+output view __Union__391__TempOp__0;
+
+create view __Union__391__TempOp__1 as
+  select  SkipDocumentMissingContentAfterDetag.reason as reason,
+          SkipDocumentMissingContentAfterDetag.content as content,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          SkipDocumentMissingContentAfterDetag.__auto__id as SkipDocumentMissingContentAfterDetag_____sep_____SkipDocumentMissingContentAfterDetag____id
+  from  SkipDocumentMissingContentAfterDetag SkipDocumentMissingContentAfterDetag;
+
+output view __Union__391__TempOp__1;
+
+create view __Union__391__TempOp__2 as
+  select  SkipDocumentMissingContentBeforeDetag.reason as reason,
+          SkipDocumentMissingContentBeforeDetag.content as content,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          SkipDocumentMissingContentBeforeDetag.__auto__id as SkipDocumentMissingContentBeforeDetag_____sep_____SkipDocumentMissingContentBeforeDetag____id
+  from  SkipDocumentMissingContentBeforeDetag SkipDocumentMissingContentBeforeDetag;
+
+output view __Union__391__TempOp__2;
+
+create view __Union__391__TempOp__3 as
+  select  SkipDocumentNoTitle.reason as reason,
+          SkipDocumentNoTitle.content as content,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          SkipDocumentNoTitle.__auto__id as SkipDocumentNoTitle_____sep_____SkipDocumentNoTitle____id
+  from  SkipDocumentNoTitle SkipDocumentNoTitle;
+
+output view __Union__391__TempOp__3;
+
+create view __Union__391__TempOp__4 as
+  select  SkipDocumentNoOutboundLinks.reason as reason,
+          SkipDocumentNoOutboundLinks.content as content,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          SkipDocumentNoOutboundLinks.__auto__id as SkipDocumentNoOutboundLinks_____sep_____SkipDocumentNoOutboundLinks____id
+  from  SkipDocumentNoOutboundLinks SkipDocumentNoOutboundLinks;
+
+output view __Union__391__TempOp__4;
+

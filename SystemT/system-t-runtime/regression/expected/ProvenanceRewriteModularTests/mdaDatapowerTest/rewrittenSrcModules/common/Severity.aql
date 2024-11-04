@@ -1,0 +1,140 @@
+module common;
+
+
+create dictionary "SeverityLevels"
+with case exact
+as (
+  'SUCCESS',
+  'TRACE',
+  'DEBUG',
+  'INFO',
+  'WARN',
+  'ERROR',
+  'FATAL',
+  'OFF',
+  'CRITICAL',
+  'CRITICAL_ERROR',
+  'SEVERE',
+  'IGNORE',
+  'SEVERE',
+  'WARNING',
+  'INFO',
+  'CONFIG',
+  'FINE',
+  'FINER',
+  'FINEST',
+  'ALL'
+);
+
+
+create view SeverityUseUnfiltered as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'SeverityLevels'
+    on D.text as severity
+  from Document D;
+
+output view SeverityUseUnfiltered;
+
+create view SeverityToFilter as
+  (select  Op.severity as severity,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__30__TempOp__0 Op)
+  union all
+  (select  Op.severity as severity,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__30__TempOp__1 Op);
+
+output view SeverityToFilter;
+
+create view SeverityUse as
+  select  Op.severity as severity,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__31__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__31__TempOp__1 Op,
+        __Minus__31__Temp __t
+  where Equals(Op.severity, __t.severity);
+
+output view SeverityUse;
+
+create view SeverityInterim as
+  select  D.severity as severity_span,
+          GetText(D.severity) as severity_text,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as SeverityUse_____sep_____D____id
+  from  SeverityUse D;
+
+output view SeverityInterim;
+
+create view SeverityOutput as
+  select  D.severity_span as span,
+          D.severity_text as text,
+          GetString('Severity') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as SeverityInterim_____sep_____D____id
+  from  SeverityInterim D;
+
+output view SeverityOutput;
+
+export view common.SeverityOutput;
+
+
+create view __Minus__31__Temp as
+  select  __t.severity as severity
+  from  
+    ((select  Op.severity as severity
+      from  __Minus__31__TempOp__1 Op)
+    minus
+    (select  Op.severity as severity
+      from  __Minus__31__TempOp__2 Op)
+    ) __t
+  group by __t.severity;
+
+output view __Minus__31__Temp;
+
+create view __Minus__31__TempOp__1 as
+  select  D.severity as severity,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as SeverityUseUnfiltered_____sep_____D____id
+  from  SeverityUseUnfiltered D;
+
+output view __Minus__31__TempOp__1;
+
+create view __Minus__31__TempOp__2 as
+  select  D.severity as severity,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as SeverityToFilter_____sep_____D____id
+  from  SeverityToFilter D;
+
+output view __Minus__31__TempOp__2;
+
+create view __Union__30__TempOp__0 as
+  select  D.severity as severity,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as SeverityUseUnfiltered_____sep_____D____id
+  from  SeverityUseUnfiltered D
+  where MatchesRegex(/_|-/, LeftContext(D.severity, 1));
+
+output view __Union__30__TempOp__0;
+
+create view __Union__30__TempOp__1 as
+  select  D.severity as severity,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as SeverityUseUnfiltered_____sep_____D____id
+  from  SeverityUseUnfiltered D
+  where MatchesRegex(/_|-/, RightContext(D.severity, 1));
+
+output view __Union__30__TempOp__1;
+

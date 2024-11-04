@@ -1,0 +1,42 @@
+module seqPatternTest;
+
+require document with columns text Text;
+
+-- Tests for table functions in sequence patterns
+
+-- Declare a simple table function that "zips together" two input tables
+create function MyTableFunc( 
+    firstArg table( spanVal Span ) as locator,
+    secondArg table( spanVal Span, strVal Text ) as locator
+)
+return table( outSpan1 Span, outSpan2 Span, outStr Text)
+external_name 
+    -- Path relative to module root; udfjars is inside <project root>/testdata
+    '../../../../udfjars/tableFnTestsUDFs.jar:com.ibm.test.udfs.TableConsumingTableFunc!eval'
+language java
+deterministic
+called on null input;
+
+-- Create two views to serve as inputs to the table function.
+-- Note that column names don't match, but types do.
+create view FirstInputView as
+extract regex /\d+/ on 1 token in D.text as match
+from Document D;
+
+create view SecondInputView as
+select S.match as spanCol, 'Dummy string' as textCol
+from 
+    (extract regex /[A-Z][a-z]+/ on 1 token in D.text as match
+    from Document D) S;
+
+-- Use the table function as atoms in the pattern expression, and in the eselect list
+create view SelectPattern as
+extract T1.outStr, 
+	    pattern (<T1.outSpan1>) (<T2.outSpan2>)
+        return group 0 as match
+           and group 1 as outSpan1
+           and group 2 as outSpan2
+from MyTableFunc(FirstInputView, SecondInputView) T1, MyTableFunc(FirstInputView, SecondInputView) T2;
+
+output view SelectPattern;
+

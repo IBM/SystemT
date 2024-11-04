@@ -1,0 +1,123 @@
+create view AnalystCandidates as
+(select C.companyname as name, 'company' as analysttype from CompanyInfo C)
+union all 
+(select P.person as name, 'person' as analysttype from  PersonFinalAllWithoutDots P);
+
+create view Analyst as
+select AC.name as name, AC.analysttype as analysttype
+from AnalystCandidates AC
+where Not(ContainsRegex(/[-:]/,RightContext(AC.name,5))) and 
+      Not(ContainsRegex(/\(([\p{L}\p{M}]+:)?[\p{Lu}\p{M}]+\)/,RightContextTok(AC.name,5)));
+ 
+create view AnalystActionDict as
+  extract dictionary 'companyanalystannouncement/analystactions.dict'
+  on D.text as match
+  from Doc D;
+  
+create view AnalystAction as
+select A.name as analyst, A.analysttype as analysttype, D.match as action, CombineSpans(A.name,D.match) as match
+from Analyst A, AnalystActionDict D
+where FollowsTok(A.name, D.match,0,3) and 
+      Not(ContainsDict('companyanalystannouncement/analystactionsnegativerc.dict',RightContextTok(D.match,2)));
+
+--output view AnalystAction; 
+create view AnalystFinancialMetric as
+  extract dictionary 'companyanalystannouncement/analystfinancialmetrics.dict'
+  on D.text as metric
+  from Doc D
+  consolidate on metric;
+  
+create view AnalystActionMetric as
+select A.analyst as analyst, A.analysttype as analysttype, A.action as action, AFM.metric as metric, CombineSpans(A.match,AFM.metric) as match
+from AnalystAction A, AnalystFinancialMetric AFM
+where FollowsTok(A.match, AFM.metric,0,3);
+
+create view AnalystActionOptionalMetric as
+(select A.analyst as analyst, A.analysttype as analysttype, A.action as action, A.metric as metric, A.match as match from AnalystActionMetric A)
+union all
+(select A.analyst as analyst, A.analysttype as analysttype, A.action as action, '' as metric, A.match as match from AnalystAction A);
+
+create view AnalystActionOptionalMetricConsolidated as
+select A.analyst as analyst, A.analysttype as analysttype, A.action as action, A.metric as metric, A.match as match
+from AnalystActionOptionalMetric A
+consolidate on A.match;
+
+create view CompanyRated1 as 
+select  C.companyname as companyrated, C.exchange as exchange, C.ticker as ticker, C.match as match
+from CompanyInfo C
+where ContainsDict('companyanalystannouncement/companyratedclue.dict',LeftContext(C.match,10));
+
+create view CompanyRated2 as
+select  C.companyname as companyrated, C.exchange as exchange, C.ticker as ticker, CombineSpans(CR1.match,C.match) as match
+from CompanyInfo C, CompanyRated1 CR1
+where FollowsTok(CR1.match,C.match,0,3) and Not(ContainsRegex(/[\r\n]/,SpanBetween(CR1.match,C.match))) and
+	Not(ContainsDict('companyanalystannouncement/analystfinancialmetrics.dict',SpanBetween(CR1.match,C.match)));
+
+create view CompanyRated3 as
+select  C.companyname as companyrated, C.exchange as exchange, C.ticker as ticker, CombineSpans(CR2.match,C.match) as match
+from CompanyInfo C, CompanyRated2 CR2
+where FollowsTok(CR2.match,C.match,0,3) and Not(ContainsRegex(/[\r\n]/,SpanBetween(CR2.match,C.match))) and
+ Not(ContainsDict('companyanalystannouncement/analystfinancialmetrics.dict',SpanBetween(CR2.match,C.match)));
+
+create view CompanyRated4 as
+select  C.companyname as companyrated, C.exchange as exchange, C.ticker as ticker, CombineSpans(CR3.match,C.match) as match
+from CompanyInfo C, CompanyRated3 CR3
+where FollowsTok(CR3.match,C.match,0,3) and Not(ContainsRegex(/[\r\n]/,SpanBetween(CR3.match,C.match))) and
+Not(ContainsDict('companyanalystannouncement/analystfinancialmetrics.dict',SpanBetween(CR3.match,C.match)));
+
+create view CompanyRated as
+(select  C.companyrated as companyrated, C.exchange as exchange, C.ticker as ticker, C.match as match from CompanyRated1 C)
+union all
+(select  C.companyrated as companyrated, C.exchange as exchange, C.ticker as ticker, C.match as match from CompanyRated2 C)
+union all
+(select  C.companyrated as companyrated, C.exchange as exchange, C.ticker as ticker, C.match as match from CompanyRated3 C)
+union all
+(select  C.companyrated as companyrated, C.exchange as exchange, C.ticker as ticker, C.match as match from CompanyRated4 C);
+ 
+create view AnalystActionCompany as
+select A.analyst as analyst, A.analysttype as analysttype, A.action as action, C.companyrated as companyrated, C.exchange as exchange, C.ticker as ticker, CombineSpans(A.match,C.match) as match
+from AnalystActionOptionalMetricConsolidated A, CompanyRated C
+where FollowsTok(A.match, C.match,0,6) and Not(ContainsRegex(/[\r\n]/,SpanBetween(A.match,C.match)));
+--consolidate on CombineSpans(A.match,C.match);
+
+
+create view AnalystActionCompanyMetric1 as
+select A.analyst as analyst, A.analysttype as analysttype, A.action as action, A.companyrated as companyrated, A.exchange as exchange, A.ticker as ticker,  AFM.metric as metric, A.match  as match
+from AnalystActionCompany A, AnalystFinancialMetric AFM
+where Contains(A.match,AFM.metric);
+
+create view AnalystReport1 as
+select A.analyst as analyst, A.analysttype as analysttype, A.action as action, A.companyrated as companyrated, A.exchange as exchange, A.ticker as ticker,  A.metric as metric, C.amountrange as financialmetricestimate, CombineSpans(A.match,C.amountrange) as match
+from AnalystActionCompanyMetric1 A, CurrencyAmountOptionalRange C
+where FollowsTok(A.match,C.amountrange,0,5) and ContainsRegex(/\bto\b/,LeftContext(C.amountrange,5));
+
+create view AnalystReport2 as
+select A.analyst as analyst, A.analysttype as analysttype, A.action as action, A.companyrated as companyrated, A.exchange as exchange, A.ticker as ticker,  A.metric as metric, C2.amountrange as financialmetricestimate, C1.amountrange as financialmetricpreviousestimate, CombineSpans(A.match,C2.amountrange) as match
+from AnalystActionCompanyMetric1 A, CurrencyAmountOptionalRange C1,CurrencyAmountOptionalRange C2
+where FollowsTok(A.match,C1.amountrange,0,5) and ContainsRegex(/\bfrom\b/,LeftContext(C1.amountrange,5))
+      and FollowsTok(C1.amountrange,C2.amountrange,0,5) and ContainsRegex(/\bto\b/,LeftContext(C2.amountrange,5));
+
+create view AnalystReports as
+(select A.analyst as analyst, A.analysttype as analysttype, A.action as action, A.companyrated as companyrated, A.exchange as exchange, A.ticker as ticker,  A.metric as metric, A.financialmetricestimate as financialmetricestimate, '' as financialmetricpreviousestimate, A.match as match from AnalystReport1 A)
+union all
+(select A.analyst as analyst, A.analysttype as analysttype, A.action as action, A.companyrated as companyrated, A.exchange as exchange, A.ticker as ticker,  A.metric as metric, A.financialmetricestimate as financialmetricestimate, A.financialmetricpreviousestimate as financialmetricpreviousestimate, A.match as match from AnalystReport2 A)
+union all
+(select A.analyst as analyst, A.analysttype as analysttype, A.action as action, A.companyrated as companyrated, A.exchange as exchange, A.ticker as ticker, '' as metric, '' as financialmetricestimate, '' as financialmetricpreviousestimate, A.match as match from AnalystActionCompany A);
+
+create view AnalystReportsConsolidated as
+select A.analyst as analyst, A.analysttype as analysttype, A.action as action, A.companyrated as companyrated, A.exchange as exchange, A.ticker as ticker,  A.metric as metric, A.financialmetricestimate as financialmetricestimate, A.financialmetricpreviousestimate as financialmetricpreviousestimate, A.match as match
+from AnalystReports A
+consolidate on A.companyrated;
+
+/* create view AnalystFMReport as
+select A.analyst as analyst, A.analysttype as analysttype, A.action as action, A.companyrated as companyrated, A.exchange as exchange, A.ticker as ticker,  FM.period as period, FM.metric as metric, FM.amountrange as amountrange, CombineSpans(A.match,FM.value) as match
+from AnalystActionCompany A, FMReport FM
+where FollowsTok(A.match,FM.value,0,20); */
+
+--output view AnalystActionCompany;
+--output view AnalystActionCompanyMetric1;
+-- output view AnalystFMReport;
+--output view AnalystReport1;
+--output view AnalystReport2;
+--output view FMReport;
+--output view AnalystReportsConsolidated;

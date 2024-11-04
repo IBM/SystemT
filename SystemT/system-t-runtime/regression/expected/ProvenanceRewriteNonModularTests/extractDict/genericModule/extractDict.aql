@@ -1,0 +1,43 @@
+module genericModule;
+
+
+require document with columns
+  text Text and
+  label Text;
+
+create view FirstName as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'firstnames.dict'
+    on D.text as name
+  from Document D
+  having MatchesRegex(/\A[A-Z][a-z]*\Z/, name);
+
+output view FirstName;
+
+
+
+create dictionary "FirstNameInline"
+with case insensitive
+as (
+  'Anna',
+  'Alex',
+  'Sibel',
+  'Cahil'
+);
+
+
+create view FirstName1 as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'FirstNameInline'
+    on D.text as name
+  from Document D
+  having MatchesRegex(/\A[A-Z][a-z]*\Z/, name);
+
+output view FirstName1;
+
+
+

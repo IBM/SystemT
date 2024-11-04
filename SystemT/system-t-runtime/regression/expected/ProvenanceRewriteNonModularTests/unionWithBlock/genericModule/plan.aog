@@ -1,0 +1,281 @@
+$Document = DocScan(
+  (
+    "text" => "Text",
+    "label" => "Text"
+  )
+);
+CreateDict(
+    "name" => "MissingNounDict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false",
+    "lemma_match" => "false"
+);
+
+$CapsToken =
+Project(
+  (
+    "@@genericModule@@CapsToken@@__auto__id" => "__auto__id",
+    "@@genericModule@@CapsToken@@__stmt__type" => "__stmt__type",
+    "@@genericModule@@CapsToken@@Document_____sep_____D____id" => "Document_____sep_____D____id",
+    "match" => "match"
+  ),
+  ApplyFunc(
+    IntConst(
+      -1
+    ) => "@@genericModule@@CapsToken@@Document_____sep_____D____id",
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_EXTRACT_REGEX"
+      ) => "@@genericModule@@CapsToken@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@CapsToken@@__auto__id",
+        FastRegexTok(/\p{Lu}\p{Ll}+/, (0 => "match"), "DOTALL", 1, 1,"D.text",
+          Project(
+            (
+              "text" => "D.text"
+            ),
+            $Document
+          )
+        )
+      )
+    )
+  )
+);
+
+$__Base__2__Temp =
+Project(
+  (
+    "noun" => "noun"
+  ),
+  BlockTok(0, 1, 3, "N.match", "noun",
+    Project(
+      (
+        "match" => "N.match"
+      ),
+      $CapsToken
+    )
+  )
+);
+
+$__Base__4__Temp =
+Project(
+  (
+    "noun" => "noun"
+  ),
+  BlockTok(0, 1, 3, "N.match", "noun",
+    Project(
+      (
+        "match" => "N.match"
+      ),
+      $CapsToken
+    )
+  )
+);
+
+$__Union__1__TempOp__0 =
+Project(
+  (
+    "@@genericModule@@__Union__1__TempOp__0@@__auto__id" => "__auto__id",
+    "@@genericModule@@__Union__1__TempOp__0@@__stmt__type" => "__stmt__type",
+    "@@genericModule@@__Union__1__TempOp__0@@Document_____sep_____D____id" => "Document_____sep_____D____id",
+    "noun" => "noun"
+  ),
+  ApplyFunc(
+    IntConst(
+      -1
+    ) => "@@genericModule@@__Union__1__TempOp__0@@Document_____sep_____D____id",
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_EXTRACT_DICT"
+      ) => "@@genericModule@@__Union__1__TempOp__0@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@__Union__1__TempOp__0@@__auto__id",
+        Dictionary("MissingNounDict" => "Default" , "D.text", "noun",
+          Project(
+            (
+              "text" => "D.text"
+            ),
+            $Document
+          )
+        )
+      )
+    )
+  )
+);
+
+$__Union__1__TempOp__1 =
+Project(
+  (
+    "Op.noun" => "noun",
+    "@@genericModule@@__Union__1__TempOp__1@@__auto__id" => "__auto__id"
+  ),
+  ApplyFunc(
+    AutoID()
+ => "@@genericModule@@__Union__1__TempOp__1@@__auto__id",
+    Project(
+      (
+        "noun" => "Op.noun"
+      ),
+      $__Base__2__Temp
+    )
+  )
+);
+
+$__Union__3__TempOp__0 =
+Project(
+  (
+    "Op.noun" => "noun",
+    "@@genericModule@@__Union__3__TempOp__0@@__auto__id" => "__auto__id"
+  ),
+  ApplyFunc(
+    AutoID()
+ => "@@genericModule@@__Union__3__TempOp__0@@__auto__id",
+    Project(
+      (
+        "noun" => "Op.noun"
+      ),
+      $__Base__4__Temp
+    )
+  )
+);
+
+$__Union__3__TempOp__1 =
+Project(
+  (
+    "@@genericModule@@__Union__3__TempOp__1@@__auto__id" => "__auto__id",
+    "@@genericModule@@__Union__3__TempOp__1@@__stmt__type" => "__stmt__type",
+    "@@genericModule@@__Union__3__TempOp__1@@Document_____sep_____D____id" => "Document_____sep_____D____id",
+    "noun" => "noun"
+  ),
+  ApplyFunc(
+    IntConst(
+      -1
+    ) => "@@genericModule@@__Union__3__TempOp__1@@Document_____sep_____D____id",
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_EXTRACT_DICT"
+      ) => "@@genericModule@@__Union__3__TempOp__1@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@__Union__3__TempOp__1@@__auto__id",
+        Dictionary("MissingNounDict" => "Default" , "D.text", "noun",
+          Project(
+            (
+              "text" => "D.text"
+            ),
+            $Document
+          )
+        )
+      )
+    )
+  )
+);
+
+$CompoundNoun =
+Union(
+  Project(
+    (
+      "Op.noun" => "noun",
+      "@@genericModule@@CompoundNoun_1@@__auto__id" => "__auto__id",
+      "@@genericModule@@CompoundNoun_1@@__stmt__type" => "__stmt__type",
+      "Op.__auto__id" => "__union_op__id"
+    ),
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_UNION"
+      ) => "@@genericModule@@CompoundNoun_1@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@CompoundNoun_1@@__auto__id",
+        Project(
+          (
+            "__auto__id" => "Op.__auto__id",
+            "noun" => "Op.noun"
+          ),
+          $__Union__1__TempOp__0
+        )
+      )
+    )
+  ),
+  Project(
+    (
+      "Op.noun" => "noun",
+      "@@genericModule@@CompoundNoun_2@@__auto__id" => "__auto__id",
+      "@@genericModule@@CompoundNoun_2@@__stmt__type" => "__stmt__type",
+      "Op.__auto__id" => "__union_op__id"
+    ),
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_UNION"
+      ) => "@@genericModule@@CompoundNoun_2@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@CompoundNoun_2@@__auto__id",
+        Project(
+          (
+            "__auto__id" => "Op.__auto__id",
+            "noun" => "Op.noun"
+          ),
+          $__Union__1__TempOp__1
+        )
+      )
+    )
+  )
+);
+
+$CompoundNoun1 =
+Union(
+  Project(
+    (
+      "Op.noun" => "noun",
+      "@@genericModule@@CompoundNoun1_1@@__auto__id" => "__auto__id",
+      "@@genericModule@@CompoundNoun1_1@@__stmt__type" => "__stmt__type",
+      "Op.__auto__id" => "__union_op__id"
+    ),
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_UNION"
+      ) => "@@genericModule@@CompoundNoun1_1@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@CompoundNoun1_1@@__auto__id",
+        Project(
+          (
+            "__auto__id" => "Op.__auto__id",
+            "noun" => "Op.noun"
+          ),
+          $__Union__3__TempOp__0
+        )
+      )
+    )
+  ),
+  Project(
+    (
+      "Op.noun" => "noun",
+      "@@genericModule@@CompoundNoun1_2@@__auto__id" => "__auto__id",
+      "@@genericModule@@CompoundNoun1_2@@__stmt__type" => "__stmt__type",
+      "Op.__auto__id" => "__union_op__id"
+    ),
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_UNION"
+      ) => "@@genericModule@@CompoundNoun1_2@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@CompoundNoun1_2@@__auto__id",
+        Project(
+          (
+            "__auto__id" => "Op.__auto__id",
+            "noun" => "Op.noun"
+          ),
+          $__Union__3__TempOp__1
+        )
+      )
+    )
+  )
+);
+
+Output: $CapsToken, $CompoundNoun, $CompoundNoun1, $__Base__2__Temp, $__Base__4__Temp, $__Union__1__TempOp__0, $__Union__1__TempOp__1, $__Union__3__TempOp__0, $__Union__3__TempOp__1;

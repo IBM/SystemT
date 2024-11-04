@@ -1,0 +1,176 @@
+$Document = DocScan(
+  (
+    "text" => "Text",
+    "label" => "Text"
+  )
+);
+CreateDict(
+    "name" => "firstnames.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false",
+    "lemma_match" => "false"
+);
+
+$FirstName =
+Select(
+  MatchesRegex(
+    RegexConst(
+      /\A[A-Z][a-z]*\Z/,
+      "JavaRegex"
+    ),
+    GetCol(
+      "name"
+    )
+  ),
+  Project(
+    (
+      "@@genericModule@@FirstName@@__auto__id" => "__auto__id",
+      "@@genericModule@@FirstName@@__stmt__type" => "__stmt__type",
+      "@@genericModule@@FirstName@@Document_____sep_____D____id" => "Document_____sep_____D____id",
+      "name" => "name"
+    ),
+    ApplyFunc(
+      IntConst(
+        -1
+      ) => "@@genericModule@@FirstName@@Document_____sep_____D____id",
+      ApplyFunc(
+        StringConst(
+          "STMT_TYPE_EXTRACT_DICT"
+        ) => "@@genericModule@@FirstName@@__stmt__type",
+        ApplyFunc(
+          AutoID()
+ => "@@genericModule@@FirstName@@__auto__id",
+          Dictionary("firstnames.dict" => "Default" , "D.text", "name",
+            Project(
+              (
+                "text" => "D.text"
+              ),
+              $Document
+            )
+          )
+        )
+      )
+    )
+  )
+);
+
+$PhoneNumber =
+Project(
+  (
+    "@@genericModule@@PhoneNumber@@__auto__id" => "__auto__id",
+    "@@genericModule@@PhoneNumber@@__stmt__type" => "__stmt__type",
+    "@@genericModule@@PhoneNumber@@Document_____sep_____D____id" => "Document_____sep_____D____id",
+    "num" => "num"
+  ),
+  Union(
+    ApplyFunc(
+      IntConst(
+        -1
+      ) => "@@genericModule@@PhoneNumber@@Document_____sep_____D____id",
+      ApplyFunc(
+        StringConst(
+          "STMT_TYPE_EXTRACT_REGEX"
+        ) => "@@genericModule@@PhoneNumber@@__stmt__type",
+        ApplyFunc(
+          AutoID()
+ => "@@genericModule@@PhoneNumber@@__auto__id",
+          FastRegex(/\+?\([1-9]\d{2}\)\d{3}-\d{4}/, (0 => "num"), "DOTALL", "D.text",
+            Project(
+              (
+                "text" => "D.text"
+              ),
+              $Document
+            )
+          )
+        )
+      )
+    ),
+    ApplyFunc(
+      IntConst(
+        -1
+      ) => "@@genericModule@@PhoneNumber@@Document_____sep_____D____id",
+      ApplyFunc(
+        StringConst(
+          "STMT_TYPE_EXTRACT_REGEX"
+        ) => "@@genericModule@@PhoneNumber@@__stmt__type",
+        ApplyFunc(
+          AutoID()
+ => "@@genericModule@@PhoneNumber@@__auto__id",
+          FastRegex(/\+?[Xx]\.?\d{4,5}/, (0 => "num"), "DOTALL", "D.text",
+            Project(
+              (
+                "text" => "D.text"
+              ),
+              $Document
+            )
+          )
+        )
+      )
+    )
+  )
+);
+
+$PersonPhoneAll =
+Project(
+  (
+    "name.name" => "person",
+    "phone.num" => "phone",
+    "@@genericModule@@PersonPhoneAll@@personphone" => "personphone",
+    "@@genericModule@@PersonPhoneAll@@__auto__id" => "__auto__id",
+    "@@genericModule@@PersonPhoneAll@@__stmt__type" => "__stmt__type",
+    "name.__auto__id" => "FirstName_____sep_____name____id",
+    "phone.__auto__id" => "PhoneNumber_____sep_____phone____id"
+  ),
+  ApplyFunc(
+    StringConst(
+      "STMT_TYPE_SELECT"
+    ) => "@@genericModule@@PersonPhoneAll@@__stmt__type",
+    ApplyFunc(
+      AutoID()
+ => "@@genericModule@@PersonPhoneAll@@__auto__id",
+      ApplyFunc(
+        CombineSpans(
+          GetCol(
+            "name.name"
+          ),
+          GetCol(
+            "phone.num"
+          )
+        ) => "@@genericModule@@PersonPhoneAll@@personphone",
+        SortMergeJoin(
+          Follows(
+            GetCol(
+              "name.name"
+            ),
+            GetCol(
+              "phone.num"
+            ),
+            IntConst(
+              0
+            ),
+            IntConst(
+              40
+            )
+          ),
+          Project(
+            (
+              "__auto__id" => "name.__auto__id",
+              "name" => "name.name"
+            ),
+            $FirstName
+          ),
+          Project(
+            (
+              "__auto__id" => "phone.__auto__id",
+              "num" => "phone.num"
+            ),
+            $PhoneNumber
+          )
+        )
+      )
+    )
+  )
+);
+
+Output: $FirstName, $PersonPhoneAll, $PhoneNumber;

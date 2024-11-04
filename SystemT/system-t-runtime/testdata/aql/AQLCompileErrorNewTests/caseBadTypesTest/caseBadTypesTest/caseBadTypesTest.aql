@@ -1,0 +1,55 @@
+module caseBadTypesTest;
+
+create view spanTypes as 
+   extract 
+   D.text as theText,
+   Equals('goof','gall') as theBool,
+   part_of_speech 'Noun' on D.text as theNoun
+   from Document D;
+
+-- first arg must be boolean
+create view nonBool as 
+  select T.theText,
+  case when CombineSpans(T.theNoun,T.theText)
+         then T.theNoun
+       else T.theBool
+  as testOut
+  from spanTypes T;
+
+-- can't return both span and Boolean types - last is null
+create view nonMatchingOutput as
+    select T.theText,
+    case when Equals(T.theNoun,'duh')
+           then T.theNoun
+         when Equals(T.theNoun,'true')
+           then T.theBool
+         else null
+    as testOut
+    from spanTypes T;
+    
+ -- can't return both span and Boolean types, middle one is different
+ create view nonMatchingOutput2 as 
+      select T.theText,
+    case when Equals(T.theNoun,'duh')
+           then T.theBool
+         when Equals(T.theNoun,'true')
+           then T.theNoun
+         else T.theBool
+    as testOut
+    from spanTypes T;
+ 
+ -- no else clause, types don't match   
+    create view nonMatchingOutput3 as 
+      select T.theText,
+    case when Equals(T.theNoun,'duh')
+           then T.theNoun
+         when Equals(T.theNoun,'true')
+           then T.theBool
+    as testOut
+    from spanTypes T;
+    
+
+output view nonBool;
+output view nonMatchingOutput;
+output view nonMatchingOutput2;
+output view nonMatchingOutput3;

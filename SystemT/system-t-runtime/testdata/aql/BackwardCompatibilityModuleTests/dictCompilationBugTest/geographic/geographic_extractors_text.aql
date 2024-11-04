@@ -1,0 +1,67 @@
+
+-- Input view for location from text annotator
+-- Input text should be the text field from twitter 
+create view LocationText_Input as
+    extract regex /.*/ 
+    on D.text as text
+    from Document D;
+
+include 'geographic/LocationFromText.aql';
+
+
+
+-- Input view for the Permanent Location Annotator
+create view Loc_InputText as
+    select D.locationAddressRefined as text
+    from LocationTweets_AllPatterns_Refined_Output D;
+    
+include 'geographic/dictionaries/Loc_DictsAndTables.aql';
+include 'geographic/Loc_Main.aql';
+
+create view LocationFromText_Refined_Final_Output as
+    select D.prov, D.city, D.state, D.country, D.fullspan, D.fulltext, D.hasCityState 
+    from LocationTweets_AllPatterns_Refined_Output E, Loc_MappedAddressOutput D
+    where Equals(GetString(E.locationAddressRefined), GetString(D.fulltext));
+
+-- Extract 4sq type information from text
+-- userName = username if available
+-- locationName = Name of the location, e.g Starbucks
+-- locationAddress = address associated with locationName
+-- url = url if available
+-- tweet = original text
+-- output view LocationTweets_AllPatterns_Output;
+
+-- Refined version of above view
+-- userName = username if available
+-- locationName = Name of the location, e.g Starbucks
+-- locationAddress = address associated with locationName
+-- locationAddressRefined = refined version of the address containing mostly city/state/country info
+-- url = url if available
+-- tweet = original text
+output view LocationTweets_AllPatterns_Refined_Output;
+
+-- Indicates the current user is with another user 
+-- userName = username if available of the second user
+-- url = url if available
+-- tweet = original text
+-- output view LocationAsUserNameTweets_AllEntities_Output;
+
+-- Indicates the current user is with another user wher results could be ambiguous
+-- userName = username if available of the second user
+-- url = url if available
+-- tweet = original text
+-- output view LocationAsUserNameTweets_Ambiguous;
+
+-- This view extracts city/state/country information
+-- Fields: 
+--  prov = one of "cityonly, citystate, stateonly, countryonly, foreigncity, foreigncountrynocity"
+--  city = name of city
+--  state = state abbreviation (US only)
+--  country = normalized country name
+--  fullspan = span
+--  fulltext = original text
+--  hasCityState = boolean
+output view LocationFromText_Refined_Final_Output;
+
+
+-- Note: Most relevant view is LocationFromText_Refined_Final_Output to be used for accelerator

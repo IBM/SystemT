@@ -1,0 +1,71 @@
+module was;
+
+
+create view Classname_ws_base as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__42__Temp_____sep_____R____id
+  from  __Subquery__42__Temp R;
+
+output view Classname_ws_base;
+
+create view Classname_ws_interim as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as Classname_ws_base_____sep_____C____id
+  from  Classname_ws_base C
+  where MatchesRegex(/\s/, LeftContext(C.match, 1))
+     and MatchesRegex(/\s/, RightContext(C.match, 1));
+
+output view Classname_ws_interim;
+
+create view Classname_ws as
+  select  classname_wsI.match as classname_ws,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          eventTypeF.__auto__id as EventType_sysoutErr_____sep_____eventTypeF____id,
+          classname_wsI.__auto__id as Classname_ws_interim_____sep_____classname_wsI____id
+  from  EventType_sysoutErr eventTypeF,
+        Classname_ws_interim classname_wsI
+  where FollowsTok(eventTypeF.eventType, classname_wsI.match, 0, 0);
+
+output view Classname_ws;
+
+create view Classname_wsOutputInterim as
+  select  D.classname_ws as classname_ws_Span,
+          GetText(D.classname_ws) as classname_ws_Text,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as Classname_ws_____sep_____D____id
+  from  Classname_ws D;
+
+output view Classname_wsOutputInterim;
+
+create view ClassnameWSOutput as
+  select  D.classname_ws_Span as span,
+          D.classname_ws_Text as text,
+          GetString('ClassnameWS') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as Classname_wsOutputInterim_____sep_____D____id
+  from  Classname_wsOutputInterim D;
+
+output view ClassnameWSOutput;
+
+export view was.ClassnameWSOutput;
+
+
+create view __Subquery__42__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____Document____id,
+    regex /((?:[a-zA-Z])+)(\.)*((?:\w|-|_|\.|\$)*)(\.)*([A-Z](?:\w|\$)*)/
+    with flags 'DOTALL'
+    on Document.text
+    return group 0 as match
+  from Document Document;
+
+output view __Subquery__42__Temp;
+

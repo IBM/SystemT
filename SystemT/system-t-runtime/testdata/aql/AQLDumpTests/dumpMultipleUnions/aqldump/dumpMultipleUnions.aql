@@ -1,0 +1,55 @@
+module aqldump;
+
+create view City1 as
+ select 'Athens' as city,
+ 	'Greece' as country,
+ 	'Europe' as continent 
+ from Document D;
+
+create view City2 as
+ select 'Mumbai' as city,
+ 	'India' as country,
+ 	'Asia' as continent 
+ from Document D;
+
+create view City3 as
+ select 'New Delhi' as city,
+ 	'India' as country,
+ 	'Asia' as continent 
+ from Document D;
+ 
+create view Organization as 
+ select 'IBM' as organization from Document D;
+ 
+create view UnionAll as
+(
+  select
+    C.city,
+    C.continent
+  from City1 C
+)
+  union all
+( 
+  select
+    C.continent
+  from City1 C, Organization O
+  where Overlaps (C.city, O.organization)
+)
+  union all
+(
+  select
+    C.city,
+    C.continent
+  from City2 C
+)
+  union all
+(
+  select
+    C.city,
+    C.continent
+  from City3 C
+)
+
+;
+
+output view UnionAll;

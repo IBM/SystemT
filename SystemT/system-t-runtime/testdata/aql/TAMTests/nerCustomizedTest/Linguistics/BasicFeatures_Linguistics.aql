@@ -1,0 +1,71 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module Linguistics;
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText;
+
+import dictionary DefiniteArticleAll from module Dictionaries as DefiniteArticleAll;
+import dictionary PrefixesForProperNounNames from module Dictionaries as PrefixesForProperNounNames;
+
+require document with columns
+text Text;
+
+create view CapsPlace as
+    select
+        R.match as match
+    from
+	(extract regex /\p{Lu}\p{M}*([\p{Ll}\&\.-\/]\p{M}*){1,20}/ 
+ 		on between 1 and 25 tokens in D.text 
+ 			as match 
+ 	  from DocumentText D) R;
+       
+ create view CapsPlaceTwo as
+    select
+         CombineSpans(cp1.match, cp2.match) as match
+    from
+        CapsPlace cp1,
+        CapsPlace cp2
+     where
+        FollowsTok(cp1.match, cp2.match, 0, 0);    
+        
+        
+  create view CapsPlaceOnetoTwo
+    as 
+     (select R.match as match from CapsPlace R)
+    union all 
+     (select R.match as match from CapsPlaceTwo R);
+ 
+ create view The as
+	select
+		D.match as match
+	from
+		(extract dictionary 'DefiniteArticleAll' on D.text as match from DocumentText D) D;
+ 
+-- Find initial words 
+	create view InitialWord1 as
+	select R.match as word
+	from (extract regex /(\p{Lu}\p{M}*\.\s*){1,5}/
+			on between 1 and 10 tokens in D.text
+			as match from DocumentText D) R
+	where Not(MatchesRegex(/(M\.D\.|U\.S\.|U\.N\.|E\.U\.)/, R.match));
+	
+	
+	-- to capture names with prefix (we use it as initial 
+	-- to avoid adding too many commplex rules)
+	create view InitialWord2 as
+	select D.match as word
+	from (extract dictionary 'PrefixesForProperNounNames' on D.text as match from DocumentText D) D;

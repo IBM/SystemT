@@ -1,0 +1,68 @@
+-- Classify Notes email addresses as Personal or Non-personal  
+  
+create view NotesEmailConsolidatedPersonal as
+  select E.annot as annot
+  from NotesEmailConsolidated E
+  where Equals(GetText(E.type),'PERSONAL');
+  
+  create view NotesEmailConsolidatedNonPersonal as
+  select E.annot as annot
+  from NotesEmailConsolidated E
+  where Equals(GetText(E.type),'NONPERS');
+  
+  
+ /**
+  * Identify likely Personal Notes email
+  */
+	
+-- Merge overlapping Person name and notes email
+  create view PersonNotesEmail as
+  select CombineSpans(P.person, E.annot) as annot
+  from FinalPersonConsolidated P,
+       NotesEmailConsolidated E
+  where Overlaps(P.person, E.annot)
+    and Not(Contains(E.annot, P.person))
+    and GreaterThan(GetBegin(E.annot), GetBegin(P.person)); 
+    
+  create view ValidPersonNotesEmail as
+  select E.annot as annot
+  from PersonNotesEmail E
+  where Not(MatchesRegex(/([^\s\/]+\s+){3}.+/, E.annot));
+ 
+ create view AllPersonalNotesEmail as
+ 	(select E.annot as annot from ValidPersonNotesEmail E)
+ 	union all 
+ 	(select E.annot as annot from NotesEmailConsolidatedPersonal E);
+ 
+ 
+--extract the person name attribute from the email
+ create view PersonalNotesEmailWithAttr as
+ select E.name as name, E.annot as annot
+ from
+ (
+ 	extract E.annot as annot,
+ 	        regex /\A([^\/]+)\// 
+ 	        	on E.annot 
+ 	        	return group 1 as name
+    from AllPersonalNotesEmail E
+ ) E;
+ 
+ 
+/*
+output view NotesEmailConsolidatedPersonal;
+output view NotesEmailConsolidatedNonPersonal;
+output view PersonNotesEmail;
+output view ValidPersonNotesEmail;
+output view PersonalNotesEmailWithAttr;
+*/
+
+
+ /**
+  * Collect All Notes email, with the personname attribute
+  * for personal notes email 
+  */
+  create view AllNotesEmail as
+	(select E.name as name, E.annot as email from PersonalNotesEmailWithAttr E)
+	union all
+	(select LeftContext(E.annot,0) as name, E.annot as email from NotesEmailConsolidatedNonPersonal E);
+	

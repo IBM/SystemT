@@ -1,0 +1,126 @@
+-- NOTE: This file requires AdditionalDictsForPlace.aql and DictsForPlace.aql
+
+-- Yunyao: created on 05/22/2008 to identify the following patterns
+-- (1) major city
+-- (2) major city, state
+-- (3) major city, state, country
+
+
+-- major cities
+create view CityAll as
+	(select C.match as match from MajorCity C)
+	union all
+	(select C.match as match from USCity C)
+	union all
+	(select C.match as match from GermanCities C);
+	
+create view City as
+select C.match as match
+from CityAll C
+consolidate on C.match;
+
+-- only return cities with strong clue
+create dictionary ClueCityDict as
+('the city of');
+
+create view CityClue as
+select D.match as match
+from   Dictionary('ClueCityDict', Document.text) D;
+
+create view StrongCity as
+select C.match as match
+from CityClue CL,
+	 City C
+where FollowsTok(CL.match, C.match, 0, 0);
+
+--create view CityCandidate as
+--select RightContextTok(CC.match, 1) as match
+--from   CityClue CC;
+--where MatchesRegex(/\s*/, RightContextTok(CC.match, 1));
+
+-- extend city name
+
+--create view CityCandidateExtended as
+--select CombineSpans(C.match, RightContextTok(C.match, 1)) as match
+--from   CityCandidate C
+--where MatchesRegex(/\s*\p{Lu}\p{M}*([\p{Ll}\p{Lo}]\p{M}*)+/, RightContextTok(C.match, 1))
+--  and Not(ContainsRegex(/[\n\r]/, RightContextTok(C.match, 1)));
+
+ 
+-- TODO: add state (full name only)
+
+-- major city, state
+-- TODO: postpone selection conditions
+create view CityStateCandidate as
+select CombineSpans(C.match, S.match) as match
+from USCity C,
+	 StateStrongAll S
+where FollowsTok(C.match, S.match, 0, 1)
+  and MatchesRegex(/\s*[,]?\s*/, SpanBetween(C.match, S.match))
+  and Not(ContainsRegex(/[\n\r]/, SpanBetween(C.match, S.match)))
+  -- avoid matchings like "Post ID"
+  and Not(MatchesRegex(/[^,]+\s+ID/, CombineSpans(C.match, S.match)));
+
+
+-- avoid matching a random list of city,state combinations
+create view CityStateWrong as
+select C.match as match
+from CityStateCandidate C
+where ContainsRegex(/,/, LeftContext(C.match, 10))
+ and ContainsRegex(/,/, RightContextTok(C.match, 10));
+
+create view CityState as
+	(select C.match as match from CityStateCandidate C)
+	minus
+	(select C.match as match from CityStateWrong C);
+
+-- major city, state, country
+create view CityStateCountryCandidate as
+select CombineSpans(C.match, CN.match) as match, SpanBetween(C.match, CN.match) as state
+from City C,
+	 Country CN
+where FollowsTok(C.match, CN.match, 3, 3)
+  and MatchesRegex(/\s*,\s*\p{Lu}\p{M}*(\p{L}\p{M}*)+\s*,\s*/, SpanBetween(C.match, CN.match))
+  and Not(ContainsRegex(/[\n\r]/, SpanBetween(C.match, CN.match)));
+
+create view CityStateCountryWrong1 as
+select C.match as match
+from CityStateCountryCandidate C,
+	 Country CN
+where Contains(C.state, CN.match);
+
+-- avoid matching a random list of city,state, country combinations
+create view CityStateCountryWrong2 as
+select C.match as match,  LeftContextTok(C.match, 1) as lc
+from CityStateCountryCandidate C
+where MatchesRegex(/,/, RightContextTok(C.match, 1))
+  and Not(ContainsRegex(/[\n\r]/, LeftContextTok(C.match, 1)));
+
+create view CityStateCountryWrong as 
+	(select C.match as match from CityStateCountryWrong1 C)
+	union all
+	(select C.match as match from CityStateCountryWrong2 C); 
+
+create view CityStateCountry as
+	(select C.match as match from CityStateCountryCandidate C)
+	minus
+	(select C.match as match from CityStateCountryWrong C);
+
+-- union of all patterns
+create view CityStateCountryCandidates as
+	(select C.match as match from MajorCity C)
+	union all
+	(select C.match as match from StrongCity C)
+	union all
+	(select C.match as match from State C)
+	union all
+	(select C.match as match from Country C)
+	union all
+	(select C.match as match from CityState C)
+	union all
+	(select C.match as match from CityStateCountry C);
+	
+create view AllCityStateCountry as
+select C.match as match
+from CityStateCountryCandidates C
+consolidate on C.match;

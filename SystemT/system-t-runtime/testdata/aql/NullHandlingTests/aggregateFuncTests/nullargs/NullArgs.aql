@@ -1,0 +1,33 @@
+module nullargs;
+
+require document with columns text Text;
+
+create view _NullSpanList as
+  extract regex 
+    /!(\d)?,(\d)?,(\d)?,(\d)?,(\d)?/
+  on D.text
+  return 
+    group 1 as firstList
+    and group 2 as secondList
+    and group 3 as thirdList
+    and group 4 as fourthList
+    and group 5 as fifthList
+  from Document D;
+  
+create view _NullIntList as
+  select
+    GetBegin(N.firstList) as firstList,
+    GetBegin(N.secondList) as secondList,
+    GetBegin(N.thirdList) as thirdList,
+    GetBegin(N.fourthList) as fourthList,
+    GetBegin(N.fifthList) as fifthList,
+    GetBegin(null) as sixthList
+  from _NullSpanList N;
+
+-- add test for defect 101422
+output view _NullIntList;
+
+create view _NullTypeList as 
+  select N.firstList, null as nullie,N.sixthList from _NullIntList N;
+
+output view _NullTypeList;

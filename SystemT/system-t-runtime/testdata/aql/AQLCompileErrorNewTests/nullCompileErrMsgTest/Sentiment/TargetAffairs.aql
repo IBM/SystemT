@@ -1,0 +1,173 @@
+module Sentiment; 
+-- TODO: Add AQL content here 
+
+
+--------------------------
+-- Target Does thing
+--------------------------
+create view TargetDoes as
+	select AD.*, T.text as target
+	from AgentDoes AD,  SentimentCustom.Target T
+	where  Equals(GetText(T.text),GetText(AD.agent));
+	
+create view TargetNotDoes as
+	select AD.*, T.text as target
+	from AgentNotDoes AD,  SentimentCustom.Target T
+	where  Equals(GetText(T.text),GetText(AD.agent));	
+	
+
+--------------------------
+-- Speaker Does Target Positive
+--------------------------
+create view TargetDoesPositive as
+	(select T.*, 'Target does positive' as Pattern, 'TgtDoesPos' as PatternCode
+	 from SpeakerDoesTarget T
+	 where MatchesDict('SentimentCustom.TargetDoesPositive_V',T.verbBase))
+	union all
+	(select T.* , 'Not[Target does negative]' as Pattern, 'TgtNotDoesNeg' as PatternCode 
+	 from SpeakerDoesTarget T
+	 where MatchesDict('SentimentCustom.TargetDoesNegative_V',T.verbBase));
+	  
+--------------------------
+-- Target Does Target Negative
+--------------------------
+create view TargetDoesNegative as
+	(select T.*, 'Target does negative' as Pattern, 'TgtDoesNeg' as PatternCode 
+	 from TargetDoes T
+	 where MatchesDict('SentimentCustom.TargetDoesNegative_V',T.verbBase))
+	 union all
+	 (select T.*, 'Not[target does positive]' as Pattern, 'TgtNotDoesPos' as PatternCode 
+	 from TargetNotDoes T
+	 where MatchesDict('SentimentCustom.TargetDoesPositive_V',T.verbBase));
+	 
+
+
+-------------------------
+-- Target is nonAgent
+-------------------------
+create view TargetIsNonagent as
+select ADN.*, T.text as target
+	from AgentDoesNonagent ADN,  SentimentCustom.Target T
+	where Equals(GetText(ADN.verbBase),'be') and Equals(GetText(T.text),GetText(ADN.agent));
+
+-------------------------
+-- Target is not nonAgent
+-------------------------
+create view TargetIsNotNonagent as
+select ADN.*, T.text as target
+	from AgentNotDoesNonagent ADN, SentimentCustom.Target T
+	where Equals(GetText(ADN.verbBase),'be') and Equals(GetText(T.text),GetText(ADN.agent));
+	
+
+--------------------------
+-- Target Is Positive Objecty
+--------------------------
+create view TargetIsPositive as
+	(select T.*, 'Target is positive' as Pattern, 'TgtIsPos' as PatternCode 
+	 from TargetIsNonagent T
+	 where MatchesDict('SentimentCustom.TargetIsObjectPositive_O',T.nonAgentNF))
+	 union all
+	 (select T.*, 'Not[target is negative]' as Pattern, 'TgtIsNotNeg' as PatternCode 
+	 from TargetIsNotNonagent T
+	 where MatchesDict('SentimentCustom.TargetIsObjectNegative_O',T.nonAgentNF));
+	 
+
+--output view TargetIsNonagent;
+--output view TargetIsNotNonagent;	 
+	 
+--------------------------
+-- Target Is Negative Object
+--------------------------
+create view TargetIsNegative as
+	(select T.*, 'Target is negative' as Pattern, 'TgtIsNeg' as PatternCode 
+	 from TargetIsNonagent T
+	 where MatchesDict('SentimentCustom.TargetIsObjectNegative_O',T.nonAgentNF))
+	 union all
+	 (select T.*, 'Not[target is positive]' as Pattern, 'TgtIsNotPos' as PatternCode 
+	 from TargetIsNotNonagent T
+	 where MatchesDict('SentimentCustom.TargetIsObjectPositive_O',T.nonAgentNF));
+	 
+--------------------------
+-- Target Modifed by an Adjective
+--------------------------	 
+create view TargetWithAdjectiveAll as
+ 	select Adj.noun as target, Adj.text as adj, Adj.head as adjHead, Adj.headNormalForm as adjHeadNF
+ 	from Adjectives Adj, SentimentCustom.Target T
+ 	where Contains(T.text,Adj.noun);
+ 	
+-- Remove those in negated sentences... 	
+create view TargetWithAdjective as
+	( 
+	   select * from TargetWithAdjectiveAll
+	)
+	minus
+	(
+	   select T.* 
+	   from TargetWithAdjectiveAll T, NegatedActions A
+	   where Contains(A.text,T.target)
+	);
+		
+	 
+--------------------------
+-- Target Modifed by a Positive Adjective
+--------------------------	 
+create view TargetWithPositiveAdjective as
+	select T.*, 'Target has positive adjective' as Pattern, 'TgtHasPosAdj' as PatternCode 
+	from  TargetWithAdjective T
+	where Or (ContainsDict('SentimentCustom.TargetIsObjectPositive_O', T.adjHead),
+			  MatchesDict('SentimentCustom.TargetIsObjectPositive_O', T.adjHeadNF));
+		
+		
+--------------------------
+-- Target Modifed by a Negative Adjective
+--------------------------	 
+create view TargetWithNegativeAdjective as
+	select T.*, 'Target has negative adjective' as Pattern, 'TgtHasNegAdj' as PatternCode
+	from  TargetWithAdjective T
+	where Or (ContainsDict('SentimentCustom.TargetIsObjectNegative_O', T.adjHead),
+			  MatchesDict('SentimentCustom.TargetIsObjectNegative_O', T.adjHeadNF));
+		
+
+create view TargetNeed as
+	select ADN.*, T.text as need
+	from AgentDoesNonagent ADN,  SentimentCustom.Target T
+	where MatchesDict('NeedVerbs',ADN.verbBase) and Equals(GetText(T.text),GetText(ADN.agent));
+	
+-- output view TargetNeed;	
+
+create view TargetNeedXNegative as
+	select T.*, T.agent as target, 'Target needs revision' as Pattern, 'TgtNeedRevision' as PatternCode
+	from TargetNeed T
+	where MatchesDict('SentimentCustom.TargetNeedsXNegative',T.nonAgentNF) and 
+		  Equals(GetText(T.nonAgentType),'theme');
+		  
+create view TargetNeedToBeXNegative as
+	select Need.*, Need.agent as target, X.verbBase as Xverb, 'Target needs to be revised' as Pattern, 'TgtNeedToBeRevised' as PatternCode
+	from TargetNeed Need, Actions X
+	where Equals(GetText(Need.aid),GetText(X.enclosing))  and
+		  Or(  MatchesDict('SentimentCustom.TargetNeedsToBeXNegative',X.verbBase),
+		       ContainsDict('SentimentCustom.TargetNeedsToBeXNegative',X.verb));
+
+		 
+--------------------------
+-- Imperative action on the verb
+--------------------------	 	
+create view TargetRequestNegative as
+	select ADN.*, T.text as target, 'Please apply to target' as Pattern, 'ImperToTgt' as PatternCode
+	from AgentDoesNonagent ADN,  SentimentCustom.Target T
+	where MatchesDict('SentimentCustom.V_TargetRequest', ADN.verbBase) and		 
+	      Equals(T.text,ADN.nonAgent) and
+		  Equals(GetText(ADN.mood), 'imperative');
+		  
+--output view AgentDoesNonagent;		  
+		  
+--------------------------
+-- Target does not do expected
+--------------------------
+create view TargetDoesntDoExpectedNegative as
+	select T.*, 'Target doesn\'t do expected' as Pattern, 'TgtNotDoesExpected' as PatternCode
+	from TargetNotDoes T
+	where MatchesDict('SentimentCustom.TargetExpectedTo_V',T.verbBase);
+	
+
+		       

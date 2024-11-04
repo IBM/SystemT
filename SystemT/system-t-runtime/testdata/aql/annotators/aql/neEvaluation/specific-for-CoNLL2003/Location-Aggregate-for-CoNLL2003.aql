@@ -1,0 +1,610 @@
+
+-- create individual locations based on the definition of the standard datasets (i.e. do not merge "state, country" etc)
+-- Yunyao: updated on 01/18/2010 to avoid passing through empty annotations
+create view LocationAll as
+	(select A.address as loc from MapLocation A where Not(MatchesRegex(//, A.address)))
+	union all
+	(select C.city as loc from MapLocation C where MatchesRegex(/.*\p{Lu}\p{M}*.+/, C.city))
+	union all
+	(select C.county as loc from MapLocation C where MatchesRegex(/.+/, C.county))
+	 union all
+	(select C.stateorprovince as loc from MapLocation C where Not(MatchesRegex(//, C.stateorprovince)))
+	union all
+	(select C.country as loc from MapLocation C where Not(MatchesRegex(//, C.country)))
+	 union all
+	(select C.continent as loc from MapLocation C where Not(MatchesRegex(//, C.continent)))
+	union all
+	(select C.match as loc from RegionValid  C where Not(MatchesRegex(//, C.match)))
+	union all
+	(select C.facility as loc from Facility C where Not(MatchesRegex(//, C.facility)))
+	union all
+	(select W.match as loc from WaterBody  W)
+	union all
+	(select W.match as loc from Land W)
+	union all
+	(select C.road as loc from Road C)
+	union all
+	(select C.loc as loc from PatternBasedLocation C)
+	-----------------------------------------------	
+	union all
+	(select C.loc as loc from AdditionaLocationCandidate C where Not(MatchesRegex(//, C.loc)));
+	---------------------------------------------------
+
+--output view MapLocation;
+--output view RegionValid;
+--output view Facility;
+--output view WaterBody;
+--output view AdditionaLocationCandidate;
+
+create view LocationConj1 as
+select C.match as loc from LocationAll L, CapsPlace C
+where Not(ContainsRegex(/\s/, L.loc))
+  and FollowsTok(L.loc, C.match, 1, 1)
+  and MatchesRegex(/\s*and\s*/, SpanBetween(L.loc, C.match))
+  and Not(MatchesRegex(/\s*\p{Lu}\p{M}*.*/, RightContextTok(C.match, 1)))
+  and Not(MatchesRegex(/of\s*/, LeftContextTok(L.loc, 1)));  
+
+create view LocationConj2 as
+select C.match as loc from LocationAll L, CapsPlaceOnetoTwo C
+where Not(ContainsRegex(/\s/, L.loc))
+  and FollowsTok(L.loc, C.match, 1, 1)
+  and MatchesRegex(/\s*to\s*/, SpanBetween(L.loc, C.match))
+  and Not(MatchesRegex(/\s*\p{Lu}\p{M}*.*/, RightContextTok(C.match, 1)))
+  and MatchesRegex(/from\s*/, LeftContextTok(L.loc, 1));  
+
+--output view LocationAll;
+
+create view LocationAllExtended as
+	(select L.* from LocationAll L)
+	union all
+	(select L.* from LocationConj1 L)
+	union all
+	(select L.* from LocationConj2 L);
+	
+--output view LocationConj1;
+--output view LocationConj2;
+
+------------------------------------------------
+-- Additional customization - remove invalid candidate 
+------------------------------------------------
+create view LocationInvalid as
+select L.loc as loc 
+from LocationAllExtended L,
+	 AdditionaLocationInvalid W
+where Contains(W.loc, L.loc);
+--------------------------------------------
+
+   create view LocationValid as
+	(select L.loc as loc from LocationAllExtended L)
+	minus
+	(select L.loc as loc from LocationInvalid L);
+
+create view LocationConsolidated as
+select C.loc as loc
+from LocationValid C
+consolidate on C.loc
+using 'LeftToRight';
+
+--output view LocationConsolidated;
+
+create view WrongLocationClueLeft as
+	extract
+		dictionaries 'location/conll2003/wrongLocation_clue_left.dict'
+		      and 'names/conll2003/sports_related_positions.dict'
+		on D.text
+		as clue
+		from Doc D;		
+
+--output view WrongLocationClueLeft;
+
+create view WrongLocationClueRight as
+	extract
+		dictionaries 'location/conll2003/wrongLocation_clue_right.dict'
+				and  'names/conll2003/sports_related_positions.dict'
+		on D.text
+		as clue
+		from Doc D;	
+
+create view WrongLocation1 as
+select L.loc as loc
+from WrongLocationClueLeft C,
+--	 CapsPlaceOnetoTwo L
+	 LocationConsolidated L
+where FollowsTok(C.clue, L.loc, 0, 2)
+  and MatchesRegex(/\s*((of)?\s*the)?\s*/, 'CASE_INSENSITIVE', SpanBetween(C.clue, L.loc))
+  and Not(ContainsRegex(/\n\t/, SpanBetween(C.clue, L.loc)));
+
+
+create view WrongLocation2All as
+select L.loc as loc
+from WrongLocationClueRight C,
+     LocationConsolidated L
+where FollowsTok(L.loc, C.clue, 0, 0)
+ and Not(ContainsRegex(/\r\n\t/, SpanBetween(L.loc, C.clue)));
+ 
+ create view WrongLocation2MinusCountry as
+	(select L.* from WrongLocation2All L)
+	minus
+	(select C.match as loc from CountryCandidate C);
+	
+create view WrongLocation2 as
+	(select L.* from WrongLocation2MinusCountry L)
+	minus
+	(select C.match as loc from DomesticRegion1 C);
+	
+
+-- left context match certain pattern 
+-- (e.g. U.S.-based: this can be used as dictionary as well, but got strange error)
+create view WrongLocation3_1 as
+select L.loc as loc
+from LocationConsolidated L
+where MatchesRegex(/^-[a-z]{2,}\s*/, RightContext(L.loc, 4));
+
+-- "At [Cardiff] : [Kent] 255-3" or "[Gloucestershire] 280" 
+-- or "[NEW YORK] 74 58 .561 "
+--create view WrongLocation3_2 as
+--select L.match as loc
+--from CapsPlaceOnetoTwo L
+--where MatchesRegex(/^\s*\d{1,3}[^\d].*/, RightContext(L.match, 10));   
+
+create view WrongLocation4 as
+select L.loc as loc
+from OrganizationConsolidated O,
+     LocationConsolidated L
+where Contains(O.org, L.loc);
+
+create view WrongLocation5 as
+select L.loc as loc
+from OrgSportsTeamValid  O,
+     LocationConsolidated L
+where Contains(O.org, L.loc);
+-- as ORG is not very precise yet
+-- and  Not(Equals(O.organization, L.loc));
+
+create dictionary CorrectContextClueDict as
+(
+    'Olympics', 'Olympic', 'champion', 'President', 'Financial Secretary', 'Producer', 'Finance Minister',
+    'Consulate-General','District Judge', 'Congressman','Treasuries','Speaker', 'TV', 'Assistant Secretary', 
+    'CHAMP', 'Opens', 'Gov', 'Governor', 'Press Secretary', 'Democrat', 'Republican'
+);
+
+create view WrongLocation6 as
+select L.match as loc
+from CapsPlaceOnetoTwo L,
+     The T,
+     CapsPlace C
+where FollowsTok(T.match, L.match, 0, 0)
+  and FollowsTok(L.match, C.match, 0, 0)
+  and Not(ContainsDict('CorrectContextClueDict', C.match))
+  and Not(MatchesDict('country.dict', C.match));
+  
+create view WrongLocation7 as
+select L1.loc as loc 
+from  LocationConsolidated L1,
+      LocationConsolidated L2
+where FollowsTok(L1.loc, L2.loc, 1, 1)
+  and MatchesRegex(/\s*at\s*/, SpanBetween(L1.loc, L2.loc));
+
+create view WrongLocation8Candidate as
+select L.loc as loc
+from LocationConsolidated L
+where MatchesRegex(/^[ ]*[A-Z][a-z]+.*/, RightContext(L.loc, 5));
+
+-- allow those that are part of stock market index
+create view Wronglocation8Invalid1 as
+select L.loc as loc
+from WrongLocation8Candidate L,
+	 StockIndex S
+where Contains(S.match, L.loc)
+  and Not(MatchesRegex(/[Tt]he[ ]+/, LeftContextTok(L.loc, 1)));
+
+--output view Wronglocation8Invalid1;
+
+-- allow those with certain right context
+create view Wronglocation8Invalid2 as
+select L.loc as loc
+from WrongLocation8Candidate L
+where ContainsDict('CorrectContextClueDict', 'Exact', RightContextTok(L.loc, 2)); 
+
+--output view Wronglocation8Invalid2;
+
+-- allow those in the first line of a resport
+create view ReportFirstLine as
+extract
+	regex '^[\r\n]+[^\r\n]+'
+	on D.text
+	as line
+	from Doc D;
+	
+create view Wronglocation8Invalid3 as
+select L.loc as loc
+from WrongLocation8Candidate L,
+     ReportFirstLine FL
+where Contains(FL.line, L.loc);
+
+--output view Wronglocation8Invalid3;
+
+-- introduce false negative
+create view WrongLocation8CandidateCountry as
+select L.* 
+from WrongLocation8Candidate L,
+     CountryCandidate C
+where Overlaps(L.loc, C.match);
+
+--output view WrongLocation8CandidateCountry;
+
+create view Wronglocation8Invalid4 as
+select L1.*
+from WrongLocation8Candidate L1,
+	 LocationConsolidated L2
+where FollowsTok(L1.loc, L2.loc, 0, 0);
+
+create view Wronglocation8Invalid as
+	(select L.* from Wronglocation8Invalid1 L)
+	union all
+	(select L.* from Wronglocation8Invalid2 L)
+	union all
+	(select L.* from Wronglocation8Invalid3 L)
+	union all
+	(select L.* from Wronglocation8Invalid4 L);
+	--union all
+	--(select L.* from WrongLocation8CandidateCountry L);
+	
+
+
+-- allow those that are part of sport event name
+create view WrongLocation8 as
+	(select L.* from WrongLocation8Candidate L)
+	minus
+	(select L.* from Wronglocation8Invalid L);
+
+create view WrongLocation8_1 as
+select L.loc as loc
+from LocationConsolidated L,
+     ReportFirstLine R
+where Contains(R.line, L.loc)
+  and MatchesRegex(/\s*(open|cup|grand\s*prix).*/, 'CASE_INSENSITIVE', RightContextTok(L.loc, 2));
+
+create view WrongLocation9 as
+select L.loc as loc
+from LocationConsolidated L
+where MatchesRegex(/.*\(\s*/, LeftContext(L.loc, 5))
+  and MatchesRegex(/^\s*\).*/, RightContext(L.loc, 5))
+  and Not(ContainsDict('country.dict', L.loc))
+  and Not(MatchesDict('location/regions/internationalRegions.dict', L.loc))
+  and Not(MatchesDict('location/regions/regions-canada.dict', L.loc))
+  and Not(MatchesDict('location/regions/regions-china.dict', L.loc))
+  and Not(MatchesDict('location/regions/regions-india.dict', L.loc))
+  and Not(MatchesDict('location/regions/regions-russia.dict', L.loc))
+  and Not(MatchesDict('location/regions/regions-US.dict', L.loc))
+  and Not(MatchesDict('orgs/conll2003/sports/country-for-sport-teams.dict', L.loc));
+  
+create view WrongLocation10 as
+extract
+	dictionary 'misc/ethnicGroup.dict'
+		on D.text   
+        as loc
+from Doc D
+having MatchesRegex(/\p{Lu}.*/, loc);
+
+--output view WrongLocation10;
+
+create dictionary LeftMergeableContextDict as
+(--'The', 
+ 'Mount', 'Lake', 'State of', 'Community of');
+
+
+-- has a capitalized word before the current candidate
+create view WrongLocation11_1 as
+select L.loc as loc
+from LocationConsolidated L
+where MatchesRegex(/([,]|(\p{Ll}\p{M}*)+)[ ]*\p{Lu}\p{M}*[^A-Z\s\-]*[ ]*/, LeftContextTok(L.loc, 2))
+  and Not(ContainsDict('LeftMergeableContextDict', LeftContextTok(L.loc, 1)));
+
+create view WrongLocation11_2 as
+select L.loc as loc
+from LocationConsolidated L
+where MatchesRegex(/[^\s]*\s*([,]|(\p{Ll}\p{M}*)+)[ ]*\p{Lu}\p{M}*[^\s\-]*-\p{Lu}\p{M}*[^\s]*[ ]*/, LeftContextTok(L.loc, 4))
+  and Not(ContainsDict('LeftMergeableContextDict', LeftContextTok(L.loc, 1)));
+
+--output view WrongLocation11_1;
+--output view WrongLocation11_2;
+
+create view WrongLocation11All as
+	(select L.* from WrongLocation11_1 L)
+	union all
+	(select L.* from WrongLocation11_2 L);
+
+create view WrongLocation11Invalid as
+select L2.*
+from LocationConsolidated L1,
+     WrongLocation11All L2
+where FollowsTok(L1.loc, L2.loc, 0, 0);
+
+create view WrongLocation11 as
+	(select L.* from WrongLocation11All L)
+	minus
+	(select L.* from WrongLocation11Invalid L);
+
+--output view WrongLocation11All;
+--output view WrongLocation11;
+--output view WrongLocation11Invalid;
+
+-- for patterns like "Collingwood 24.12"
+create view WrongLocation12 as
+select L.loc as loc
+from LocationConsolidated L
+where MatchesRegex(/[ ]*\d{1,2}[ ]*\.\s*\d{1,2}\s*\(\s*\d{1,3}\s*\)/, RightContextTok(L.loc, 6));
+
+-- for patterns like "Doetinchem-Doetinchem"
+create view WrongLocation13_1 as
+select L.loc as loc
+from LocationConsolidated L
+where MatchesRegex(/-/, RightContext(L.loc, 1));
+
+create view WrongLocation13_2 as
+select L.loc as loc
+from LocationConsolidated L
+where MatchesRegex(/-/, LeftContext(L.loc, 1));
+
+-- for patterns like "CKD [PRAHA] HOLDING 369.66 384.00"
+-- ToDo: removed if organization is identified correctly
+create view WrongLocation14 as
+select L.loc as loc
+from LocationConsolidated L
+where MatchesRegex(/[ ]+([A-Z]+[ ]+)?\d{3,4}\.\d{2}.*/, RightContextTok(L.loc, 6)); 
+
+-- remove those contained by Person
+create view WrongLocation15 as
+select L.loc as loc
+from LocationConsolidated L,
+     PersonWithAttrAllValid P
+where Contains(P.person, L.loc)
+ -- since Person filtering based on contextual clue is not done yet
+ and Not(ContainsDict('names/conll2003/wrongPerson_clue_right.dict', RightContextTok(P.person, 2)))
+ and Not(ContainsDict('names/conll2003/wrongPerson_clue_left.dict', LeftContextTok(P.person, 2)));
+
+-- if left token is all upper case but the location itself is mixed case
+create view WrongLocation16 as
+select L.*
+from LocationConsolidated L
+where Not(MatchesRegex(/(\p{Lu}\p{M}*|\s)+/, L.loc))
+  and MatchesRegex(/(\p{Lu}\p{M}*){2,}[ ]+/, LeftContextTok(L.loc, 1));
+  
+--output view WrongLocation16;
+
+create view WrongLocationAll as
+	(select L.loc as loc from WrongLocation1 L)
+	union all
+	(select L.loc as loc from WrongLocation2 L)
+	union all
+	(select L.loc as loc from WrongLocation3_1 L)
+-- 	union all
+--	(select L.loc as loc from WrongLocation3_2 L)
+	union all
+	(select L.loc as loc from WrongLocation4 L)
+	union all
+	(select L.loc as loc from WrongLocation5 L)
+	union all
+	(select L.loc as loc from WrongLocation6 L)
+	--union all
+	--(select L.loc as loc from WrongLocation7 L)
+	union all
+	(select L.loc as loc from WrongLocation8 L)
+	union all
+	(select L.loc as loc from WrongLocation8_1 L)
+--	union all
+--	(select L.loc as loc from WrongLocation9 L)
+	union all
+	(select L.loc as loc from WrongLocation10 L)
+	union all
+	(select L.loc as loc from WrongLocation11 L)
+	union all
+	(select L.loc as loc from WrongLocation12 L)
+	union all
+	(select L.loc as loc from WrongLocation13_1 L)	
+	union all
+	(select L.loc as loc from WrongLocation13_2 L)
+	union all
+	(select L.loc as loc from WrongLocation14 L)
+	union all
+	(select L.loc as loc from WrongLocation15 L)
+	union all
+	(select L.loc as loc from WrongLocation16 L);
+
+create view WrongLocation as
+select L.*
+from WrongLocationAll L
+consolidate on L.loc
+using 'ContainsButNotEqual';
+	
+--output view WrongLocation;
+--output view WrongLocation1;
+--output view WrongLocation2;
+--output view WrongLocation4;
+--output view WrongLocation5;
+--output view WrongLocation6;
+--output view WrongLocation7;
+--output view WrongLocation8;
+--output view WrongLocation9;
+--output view WrongLocation12;
+--output view WrongLocation13_1;
+--output view WrongLocation13_2;
+--output view WrongLocation14;
+--output view WrongLocation15;
+--output view OrganizationConsolidated;
+
+------------------------------------------------------------
+-- Additional customization - extend with "City" and "State" 
+------------------------------------------------------------
+create view CityExtended as	
+select CombineSpans(C.loc, CR.match) as loc
+from
+	LocationConsolidated C, 
+	CityRightClue CR
+where FollowsTok(C.loc, CR.match, 0, 0)
+  and MatchesRegex(/[A-Z].*/, CR.match);
+
+create dictionary RightMergeableContextDict as
+('State', 'Republic', 'Lake');
+
+create view RightMergeableContext as
+select D.match as match
+from   Dictionary('RightMergeableContextDict', 'Exact', Doc.text) D;
+
+create view LocationExtendedtoRight as	
+select CombineSpans(C.loc, S.match) as loc
+from
+	LocationConsolidated C, 
+	RightMergeableContext S
+where FollowsTok(C.loc, S.match, 0, 0)
+  and Not(ContainsRegex(/[\n\r\t]/, SpanBetween(C.loc, S.match)));
+
+
+create view LeftMergeableContext as
+	extract
+		dictionaries 'LeftMergeableContextDict'
+				and  'direction.dict'
+			on D.text   
+        	as clue
+			from Doc D
+			having MatchesRegex(/\p{Lu}\p{M}*.*/, clue);
+
+create view LocationExtendedtoLeft as	
+select CombineSpans(S.clue, C.loc) as loc
+from
+	LocationConsolidated C, 
+	LeftMergeableContext S
+where FollowsTok(S.clue, C.loc, 0, 0)
+  and Not(ContainsRegex(/[\n\r\t]/, SpanBetween(S.clue, C.loc)))
+  -- not match partial location names
+  and Not(MatchesRegex(/\./, LeftContextTok(S.clue, 1))); 
+      
+create view LocationExtended as
+	(select C.loc as loc from LocationConsolidated C)
+	union all
+	(select C.loc as loc from CityExtended C)
+	union all
+	(select C.loc as loc from LocationExtendedtoRight C)
+	union all
+	(select C.loc as loc from LocationExtendedtoLeft C)
+--	union all
+--	(select C.loc as loc from CombinedLocation1 C)
+--	union all
+--	(select C.loc as loc from CombinedLocation2 C)
+--	union all
+--	(select C.loc as loc from CombinedLocation3 C)
+	union all
+	(select T.match as loc from TownConsolidated T);
+
+create view LocationExtendedConsolidated as
+select L.loc as loc
+from LocationExtended L
+consolidate on L.loc
+using 'ContainsButNotEqual'; 
+
+--output view LocationExtendedConsolidated;
+
+-- avoid matching "Clinton White House"
+create view USPresidentLastName as
+extract 
+	dictionaries 'names/famous/USPresidentLastName.dict' 
+	on D.text
+	as lastname
+from Doc D
+having MatchesRegex(/\p{Lu}\p{M}*.*/, lastname);
+
+create view WhiteHouse as
+select SubSpanTok(RightContextTok(L.lastname, 2), 0, 2) as loc, 
+	   CombineSpans(L.lastname, RightContextTok(L.lastname, 2)) as wrongLoc
+from USPresidentLastName L
+where MatchesRegex(/\s*White\s*House/,RightContextTok(L.lastname, 2));
+
+create view LocationExtendedInvalid as
+	(select C.* 
+	 from LocationExtendedConsolidated C,
+	      WrongLocation W
+	 where Overlaps(W.loc, C.loc)
+	   and Not(Contains(C.loc, W.loc)))
+	 union all
+	 (select W.*
+	 from WrongLocation W)
+	 union all
+	 (select W.wrongLoc as loc from WhiteHouse W);
+
+create view LocationExtendedValid as
+	(select C.* from LocationExtendedConsolidated C)
+	minus
+	(select C.* from LocationExtendedInvalid C);
+
+create view CombinedLocation1 as
+select CombineSpans(C1.loc, C2.loc) as loc
+from   LocationExtendedValid C1,
+       LocationExtendedValid C2
+where  FollowsTok(C1.loc, C2.loc, 0, 1)
+  and  MatchesRegex(/[\-]?/, SpanBetween(C1.loc, C2.loc));
+
+create view CombinedLocation2 as
+select CombineSpans(C1.loc, C2.loc) as loc
+from   LocationExtendedValid C1,
+       LocationExtendedValid C2
+where  FollowsTok(C1.loc, C2.loc, 0, 0)
+  and  MatchesRegex(/[ ]*[\r\n]+/, SpanBetween(C1.loc, C2.loc))
+  and  Not(MatchesRegex(/[A-Z]+/, C2.loc)); 
+ --  and  MatchesRegex(/[\r\n]/, LeftContext(C1.loc, 1)); 
+
+--output view LocationExtendedValid;
+--output view CombinedLocation1;
+--output view CombinedLocation2;
+
+create view LocationExtendedValidAll as
+	(select C.* from LocationExtendedValid C)
+	union all
+	(select C.* from CombinedLocation1 C)
+	union all
+	(select C.* from CombinedLocation2 C);
+--	union all
+--	(select C.* from CombinedLocation3 C);
+	
+
+/*
+create view LocationExtendedValidAll as
+	(select C.loc from LocationExtendedValid C)
+	union all
+	(select C.loc as loc from PatternBasedLocation C);
+*/	
+
+--create view LocationTokens as
+--select R.match as loc
+--from Regex(/[^\s\.]{2,}/, LocationExtendedValidAll.loc) R;
+
+create view LocationTokenCandidateDedup as
+select GetText(L.loc) as loc
+from LocationExtendedValidAll L
+group by GetText(L.loc);
+
+create view LocationTokenCandidatesAll as
+select CW.match as loc
+from (select L.loc as loc, toUpperCase(L.loc) as normLoc from LocationTokenCandidateDedup L) L,
+     (select CW.match as match, toUpperCase(CW.match) as normMatch from RelaxedCapsPlace CW) CW
+where
+  Equals(GetText(L.normLoc), GetText(CW.normMatch))
+  and Not(MatchesRegex(/\s*\p{Lu}\p{M}*\p{Ll}\p{M}*.*/,RightContextTok(CW.match,1)))
+  and Not(MatchesRegex(/\p{Lu}\p{M}*\p{Ll}\p{M}*.*\s*/,LeftContextTok(CW.match,1)));
+  
+--output view LocationTokenCandidatesAll;
+
+create view LocationTokenCandidates as
+	(select L.* from LocationTokenCandidatesAll L)
+	 minus
+	(select L.*
+	 from LocationTokenCandidatesAll L, 
+	      WrongLocation W
+	 where Contains(W.loc, L.loc));
+
+--output view LocationTokenCandidates;
+
+create view LocationTokenCandidatesConsolidated as
+select L.loc as loc
+from LocationTokenCandidates L
+consolidate on L.loc;

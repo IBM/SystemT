@@ -1,0 +1,61 @@
+-- AQL to test consistency of Overlaps function evaluation via SortMergeJoin and NLJoin algorithms
+-- Related to fix via RTC # 61415 that made a change to both OverlapsMP.java and Overlaps.java 
+
+-- When the Overlaps predicate function is used in the where clause on its own, and not along
+-- with another or more predicate function(s) on the input relations, the optimizer, by default
+-- prefers to use the SortMergeJoin algorithm towards evaluating the outcome of the predicate function
+
+-- The Junit test corresponding to this AQL would force the use of NLJoin algorithm through
+-- compilation of this AQL using a Planner instance, of type 'ImplType.NAIVE'. Results from
+-- both algorithm applications are then compared for equality, to ensure consistency of Overlaps behavior.
+
+-- @junit com.ibm.avatar.algebra.test.stable.
+
+create view RoadTrip as 
+extract 
+	regex /Road[\s]?Trip/ 
+	with flags 'CASE_INSENSITIVE' 
+	on between 1 and 2 tokens 
+	in Document.text as reference 
+from Document;
+
+create view RoadTripContexts as 
+select 
+	LeftContext(R.reference,0) as leftCtxt,
+	RightContext(R.reference,0) as rightCtxt 
+from RoadTrip R;
+
+create view OverlapsInWhereTestLeft1 as 
+select 
+	R.reference as reference, 
+	RR.leftCtxt as leftCtxt 
+from RoadTrip R, RoadTripContexts RR
+where Overlaps (R.reference, RR.leftCtxt);
+
+create view OverlapsInWhereTestLeft2 as 
+select 
+	R.reference as reference, 
+	RR.leftCtxt as leftCtxt 
+from RoadTrip R, RoadTripContexts RR
+where Overlaps (RR.leftCtxt, R.reference);
+
+create view OverlapsInWhereTestRight1 as 
+select 
+	R.reference as reference, 
+	RR.rightCtxt as rightCtxt 
+from RoadTrip R, RoadTripContexts RR
+where Overlaps (R.reference, RR.rightCtxt);
+
+create view OverlapsInWhereTestRight2 as 
+select 
+	R.reference as reference, 
+	RR.rightCtxt as rightCtxt 
+from RoadTrip R, RoadTripContexts RR
+where Overlaps (RR.rightCtxt, R.reference);
+
+
+output view OverlapsInWhereTestLeft1;
+output view OverlapsInWhereTestLeft2;
+output view OverlapsInWhereTestRight1;
+output view OverlapsInWhereTestRight2;
+

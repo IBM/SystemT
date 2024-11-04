@@ -1,0 +1,370 @@
+-- Yunyao: created on 08/14/2009 to identify
+-- 		   1. major international regions such as Korean Peninsula 
+-- 		   2. major general regions such as New England (excluding City, State, Country)
+--         3. landmarks such as Wall Street and Time Square
+
+--include 'detag.aql';
+--include 'GenericNE/serverSideSpecific/AdditionalDictsForAddress.aql';
+--include 'GenericNE/DictsForAddress.aql';
+--include 'GenericNE/CityStateCountry.aql';
+
+create view DirectionCandidate as
+select D.match as match
+from   Dictionary('direction.dict', 'Exact', Doc.text) D
+-- not part of a word
+where  Not(MatchesRegex(/(-|\.)/, LeftContext(D.match, 1)));
+
+--output view DirectionCandidate;
+
+create view Direction as
+select D.match as match
+from   DirectionCandidate D
+consolidate on D.match;
+
+--output view Direction;
+----------------------------------
+-- major international regions
+----------------------------------
+create dictionary WrongRegionDict as (
+	'Australia'
+);
+
+
+create view InternationalRegionCandidate1 as
+extract
+    dictionaries
+        'location/regions/internationalRegions.dict' 
+    and 'location/regions/regions-of-conflict.dict'
+        on D.text   
+        as match     
+        from Doc D
+having MatchesRegex(/\p{Lu}\p{M}*.+/, match)
+   and Not(MatchesDict('WrongRegionDict', match))
+   and Not(MatchesDict('continent.dict', match));
+   
+   
+create view InternationalRegionCandidate1_2 as
+extract
+    dictionaries   
+     'nationality.dict'
+    on D.text   
+    as match     
+    from Doc D;
+--having Not(MatchesRegex(/[tT]he[ ]+/, LeftContextTok(match, 1)));
+-- Not(MatchesRegex(/[ ]+\p{Lu}\p{M}*.+/, RightContextTok(match, 1)));
+        
+create view InternationalRegionCandidate2 as
+extract
+    dictionaries
+        'location/regions/internationalRegions.dict' 
+    and 'location/regions/regions-of-conflict.dict'
+        with flags 'Exact'
+        on D.text
+        as match     
+   from Doc D;
+
+create view InternationalRegionExtended as
+select CombineSpans(D.match, R.match) as match
+from Direction D,
+	 InternationalRegionCandidate1 R
+where FollowsTok(D.match, R.match, 0, 0);
+
+create view InternationalRegionAll as
+	(select R.match as match from InternationalRegionCandidate1 R)
+	union all
+	(select R.match as match from InternationalRegionCandidate1_2 R)
+	union all
+	(select R.match as match from InternationalRegionCandidate2 R)
+	union all
+	(select R.match as match from InternationalRegionExtended R);
+	
+create view InternationalRegion as
+select R.match as match
+from InternationalRegionAll R
+consolidate on R.match
+using 'LeftToRight';
+	
+---------------------------------------
+--  general regions of major countries
+---------------------------------------
+create view DomesticRegion1 as
+extract
+    dictionaries
+        'location/regions/regions-US.dict' 
+    and 'location/regions/regions-UK.dict'
+    and 'location/regions/regions-china.dict'
+    and 'location/regions/regions-russia.dict'
+    and 'location/regions/regions-canada.dict'
+    and 'location/regions/regions-india.dict' 
+    and 'location/regions/riveria.dict'
+--NOTE: more dictionaries can be added here
+--    with flags 'Exact'
+        on D.text   
+        as match     
+        from Doc D
+        having MatchesRegex(/\p{Lu}\p{M}*.+/, match);
+
+
+-- direction + country is a region
+-- consolidate the country matches first
+create view CountryCandidateConsolidated as
+select C.match as match
+from CountryCandidate C
+consolidate on C.match;
+
+create view DomesticRegion2 as
+select CombineSpans(D.match, C.match) as match
+from   Direction D, 
+	   CountryCandidateConsolidated C
+where  FollowsTok(D.match, C.match, 0, 0) 
+   and Not(ContainsRegex(/[\n\r]/, SpanBetween(D.match, C.match)))
+   -- Avoid matches such as "North Korea, South"
+   and Not(ContainsRegex(/[,]/, C.match));
+
+create view DomesticRegion2_1 as
+select C.match as match
+from   CountryCandidateConsolidated C
+where  MatchesDict('direction.dict', LeftContextTok(C.match, 1))
+--  and  MatchesRegex(/\p{Ll}\p{M}*.*/, LeftContextTok(C.match, 1))
+  and Not(ContainsDict('misc/ethnicGroup.dict', C.match));
+
+create dictionary LeftContextDomesticRegionClueDict as (
+	' inter-'
+); 
+
+create view LeftContextDomesticRegionClue as
+extract
+	dictionaries
+		'LeftContextDomesticRegionClueDict'
+	on D.text
+	as clue
+from Doc D;
+
+create view DomesticRegion2_2 as
+select C.match as match
+from   Nationalities C,
+	   LeftContextDomesticRegionClue L
+where FollowsTok(L.clue, C.match, 0, 0);
+
+--output view DomesticRegion2_2;
+
+--output view CountryCandidateConsolidated;
+--output view DomesticRegion2_1;
+   
+-- direction + state/province is a region
+create view DomesticRegion3 as
+select CombineSpans(D.match, S.match) as match
+from   Direction D,
+       StatesFromMajorCountries S
+where  FollowsTok(D.match, S.match, 0, 0)
+and Not(ContainsRegex(/[\n\r]/, SpanBetween(D.match, S.match)));
+
+-- direction + city is a region 
+create view DomesticRegion4 as
+select CombineSpans(D.match, C.match) as match
+from   Direction D,
+	   CityAll C
+where  FollowsTok(D.match, C.match, 0, 0)
+and Not(ContainsRegex(/[\n\r]/, SpanBetween(D.match, C.match)));
+
+create view DomesticRegionAll as
+	(select D.match as match from DomesticRegion1 D)
+	union all
+	(select D.match as match from DomesticRegion2 D)
+	union all
+	(select D.match as match from DomesticRegion2_1 D)
+	union all
+	(select D.match as match from DomesticRegion2_2 D)
+	union all
+	(select D.match as match from DomesticRegion3 D)
+	union all
+	(select D.match as match from DomesticRegion4 D);
+	
+create view DomesticRegion as
+select D.match as match
+from   DomesticRegionAll D
+consolidate on D.match;
+
+
+-- identify region based on context clue
+create view RegionClue as
+extract
+    dictionaries
+	'location/regions/regionSuffix.dict'
+    --with flags 'Exact'
+     	on D.text
+	as match
+	from Doc D;
+
+create view RegionWithClue1 as
+select C.match as match
+from CapsPlace C,
+     RegionClue R
+where FollowsTok(C.match, R.match, 0, 0)
+  and Not(MatchesRegex(/\p{Lu}.*/, RightContextTok(C.match, 1)))
+  and MatchesRegex(/\p{Ll}.*/, R.match);
+  
+create view RegionWithClue2 as
+select CombineSpans(C.match, R.match) as match
+from CapsPlace C,
+     RegionClue R
+where FollowsTok(C.match, R.match, 0, 0)
+  and Not(MatchesRegex(/\p{Lu}.*/, RightContextTok(C.match, 1)))
+  and MatchesRegex(/\p{Lu}.*/, R.match);
+
+--output view RegionClue;
+--output view RegionWithClue2;
+
+----------------------------------------------------------
+-- Extract Landmarks
+----------------------------------------------------------
+create view Landmark as
+extract
+    dictionaries
+        'location/landmarks/financialDistrict.dict' 
+    and 'location/landmarks/square.dict'
+    --and 'location/landmarks/politicalLandmarks.dict'
+    and 'location/landmarks/worldHeritageSite.dict'
+    --and 'location/landmarks/sportsVenue.dict'
+    and 'location/landmarks/techCenter.dict'
+    with flags 'Exact'
+        on D.text   
+        as match     
+        from Doc D;
+        
+create view Landmark_Political as
+extract
+    dictionaries
+     	'location/landmarks/politicalLandmarks.dict'
+    with flags 'Exact'
+        on D.text   
+        as match     
+        from Doc D;
+
+create view Landmark_Facility as
+extract
+    dictionaries
+    	'location/landmarks/sportsVenue.dict'
+    with flags 'Exact'
+        on D.text   
+        as match     
+        from Doc D;
+
+create view ContinentWithDirection as
+select CombineSpans(D.match, C.match) as match
+from Direction D,
+	 Continents C
+where FollowsTok(D.match, C.match, 0, 0);
+
+create view NationalityWithDirection as
+	extract
+		pattern <D.match><N.match>
+		return group 0 as match
+from Direction D, Nationalities N;        
+
+---------------------------------------------------------
+-- Union all regions
+----------------------------------------------------------
+	
+create view RegionCandidateAll as
+   (select R.match as match from InternationalRegionCandidate1 R)
+	union all
+	(select R.match as match from DomesticRegion R)
+	union all
+	(select L.match as match from Landmark L)
+	union all
+	(select R.match as match from RegionWithClue1 R)
+	union all
+	(select R.match as match from RegionWithClue2 R);
+
+create dictionary WrongRegionLeftClueDict as (
+	'situation on the', 'issue on the', 'over', 'for', '\'s'
+);
+
+create dictionary WrongRegionStrongLeftClueDict as (
+	'liberation of', 'parts of', 'raids into', 'rolling into', 'rolled through', 'heroes of the new', 'fighting across', 'area of', 'part of',
+	'bridge in'
+);
+
+
+create view WrongRegionLeftClue as
+extract
+	dictionaries 
+		'WrongRegionLeftClueDict'
+	on D.text
+	as clue
+from Doc D;
+
+create view WrongRegionStrongLeftClue as
+extract
+	dictionaries 
+		'WrongRegionStrongLeftClueDict'
+	on D.text
+	as clue
+from Doc D;
+
+create view WrongRegion1 as
+select R.* 
+from WrongRegionLeftClue C, RegionCandidateAll R 
+where FollowsTok(C.clue, R.match, 0, 0);
+
+--output view RegionCandidateAll;
+
+create view WrongRegion1_1 as
+select R.*
+from WrongRegionStrongLeftClue C,
+     RegionCandidateAll R
+where FollowsTok(C.clue, R.match, 0, 1)
+  and Not(MatchesRegex(/\s*the\s*/, SpanBetween(C.clue, R.match))); 
+
+--output view WrongRegion1_1;
+
+create dictionary WrongRegionRightClueDict as (
+	'\'s', 'is'
+);
+
+create view WrongRegionRightClue as
+extract
+	dictionaries 
+		'WrongRegionRightClueDict'
+	on D.text
+	as clue
+from Doc D;
+
+create view WrongRegion2 as
+select R.*
+from WrongRegionRightClue C, RegionCandidateAll R 
+where FollowsTok(R.match, C.clue, 0, 0);
+
+create view WrongRegionAll as
+	(select E.* from Ethnic E)
+	union all
+	(select N.* from Nationalities N)
+	union all
+	(select R.* from WrongRegion1 R)
+	union all
+	(select R.* from WrongRegion1_1 R)
+	union all
+	(select R.* from WrongRegion2 R)
+	union all
+	(select C.match as match from ContinentWithDirection C)
+	union all
+	(select S.* from StatesFromMajorCountries S)
+	union all
+	(select N.* from NationalityWithDirection N);
+	
+create view ValidRegionCandidateAll as
+	(select R.* from RegionCandidateAll R)
+	minus
+	(select R.* from WrongRegionAll R);	
+	
+create view RegionCandidate as
+select R.match as match
+from   ValidRegionCandidateAll R
+consolidate on R.match;
+	
+--output view RegionCandidate;
+--output view DomesticRegion;	
+--output view Landmark;
+--output view RegionWithClue1;
+	

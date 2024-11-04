@@ -1,0 +1,44 @@
+module module1;
+
+
+require document with columns
+  text Text;
+
+create function MyTableFunc(
+  intArg Integer)
+return table (stringVal Text, realVal Float)
+external_name 'tableFnTestsUDFs.jar:com.ibm.test.udfs.BasicTableFunc!eval'
+language java
+deterministic
+called on null input
+
+;
+
+
+create view TabFuncOutput as
+  select  MyTableFunc.stringVal as stringVal,
+          MyTableFunc.realVal as realVal,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          MyTableFunc.__auto__id as __TableFunction__1__Temp_____sep_____MyTableFunc____id
+  from  __TableFunction__1__Temp MyTableFunc;
+
+output view TabFuncOutput;
+
+
+
+export function module1.MyTableFunc;
+
+
+create view __TableFunction__1__Temp as
+  select  T.* ,
+          AutoID() as __auto__id,
+          'STMT_TYPE_TABLE_FUNC' as __stmt__type,
+          'MyTableFunc(3)' as __display__name,
+          -1 as MyTableFunc_____sep_____MyTableFunc____id
+  from  MyTableFunc(
+  3
+) T;
+
+output view __TableFunction__1__Temp;
+

@@ -1,0 +1,80 @@
+-- bandtest.aql
+--
+-- Small part of the band review annotator, written in an extended version of SQL
+
+require document with columns text Text;
+
+create view Sent as
+extract 
+    split using B.boundary 
+        retain right split point
+        on B.text
+        as annot
+from (
+    extract 
+        D.text as text,
+        regex /(?:(?:[\;\.\?!]+\s)|(\n\s*\n))/ on D.text as boundary 
+        from Document D
+    having Not(ContainsDict('abbreviations.dict', 
+    CombineSpans(LeftContextTok(boundary, 1), boundary)))
+) B;
+
+create view ProperNoun as 
+extract regex
+	/(\b[A-Z]\w{3,}(?:'s)?\b(?:-[A-z]\w*(?:'s)?|\s{1,10}(?:[a-z]{1,3}\s{1,10}){0,2}[A-Z]\w*(?:'s)?){0,6})(?<!\s|This|That|They|Then|Their|Theirs)\b/ --'
+	on D.text as annot
+from Document D;
+
+create view Crowd as 
+select D.match as annot
+from Dictionary('crowdwords.dict', Document.text) D;
+
+create view Perform as
+select D.match as annot
+from Dictionary('performwords.dict', Document.text) D;
+
+create view Interact as
+select D.match as annot
+from Dictionary('interact_words.dict', Document.text) D;
+
+
+-- <Perform> <0-4words> <ProperNoun>
+create view PerformProp as
+select Perf.annot as Perform,
+	Prop.annot as ProperNoun,
+	CombineSpans(Perf.annot, Prop.annot) as annot
+from Perform Perf, ProperNoun Prop, Sent S
+where 
+	FollowsTok(Perf.annot, Prop.annot, 0, 4)
+	and Contains(S.annot, Perf.annot)
+	and Contains(S.annot, Prop.annot);
+	
+					
+-- <Crowd> <0-3words> <Interact>
+create view CrowdInteract as
+select CombineSpans(C.annot, I.annot) as annot
+from Crowd C, Interact I, Sent S
+where FollowsTok(C.annot, I.annot, 0, 3)
+	and Contains(S.annot, C.annot)
+	and Contains(S.annot, I.annot);
+
+				
+-- Union together the two concert description patterns
+create view ConcertDescription as
+	(select P.annot as annot from PerformProp P)
+	union all
+	(select C.annot as annot from CrowdInteract C);
+
+-- Consolidate to remove overlapping matches.
+create view ConcertDescFiltered as 
+select C.annot as annot
+from ConcertDescription C
+consolidate on C.annot;
+
+-- Find blocks of concert description patterns, and send them to
+-- one of our outputs.
+select B.block as annot
+into ConcertDescRun
+from Block(500, 3, ConcertDescFiltered.annot) B;
+
+

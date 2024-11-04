@@ -1,0 +1,164 @@
+create view CoNLL2003MissingLocationExact as
+	extract
+		dictionaries 'location/conll2003/conll2003missingLocation.dict'
+		with flags 'Exact'
+		on D.text
+		as match
+		from Doc D;			
+		
+create view CoNLL2003MissingLocationAllCaps as
+	extract
+		dictionaries 'location/conll2003/conll2003missingLocation.dict'
+		on D.text
+		as match
+		from Doc D
+		having MatchesRegex(/(\p{Lu}\p{M}*\W?\s*)+/, match);		
+		
+create view CoNLL2003WrongLocation as
+	extract
+		dictionaries 'location/conll2003/conll2003wrongLocation.dict'
+		on D.text
+		as match
+		from Doc D
+		having MatchesRegex(/\p{Lu}\p{M}*.+/, match);
+				
+create dictionary CountryAbbrevDict as
+(
+    'US', 'U.S.', 'U.K.', 'UK', 'United States', 'H.K.', 'HK', 'UAE'
+);
+
+create view CountryAbbrevCandidate as
+	extract
+		dictionaries 'CountryAbbrevDict'
+		with flags 'Exact'
+		on D.text   
+        as country
+		from Doc D;
+
+create dictionary CurrencySignDict as
+(
+	'$', 'dollar'
+);
+
+
+create view CurrencySign as
+	extract
+		dictionaries 'CurrencySignDict'
+		on D.text   
+        as currency
+		from Doc D;
+
+create view CountryAbbrevInvalid as
+select CA.*
+from CountryAbbrevCandidate CA,
+	 CurrencySign C
+where FollowsTok(CA.country, C.currency, 0, 0);
+
+create view CountryAbbrev as
+	(select CA.* from CountryAbbrevCandidate CA)
+	minus
+	(select CA.* from CountryAbbrevInvalid CA);
+	
+create view AdditionalCities as
+	extract 
+		dictionaries 
+			'location/cities/majorCities-iraq.dict'
+		and 'location/cities/majorCities-alghanistan.dict'	
+		and 'location/cities/majorCities-morocco.dict'	
+		and 'location/cities/majorCities-czech.dict'	
+		and 'location/cities/majorCities-netherlands.dict'	
+		and 'location/cities/majorCities-argentina.dict'
+		and 'location/cities/majorCities-palestine.dict'
+		and 'location/cities/majorCities-bosnia.dict'
+		and 'location/cities/majorCities-romania.dict'
+		and 'location/cities/majorCities-israel.dict'
+		and 'location/cities/majorCities-slovakia.dict'
+		and 'location/cities/majorCities-hungary.dict'
+		and 'location/cities/majorCities-austria.dict'
+		and 'location/cities/towns-uk.dict'
+		and 'location/cities/majorCities-japan.dict'
+		and 'location/cities/majorCities-colombia.dict'
+		and 'location/cities/majorCities-greece.dict'
+		on D.text
+		as city
+		from Doc D
+		having MatchesRegex(/\p{Lu}\p{M}*.+/, city);
+
+
+create view AdditionalStates as
+	extract 
+		dictionaries 
+			'location/statesOrProvinces/counties-england.dict' 
+    	and 'location/statesOrProvinces/provinces-argentina.dict'
+    	and 'location/statesOrProvinces/republics-russia.dict'
+    	and 'location/statesOrProvinces/provinces-netherlands.dict' 
+		and 'location/statesOrProvinces/departments-colombia.dict' 
+		on D.text
+		as state
+		from Doc D
+		having MatchesRegex(/\p{Lu}\p{M}*.+/, state);
+
+create view AdditionaLocationCandidate as
+	(select C.match as loc from MajorCity C where MatchesRegex(/\p{Lu}\p{M}*.+/, C.match))
+	union all
+	(select C.match as loc from USCity C where MatchesRegex(/(\p{Lu}\p{M}*\.?\s?)+/, C.match))
+	union all
+	(select C.match as loc from GermanCities C where MatchesRegex(/\p{Lu}\p{M}*.+/, C.match))
+	union all
+	(select C.match as loc from CoNLL2003MissingLocationExact C)
+	union all
+	(select C.match as loc from CoNLL2003MissingLocationAllCaps C)
+	union all
+	(select S.match as loc from StateStrongAbbrevAll S)
+	union all
+	(select C.country as loc from CountryAbbrev C)
+	union all
+	(select C.city as loc from AdditionalCities C)
+	union all
+	(select C.state as loc from AdditionalStates C)
+	union all
+	(select S.match as loc from StatesFromMajorCountries S);
+--output view MajorCity;
+--output view USCity;
+--output view GermanCities;
+--output view StateStrongAbbrevAll;
+--output view AdditionalCities;
+--output view AdditionalStates;
+			
+			
+create view AdditionaLocationInvalid1 as
+select R.loc as loc
+from   AdditionaLocationCandidate R,
+	   PersonFinalAllWithoutDots P
+where  Contains(P.person, R.loc)
+  and  Not(Equals(P.person, R.loc));      
+
+create view AdditionaLocationInvalid2 as
+select R.loc as loc
+from   AdditionaLocationCandidate R,
+	   OrganizationConsolidated O 
+where  Contains(O.org, R.loc)
+  and  Not(Equals(O.org, R.loc));   
+
+create view AdditionaLocationInvalid3 as
+select R.loc as loc
+from   AdditionaLocationCandidate R,
+	   OrganizationConsolidated O 
+where  Overlaps(O.org, R.loc)
+  and  Not(Contains(O.org, R.loc));
+  
+create view AdditionaLocationInvalid4 as
+select R.loc as loc
+from   AdditionaLocationCandidate R
+where ContainsDict('pos/preps-list', SubSpanTok(R.loc, 1, 1));
+  		
+create view AdditionaLocationInvalid as
+	(select A.* from  AdditionaLocationInvalid1 A)
+	union all
+	(select A.* from  AdditionaLocationInvalid2 A)
+	union all
+	(select A.* from  AdditionaLocationInvalid3 A)
+	union all
+	(select A.* from  AdditionaLocationInvalid4 A)
+	union all
+	(select L.match as loc from CoNLL2003WrongLocation L);

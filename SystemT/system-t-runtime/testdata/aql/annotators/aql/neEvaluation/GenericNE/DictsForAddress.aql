@@ -1,0 +1,100 @@
+create view CountryCandidate as
+select
+	D.match as match
+from
+--	Dictionary('country.dict', 'Exact', Doc.text) D;
+	Dictionary('country.dict', Doc.text) D
+where MatchesRegex(/\p{Lu}\p{M}*.+/, D.match);
+
+--output view CountryCandidate;
+
+create view USStateCandidate  as
+select
+		D.match as match
+	from
+		Dictionary('stateList.dict',  Doc.text) D;
+
+create view CanadianProvinceCandidate  as
+select
+		D.match as match
+	from
+		Dictionary('location/statesOrProvinces/province-canada.dict',  Doc.text) D;
+		
+create view StateCandidate as
+	(select C.match as match from USStateCandidate C)
+	union all	
+	(select C.match as match from CanadianProvinceCandidate C);
+		
+ -- The following do exact dictionary matching may missing entries such as 'Al', 'Ms'
+ -- to avoid false positives in weak rules (e.g. the one w/o zipcode)	
+ -- Yunyao: updated on 11/06/2009 to include state abbreviations in chicago AP style as well
+ create view USStateStrongAbbrev  as
+ extract 
+ 	dictionaries 
+ 		'stateListAbbrev.dict' and
+ 		'stateAbbrv.ChicagoAPStyle.dict'
+    with flags 'Exact'
+ 		on D.text   
+        as match     
+        from Doc D;
+
+-- Yunyao: updated on 11/06/2009 to include state abbreviations in chicago AP style as well
+ create view USStateWeakAbbrev  as
+    extract 
+ 	dictionaries 
+ 		'stateListAbbrev.dict' and
+ 		'stateAbbrv.ChicagoAPStyle.dict'
+    	on D.text   
+        as match     
+        from Doc D;
+		
+		
+create view StateStrongAbbrev as
+	(select A.match as match from USStateStrongAbbrev A)
+	union all
+	(select A.match as match from CanadianProvinceStrongAbbrev A);
+
+--output view CanadianProvinceStrongAbbrev;
+	
+create view StateWeakAbbrev as
+	(select A.match as match from USStateWeakAbbrev A)
+	union all
+	(select A.match as match from CanadianProvinceWeakAbbrev A);
+
+create view StatesFromMajorCountries as
+	(select C.match as match from StateCandidate C)
+	union all
+	(select C.match as match from StatesFromOtherMajorCountries C);
+
+  create view StateStrongAll
+	as
+	(select S.match as match from StatesFromMajorCountries S)
+	union all 
+	 (select S.match as match from StateStrongAbbrev S);	
+	 
+  create view StateWeakAll
+	as
+	(select S.match as match from StateCandidate S)
+	union all 
+	 (select S.match as match from StateWeakAbbrev S);	
+
+create view USCity as
+	select
+		D.match as match
+	from
+	--	Dictionary('city.dict', 'Exact', Doc.text) D
+		Dictionary('city.dict', Doc.text) D
+	where MatchesRegex(/\p{Lu}\p{M}*.+/, D.match);	
+
+create view GermanCities as
+	select
+		D.match as match 
+	from
+		Dictionary('city_german.dict', Doc.text) D;  
+		
+create view CitiesAll as 
+	(select S.match as match from USCity S)
+	union all
+	(select S.match as match from GermanCities  S)
+	union all
+	(select S.match as match from MajorCity  S);

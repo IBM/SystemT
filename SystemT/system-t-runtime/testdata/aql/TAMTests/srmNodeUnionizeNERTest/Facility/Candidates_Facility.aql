@@ -1,0 +1,53 @@
+module Facility;
+
+import dictionary FacilityNegativeCluesStrong from module Dictionaries as FacilityNegativeCluesStrong; 
+import dictionary FacilityNegativeCluesTwo from module Dictionaries as FacilityNegativeCluesTwo;
+
+import view Nationalities from module CommonFeatures as Nationalities;
+
+create view CapsFacilityCandidate as
+	(select C.match as match from CapsFacilityCandidate1 C)
+	union all
+	(select C.match as match from CapsFacilityCandidate2 C);
+
+	
+create view FacilityFilter as
+	(select F.* from FacilityFilter1 F)
+	union all
+	(select N.* from Nationalities N);
+
+create view CapsFacility as
+	(select C.* from CapsFacilityCandidate C)
+	minus
+	(select F.* from FacilityFilter F);
+
+create view FacilityAll1 as
+select CombineSpans(C.match, F.match) as facility 
+from CapsFacility C,
+	 FacilitySuffix F
+where FollowsTok(C.match, F.match, 0, 0)
+and  Not(ContainsDict('FacilityNegativeCluesStrong', C.match));
+
+create view FacilityAll2 as
+select C.match as facility 
+from CapsFacility C,
+	 FacilitySuffixLowerCase F
+where FollowsTok(C.match, F.match, 0, 0)
+and  Not(ContainsDict('FacilityNegativeCluesStrong', C.match));
+
+
+create view FacilityAll as
+	(select F.facility as facility from FacilityAll1 F)
+	union all
+	(select F.facility as facility from FacilityAll2 F);
+
+
+create view FacilityInvalid as
+select F.facility as facility
+from FacilityAll F
+where ContainsDict('FacilityNegativeCluesTwo', LeftContextTok(F.facility,1));
+
+create view FacilityValid as
+	(select F.* from FacilityAll F)
+	minus
+	(select F.* from FacilityInvalid F);

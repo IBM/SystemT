@@ -1,0 +1,43 @@
+/**
+* Test Case: Define two AQL elements in 1.aql and attempt to import them into another module using same alias name.
+* Expected result: Compiler error stating there are duplicates.
+*/
+module module1;
+
+-- create a simple view
+create view SimpleView
+as select D.text from Document D;
+
+export view SimpleView;
+
+-- create a simple Dictionary
+create dictionary SimpleDict as 
+('one', 'two');
+
+export dictionary SimpleDict;
+
+-- create a simple table
+create table SimpleTable 
+  (name Text, value Text) as
+ values 
+	('One', '1'), 
+	('Two', '2');
+
+export table SimpleTable;
+
+-- create a simple external view
+create external view SimpleExtView(field1 Text, field2 Text)
+external_name 'SimpleExtView';
+
+export view SimpleExtView;
+
+-- create a simple function
+create function SimpleFunc 
+(p1 Span  ,p2 Span)
+return Span like p1
+external_name 'udfjars/udfs.jar:com.ibm.test.udfs.udf1!combineSpans'
+language java
+deterministic
+return null on null input;
+
+export function SimpleFunc;

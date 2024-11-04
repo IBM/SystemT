@@ -1,0 +1,41 @@
+###############################################################################
+# boysandgirls.aog
+#
+# ("aog" stands for Avatar Operator Graph.)
+#
+# File that specifies a plan for annotating just the "Person" part of 
+# personphone_xry.aog, dividing the names into male and female sets.
+###############################################################################
+
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+#dictionary of first names
+CreateDict(
+    "name" => "dictionaries/male.first.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+#dictionary of first names
+CreateDict(
+    "name" => "dictionaries/female.first.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+($Male, $Female) =
+	Dicts(
+		(
+			"dictionaries/male.first.dict" => "IgnoreCase", 
+			"dictionaries/female.first.dict" => "IgnoreCase"
+		), "text", "match", $Document);
+
+			
+# Specify the output.  Yes, we're running the annotator twice here.
+Output: $Male, $Female;

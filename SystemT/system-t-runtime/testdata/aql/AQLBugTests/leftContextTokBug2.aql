@@ -1,0 +1,25 @@
+-----------------------------------------------------------------------------
+-- leftContextTokBug2.aql
+--
+-- Test case for LeftContextTok where token offset is specified as '0'.
+-----------------------------------------------------------------------------
+require document with columns text Text;
+
+-- Paste your AQL rules here.
+-- Example:
+
+--Extracts numbers of the pattern mentioned in the regex below
+create view PhoneNum as
+extract
+    regex /[0-9]{3}-[0-9]{4}/
+        on D.text as number
+from Document D;
+
+output view PhoneNum;
+
+create view LeftTokenOfEntity as
+  select D.number as number,
+  LeftContextTok(D.number,0) as zeroTok
+  --if LeftContext(D.number,0) is used instead of above line, output is as expected- null string
+  from PhoneNum D;
+output view LeftTokenOfEntity;

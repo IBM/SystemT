@@ -1,0 +1,221 @@
+-------------------------------------------------------------------------------
+-- homepage.aql
+--
+-- Various annotators to identify features that are used during global analysis
+-- to find home pages.
+--
+-- Depends on HTML.aql.
+--
+-- This file produces the contents of the following local analysis outputs:
+--      a. SemLabel
+--
+-- Based on Huiayu's original Java implementation.
+-- Author: Laura Chiticariu <chiti@us.ibm.com>
+-------------------------------------------------------------------------------
+
+------------------------------------------------------------------------------
+-- PersonalHomepage and OtherHomepage rules
+
+-- Page titles in the IBM intranet have a hierarchical structure.  We apply
+-- various rules to the nodes of the hierarchy.  Some rules only apply to the
+-- root or leaf nodes, while other rules apply to every node.
+
+
+-- The SplitTitle rule in HTML.aql separates out each title into its component
+-- parts.  Pull out the root and leaf of the hierarchy, so that we can apply
+-- rules to just these nodes.
+create view TitleRoot as
+select S.title as title, S.elem as elem
+from SplitTitle S
+consolidate on S.elem using 'RetainFirst';
+
+create view TitleLeaf as
+select S.title as title, S.elem as elem
+from SplitTitle S
+consolidate on S.elem using 'RetainLast';
+
+
+-- Look for special patterns in the first (e.g. root) segment of each title,
+-- and label each.
+-- Dictionary and mapping table are in the following external file:
+include 'dicts/firstSegStrings.aql';
+
+create view TitleRootSemLabel as 
+select 
+	D.title as title,
+	D.elem as elem,
+	L.label as label,
+	D.match as match
+from FirstSegLabels L,
+	(
+		extract
+			T.title as title,
+			T.elem as elem,
+			dictionary 'FirstSegStrings' on T.elem as match
+		from TitleRoot T
+	) D
+where 
+	Equals(GetText(L.str), GetText(D.match));
+	
+	
+-- Look for special patterns in the last (e.g. leaf) segment of each title,
+-- and label each.
+-- Dictionary and mapping table are in the following external file:
+include 'dicts/lastSegStrings.aql';
+
+create view TitleLeafSemLabel as 
+select 
+	D.title as title,
+	D.elem as elem,
+	L.label as label,
+	D.match as match
+from LastSegLabels L,
+	(
+		extract
+			T.title as title,
+			T.elem as elem,
+			dictionary 'LastSegStrings' on T.elem as match
+		from TitleLeaf T
+	) D
+where 
+	Equals(GetText(L.str), GetText(D.match));
+	
+	
+-- Semantic labeling for URLs
+-- Uses the labels and corresponding regular expressions defined in 
+-- /es2resources/configs/patterns/url_label_pattern.txt
+-- and copied below, for debugging purposes
+create view URLSemLabel as
+--you_ibm	::	//w3(?:-\d+)?.ibm.com/(hr)/
+(
+	select 'you_ibm' as label, U.url as url
+	from URL U
+	where ContainsRegex(/\/\/w3(?:-\d+)?.ibm.com\/(hr)\//, U.url)
+)
+union all
+--it_tools	::	//w3(?:-\d+)?.ibm.com/(tools/it)/
+(
+	select 'it_tools' as label, U.url as url
+	from URL U
+	where ContainsRegex(/\/\/w3(?:-\d+)?.ibm.com\/(tools\/it)\//, U.url)
+)
+union all
+--issi	::	//w3(?:-\d+)?.ibm.com/download/(standardsoftware)/
+(
+	select 'issi' as label, U.url as url
+	from URL U
+	where ContainsRegex(/\/\/w3(?:-\d+)?.ibm.com\/download\/(standardsoftware)\//, U.url)
+)
+union all
+--ibm_research	::	//w3(?:-\d+)?.(research).ibm.com|//w3.ibm.com/(research)/
+(
+	select 'ibm_research' as label, U.url as url
+	from URL U
+	where ContainsRegex(/\/\/w3(?:-\d+)?.(research).ibm.com/, U.url)
+)
+union all
+(
+	select 'ibm_research' as label, U.url as url
+	from URL U
+	where ContainsRegex(/\/\/w3.ibm.com\/(research)\//, U.url)
+)
+union all
+--collab_central	::	//w3(?:-\d+)?.ibm.com/(collaboration)/
+(
+	select 'collab_central' as label, U.url as url
+	from URL U
+	where ContainsRegex(/\/\/w3(?:-\d+)?.ibm.com\/(collaboration)\//, U.url)
+)
+union all
+--ibm_strategy	::	//w3(?:-\d+)?.ibm.com/(strategy)/
+(
+	select 'ibm_strategy' as label, U.url as url
+	from URL U
+	where ContainsRegex(/\/\/w3(?:-\d+)?.ibm.com\/(strategy)\//, U.url)
+)
+union all
+--siteserv	::	//w3(?:-\d+)?.ibm.com/(siteserv)/
+(
+	select 'siteserv' as label, U.url as url
+	from URL U
+	where ContainsRegex(/\/\/w3(?:-\d+)?.ibm.com\/(siteserv)\//, U.url)
+)
+union all
+--presentation_central	::	//w3(?:-\d+)?.ibm.com/ibm/(presentations)/
+(
+	select 'presentation_central' as label, U.url as url
+	from URL U
+	where ContainsRegex(/\/\/w3(?:-\d+)?.ibm.com\/ibm\/(presentations)\//, U.url)
+)
+union all
+--corp_sec	::	//w3(?:-\d+)?.ibm.com/(security)/
+(
+	select 'corp_sec' as label, U.url as url
+	from URL U
+	where ContainsRegex(/\/\/w3(?:-\d+)?.ibm.com\/(security)\//, U.url)
+)
+union all
+--on_demand_community	::	//w3(?:-\d+)?.ibm.com/ibm/(ondemandcommunity)/
+(
+	select 'on_demand_community' as label, U.url as url
+	from URL U
+	where ContainsRegex(/\/\/w3(?:-\d+)?.ibm.com\/ibm\/(ondemandcommunity)\//, U.url)
+)
+union all
+--ibm_finance	::	//w3(?:-\d+)?.ibm.com/(finance)
+(
+	select 'ibm_finance' as label, U.url as url
+	from URL U
+	where ContainsRegex(/\/\/w3(?:-\d+)?.ibm.com\/(finance)\//, U.url)
+)
+--ibm_exec_corner	::	//w3(?:-\d+)?.ibm.com/ibm/(executivecorner)/
+union all
+(
+	select 'ibm_exec_corner' as label, U.url as url
+	from URL U
+	where ContainsRegex(/\/\/w3(?:-\d+)?.ibm.com\/ibm\/(executivecorner)\//, U.url)
+)
+union all
+--it_help	::	//w3(?:-\d+)?.ibm.com/(helpcentral)|//(helpcentral).ibm.com/
+(
+	select 'it_help' as label, U.url as url
+	from URL U
+	where ContainsRegex(/\/\/w3(?:-\d+)?.ibm.com\/(helpcentral)\//, U.url)
+)
+union all
+(
+	select 'it_help' as label, U.url as url
+	from URL U
+	where ContainsRegex(/\/\/(helpcentral).ibm.com\//, U.url)
+)
+union all
+--bluepedia	::	//(bluepedia).csghl.de.ibm.com/|//w3(?:-\d+)?.ibm.com/(bluepedia)
+(
+	select 'bluepedia' as label, U.url as url
+	from URL U
+	where ContainsRegex(/\/\/(bluepedia).csghl.de.ibm.com\//, U.url)
+)
+union all
+(
+	select 'bluepedia' as label, U.url as url
+	from URL U
+	where ContainsRegex(/\/\/w3(?:-\d+)?.ibm.com\/(bluepedia)/, U.url)
+)
+union all
+--tap	::	//w3(?:-\d+)?.tap.ibm.com/myTAP
+(
+	select 'tap' as label, U.url as url
+	from URL U
+	where ContainsRegex(/\/\/w3(?:-\d+)?.tap.ibm.com\/myTAP/, U.url)
+);
+
+
+
+
+-- TODO: implement the decision procedure:
+-- TitleLeafSemLabel > TitleRootSemLabel > URLSemLabel
+-- The label from the last segment of the title has priority over 
+-- the label from the first segment of the tutle,
+-- which in turn has priority over the label of the url
+
+

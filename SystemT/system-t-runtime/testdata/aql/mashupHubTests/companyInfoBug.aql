@@ -1,0 +1,121 @@
+require document with columns text Text;
+
+create view Doc as
+select D.text as text from Document D;
+
+-- ================ Detect short headlines =====================
+-- extract the title of the html page
+create view AllTitle as
+extract regex /^(\p{Lu}[^\n]{20,150})\n/ 
+	-- with flags 'MULTILINE'
+	on D.text
+	return 
+		group 1 as title
+from Document D;
+
+
+-- Remove information about the source website from the title
+-- For now we remove anything before the '-' character
+create view Title as
+(
+	select Chomp(T.match) as match
+	from 
+		(	
+		extract regex /[^-]*-(.+)/ 
+			on T.title
+			return 
+				group 1 as match
+		from AllTitle T
+		) T
+)
+union all
+(
+	select T.title as match
+	from AllTitle T
+	where Not(ContainsRegex(/-/, T.title))
+);
+
+--HACK - identify lists of short events from StreetInsider.com
+create view ShortAnnouncementListItem as
+extract regex /^-\s([^\n]*)\n/ 
+	with flags 'MULTILINE'
+	on D.text
+	return 
+		group 1 as match
+from Document D;
+
+-- work with titles and short events separately from the body of the news articles
+create view ShortText as
+( select T.match as match from Title T )
+union all
+( select E.match as match from ShortAnnouncementListItem E );
+
+
+
+-- ================ Detect body of text =====================
+
+create view Sentences as
+extract 
+    split using B.boundary 
+        retain right split point
+        on B.text
+        as sentence
+from (
+    extract 
+        D.text as text,
+        regex /(([\.\?!-]+\s)|(\n\s*\n))/ on D.text as boundary
+        from Document D
+		-- Filter the candidate boundaries.
+		having Not(ContainsDict('financial/abbreviations.dict', 
+            CombineSpans(LeftContextTok(boundary, 1), boundary)))
+) B;
+
+
+--Find company names based on financial event clues
+--extract company clues related to financial events
+create view EventClueShort as
+select E.clue as clue, SpanIntersection(A.match, RightContext(E.clue, 70)) as rc
+from
+(
+	extract dictionary 'financial/eventclue.dict'
+	on A.match as clue
+	from ShortText A
+) E, ShortText A
+where Contains(A.match, E.clue);
+
+ 
+
+-- look for patterns of the form "to acquire/buy [comp-name] for/;"
+create view EventClueAfterCompanyInfoShort as
+select E.match as clue, LeftContext(E.match, 50) as lc
+from
+(
+	extract dictionary 'financial/eventclueafter.dict'
+	on E.rc as match
+	from EventClueShort E
+) E;
+
+
+create view CompanyInfoWeakNoTickerShort2 as
+select '' as exchange, '' as ticker, C.companyname as companyname, C.companyname as match
+from
+(
+  extract E.match as match,
+	regex /\A[ ]*(\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&)+([ ]*\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&)+)*)[ ]*(\.)?[ ]*$/ on E.match 
+    	return 
+    		group 1 as companyname
+  from 
+  (
+  	select SpanBetween(E1.clue, E2.clue) as match
+  	from EventClueShort E1, EventClueAfterCompanyInfoShort E2
+  ) E
+) C;
+
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Output section <<<<<<<<<<<<<<<<
+-- ===========================================================================		
+
+output view EventClueShort;
+output view EventClueAfterCompanyInfoShort;
+output view CompanyInfoWeakNoTickerShort2;

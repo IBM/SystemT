@@ -1,0 +1,16 @@
+/**
+** Test case: Verifies that output views that are not exported are also written out to metadata
+**/
+module outputViewMetadataTest;
+
+create view PhoneNumber as
+select P.num as number, LeftContextTok(P.num, 3) as lc
+from
+(
+extract 
+    regexes /\+?\([1-9]\d{2}\)\d{3}-\d{4}/ and /\+?[Xx]\.?\d{4,5}/
+    on D.text as num
+from Document D
+) P;
+
+output view PhoneNumber;

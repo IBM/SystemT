@@ -1,0 +1,110 @@
+module nullargs;
+
+-- This test suite tests every aggregate function on some integer lists containing nulls 
+
+require document with columns text Text;
+
+------------------------------------------------------------------------------
+-- Tests of aggregate functions
+------------------------------------------------------------------------------
+
+-- COUNT
+create view CountTest as
+select 
+        Count(A.firstList) as first,
+        Count(A.secondList) as second,
+        Count(A.thirdList) as third,
+        Count(A.fourthList) as fourth,
+        Count(A.fifthList) as fifth,
+        Count(A.sixthList) as sixth
+from _NullIntList A;
+
+output view CountTest;
+
+
+-- SUM
+create view SumTest as
+select 
+        Sum(A.firstList) as first,
+        Sum(A.secondList) as second,
+        Sum(A.thirdList) as third,
+        Sum(A.fourthList) as fourth,
+        Sum(A.fifthList) as fifth,
+        Sum(A.sixthList) as sixth
+from _NullIntList A;
+
+output view SumTest;
+
+
+-- AVG
+create view AvgTest as
+select 
+        Avg(A.firstList) as first,
+        Avg(A.secondList) as second,
+        Avg(A.thirdList) as third,
+        Avg(A.fourthList) as fourth,
+        Avg(A.fifthList) as fifth,
+        Avg(A.sixthList) as sixth
+from _NullIntList A;
+
+output view AvgTest;
+
+
+-- MAX/MIN 
+-- create a list of items containing a null tuple (which won't display on output since List() ignores nulls) 
+create view MaxMin as
+(select 3 as mycol from Document D)
+union all
+(select null as mycol from Document D)
+union all
+(select 5 as mycol from Document D)
+union all
+(select 1 as mycol from Document D)
+union all 
+(select 4 as mycol from Document D)
+union all 
+(select 2 as mycol from Document D);
+
+create view MaxTest as
+select
+        List(M.mycol) as nums,
+        Max(M.mycol) as maximum
+from MaxMin M;
+
+output view MaxTest;
+
+create view MinTest as
+select
+        List(M.mycol) as nums,
+        Min(M.mycol) as minimum
+from MaxMin M;
+
+output view MinTest;
+
+
+
+-- LIST
+create view ListTest as
+select 
+        List(A.firstList) as first,
+        List(A.secondList) as second,
+        List(A.thirdList) as third,
+        List(A.fourthList) as fourth,
+        List(A.fifthList) as fifth,
+        List(A.sixthList) as sixth
+from _NullIntList A;
+
+output view ListTest;
+
+--Add tests for defect 101422
+  create view ListNullTypeTest as 
+  select List(A.nullie) as nullList
+  from _NullTypeList A;
+
+  output view ListNullTypeTest;
+  
+  create view MaxMinNull as
+  select Max(A.nullie) as nullmax, Min(A.nullie) as nullmin
+  from _NullTypeList A;
+  
+  output view MaxMinNull;

@@ -1,0 +1,76 @@
+-- Patterns to identify Sports teams
+  
+----------------------------------------------------------
+-- DICTIONARY MATCHING 
+----------------------------------------------------------
+-- ToDo: clean up the shortname dictionary
+create view SoccerTeam as
+extract 
+	    dictionary 'orgs/orgs/sports/uefa_football_club_list_fullnames.dict'
+               and 'orgs/orgs/sports/mls_football_club_with_location.dict' 
+        on D.text as org
+from Doc D
+having MatchesRegex(/[\p{Lu}\p{M}*\d].+/, org)
+consolidate on org;
+
+
+
+create view BaseballTeam as
+extract 
+	    dictionary 'orgs/orgs/sports/baseball_clubs_with_location.dict'
+        on D.text as org
+from Doc D
+having MatchesRegex(/[\p{Lu}\p{M}*\d].+/, org)
+consolidate on org;
+
+create view BasketballTeam as
+extract 
+	    dictionary 'orgs/orgs/sports/basketball_clubs_with_location.dict'
+        on D.text as org
+from Doc D
+having MatchesRegex(/[\p{Lu}\p{M}*\d].+/, org)
+consolidate on org;
+
+create view HockeyTeam as
+extract 
+	    dictionary 'orgs/orgs/sports/hockey_clubs_with_location.dict'
+        on D.text as org
+from Doc D
+having MatchesRegex(/[\p{Lu}\p{M}*\d].+/, org)
+consolidate on org;
+
+create view AmericanFootballTeam as
+extract 
+	    dictionary 'orgs/orgs/sports/american_football_clubs_with_location.dict'
+        on D.text as org
+from Doc D
+having MatchesRegex(/[\p{Lu}\p{M}*\d].+/, org)
+consolidate on org;
+
+
+create view OrgSportsTeamCand as
+select O.org as org
+from
+(
+	(select O.org from SoccerTeam O)
+	union all
+	(select O.org from BaseballTeam O)
+	union all
+	(select O.org from BasketballTeam O)
+	union all
+	(select O.org from HockeyTeam O)
+	union all
+	(select O.org from AmericanFootballTeam O)
+) O
+consolidate on O.org;
+
+
+create view OrgSportsTeamValid as
+select * from OrgSportsTeamCand;
+
+
+------------------------------------------------------------------
+
+
+create view OrgSportsTeamAll as
+select O.org as org from OrgSportsTeamValid O;

@@ -1,0 +1,259 @@
+
+/*******************************************************************************
+* newForwardBlock.aql
+*
+* Annotator from IOPES that the blocks of headers in emails that indicate 
+* forwarded messages, AKA "forward blocks".
+* 
+* I've modified the syntax to use the "extract" clause, but the views are 
+* otherwise the same as the IOPES version.
+*******************************************************************************/
+
+/********************************************************************************
+* REGULAR EXPRESSIONS OVER DOCUMENTS
+*
+* Identify email headers by regular expression matching 
+*
+* Each regex is evaluated as a selection over $Document, producing "Raw" tuples
+* with the schema: <doc, HeaderBegin>
+*
+* The original regular expressions defined as startPatterns in
+* annotators/src/java/com/ibm/avatar/annotators.email/ForwardBlockExtractor.java
+********************************************************************************/
+
+
+create view HeaderBegin1 as
+extract regex /(total\W{0,2}\w{0,15}\W{0,2}((time)|(distance)))([ A-Za-z0-9\t,])*/
+on between 1 and 100 tokens in D.text as annot from Document D;
+
+create view HeaderBegin2partone as
+extract regex /\/.{1,25}\/.{1,20}(\@.{1,20})?\s*\n(>\s*)*/
+on between 1 and 100 tokens in D.text as annot from Document D;
+
+create view HeaderBegin2parttwo as
+extract regex /\d{2,4}(\/|\.)\d{2,4}(\/|\.)\d{2,4}\s\d{2}\:\d{2}(\s+(PM|AM))?/
+on between 1 and 100 tokens in D.text as annot from Document D;
+
+create view HeaderBegin2 as
+select CombineSpans(R1.annot,R2.annot) as annot
+from HeaderBegin2partone R1, HeaderBegin2parttwo R2
+where Follows(R1.annot, R2.annot,0,0);
+
+create view HeaderBegin3 as
+extract regex /(To\s*\n(>\s*)*(.{5,1000})?\s*\n(>\s*)*\s*cc\s*\n)/
+on D.text as annot from Document D;
+
+create view HeaderBegin4 as
+extract regex /To:\s*[^:]{1,200}\s*\n(>\s*)*\s*(CC|cc|Cc):\s*(\n)?/
+on between 1 and 100 tokens in D.text as annot from Document D;
+
+create view HeaderBegin5 as
+extract regex /On\s*(([A-Z][a-z]{2,10},?\s*\d{1,2},?\s*[A-Z][a-z]{2,10}\s*\d{2,4},)|(\d{1,2}\/\d{1,2}\/\d{1,2},))\s*(.{1,100})?\s*wrote\:/
+on between 1 and 100 tokens in D.text as annot from Document D;
+
+create view HeaderBegin6 as
+extract regex /At\s+\d{2}:\d{2}\s+.{1,9}\s+.{1,6},\s+you wrote:/
+on between 1 and 100 tokens in D.text as annot from Document D;
+
+create view HeaderBegin7 as
+extract regex /(From:\s*.{1,40}\s*\[mailto:.{5,50}\])|(From:\s*.{1,50}\s*\n\s*To:)/
+on between 1 and 100 tokens in D.text as annot from Document D;
+
+create view HeaderBegin8 as
+extract regex /\-{5}\s*Message\sfrom\s*.{5,30}\s.{6,40}\s*on\s*[A-Z][a-z]{2,8},\s*\d{1,2}\s*[A-Z][a-z]{2,8}\s*\d{4}(.|\n){10,18}\s*\-{5}/
+on between 1 and 100 tokens in D.text as annot from Document D;
+
+create view HeaderBegin9 as
+extract regex /\-{5}\s+Original\s*Message\s+\-{5}\s*(\n{0,3})?\s*From:.{0,50}/
+on between 1 and 100 tokens in D.text as annot from Document D;
+
+create view HeaderBegin10 as
+extract regex /Quoting\s*.{0,120}:\s*(\n)+\s*(>\s*)/
+on between 1 and 100 tokens in D.text as annot from Document D;
+
+create view HeaderBegin11 as
+extract regex /\[[Aa]ttachment\s*deleted\s*by\s*.{0,60}\]/
+on between 1 and 100 tokens in D.text as annot from Document D;
+
+/********************************************************************************
+* REGULAR EXPRESSIONS OVER DOCUMENTS
+*
+* Identify email headers by regular expression matching 
+*
+* Each regex is evaluated as a selection over the "Document" view, producing "Raw" 
+* tuples with the schema: <doc, HeaderEnd>
+*
+* The original regular expressions defined as endPatterns in
+* annotators/src/java/com/ibm/avatar/annotators.email/ForwardBlockExtractor.java
+********************************************************************************/
+create view HeaderEnd1 as
+extract regex /(Subject:)|(Subject\s*\n)/
+on D.text as annot from Document D;
+
+create view HeaderEnd2 as
+extract regex /Subject\s*\n/
+on D.text as annot from Document D;
+
+create view HeaderEnd3 as
+extract regex /Subject\s*\n/
+on D.text as annot from Document D;
+
+create view HeaderEnd4 as
+extract regex /Subject:/
+on 2 tokens in D.text as annot from Document D;
+
+create view HeaderEnd7 as
+extract regex /(Subject:)|(Date:.{20,80}\s*\n)/
+on D.text as annot from Document D;
+
+create view HeaderEnd8 as
+extract regex /Subject:/
+on 2 tokens in D.text as annot from Document D;
+
+create view HeaderEnd9 as
+extract regex /\s*Subject:/
+on D.text as annot from Document D;
+
+	
+/********************************************************************************
+* IDENTIFY EMAIL FORWARD HEADERS
+*
+* LOOK FOR END PATTERNS CORRESPONDING TO THE APPROPRIATE FORWARD HEADER
+*
+* Find the end patterns that is within 1000 characters of a start pattern with
+* the same identifier.  
+*
+* Then merge each such <start pattern, end pattern> into a tuple in 
+* ForwardBlockCandidates.
+* 
+* Any forward block candidate that contains another forward block candidate is
+* discarded, producing tuples with the schema: <doc, HeaderBegin, HeaderEnd>
+*
+********************************************************************************/   
+
+create view ForwardBlockCandidates1 as
+select B.annot as headerBegin, 
+       E.annot as headerEnd,
+       CombineSpans(B.annot, E.annot) as annot
+from HeaderBegin1 B, HeaderEnd1 E
+where FollowsTok(B.annot, E.annot, 0, 1000);
+
+create view FinalForwardBlockCandidates1 as
+select FBC.annot as annot
+from  ForwardBlockCandidates1 FBC
+consolidate on FBC.annot
+using 'NotContainedWithin';
+
+create view ForwardBlockCandidates2 as
+select B.annot as headerBegin, 
+       E.annot as headerEnd,
+       CombineSpans(B.annot, E.annot) as annot
+from HeaderBegin2 B, HeaderEnd2 E
+where FollowsTok(B.annot, E.annot, 0, 1000);
+
+create view FinalForwardBlockCandidates2 as
+select FBC.annot as annot
+from  ForwardBlockCandidates2 FBC
+consolidate on FBC.annot
+using 'NotContainedWithin';
+
+create view ForwardBlockCandidates3 as
+select B.annot as headerBegin, 
+       E.annot as headerEnd,
+       CombineSpans(B.annot, E.annot) as annot
+from HeaderBegin3 B, HeaderEnd3 E
+where FollowsTok(B.annot, E.annot, 0, 1000);
+
+create view FinalForwardBlockCandidates3 as
+select FBC.annot as annot
+from  ForwardBlockCandidates3 FBC
+consolidate on FBC.annot
+using 'NotContainedWithin';
+
+create view ForwardBlockCandidates4 as
+select B.annot as headerBegin, 
+       E.annot as headerEnd,
+       CombineSpans(B.annot, E.annot) as annot
+from HeaderBegin4 B, HeaderEnd4 E
+where FollowsTok(B.annot, E.annot, 0, 1000);
+
+create view FinalForwardBlockCandidates4 as
+select FBC.annot as annot
+from  ForwardBlockCandidates4 FBC
+consolidate on FBC.annot
+using 'NotContainedWithin';
+
+create view ForwardBlockCandidates7 as
+select B.annot as headerBegin, 
+       E.annot as headerEnd,
+       CombineSpans(B.annot, E.annot) as annot
+from HeaderBegin7 B, HeaderEnd7 E
+where FollowsTok(B.annot, E.annot, 0, 1000);
+
+create view FinalForwardBlockCandidates7 as
+select FBC.annot as annot
+from  ForwardBlockCandidates7 FBC
+consolidate on FBC.annot
+using 'NotContainedWithin';
+
+create view ForwardBlockCandidates8 as
+select B.annot as headerBegin, 
+       E.annot as headerEnd,
+       CombineSpans(B.annot, E.annot) as annot
+from HeaderBegin8 B, HeaderEnd8 E
+where FollowsTok(B.annot, E.annot, 0, 1000);
+
+create view FinalForwardBlockCandidates8 as
+select FBC.annot as annot
+from  ForwardBlockCandidates8 FBC
+consolidate on FBC.annot
+using 'NotContainedWithin';
+
+create view ForwardBlockCandidates9 as
+select B.annot as headerBegin, 
+       E.annot as headerEnd,
+       CombineSpans(B.annot, E.annot) as annot
+from HeaderBegin9 B, HeaderEnd9 E
+where FollowsTok(B.annot, E.annot, 0, 1000);
+
+create view FinalForwardBlockCandidates9 as
+select FBC.annot as annot
+from  ForwardBlockCandidates9  FBC
+consolidate on FBC.annot;
+
+/*
+ * Consolidate all forward blocks
+ */
+
+create view ForwardBlockAll as 
+     (select FB1.annot as annot from FinalForwardBlockCandidates1 FB1)
+     union all
+     (select FB2.annot as annot from FinalForwardBlockCandidates2 FB2)
+     union all
+     (select FB3.annot as annot from FinalForwardBlockCandidates3 FB3)
+     union all
+     (select FB4.annot as annot from FinalForwardBlockCandidates4 FB4)
+     union all
+     (select HB5.annot as annot from HeaderBegin5 HB5)
+     union all
+     (select HB6.annot as annot from HeaderBegin6 HB6)
+     union all
+     (select FB7.annot as annot from FinalForwardBlockCandidates7 FB7)
+     union all
+     (select FB8.annot as annot from FinalForwardBlockCandidates8 FB8)
+     union all
+     (select FB9.annot as annot from FinalForwardBlockCandidates9 FB9)
+     union all
+     (select HB10.annot as annot from HeaderBegin10 HB10)
+     union all
+     (select HB11.annot as annot from HeaderBegin11 HB11);
+
+
+ 
+create view ForwardBlock as 
+select FB.annot as annot
+from ForwardBlockAll FB
+consolidate on FB.annot using 'NotContainedWithin';
+
+output view ForwardBlock;
+

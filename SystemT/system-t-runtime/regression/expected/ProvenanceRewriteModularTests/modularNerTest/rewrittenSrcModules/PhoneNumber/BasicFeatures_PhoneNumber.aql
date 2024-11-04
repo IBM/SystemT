@@ -1,0 +1,110 @@
+module PhoneNumber;
+
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText
+;
+
+
+import dictionary PhoneWordsAsCluesOne from module Dictionaries as PhoneWordsAsCluesOne
+;
+
+
+import dictionary PhoneWordsAsCluesTwo from module Dictionaries as PhoneWordsAsCluesTwo
+;
+
+
+import dictionary PhoneWordsAsFilters from module Dictionaries as PhoneWordsAsFilters
+;
+
+
+require document with columns
+  text Text;
+
+create view StrongPhoneVariant as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__12__Temp_____sep_____D____id
+  from  __Subquery__12__Temp D;
+
+output view StrongPhoneVariant;
+
+create view PhoneNumberInstance as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__13__Temp_____sep_____R____id
+  from  __Subquery__13__Temp R;
+
+output view PhoneNumberInstance;
+
+create view CorrectPhoneNumberInstance as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as PhoneNumberInstance_____sep_____R____id
+  from  PhoneNumberInstance R
+  where Not(ContainsRegex(/(\(.+\()|(\).+\)|(\/.+\/)|(\([^)]*$))/, R.match));
+
+output view CorrectPhoneNumberInstance;
+
+create view PhoneVariant as
+  select  D.match as annot,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__14__Temp_____sep_____D____id
+  from  __Subquery__14__Temp D;
+
+output view PhoneVariant;
+
+create view PhoneFilter as
+  select  D.match as annot,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__15__Temp_____sep_____D____id
+  from  __Subquery__15__Temp D;
+
+output view PhoneFilter;
+
+create view __Subquery__12__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'PhoneWordsAsCluesTwo'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__12__Temp;
+
+create view __Subquery__13__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    regex /(\+\s*){0,2}[\p{Nd}(]([\p{Nd} ()\-.\/]){9,20}\p{Nd}/
+    with flags 'DOTALL'
+    on between 1 and 10 tokens in D.text
+    return group 0 as match
+  from DocumentText D;
+
+output view __Subquery__13__Temp;
+
+create view __Subquery__14__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'PhoneWordsAsCluesOne'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__14__Temp;
+
+create view __Subquery__15__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'PhoneWordsAsFilters'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__15__Temp;
+

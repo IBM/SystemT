@@ -1,0 +1,23 @@
+/*
+Test to verify that external tables with fields of type Float and Boolean work fine.
+*/
+
+module loadExtTableFloatBoolTest;
+
+require document with columns text Text;
+
+create external table MyTable (floatVal Float, booleanVal Boolean) required true;
+	
+create view TableCopy as
+	select T.*
+	from MyTable T;
+	
+create view TableCopyFiltered as
+	select T.*
+	from MyTable T
+	where Equals(T.floatVal, 1.3)
+	  and Equals(T.booleanVal, false);
+	
+output view TableCopy;
+output view TableCopyFiltered;
+

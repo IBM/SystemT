@@ -1,0 +1,39 @@
+# tmp.aog
+# 
+# temporary testing AOG code goes here.
+
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+#first names dictionary
+CreateDict(
+    "name" => "dictionaries/first.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+# Find potential first names.
+$FirstName = 
+Project(( "match" => "first" ), 
+	Dictionary("dictionaries/first.dict", "text", $Document));
+
+# Use a regular expression to find potential last names.
+$LastName = 
+	RegexTok(/[A-Z]\w*/, (0 => "last"), 2, "text", $Document);
+
+
+# Same thing with an RSE join.  Note the explicitly inverted predicate.
+$RSEJoinFollowedByTok =
+ApplyFunc(CombineSpans("last", "first") => "Combined", 
+	RSEJoin(FollowedByTok("first", "last", 1, 7), $FirstName, 
+		RegexTok(/[A-Z]\w*/, (0 => "last"), 2, "text", $Document))
+);
+
+################################################################################
+# OUTPUT SPEC
+Output: $RSEJoinFollowedByTok;
+

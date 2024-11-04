@@ -1,0 +1,33 @@
+module rse;
+
+-- rse.aql:
+-- A simple view that should always be compiled with RSE join.  Used for
+-- verifying that the optimizer is indeed selecting RSE join when it should do
+-- so.
+
+
+-- Define some auxiliary views
+create view CapsWord as
+extract regex /[A-Z][a-z]+/ 
+    on 1 token in D.text
+    as word
+from Document D;
+
+
+create dictionary TheDict as ( 'the' );
+
+create view TheView as
+extract dictionary TheDict on D.text as thematch 
+from Document D;
+
+
+-- This is the view that should have an RSE join; we don't really care about
+-- what it outputs, just whether the optimizer chooses the right kind of join.
+create view RSEJoinView as
+select CW.word as word, TV.thematch as thematch
+from CapsWord CW, TheView TV
+where FollowsTok(CW.word, TV.thematch, 0, 0);
+
+
+output view RSEJoinView;
+

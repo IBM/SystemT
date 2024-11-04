@@ -1,0 +1,25 @@
+module runtimeErrorTest;
+
+require document with columns text Text;
+
+-- A simple test of table functions; checks whether table functions work at
+-- all.
+
+-- Declare a simple table function
+create function MyTableFunc( intArg Integer )
+return table( stringVal Text, realVal Float )
+external_name 
+    -- Path relative to module root; udfjars is inside <project root>/testdata
+    '../../../../udfjars/tableFnTestsUDFs.jar:com.ibm.test.udfs.BasicTableFunc!eval'
+language java
+deterministic
+called on null input;
+
+-- The table function's implementation throws an exception if it receives a
+-- number greater than 5 as input
+create view TabFuncOutput as
+select * from MyTableFunc(42);
+
+output view TabFuncOutput;
+
+

@@ -1,0 +1,161 @@
+module travel;
+
+
+-- Rule #2b, went to
+create dictionary travel_went_dict as
+('traveled',
+  'went',
+  'was at',
+  'visited',
+  'enjoyed',
+  'liked',
+  'was in'
+  );
+  
+create view travel_went as 
+extract dictionary 'travel_went_dict'  on D.text as went
+from travel_inputView D;
+  
+create dictionary travel_if as
+('if');
+--should add "when"??
+  
+create view travel_past_went as 
+select CombineSpans(W.went,D.indirectObject) as keyPhrase
+from travel_tripOrDest D, travel_went W
+where 
+	FollowsTok(W.went,D.indirectObject,0,2) and
+	Or(ContainsDict('travel_on_dict',SpanBetween(W.went,D.indirectObject)),
+	   ContainsDict('travel_to_word_dict',SpanBetween(W.went,D.indirectObject))) and
+	Not(ContainsDict('travel_if',LeftContext(W.went,140)))  and
+	Not(ContainsDict('travel_boring_trip',SpanBetween(W.went,D.indirectObject))) and
+	Not(ContainsDict('travel_boring_trip',LeftContextTok(W.went,2))) and
+	Not(ContainsDict('travel_boring_trip', RightContextTok(D.indirectObject,2)));
+	
+create view travel_past_took as
+extract
+	pattern 'took' <Token>{0,2} <T.tripWord> as keyPhrase
+from travel_trip_word T
+having Not(ContainsDict('travel_boring_trip',CombineSpans(keyPhrase,RightContextTok(keyPhrase, 6)))) and -- protected via context
+Not(ContainsDict('travel_if',LeftContextTok(keyPhrase,5)));
+
+-- visited
+create dictionary travel_visited_dict as
+('visited');
+
+create view travel_visited as
+extract dictionary travel_visited_dict on I.text as visited
+from travel_inputView I;
+
+create view travel_past_visited as
+select CombineSpans(V.visited, M.myFriendIn) as keyPhrase
+from travel_MyIn M, travel_visited V
+where Follows(V.visited,M.myFriendIn,0,140);
+
+create dictionary travel_past_phrase_dict as
+('flew from');
+
+create view travel_past_phrase as 
+extract dictionary 'travel_past_phrase_dict' on D.text as flewFrom
+from travel_inputView D;
+
+create view airport_flew_from as
+select CombineSpans(FP.iWe,F.flewFrom) as keyPhrase
+from 
+	travel_firstPersonPronoun  FP, travel_past_phrase F
+where FollowsTok(FP.iWe,F.flewFrom,0,2);
+	
+
+	---
+	create dictionary travel_post_clue_dict  as 
+('yesterday',
+'last week',
+'last month',
+'last year',
+'a week ago',
+'two weeks ago',
+'three weeks ago',
+'a month ago',
+'two months ago',
+'back in');
+
+create view travel_post_clue as
+extract dictionary 'travel_post_clue_dict' on I.text as yesterday
+from travel_inputView I;
+
+create view travel_post_onMyFlight as
+select CombineSpans(A.onMyFlight, F.yesterday) as keyPhrase
+from travel_onMyFlight A, travel_post_clue F
+where FollowsTok(A.onMyFlight,F.yesterday,0,1);
+	
+	---
+	
+create view travel_past_output_all as
+(select B.keyPhrase as keyPhrase from travel_past_went B)
+union all 
+(select C.keyPhrase as keyPhrase from travel_past_took C)
+union all
+(select D.keyPhrase as keyPhrase from travel_past_visited D)
+union all
+(select D.keyPhrase as keyPhrase from airport_flew_from D)
+;
+
+
+create dictionary travel_go_dict as
+('going',
+'go',
+'went'); 
+
+create view travel_past_output_addPersonA as
+select V.text as text,
+P.keyPhrase as keyPhrase,
+CombineSpans(F.firstPerson,P.keyPhrase) as personPhrase
+from  travel_past_output_all P, travel_inputView V, travel_I_all F
+where  Or(FollowsTok(F.firstPerson,P.keyPhrase,0,0),
+		  Overlaps(F.firstPerson,P.keyPhrase));
+
+create view travel_past_output_addPersonB as 
+select A.text as text,
+A.keyPhrase as keyPhrase 
+from travel_past_output_addPersonA A 
+where Not(ContainsDict('travel_noti_dict',A.personPhrase));
+
+create view travel_past_output_alreadyPerson as
+select V.text as text,
+P.keyPhrase as keyPhrase
+from travel_past_output_all P, travel_inputView V
+where  
+		Or(ContainsDict('travel_my_dict',P.keyPhrase),
+		ContainsDict('travel_firstPerson_pronoun_dict',P.keyPhrase));
+
+create view travel_past_output_union  as 
+select P.text as text,
+	P.keyPhrase as keyPhrase 
+	from  (
+			(select A.text as text, A.keyPhrase as keyPhrase from travel_past_output_addPersonB A) 
+				union all 
+			(select B.text as text, B.keyPhrase as keyPhrase from travel_past_output_alreadyPerson B)
+		   ) P
+where  
+	Not(ContainsDict('travel_go_dict',RightContextTok(P.keyPhrase,5)))  -- not sure why this is here
+and Not(ContainsDict('travel_wishful_dict',CombineSpans(LeftContext(P.keyPhrase,140), P.keyPhrase))) -- exclude wishful --protected via context
+and Not(ContainsDict('travel_conditional_dict',CombineSpans(LeftContext(P.keyPhrase,140), P.keyPhrase))) -- exclude wishful --protected via context
+and Not(ContainsDict('travel_habitual_dict',P.text))  -- exclude habitual travellers
+and Not(ContainsDict('travel_negation_dict',LeftContextTok(P.keyPhrase,6)))  -- in this case, eliminate "should've" 
+;
+
+create view travel_past_output_preConsolidate as 
+(select T.text as text,
+	T.keyPhrase as keyPhrase
+	from travel_past_output_union  T
+	)
+union all
+( select I.text as text,
+	B.keyPhrase as keyPhrase
+	from travel_post_onMyFlight B, travel_inputView I
+);
+
+create view travel_past_output as
+select A.text as text, A.keyPhrase as keyPhrase from travel_past_output_preConsolidate A
+consolidate on A.keyPhrase using 'ContainedWithin';
+

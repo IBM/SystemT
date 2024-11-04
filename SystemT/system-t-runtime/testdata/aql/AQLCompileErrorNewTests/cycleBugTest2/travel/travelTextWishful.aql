@@ -1,0 +1,95 @@
+module travel;
+
+
+   create view travel_going_vacation_want as
+  extract 
+  pattern 'go'  <Token> <T.indirectObject>  as keyPhrase
+  from ((select * from travel_other_intent_trip) 
+  		 union all
+  		(select * from travel_other_intent_dest)) G,
+  		travel_tripOrDest T
+  having Not(ContainsDict('travel_boring_trip',RightContextTok(keyPhrase,3)));
+  
+  -- RULE #? planning & taking
+-- plan a trip to destination 
+--  took a trip	
+-- Need to improve this rule to include time info, not yet in output.
+create dictionary travel_PreWord_dict as
+('plan',
+'go on');
+
+create view travel_preWord as 
+extract dictionary 'travel_PreWord_dict' on D.text as plan
+from travel_inputView D;
+
+create view travel_other as
+extract 
+pattern <P.plan> ('a'|'the') <T.tripWord> as keyPhrase
+from travel_trip_word T, travel_preWord P;
+
+create dictionary travel_conditional_dict as 
+(
+'If I had',
+'If I could',
+'If I were',
+'If I was',
+'had a dream',
+'what if'
+);
+
+-- The commented out ones probably need a destination.
+create dictionary travel_traveldesire_dict as (
+'take a trip',
+'plan a trip',
+'make a trip',
+'travel to',
+'travel on',
+'travel',
+'travel overseas'
+);
+
+-- The commented out ones probably need a destination.
+create dictionary travel_traveldesire_dest_dict as (
+'make a trip to',
+'make a trip 2',
+'take a trip 2',
+'go 2',
+'go to',
+'go on',
+'be at',
+'be on',
+'be in',
+'go to',
+'visit'
+);
+
+create view travel_traveldesire as 
+extract dictionary 'travel_traveldesire_dict' on D.text as travelDesire
+from travel_inputView D;
+
+create view travel_traveldesire_needDest as
+extract dictionaries 'travel_traveldesire_dict' and 'travel_traveldesire_dest_dict' on D.text as travelDesire
+from  travel_inputView D;
+
+create view travel_want_traveldesire as
+select CombineSpans(W.wishPhrase, T.travelDesire) as keyPhrase  --protected
+from travel_traveldesire T, travel_wishful_all W
+where FollowsTok(W.wishPhrase,T.travelDesire,0,3) and
+	Not(ContainsDict('travel_boring_trip',RightContextTok(T.travelDesire,5)));
+
+create view travel_want_travel_dest as
+select CombineSpans(W.wishPhrase, D.indirectObject) as keyPhrase  --protected
+from travel_traveldesire_needDest T, travel_wishful_all W, travel_tripOrDest D
+where FollowsTok(W.wishPhrase,T.travelDesire,0,3) and
+	  FollowsTok(T.travelDesire,D.indirectObject,0,3) and
+	Not(ContainsDict('travel_boring_trip',RightContextTok(T.travelDesire,5)));
+
+
+create view travel_implicit_traveldesire as
+extract dictionary 'travel_buyObject_dict'  on I.text as desiredThing
+from travel_inputView I;
+
+-- Things in this view are wishful unless there is also an intent clue.
+create view travel_wishful_maybeintent as
+select A.desiredThing as keyPhrase from travel_implicit_traveldesire A;
+

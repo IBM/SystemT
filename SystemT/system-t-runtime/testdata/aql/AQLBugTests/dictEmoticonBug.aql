@@ -1,0 +1,50 @@
+-----------------------------------------------------------------------------
+-- dictEmoticonBug.aql
+--
+-- Test case for defect 28160: CS Defect #140021: Problem with dictionary 
+-- evaluation on entries ending with escape character
+-----------------------------------------------------------------------------
+
+require document with columns text Text;
+
+-----------------------------------------------------------------------------
+-- Method 1: Direct inline dictionary
+
+create dictionary EmoticonDict as( 
+	'(:-\\'
+);
+
+create view AnnoyedEmoticonInline as
+extract dictionary 'EmoticonDict' on D.text as match
+from Document D;
+
+output view AnnoyedEmoticonInline;
+
+
+----------------------------------------------------------------------------
+-- Method 2: Table --> dictionary
+
+create table EmoticonTable (smiley Text) as
+values 
+	(':-\\');
+	
+create dictionary EmoticonDict2 
+from table EmoticonTable
+with entries from smiley;
+
+create view AnnoyedEmoticonTable as 
+extract dictionary EmoticonDict2 on D.text as smiley
+from Document D;
+
+output view AnnoyedEmoticonTable;
+
+-----------------------------------------------------------------------------
+--Method 3: File --> dictionary
+
+create view AnnoyedEmoticonFile as
+extract dictionary 'dictEmoticonBug.dict' on D.text as match
+from Document D;
+
+
+output view AnnoyedEmoticonFile;
+

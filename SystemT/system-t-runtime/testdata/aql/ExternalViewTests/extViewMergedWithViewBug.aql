@@ -1,0 +1,17 @@
+require document with columns text Text;
+--
+-- Test case for defect 13079:	SystemT.SIngle.getExternalViewSchema() fails in certain cases
+--
+
+-- Declare an external view that is populated at runtime
+create external view Word(match Span) 
+external_name 'Word'; 
+
+-- Select the contents of the external view
+-- Causes the plan nodes for Word and WordAll to be merged into a single node, 
+-- causing the invocation of SystemT.Single.getExternalViewSchema("Word") to fail.
+create view WordAll as 
+select * 
+from Word; 
+
+output view WordAll;

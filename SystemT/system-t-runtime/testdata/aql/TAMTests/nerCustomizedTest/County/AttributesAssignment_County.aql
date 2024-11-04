@@ -1,0 +1,38 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module County;
+
+import view StateOrProvince_ from module StateOrProvince as StateOrProvince_;
+
+create view CountyState as
+select C.match as county, S.stateorprovince as state, S.country as country, S.continent as continent, CombineSpans(C.match, S.reference) as reference
+from StateOrProvince_ S,
+	 CountyValid C
+where FollowsTok(C.match, S.stateorprovince, 0, 1)
+  and MatchesRegex(/\s*[,]?\s*/, SpanBetween(C.match, S.stateorprovince))
+  and Not(ContainsRegex(/[\n\r]/, SpanBetween(C.match, S.stateorprovince)));
+
+create view CountyAll as
+	(select C.county as county, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CountyState C)
+	union all
+	(select C.match as county, '' as state, '' as country, '' as continent, C.match as reference from CountyValid C);
+
+
+create view County_ as
+select C.county as county, C.state as stateorprovince, C.country as country, C.continent as continent, C.reference as reference
+from CountyAll C
+consolidate on C.county;

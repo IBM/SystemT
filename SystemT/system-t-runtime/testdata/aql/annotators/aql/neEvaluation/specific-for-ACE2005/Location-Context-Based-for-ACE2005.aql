@@ -1,0 +1,127 @@
+----------------------------------------------------
+-- High precision rules: no need for filtering
+----------------------------------------------------
+create view LongCapsPlace as
+select CombineSpans(CP1.match, CP2.match) as match
+from CapsPlace CP1,
+     CapsPlace CP2
+where FollowsTok(CP1.match, CP2.match, 0, 1)
+  and MatchesRegex(/\s*(-|de)?\s*/, SpanBetween(CP1.match, CP2.match))
+  and Not(MatchesRegex(/([tT]he|an?)/, CP1.match));  
+  
+create view HyphenatedLongCapsPlace1 as
+select CombineSpans(CP1.match, CP2.match) as match
+from CapsPlace CP1,
+     CapsPlace CP2
+where FollowsTok(CP1.match, CP2.match, 3, 3)
+  and MatchesRegex(/-(\p{L}\p{M}*)+-/, SpanBetween(CP1.match, CP2.match));
+
+create view HyphenatedLongCapsPlace2 as
+select CombineSpans(LeftContextTok(CP.match, 2), CP.match) as match
+from CapsPlace CP
+where MatchesRegex(/al-/, LeftContextTok(CP.match, 2));
+
+  
+create view CapsInitial as
+extract
+	regex /(\p{Lu}\p{M}*\.?){1,2}/
+	on between 1 and 4 tokens in D.text
+	as word
+from Doc D;  
+  
+create view CapsPlaceWithInitial1 as
+select CombineSpans(I.word, CP.match) as match
+from   CapsInitial I,
+       CapsPlace CP
+where FollowsTok(I.word, CP.match, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(I.word, CP.match)));
+  
+create view CapsPlaceWithInitial2 as
+select CombineSpans(CP.match, I.word) as match
+from CapsInitial I,
+     CapsPlace CP
+where FollowsTok(CP.match, I.word, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(I.word, CP.match)));
+  
+create view AllCapsPlace as
+extract
+	regex	/(\p{Lu}\p{M}*){2,}/
+		on 1 token in D.text
+		as match
+from Doc D
+having MatchesRegex(/\s*,/, RightContextTok(match, 1))
+   and MatchesRegex(/[\r\n]/, LeftContext(match, 1));
+  
+create view RelaxedCapsPlaceAll as
+	(select CP.* from CapsPlace CP)
+	union all
+	(select CP.* from LongCapsPlace CP)
+	union all
+	(select CP.* from HyphenatedLongCapsPlace1 CP)
+	union all
+	(select CP.* from HyphenatedLongCapsPlace2 CP)
+	union all
+	(select CP.* from CapsPlaceWithInitial1 CP)
+	union all
+	(select CP.* from CapsPlaceWithInitial2 CP)
+	union all
+	(select O.* from AllCapsPlace O);
+	
+create view RelaxedCapsPlace as
+select CP.*
+from RelaxedCapsPlaceAll CP
+where Not(ContainsDict('pos/preps-list', SubSpanTok(CP.match, 1, 1)))
+  and Not(MatchesDict('pos/dets-list', CP.match));
+
+create view ExtraLongCapsPlace as
+select CombineSpans(CP1.match, CP2.match) as match
+from RelaxedCapsPlace CP1,
+     RelaxedCapsPlace CP2
+where FollowsTok(CP1.match, CP2.match, 1, 1)
+  and MatchesRegex(/\s*de\s*/, SpanBetween(CP1.match, CP2.match));
+  
+create view AllRelaxedCapsPlace as
+	(select CP.* from RelaxedCapsPlace CP)
+	union all
+	(select CP.* from ExtraLongCapsPlace CP);
+
+create dictionary AmbiguousLocDict as (
+	'East coast'
+);
+
+create view AmbiguousLoc as
+	extract
+		dictionaries
+			'AmbiguousLocDict'
+		on D.text
+		as match
+from Doc D;
+
+create dictionary LeftContextClue4AmbiguousLocDict as (
+	'on the', 'entire'
+);
+
+create view LeftContextClue4AmbiguousLoc as
+	extract
+		dictionaries
+			'LeftContextClue4AmbiguousLocDict'
+		on D.text
+		as clue
+from Doc D;
+
+create view PatternBasedLocation as
+	extract
+		pattern <C.clue>(<L.match>)
+		return group 1 as match
+from LeftContextClue4AmbiguousLoc C,
+	 AmbiguousLoc L;
+	 
+create view WrongPatternBasedLocation as
+	(select L.* from AmbiguousLoc L)
+	minus
+	(select L.* from PatternBasedLocation L);	 
+	 
+--create view PatternBasedLocation as
+--	(select P.* from PatternBasedLocation1 P)
+
+--output view PatternBasedLocation;

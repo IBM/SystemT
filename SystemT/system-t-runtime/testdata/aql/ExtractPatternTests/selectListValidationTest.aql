@@ -1,0 +1,107 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test cases for extension to sequence patterns to pass through attributes
+-- Verifies that extra items in select list are validated wrt FROM clause
+--
+-------------------------------------------------------------------------------
+
+create view CapsWord as
+extract 'CapsWord' as type,
+	regex /[A-Z].*/ on 1 token in D.text as match
+from Document D;
+
+create view LowWord as
+extract 'LowWord' as type,
+	regex /[a-z]*/ on 1 token in D.text as match
+from Document D;
+
+-- Wrong view alias will generate an exception "Name 'M' not found in from list"
+create view ColRefAtom1 as
+extract M.type as ctype, GetText(N.type) as ctype_text,
+	    pattern <C.match> as match
+from CapsWord C;
+
+output view ColRefAtom1;
+
+-- Wrong pass through column name will generate an exception "C (CapsWord) has no output column called 'type_' (columns are [type, match])"
+create view ColRefAtom2 as
+extract C.type_ as ctype, GetText(C.type__) as ctype_text,
+	    pattern <C.match> as match
+from CapsWord C;
+
+output view ColRefAtom2;
+
+-- Correct statement, should not generate any exceptions
+create view ColRefAtom3 as
+extract C.type as ctype,
+	    pattern <C.match> as match
+from CapsWord C
+consolidate on match;
+
+output view ColRefAtom3;
+
+-- Wrong view alias inside ScalarFunc will generate an exception "Name 'M' not found in from list"
+create view ColRefAtom5 as
+extract GetText(M.type) as ctype,
+	    pattern <C.match> as match
+from CapsWord C;
+
+output view ColRefAtom5;
+
+-- Wrong pass through column name inside ScalarFunc will generate an exception "C (CapsWord) has no output column called 'type_' (columns are [type, match])"
+create view ColRefAtom6 as
+extract GetText(C.type_) as ctype,
+	    pattern <C.match> as match
+from CapsWord C;
+
+output view ColRefAtom6;
+
+-- SELECT list contains an aggregate function call - will generate exception "Aggregate function 'Count' not allowed in EXTRACT clause"
+create view ColRefAtom10 as
+extract Count(C.type) as ctype,
+	    pattern <C.match> as match
+from CapsWord C;
+
+output view ColRefAtom10;
+
+-- Test col ref validation for select list
+-- Wrong statement - select list mentions a column that is not defined in the subquery. should throw an error that
+create view ColRefAtom11 as
+extract C.match1 as match1,
+	pattern <C.match> as match
+from (select * from CapsWord) C;
+
+output view ColRefAtom11;
+
+-- Wrong statement - select list and pattern have a duplicate output column. 
+-- Throws: The select list already has a column called 'match'. Columns are: [match]
+create view ColRefAtom12 as
+extract C.match as match,
+	pattern <C.match> as match
+from CapsWord C;
+
+output view ColRefAtom12;
+
+-- Wrong statement - select list and pattern have a duplicate output column. The column in select list is coming from wildcard expansion 
+-- Throws: The select list already has a column called 'match'. Columns are: [type, match]
+create view ColRefAtom13 as
+extract C.*,
+	pattern <C.match> as match
+from CapsWord C;
+
+output view ColRefAtom13;
+
+-- Wrong statement - select list and pattern have a duplicate output column. The column in select list is coming from alias inferrence 
+-- Throws: The select list already has a column called 'match'. Columns are: [match]
+create view ColRefAtom14 as
+extract C.match,
+	pattern <C.match> as match
+from CapsWord C;
+
+output view ColRefAtom14;
+
+
+
+
+
+

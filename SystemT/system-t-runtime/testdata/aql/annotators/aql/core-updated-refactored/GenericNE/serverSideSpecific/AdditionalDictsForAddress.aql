@@ -1,0 +1,105 @@
+-- Yunyao: created on 05/22/2008
+
+-- Additional state abbreviations
+create view CanadianProvinceStrongAbbrev  as
+select D.match as match
+--from   Dictionary('location/statesOrProvinces/provinceAbbrev-canada.dict',  'Exact', Doc.text) D;
+--from (extract dictionary 'location/statesOrProvinces/provinceAbbrev-canada.dict' with flags 'Exact' on D.text as match from Doc D) D;
+from (extract dictionary 'location/statesOrProvinces/loc_canada_provin_abbrev_case_en.dict' with flags 'Exact' on D.text as match from Doc D) D;
+
+create view CanadianProvinceWeakAbbrev  as
+select D.match as match
+--from   Dictionary('location/statesOrProvinces/provinceAbbrev-canada.dict',  Doc.text) D;
+--from (extract dictionary 'location/statesOrProvinces/provinceAbbrev-canada.dict' on D.text as match from Doc D) D;
+from (extract dictionary 'location/statesOrProvinces/loc_canada_provin_abbrev_case_en.dict' on D.text as match from Doc D) D;
+	
+-- states for major countries other than US and Canada
+
+
+create view StatesFromOtherMajorCountries as
+extract
+    dictionaries
+        --'location/statesOrProvinces/provinces-china.dict'
+        'location/statesOrProvinces/loc_china_provin_case_en.dict'
+    --and 'location/statesOrProvinces/provinces-russia.dict'
+    and 'location/statesOrProvinces/loc_russia_provin_case_en.dict'
+    --and 'location/statesOrProvinces/states-india.dict'
+    and 'location/statesOrProvinces/loc_india_states_case_en.dict'
+    --and 'location/statesOrProvinces/states-france.dict'
+    and 'location/statesOrProvinces/loc_france_states_case_fr.dict'
+    --and 'location/statesOrProvinces/states-italy.dict'
+    and 'location/statesOrProvinces/loc_italy_states_case_en.dict'
+    --and 'location/statesOrProvinces/states-iran.dict'
+    and 'location/statesOrProvinces/loc_iran_states_case_en.dict'
+    --and 'location/statesOrProvinces/states-mexico.dict'
+    and 'location/statesOrProvinces/loc_mexico_states_case_es.dict'
+    --and 'location/statesOrProvinces/states-australia.dict'
+    and 'location/statesOrProvinces/loc_australia_states_case_en.dict'
+    --and 'location/statesOrProvinces/provinces-southKorea.dict'
+    and 'location/statesOrProvinces/loc_southkorea_provin_case_en.dict'
+    --and 'location/statesOrProvinces/autoCommunities-spain.dict'
+    and 'location/statesOrProvinces/loc_spain_comm_case_en.dict'
+    --and 'location/statesOrProvinces/provinces-turkey.dict'
+    and 'location/statesOrProvinces/loc_turkey_provin_case_tr.dict'
+    --and 'location/statesOrProvinces/states-brazil.dict'
+    and 'location/statesOrProvinces/loc_brazil_states_case_pt.dict'
+    --and 'location/statesOrProvinces/prefectures-japan.dict'
+    and 'location/statesOrProvinces/loc_japan_prefec_case_en.dict'       
+--NOTE: more dictionaries can be added here
+    with flags 'Exact'
+        on D.text   
+        as match
+from Doc D;
+	
+--output view StatesFromMajorCountries;
+
+-- major cities around the world
+create view MajorCity as
+extract
+    dictionaries
+		--'location/cities/majorCity_world.dict'
+		'location/cities/loc_world_cities_mixed_long.dict'
+	--and 'location/cities/majorCities.dict'
+	and 'location/cities/loc_world_cities_mixed_short.dict'
+	--and 'location/cities/city_bayarea.dict'
+	and 'location/cities/loc_usa_bayarea_cities_en.dict'
+	-- major cities for countries with GDP of top 20 in the world (except for US and Germany)
+	--and 'location/cities/majorCities-china.dict'
+	and 'location/cities/loc_china_cities_en.dict'
+	--and 'location/cities/majorCities-UK.dict'
+	and 'location/cities/loc_uk_cities_en.dict'
+	--and 'location/cities/majorCities-russia.dict'
+	and 'location/cities/loc_russia_cities_en.dict'
+	--and 'location/cities/majorCities-france.dict'
+	and 'location/cities/loc_france_cities_fr.dict'
+	--and 'location/cities/majorCities-iran.dict'
+	and 'location/cities/loc_iran_cities_en.dict'
+	--and 'location/cities/majorCities-india.dict'
+	and 'location/cities/loc_india_cities_en.dict'
+	--and 'location/cities/majorCities-brazil.dict'
+	and 'location/cities/loc_brazil_cities_pt.dict'
+	--and 'location/cities/majorCities-italy.dict'
+	and 'location/cities/loc_italy_cities_it.dict'
+	--and 'location/cities/majorCities-mexico.dict'
+	and 'location/cities/loc_mexico_cities_mixed.dict'
+	--and 'location/cities/majorCities-southKorea.dict'
+	and 'location/cities/loc_southkorea_cities_en.dict'
+	--and 'location/cities/majorCities-spain.dict'
+	and 'location/cities/loc_spain_cities_es.dict'
+	--and 'location/cities/majorCities-indonesia.dict'
+	and 'location/cities/loc_indonesia_cities_id.dict'
+	--and 'location/cities/majorCities-australia.dict'
+	and 'location/cities/loc_australia_cities_en.dict'
+	--and 'location/cities/majorCities-taiwan.dict'
+	and 'location/cities/loc_taiwan_cities_en.dict'
+	--and 'location/cities/majorCities-turkey.dict'
+	and 'location/cities/loc_turkey_cities_en.dict'
+	--and 'location/cities/majorCities-serbia.dict'
+	and 'location/cities/loc_serbia_cities_sr.dict'
+	--and 'location/cities/majorCities-netherlands.dict'
+	and 'location/cities/loc_dutch_cities_nl.dict'
+	--and 'location/cities/stateCapitals-us.dict'
+	and 'location/cities/loc_usa_state_capitals_en.dict'
+	    on D.text   
+        as match
+	from Doc D;

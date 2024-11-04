@@ -1,0 +1,135 @@
+create view OrgWithinUrlEmailPlace as
+select O.org as org
+from OrgSentence O, UrlEmailPlace UEP
+where Contains (UEP.match, O.org);
+
+
+create view OrgOverlapTime as
+select O.org as org
+from OrgSentence O, Times t
+where Overlaps(t.match, O.org);
+
+create view InvalidOrg as
+	(select OP.org as org from OrgWithinUrlEmailPlace OP)
+	union all
+	(select OP.org as org from OrgOverlapTime OP);
+	
+create view ValidOrg as 
+	(select O.org as org from OrgSentence O)
+	minus
+	(select OP.org as org from InvalidOrg OP);
+ 
+create view ValidOrgConsolidated as
+select C.org as org
+--from Consolidate(OrgSentence.org) C;
+--from Consolidate(ValidOrg.org) C;
+from ValidOrg C
+consolidate on C.org;
+
+/*
+output view OrgWithinUrlEmailPlace;
+output view InvalidOrg;
+output view ValidOrg;
+output view ValidOrgConsolidated;
+*/
+
+create view AnyCapsOrg as
+	(select O.match as match from AllCapsOrg O)
+	union all
+	(select O.match as match from CapsOrg O);
+
+create view FinalOrgExpanded1 as
+select CombineSpans(CO.match, C.org) as org
+from ValidOrgConsolidated C,
+	 AnyCapsOrg CO
+where ContainsDict('OrgPartnershipDict', C.org)
+ and FollowsTok(CO.match, C.org, 0, 2)
+ --and MatchesRegex(/\s*,?\s*&?\s*/, SpanBetween(CO.match, C.org));
+ --Yunyao: avoid line break or tab and allow the missing of '&' if the extension is the beginning of a line 
+ -- TODO: allow the missing of & if the extension is the begining of a sentence
+ and MatchesRegex(/([ ]*,?[ ]*&[ ]*)|(^[ ]*,?[ ]*&?[ ]*)/, SpanBetween(CO.match, C.org));
+ 
+ 
+--Yunyao: added 03/09/2009 to allow expansion with strong suffix/type 
+create view FinalOrgExpanded2 as
+select CombineSpans(C.org, CL.match) as org
+from ValidOrgConsolidated C,
+	 OrgClueStCaps CL
+where FollowsTok(C.org, CL.match,  0, 2)
+--Yunyao: avoid line break or tab and allow the missing of '&' if the extension is the beginning of a line 
+-- TODO: allow the missing of & if the extension is the begining of a sentence
+ and MatchesRegex(/([ ]*,?[ ]*&[ ]*)|(^[ ]*,?[ ]*&?[ ]*)/, SpanBetween(C.org, CL.match));
+
+--Yunyao: added 03/11/2009 to allow expansion for organization to the left with &
+create view FinalOrgExpanded3 as
+select CombineSpans(CO.match, C.org) as org
+from ValidOrgConsolidated C,
+	 AnyCapsOrg CO
+where FollowsTok(CO.match, C.org, 1, 1)
+ and MatchesRegex(/([ ]*&[ ]*)|(^[ ]*&?[ ]*)/, SpanBetween(CO.match, C.org));
+
+create view FinalOrgAll as
+	(select O.org as org from ValidOrgConsolidated O)
+	union all
+	(select O.org as org from FinalOrgExpanded1 O)
+	union all
+	(select O.org as org from FinalOrgExpanded2 O)
+	union all
+	(select O.org as org from FinalOrgExpanded3 O)
+	union all
+	(select O.match as org from OrgWithinNotesEmail1 O)
+	union all
+	(select O.match as org from OrgWithinNotesEmail2 O);
+	
+
+
+create view FinalOrgConsolidated as
+select C.org as org
+--from Consolidate(FinalOrgAll.org) C;
+from FinalOrgAll C
+consolidate on C.org;
+
+
+-- Yunyao: change made on 03/24/2008 
+--         avoid matches with . on both side
+-- begain block change
+-- Yunyao: removed on 05/12/2008
+--create view FinalOrgConsolidatedWithDots as
+--select O.org as org
+--from FinalOrgConsolidated O
+--where MatchesRegex(/\./, LeftContextTok(O.org,1)) and
+--	  MatchesRegex(/\./, RightContextTok(O.org,1));
+	
+--select O.org as org into
+--FinalOrgConsolidatedWithDotsOutput
+--from FinalOrgConsolidatedWithDots O;
+
+create view FinalOrgConsolidatedWithoutDots as
+select O.org as org from FinalOrgConsolidated O;
+--	(select O.org as org from FinalOrgConsolidated O)
+--	minus
+--	(select O.org as org from FinalOrgConsolidatedWithDots O);	
+	
+-- end block change
+
+create view CitiesAll as 
+	(select S.match as match from USCity S)
+	union all
+	(select S.match as match from GermanCities  S)
+	union all
+	(select S.match as match from MajorCity  S);
+	
+create view UrlEmailPlaceOrg as 
+     --Laura 05/05/2009: globally replaced Place with AddressFinal
+     (select R.reference as match from AddressFinal R)
+     union all
+     (select R.org as match from FinalOrgConsolidatedWithoutDots R)
+     union all
+     (select R.match as match from CitiesAll R);
+     
+create view OrganizationConsolidated as
+select O.org as organization, '' as type, O.org as reference
+from FinalOrgConsolidatedWithoutDots O
+consolidate on O.org
+using 'LeftToRight';
+

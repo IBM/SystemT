@@ -1,0 +1,60 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- udfResourceTest.aql
+--
+-- Tests a UDF that loads a non-class resource from the UDF jar.
+
+create dictionary PropDict as
+(
+ 'name','phone','company'
+);
+
+create view Property as
+select
+  D.match as match
+from
+  Dictionary('PropDict', Document.text) D;
+
+-- Declare a UDF that returns the corresponding property from the properties file, 
+-- using Class.getResourceAsStream() and the file's absolute path
+create function getResourceFromClassWithAbsolutePath(p1 Span)
+return String
+external_name 'udfjars/udfs.jar:com.ibm.test.udfs.PropertyParser!getResourceFromClassWithAbsolutePath'
+language java
+deterministic
+return null on null input;
+
+-- Declare a UDF that returns the corresponding property from the properties file, 
+-- using Class.getResourceAsStream() and the file's path relative to the package name
+create function getResourceFromClassWithRelativePath(p1 Span)
+return String
+external_name 'udfjars/udfs.jar:com.ibm.test.udfs.PropertyParser!getResourceFromClassWithRelativePath'
+language java
+deterministic
+return null on null input;
+
+-- Declare a UDF that returns the corresponding property from the properties file, 
+-- using ClassLoader.getResourceAsStream() and the file's absolute path
+create function getResourceFromClassLoaderWithAbsolutePath(p1 Span)
+return String
+external_name 'udfjars/udfs.jar:com.ibm.test.udfs.PropertyParser!getResourceFromClassLoaderWithAbsolutePath'
+language java
+deterministic
+return null on null input;
+
+-- Test the UDFs
+create view LoadResourceFromClassUsingAbsolutePath as
+select getResourceFromClassWithAbsolutePath(P.match) from Property P;
+
+output view LoadResourceFromClassUsingAbsolutePath;
+
+create view LoadResourceFromClassUsingRelativePath as
+select getResourceFromClassWithRelativePath(P.match) from Property P;
+
+output view LoadResourceFromClassUsingRelativePath;
+
+create view LoadResourceFromClassLoaderUsingAbsolutePath as
+select getResourceFromClassLoaderWithAbsolutePath(P.match) from Property P;
+
+output view LoadResourceFromClassLoaderUsingAbsolutePath;

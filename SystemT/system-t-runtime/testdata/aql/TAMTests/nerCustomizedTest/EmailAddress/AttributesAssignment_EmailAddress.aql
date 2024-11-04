@@ -1,0 +1,39 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module EmailAddress;
+
+
+create view EmailAddressWithAttr as
+  extract 
+        regex /^([^@]+)@([^@]+)$/ on E.email
+       return group 0 as reference and group 1 as local and group 2 as domain
+  from InternetEmailFinal E;
+
+create view EmailAddressWithoutAttr as
+(select E.email as email from InternetEmailFinal E)
+minus
+(select E.reference as email from EmailAddressWithAttr E);
+
+create view EmailAddressWithAttrAll as
+(select E.reference as email, E.local as local, E.domain as domain, E.reference as reference from EmailAddressWithAttr E)
+union all
+(select E.email as email, '' as local, '' as domain, E.email as reference from EmailAddressWithoutAttr E);
+
+create view EmailAddress_ as 
+select E.email as email, E.local as local, E.domain as domain, E.reference as reference
+from EmailAddressWithAttrAll E;
+

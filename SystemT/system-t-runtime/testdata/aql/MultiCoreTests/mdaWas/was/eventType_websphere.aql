@@ -1,0 +1,68 @@
+-- http://publib.boulder.ibm.com/infocenter/wasinfo/beta/index.jsp?topic=%2Fcom.ibm.websphere.nd.doc%2Finfo%2Fae%2Fae%2Frtrb_readmsglogs.html (broken link!)
+
+-- ******************************************
+-- Extract the event type i.e. a single character indicating the type of event (refer the regex below for the supported characters/types) that is
+-- (i) surrounded by a single white space
+-- (ii) following the shortname (refer the extrctor to extract shortname)
+-- (iii) surrounded by a single white space
+-- Eg:
+--	[1/5/12 16:42:22:992 PST] 00000028 TraceBPE E com.ibm.bpe.util.Assert.assertion(Assert.java:68)
+--	Here 'E' is the target for extraction. And 'TraceBPE' is the shortname
+-- ******************************************
+
+
+create view EventType_sysoutErr_base as 
+--    extract regex /[FEWAICDORZ]{1}/ on 1 token in D.text as match
+	  extract regex /[FEWAICDORZ\>\<123]{1}/ on 1 token in D.text as match
+    from Doc D;
+    	
+create view EventType_sysoutErr_interim as 
+    select C.match
+    from EventType_sysoutErr_base C
+    where MatchesRegex(/\s/, LeftContext(C.match, 1))
+    and MatchesRegex(/\s/, RightContext(C.match, 1));
+
+create view EventType_sysoutErr as
+select 
+	eventTypeI.match as eventType
+from 
+	Shortname shortnameF,
+	EventType_sysoutErr_interim eventTypeI
+where 
+	FollowsTok(shortnameF.shortname, eventTypeI.match, 0, 0);	
+
+create view EventTypeSysoutErrOutputInterim as
+select D.eventType as eventType_Span, GetText(D.eventType) as eventType_Text
+from EventType_sysoutErr D;
+
+-- Seems redundant 
+-- http://publib.boulder.ibm.com/infocenter/wasinfo/beta/index.jsp?topic=%2Fcom.ibm.websphere.nd.doc%2Finfo%2Fae%2Fae%2Frtrb_readtrc.html (broken link!)
+
+--create view EventType_trace_base as 
+--    extract regex /[\>\<123Z]{1}/ on 1 token in D.text as match
+--    from Doc D;
+--    	
+--create view EventType_trace_interim as 
+--    select C.match
+--    from EventType_trace_base C
+--    where MatchesRegex(/\s/, LeftContext(C.match, 1))
+--    and MatchesRegex(/\s/, RightContext(C.match, 1));
+--
+--create view EventType_trace as
+--select 
+--	eventTypeI.match as eventType
+--from 
+--	Shortname shortnameF,
+--	EventType_trace_interim eventTypeI
+--where 
+--	FollowsTok(shortnameF.shortname, eventTypeI.match, 0, 0);	
+--
+--create view EventTypeTraceOutput as
+--select D.eventType as eventType_Span, GetText(D.eventType) as eventType_Text
+--from EventType_trace D;
+
+create view EventTypeOutput as
+select D.eventType_Span as span, D.eventType_Text as text, GetString('EventTypeWS') as field_type
+from EventTypeSysoutErrOutputInterim D;
+
+

@@ -1,0 +1,21 @@
+module module1;
+
+require document with columns text Text;
+
+-- Declare a simple table function
+create function MyTableFunc( intArg Integer )
+return table( stringVal Text, realVal Float )
+external_name 'tableFnTestsUDFs.jar:com.ibm.test.udfs.BasicTableFunc!eval'
+language java
+deterministic
+called on null input;
+
+-- Access the table function via select *
+create view TabFuncOutput as
+select * from MyTableFunc(3);
+
+output view TabFuncOutput;
+
+-- Export the table function
+export function MyTableFunc;
+

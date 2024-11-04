@@ -1,0 +1,32 @@
+module WaterBody;
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText;
+
+import dictionary WaterBodies from module Dictionaries as WaterBodies;
+import dictionary Oceans from module Dictionaries as Oceans;
+import dictionary Seas from module Dictionaries as Seas;
+
+require document with columns
+text Text;
+
+
+-- Water Body
+
+create view WaterBodyRightClue as
+extract
+	dictionary 'WaterBodies'
+	on D.text
+	as match
+from DocumentText D;
+
+
+create view WaterBodyDictMatch as
+extract
+    dictionaries
+        'Oceans' and 'Seas' 
+    on D.text   
+        as match     
+from DocumentText D
+having MatchesRegex(/\p{Lu}\p{M}*.+/, match);
+
+

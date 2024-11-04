@@ -1,0 +1,41 @@
+--
+-- Test to ensure that NickLiterals that aredouble quote string literals with escaped quotes inside the literal produce valid AOG.
+--
+
+create dictionary firstDict as
+(
+'Aaron',
+'Candra',
+'Freeman',
+'Mathew',
+'Matthew',
+'Zoraida'
+);
+
+create dictionary LastNamesDict as
+(
+ 'Anthony', 'Lehman', 'Radcliff'
+);
+
+create view LastName as
+extract dictionary 'LastNamesDict'
+on D.text as lastname 
+from Document D;
+
+create view fromList as 
+select FN.firstname as firstname,
+       "\"Last \" Name\"".lastname as lastname 
+from 
+    (extract dictionary 'firstDict' on D.text as firstname from Document D) FN, 
+    LastName "\"Last \" Name\"" 
+  where Follows(FN.firstname, "\"Last \" Name\"".lastname, 0, 1);
+  
+create view fromListStar as 
+select * 
+from 
+    (extract dictionary 'firstDict' on D.text as firstname from Document D) FN, 
+    LastName "\"Last \" Name\"" 
+  where Follows(FN.firstname, "\"Last \" Name\"".lastname, 0, 1);
+  
+output view fromList;
+output view fromListStar;

@@ -1,0 +1,309 @@
+create view OrgWithinUrlEmailPlace as
+select O.org as org
+from OrgSentence O, UrlEmailPlace UEP
+where Contains (UEP.match, O.org);
+
+create view OrgOverlapTime as
+select O.org as org
+from OrgSentence O, Times t
+where Overlaps(t.match, O.org);
+
+create view InvalidOrg as
+	(select OP.org as org from OrgWithinUrlEmailPlace OP)
+	union all
+	(select OP.org as org from OrgOverlapTime OP);
+	
+create view ValidOrg as 
+	(select O.org as org from OrgSentence O)
+	minus
+	(select OP.org as org from InvalidOrg OP);
+ 
+create view ValidOrgConsolidated as
+select C.org as org
+--from Consolidate(OrgSentence.org) C;
+--from Consolidate(ValidOrg.org) C;
+from ValidOrg C
+consolidate on C.org;
+
+/*
+output view OrgWithinUrlEmailPlace;
+output view InvalidOrg;
+output view ValidOrg;
+output view ValidOrgConsolidated;
+*/
+
+create view FinalOrgExpanded1 as
+select CombineSpans(CO.match, C.org) as org
+from ValidOrgConsolidated C,
+	 AnyCapsOrg CO
+where ContainsDict('OrgPartnershipDict', C.org)
+ and FollowsTok(CO.match, C.org, 0, 2)
+ --and MatchesRegex(/\s*,?\s*&?\s*/, SpanBetween(CO.match, C.org));
+ --Yunyao: avoid line break or tab and allow the missing of '&' if the extension is the beginning of a line 
+ -- TODO: allow the missing of & if the extension is the begining of a sentence
+ and MatchesRegex(/([ ]*,?[ ]*&[ ]*)|(^[ ]*,?[ ]*&?[ ]*)/, SpanBetween(CO.match, C.org));
+ 
+ 
+--Yunyao: added 03/09/2009 to allow expansion with strong suffix/type 
+create view FinalOrgExpanded2 as
+select CombineSpans(C.org, CL.match) as org
+from ValidOrgConsolidated C,
+	 OrgClueStCaps CL
+where FollowsTok(C.org, CL.match,  0, 2)
+--Yunyao: avoid line break or tab and allow the missing of '&' if the extension is the beginning of a line 
+-- TODO: allow the missing of & if the extension is the begining of a sentence
+ and MatchesRegex(/([ ]*,?[ ]*&[ ]*)|(^[ ]*,?[ ]*&?[ ]*)/, SpanBetween(C.org, CL.match));
+
+--Yunyao: added 03/11/2009 to allow expansion for organization to the left with &
+create view FinalOrgExpanded3 as
+select CombineSpans(CO.match, C.org) as org
+from ValidOrgConsolidated C,
+	 AnyCapsOrg CO
+where FollowsTok(CO.match, C.org, 1, 1)
+ and MatchesRegex(/([ ]*&[ ]*)|(^[ ]*&?[ ]*)/, SpanBetween(CO.match, C.org));
+ 
+--Yunyao: added 09/25/2009 to allow expansion to the left with ordinal number such as 1st, 2nd etc.
+create view FinalOrgExpanded4 as
+select CombineSpans(LeftContextTok(C.org, 1), C.org) as org
+from ValidOrgConsolidated C
+where MatchesRegex(/\d+(st|nd|rd|th)\s*/, LeftContextTok(C.org, 1)); 
+
+create view FinalOrgWithExpansions as
+	(select O.org as org from ValidOrgConsolidated O)
+	union all
+	(select O.org as org from FinalOrgExpanded1 O)
+	union all
+	(select O.org as org from FinalOrgExpanded2 O)
+	union all
+	(select O.org as org from FinalOrgExpanded3 O)
+	union all
+	(select O.org as org from FinalOrgExpanded4 O);
+	
+
+-- Laura: added 11/18/2009 to expand governmental orgs to the left with country
+-- Country + Governmental Organization = Organization
+create view FinalOrgExpanded5 as
+extract 
+	pattern <C.match> <O.org> as org
+from 
+	CountryCandidate C, 
+	(
+		(select O.org as org from FinalOrgWithExpansions O)
+		union all
+		(select O.match as org from OrgGov O)
+	) O
+having Or(ContainsDict('industryTypeGovernment_prefix.dict', org),
+          ContainsDict('industryTypeGovernment_suffix.dict', org),
+	      ContainsDict('organization_government.dict', org));
+
+--output view FinalOrgExpanded5;
+
+
+
+create view FinalOrgAll as
+	(select O.org as org from FinalOrgWithExpansions O)
+	union all
+	(select O.org as org from FinalOrgExpanded5 O)
+	union all
+	(select O.match as org from OrgWithinNotesEmail1 O)
+	union all
+	(select O.match as org from OrgWithinNotesEmail2 O);
+
+
+create view FinalOrgAllConsolidated as
+select C.org as org
+from FinalOrgAll C
+consolidate on C.org;
+
+
+-- Governmental orgs that give too many false positives taken by themselves
+create dictionary OrgGovInvalidDict as(
+	'Marine', 'Marines', 'Union', 'Police', 'Board', 'Campaign', 'Office', 'Party', 'House'
+);
+
+
+create view CountryCity as
+	(select C.match from CountryCandidate C) 
+	union all
+	(select C.match from CitiesAll C);
+
+-- Remove matches of the form <Country>'s <Org> and keep only the actual <Org>
+create view OrgOfCountryCity as
+select O.orgwrong, O.org
+from
+(
+	select O.org as orgwrong, Chomp(SpanBetween(RightContextTok(C.match,2), RightContextTok(O.org,0))) as org
+	from CountryCity C, FinalOrgAllConsolidated O
+	where Equals(GetBegin(C.match), GetBegin(O.org))
+	  and MatchesRegex(/'s/, RightContextTok(C.match,2))--'
+) O
+where Not(Equals(GetText(O.org),''));
+
+
+-- Laura: added 11/20/2009 to allow City+MediaSuffix = Organization	      
+create view CityMediaOrg as
+extract 
+	pattern <C.match> <O.match> as org
+from CountryCity C, OrgMediaSuffix O
+having Not(ContainsRegex(/[\n\r\t]{2,}/, org));
+
+
+create view FinalOrgAllExtended as
+	(
+		(select O.org as org from FinalOrgAllConsolidated O)
+		union all
+		(select O.org as org from OrgOfCountryCity O)
+		union all
+		(select O.org as org from CityMediaOrg O)
+	)
+	minus
+	(select O.orgwrong as org from OrgOfCountryCity O);
+
+create view FinalOrgAllExtendedInvalid as
+select O.org as org
+from  FinalOrgAllExtended O
+where MatchesDict('OrgGovInvalidDict', O.org);
+
+create dictionary HouseClue as(
+	'Representative', 'Representatives', 
+	'Democrat', 'Democrats',' Republican', 'Republicans', 'Member', 'Members',
+	'voted', 'will vote'
+);
+
+create dictionary TheeDict as ('The', '.');
+
+--output view FinalOrgAllExtendedInvalid;
+
+create view OrgHouseValid as
+select O.org as org 
+	from  FinalOrgAllExtended O 
+	where MatchesRegex(/House/, O.org)
+	  and Or(MatchesDict('TheeDict', LeftContextTok(O.org,1)),
+	         MatchesRegex(/[a-z]+.*/, LeftContextTok(O.org,1))
+	         );
+	          
+--output view OrgHouseValid;
+
+create view FinalOrgConsolidated as
+( select * from  FinalOrgAllExtended O where Not(MatchesDict('OrgGovInvalidDict', O.org)) )
+union all
+( select * from  OrgHouseValid )
+union all
+( select * from  OrgSportsTeam );
+
+
+--**** BEGIN BLOCK: FIND ADDITIONAL ORGANIZATION ABBREVIATIONS *********
+
+create view OrgAbbrvCand as
+select O.org, getAbbreviation(O.org) as abbreviation 
+from FinalOrgConsolidated O;
+
+create view OrgAbbrvCandNotNull as
+select *
+from OrgAbbrvCand A
+where NotNull(A.abbreviation);
+
+-- retain only abbreviations of length two or more
+-- do a group by to simulate "select distinct" for performance reasons
+create view OrgAbbrv as
+select --GetText(A.org) as org, 
+		GetText(A.abbreviation) as abbreviation
+from OrgAbbrvCandNotNull A
+where GreaterThan(GetLength(A.abbreviation), 1)
+group by --GetText(A.org), 
+		GetText(A.abbreviation);
+
+create view OrgAbbrvMatch as
+select --A.org as origin, 
+		CW.match as org
+from AnyCapsOrg CW, OrgAbbrv A
+where Equals(GetText(CW.match), GetText(A.abbreviation));
+
+create dictionary degreeDict as(
+	'BS', 'BA', 'MS', 'MA', 'AD', 'PHD', 'MFA'
+);
+
+create dictionary degreeRCDict as(
+	'in', 'of', 'degree'
+);
+
+create dictionary abbrvFilterDict as(
+	'PC', 'II', 'CD', 'OR', 'AND', 'BC', 'PS', 'IT', 'US'
+);
+
+create view OrgAbbrvFilter as
+(select O.org from OrgAbbrvMatch O, UrlEmailPlace UEP where Contains (UEP.match, O.org))
+union all
+(select O.org from OrgAbbrvMatch O where MatchesDict('abbrvFilterDict', 'Exact', O.org))
+union all
+(select O.org from OrgAbbrvMatch O where MatchesDict('degreeDict', 'Exact', O.org) and MatchesDict('degreeRCDict', RightContextTok(O.org, 1)))
+-- Laura 09/02/09: might decide to replace the following by filtering on FinalLocation at the end
+union all
+(select O.org from OrgAbbrvMatch O where MatchesDict('stateListAbbrev.dict', 'Exact', O.org))
+;
+
+
+create view FinalOrgAbbrv as
+(select O.org from OrgAbbrvMatch O)
+minus
+(select O.org from OrgAbbrvFilter O);
+
+/*
+output view OrgAbbrvMatch;
+output view FinalOrgAbbrv;
+*/
+
+--**** END BLOCK: FIND ADDITIONAL ORGANIZATION ABBREVIATIONS ***********
+
+
+-- Yunyao: change made on 03/24/2008 
+--         avoid matches with . on both side
+-- begain block change
+-- Yunyao: removed on 05/12/2008
+--create view FinalOrgConsolidatedWithDots as
+--select O.org as org
+--from FinalOrgConsolidated O
+--where MatchesRegex(/\./, LeftContextTok(O.org,1)) and
+--	  MatchesRegex(/\./, RightContextTok(O.org,1));
+	
+--select O.org as org into
+--FinalOrgConsolidatedWithDotsOutput
+--from FinalOrgConsolidatedWithDots O;
+
+create view FinalOrgConsolidatedWithoutDots as
+select O.org as org from FinalOrgConsolidated O;
+--	(select O.org as org from FinalOrgConsolidated O)
+--	minus
+--	(select O.org as org from FinalOrgConsolidatedWithDots O);	
+	
+-- end block change
+
+	
+create view UrlEmailPlaceOrg as 
+     --Laura 05/05/2009: globally replaced Place with AddressFinal
+     (select R.reference as match from AddressFinal R)
+     union all
+     (select R.org as match from FinalOrgConsolidatedWithoutDots R)
+     union all
+     (select R.match as match from CitiesAll R);
+     
+     
+    
+create view OrganizationConsolidated as
+select O.org as organization, '' as type, O.org as reference
+--from FinalOrgConsolidatedWithoutDots O
+from 
+(
+	(select O.org as org from FinalOrgConsolidatedWithoutDots O)
+	union all
+	(select O.org as org from FinalOrgAbbrv O)
+) O
+consolidate on O.org
+using 'LeftToRight';
+
+/*
+output view FinalOrgConsolidatedWithoutDots;
+output view OrganizationConsolidated;
+
+*/
+

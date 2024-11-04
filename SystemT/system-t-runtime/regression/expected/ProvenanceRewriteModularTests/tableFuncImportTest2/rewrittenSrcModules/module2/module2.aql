@@ -1,0 +1,95 @@
+module module2;
+
+
+import module module1;
+
+
+require document with columns
+  text Text;
+
+create view FirstInputViewCopy as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /\d+/
+    with flags 'DOTALL'
+    on between 1 and 1 tokens in D.text
+    return group 0 as match
+  from Document D;
+
+output view FirstInputViewCopy;
+
+
+
+create view SecondInputView as
+  select  S.match as spanCol,
+          'Dummy string' as textCol,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as __Subquery__1__Temp_____sep_____S____id
+  from  __Subquery__1__Temp S;
+
+output view SecondInputView;
+
+
+
+create view TabFuncOutput as
+  select  T.outSpan1 as outSpan1,
+          T.outSpan2 as outSpan2,
+          T.outStr as outStr,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as __TableFunction__2__Temp_____sep_____T____id
+  from  __TableFunction__2__Temp T;
+
+output view TabFuncOutput;
+
+
+
+create view TabFuncOutput2 as
+  select  T.outSpan1 as outSpan1,
+          T.outSpan2 as outSpan2,
+          T.outStr as outStr,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as __TableFunction__2__Temp_____sep_____T____id
+  from  __TableFunction__2__Temp T;
+
+output view TabFuncOutput2;
+
+
+
+create view __Subquery__1__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /[A-Z][a-z]+/
+    with flags 'DOTALL'
+    on between 1 and 1 tokens in D.text
+    return group 0 as match
+  from Document D;
+
+output view __Subquery__1__Temp;
+
+create view __TableFunction__2__Temp as
+  select  T.* ,
+          AutoID() as __auto__id,
+          'STMT_TYPE_TABLE_FUNC' as __stmt__type,
+          'module1.MyTableFunc(<module1.FirstInputView>, <SecondInputView>)' as __display__name,
+          -1 as "module1.MyTableFunc_____sep_____T____id"
+  from  module1.MyTableFunc(
+  __TableLocator__3__Temp,
+  __TableLocator__4__Temp
+) T;
+
+output view __TableFunction__2__Temp;
+
+create view __TableLocator__3__Temp as
+  select  Op.match as match
+  from  "module1.FirstInputView" Op;
+
+create view __TableLocator__4__Temp as
+  select  Op.spanCol as spanCol,
+          Op.textCol as textCol
+  from  SecondInputView Op;
+

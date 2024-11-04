@@ -1,0 +1,30 @@
+module common;
+
+create view IPAddressBuildingBlock as 
+select 
+	R.match as match
+from 
+	Regex(/(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/,
+        Document.text) R;
+
+-- View used by webaccess rules
+export view IPAddressBuildingBlock;
+	
+-- FINAL OUTPUT
+create view IpAddress4RecSplit as 
+select D.match as match
+from IPAddressBuildingBlock D;
+
+create view IPAddressInterim as 
+select D.match as ipAddress_Span, GetText(D.match) as ipAddress_Text
+from IPAddressBuildingBlock D;
+
+-- View used by syslog extractor
+export view IPAddressInterim;
+
+create view IPAddressOutput as
+select D.ipAddress_Span as span, D.ipAddress_Text as text, GetString('IPAddress') as field_type
+from IPAddressInterim D;
+
+export view IPAddressOutput;
+

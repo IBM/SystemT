@@ -1,0 +1,75 @@
+##############################################################################
+# table.aog
+#
+# Tests of lookup tables in AOG.
+##############################################################################
+
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+#create dictionary of company name
+CreateDict(
+    "name" => "dictionaries/aogParserTests/companyDict.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+# Create a lookup table that maps company to locations
+CreateTable(
+    # Table name
+    "CompanyToLocation",
+    # Table attributes
+    ( "isExternal" => "false"),    
+    # Schema
+    ("name" => "Text", "location" => "Text"),
+    # Tuples
+    ("IBM", "USA"),
+    ("Enron", "Hell"),
+    ("Acme Fake Company Names", "Somewhere")
+);
+
+$CompanyToLocation = TableScan("CompanyToLocation");
+
+# Extract company names.
+$Company = Dictionary("dictionaries/aogParserTests/companyDict.dict", "text", $Document);
+
+# Map company names to locations.
+$Location =  
+Project(
+	(
+		"location" => "location",
+    	"match" => "company"
+    ),
+	SortMergeJoin(
+		Equals(
+	    	GetText(GetCol("match")),
+	      	GetText(GetCol("name"))
+	    ),
+	    $Company,
+	    $CompanyToLocation
+	)
+);
+
+# Make sure that the join works if you reverse the order of arguments.
+$Location2 =  
+Project(
+	(
+		"location" => "location",
+    	"match" => "company"
+    ),
+	SortMergeJoin(
+		Equals(
+			GetText(GetCol("name")),
+	    	GetText(GetCol("match"))
+	    ),
+	    $CompanyToLocation,
+	    $Company
+	)
+);
+     
+
+Output: $CompanyToLocation, $Company, $Location, $Location2;

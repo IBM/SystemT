@@ -1,0 +1,166 @@
+--- This file contains rule constrains and the mapping into UIMA types
+--- Rule constraints are restrictions like a document having category A 
+--- implies or exclues it also having category B
+--- The constraint logic implemented here will make sure that these constraints
+--- are met. Individual rule set developers don't need to take care of this.
+
+--- Constraints  for categories that we already have rules for:
+--- -----------------------------------------------------------
+--- Privileged excludes (implies) LegalContent 
+--- IntellectualProperty excludes (implies) LegalContent
+--- Harassment excludes (implies) LegalContent
+--- Privileged excludes (implies) Confidential?
+--- Private excludes (contradicts) Confidential
+--- InappropriateJoke excludes (contradicts) Confidential
+--- Automated Messages excludes (contradicts) Private
+
+--- Constraints for categories that we don't have rules for yet:
+--- -----------------------------------------------------------
+--- AutomatedMessage excludes (contradicts) InappropriateUseOfProperty 
+--- InappropriateJoke excludes (implies) InappropriateUseOfProperty 
+--- InappropriateJoke excludes (implies) Harassment 
+--- InappropriateUseOfProperty excludes (implies) Private
+
+
+--- Privileged excludes (implies) LegalContent 
+--- IntellectualProperty excludes (implies) LegalContent
+create view LCPriv as
+ select LCAll.match as match
+ from LCAll, PrivilegedAll;
+
+create view LCIP as
+ select LCAll.match as match
+ from LCAll, IPAll;
+
+create view LCExclude as 
+ (select LCPriv.match as match from LCPriv)
+ union all
+ (select LCIP.match as match from LCIP);
+
+create view LCAllConstrained as
+  (select LCAll.match as match from LCAll)
+ minus 
+  (select LCExclude.match as match from LCExclude);
+ 
+create view LegalContent as select LCAllConstrained.match as match
+from LCAllConstrained 
+ where Equals(GetLanguage(LCAllConstrained.match), 'en')
+ consolidate on LCAllConstrained.match;
+
+output view LegalContent as 'com.ibm.eda.LegalConcept.LegalContent';
+
+--- Privileged excludes (implies) Confidential?
+--- Private excludes (contradicts) Confidential
+--- InappropriateJoke excludes (contradicts) Confidential
+create view ConfPrivileged as
+ select ConfidentialAll.match as match
+ from ConfidentialAll, PrivilegedAll;
+
+-- thampp 2009/02/03: commenting out the categories that are not ready yet
+--  create view ConfPrivate as
+--   select ConfidentialAll.match as match
+--   from ConfidentialAll, PrivateAll;
+
+-- thampp 2009/02/03: commenting out the categories that are not ready yet
+-- create view ConfInappropriate as
+--  select ConfidentialAll.match as match
+--  from ConfidentialAll, InappropriateAll;
+
+create view ConfidentialExclude as 
+ select ConfPrivileged.match as match from ConfPrivileged;
+--- GANESH: union all 
+--- GANESH: (select ConfPrivate.match as match from ConfPrivate)
+-- thampp 2009/02/03: commenting out the categories that are not ready yet
+--  union all
+--  (select ConfInappropriate.match as match from ConfInappropriate);
+
+create view ConfidentialAllConstrained as
+  (select ConfidentialAll.match as match from ConfidentialAll)
+ minus 
+  (select ConfidentialExclude.match as match from ConfidentialExclude);
+
+create view Confidential as select ConfidentialAllConstrained.match as match
+ from ConfidentialAllConstrained 
+ where Equals(GetLanguage(ConfidentialAllConstrained.match), 'en')
+ consolidate on ConfidentialAllConstrained.match;
+
+output view Confidential as 'com.ibm.eda.LegalConcept.Confidential';
+
+--- Automated Messages excludes (contradicts) Private
+-- thampp 2009/02/03: commenting out the categories that are not ready yet
+--  create view PrivateExclude as
+--   select PrivateAll.match as match
+--   from PrivateAll, AutoEmailsAll;
+
+--  create view PrivateAllConstrained as
+--  (select PrivateAll.match as match from PrivateAll)
+--  minus 
+--  (select PrivateExclude.match as match from PrivateExclude);
+
+--- Ganesh: Replaced "PrivateAllConstrained" with "PrivateAll"
+-- select PrivateAllConstrained.match as match
+--  into "com.ibm.eda.LegalConcept.Private"
+--  from PrivateAllConstrained
+--  consolidate on PrivateAllConstrained.match;
+
+---
+--- Mapping into UIMA types for concepts that don't have restrictions on them
+---
+create view AutomatedMessage as select P.match as match
+from AutoEmailsAll P
+where Equals(GetLanguage(P.match), 'en')
+consolidate on P.match;
+
+output view AutomatedMessage as 'com.ibm.eda.LegalConcept.AutomatedMessage';
+
+---
+create view Finance as select P.match as match
+from FinanceAll P
+where Equals(GetLanguage(P.match), 'en')
+consolidate on P.match;
+
+output view Finance as 'com.ibm.eda.LegalConcept.Finance';
+
+---
+-- thampp 2009/02/03: commenting out the categories that are not ready yet
+-- select IA.match as match
+-- into "com.ibm.eda.LegalConcept.InappropriateJoke"
+-- from InappropriateAll IA
+-- consolidate on IA.match;
+----
+create view Previleged as select C.match as match
+from PrivilegedAll C
+where Equals(GetLanguage(C.match), 'en')
+consolidate on C.match;
+
+output view Previleged as 'com.ibm.eda.LegalConcept.Privileged';
+
+----
+--  select S.match as match
+--  into "com.ibm.eda.LegalConcept.JobSolicitation"
+--  from SolicitationAll S
+--  consolidate on S.match;
+---
+create view IntellectualProperty as select IP.match as annot
+from IPAll IP
+where Equals(GetLanguage(IP.match), 'en')
+consolidate on IP.match;
+
+output view IntellectualProperty as 'com.ibm.eda.LegalConcept.IntellectualProperty';
+---
+
+----select LC.match as annot
+----into "com.ibm.eda.LegalConcept.LegalContent"
+----from LCAll LC
+----consolidate on LC.match;
+---
+----select C.match as match
+----into "com.ibm.eda.LegalConcept.Confidential"
+----from ConfidentialAll C
+----consolidate on C.match;
+----
+-- select P.match as match
+-- into "com.ibm.eda.LegalConcept.Private"
+-- from PrivateAll P
+-- consolidate on P.match;
+

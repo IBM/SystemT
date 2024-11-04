@@ -1,0 +1,26 @@
+module MSTaxon;
+
+/**
+ * Associate each sentiment object with the structured data, 
+ * as well as the sentence it occurs in.
+ */ 
+create view Sentiment_withTags as
+select F1.value as category, 
+	   F2.value as subcategory, 
+	   F3.value as subject, 
+	   F4.name as field,
+	   S.ObjectSpan as Object, 
+	   SE.text as sentence
+from Sentiment S, Sentences SE,
+     Field_Category F1, Field_Subcategory F2, Field_Subject F3, Field_Unstructured F4
+where Contains(F4.value, S.ObjectSpan)
+  and Contains(SE.text, S.ObjectSpan); 
+
+
+-- NounPhrases consolidated
+create view NounPhrases_Consolidated as
+select *
+from NounPhrases N
+consolidate on N.text;
+
+  

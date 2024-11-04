@@ -1,0 +1,58 @@
+-------------------------------------------------------------------------------
+-- remap.aql
+--
+-- Test case for remapping spans over the detagged text back to the original
+-- text.
+--
+-- Based on Huiayu's original Java implementation.
+-- Author: Fred Reiss <frreiss@us.ibm.com>
+-------------------------------------------------------------------------------
+
+-- Get anchor tags out of the text
+detag Document.text into Doc
+annotate 
+    element 'a' as Anchor
+		with attribute 'href' as target,
+	element 'meta' as Meta
+		with attribute 'name' as name
+		and attribute 'content' as content;
+
+output view Anchor;
+
+-- Remap the spans back to the original HTML document
+create view AnchorHTML as
+select Remap(A.match) as anchor
+from Anchor A;
+
+output view AnchorHTML;
+
+-- Mark every character in the detagged doc, and see what we get out.
+create view EveryCharHTML as
+select Remap(E.char) as char
+from (extract regex /./ on D.text as char from Doc D) E;
+
+output view EveryCharHTML;
+
+-- Mark all capitalized words in the detagged doc.
+create view CapsWordHTML as
+select Remap(E.char) as char
+from (extract regex /[A-Z][A-Za-z]*/ on D.text as char from Doc D) E;
+
+
+output view CapsWordHTML;
+
+-- Find meta tags with name="keywords"
+create view MetaKeywords as
+	select M.content as content
+	from Meta M
+	where MatchesRegex(/keywords/, M.name);
+
+output view MetaKeywords;
+
+-- Remap the keywords back to the original text.
+--create view MetaRemapped as
+--select Remap(M.content) as content
+--from MetaKeywords M;
+--
+--output view MetaRemapped;
+

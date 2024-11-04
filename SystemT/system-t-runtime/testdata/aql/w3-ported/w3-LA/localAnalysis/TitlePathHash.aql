@@ -1,0 +1,45 @@
+-------------------------------------------------------------------------------
+-- TitlePathHash.aql
+--
+--
+-- Depends on URL.aql,HTML.aql
+--
+-- Based on Huiayu's original Java implementation.
+-------------------------------------------------------------------------------
+-- Laura 0/25: replaced with simplified version below.
+/*
+create view DedupQueryFinal as
+(select '' as dedupquery
+from Dedupwithoutquery DQ)
+union all
+(select SD.dedupquery as dedupquery
+from SplitDedup SD);
+
+create view TitleAndPath as
+select GetText(DP.deduppath) as path,
+GetText(T.origtitle) as title,
+T.titleHash as title_hash
+from TitleHash T,DedupPathFinal DP;
+
+create view DedupQueryWithHashes as
+select GetText(SD.dedupquery) as query,
+QH.urlQueryHash as query_hash,
+QH.urlPathHash as path_hash
+from DedupQueryFinal SD,FinalNormalizedUrlwithHashes QH;
+
+create view TitlePathHash as
+select 
+	GetText(TP.title) as title,TP.title_hash as title_hash,
+	GetText(QPH.query) as query, QPH.query_hash as query_hash,
+	GetText(TP.path) as path, QPH.path_hash as path_hash
+from TitleAndPath TP,DedupQueryWithHashes QPH ;
+*/
+
+
+create view TitlePathHash as
+select 
+	GetText(T.origtitle) as title, T.titleHash as title_hash,
+	GetText(QPH.query) as query, QPH.urlQueryHash as query_hash, 
+	GetText(QPH.path) as path, QPH.urlPathHash as path_hash
+from TitleHash T, UrlPathQueryHashCombined QPH ;
+

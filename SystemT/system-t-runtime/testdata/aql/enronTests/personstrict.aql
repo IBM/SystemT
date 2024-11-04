@@ -1,0 +1,463 @@
+require document with columns text Text;
+
+-- ****************************************************************************
+--
+-- Created By : Yunyao Li (yunyaoli@us.ibm.com)
+-- 
+-- Annotator type : Built-in
+-- 
+-- Purpose : Extract names from plain text
+-- Examples :
+--			Mr. Rogers
+--			Fred Rogers
+--			Fred Q. Rogers, Esq.
+--
+-- This is a translation based on personstrict.txt
+-- ****************************************************************************
+
+create dictionary FilterPersonDict as
+(
+	'Travel', 'Fellow', 'Sir', 'IBMer', 'Researcher', 'All',
+	'Friends', 'Friend', 'Colleague', 'Colleagues', 'Managers',
+	'Customer', 'Users', 'User', 'Valued', 'Executive', 'Chairs',
+	'New', 'Owner', 'Conference', 'Please', 'Outlook', 'Lotus', 'Notes',
+	'This', 'That', 'There', 'Here', 'Subscribers', 'What', 'When', 'Where',
+	'With', 'While', 'Thanks', 'Thanksgiving','Senator', 'Platinum', 'Perspective',
+	'Manager', 'Ambassador', 'Professor', 'Dear', 'Contact', 'Cheers', 'Athelet',
+	'And', 'Act', 'But', 'Hello', 'Call', 'From', 'Center', 'The', 'Take', 'Junior',
+	'Both', 'Communities', 'Greetings', 'Hope', 'Restaurants', 'Properties',
+	'Let', 'Corp', 'Memorial', 'You', 'Your',  'Popcorn', 'Name', 'July', 'June',
+	'Business', 'Administrative', 'South', 'Members', 'Address', 'Please', 'List',
+	'Public', 'Inc', 'Parkway', 'Brother', 'Buy', 'Then', 'Services', 'Statements',
+	'President', 'Commissioner', 'Commitment', 'Commits',
+	'Director', 'End', 'Exit', 'Experiences', 'Finance', 'Elementary', 'Wednesday',
+	'Nov', 'Infrastructure', 'Inside', 'Convention',
+	'Judge', 'Lady', 'Friday',  'Project', 'Projected', 
+	'Recalls', 'Regards', 'Recently', 'Administration', 'Independence', 'Denied',
+	'Unfortunately', 'Under', 'Uncle', 'Utility', 'Unlike', 'Was', 'Were', 'Secretary',
+	'Speaker'
+	--'Institute', 'Management', 'Committee', 'Communications','Industries','Networks',
+	--'State', 'Club','Company',
+);
+
+create dictionary InitialDict as
+(
+	'rev.', 'col.', 'reverend', 'prof.', 'professor.', 
+	'lady', 'miss.', 'mrs.', 'mrs', 'mr.', 'pt.', 'ms.',
+	'messrs.', 'dr.', 'master.', 'marquis', 'monsieur',
+	'ds', 'di', 
+	--'Dear' (Yunyao: comments out to avoid mismatches such as Dear Member),
+	--'Junior' (Yunyao: comments out to avoid mismatches such as Junior National [team player],
+ 	-- If we can have large negative dictionary to eliminate such mismatches, 
+	-- then this may be recovered 
+	'Name:'
+);
+
+-- Find dictionary matches for all title initials
+create view Initial as
+select D.match as initial
+from   Dictionary('InitialDict', 'Exact', Document.text) D;
+
+-- Find capitalized words that look like person names and not in the non-name dictionary
+create view CapsPerson as
+select R.match as name
+from   Regex(/\b\p{Upper}\p{Lower}[\p{Alpha}]{1,20}\b/, Document.text) R
+where  Not(ContainsDict('FilterPersonDict', R.match));
+
+-- Find dictionary matches for all last names
+create view LastName as
+select D.match as lastname
+from   Dictionary('dictionaries/PERSON.ST.LNAME.yunyao.dict', Document.text) D
+where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{1,20}/, D.match);	
+
+-- Find dictionary matches for all first names
+create view FirstName as
+select D.match as firstname
+from   Dictionary('dictionaries/PERSON.ST.FNAME.yunyao.dict', Document.text) D
+where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{1,20}/, D.match);	
+
+-- Combine all dictionary matches for both last names and first names
+create view Person as
+     (select LN.lastname as name from LastName LN)
+union all 
+     (select FN.firstname as name from FirstName FN);
+
+
+-- Find initial words 
+create view InitialWord as
+select R.match as word
+from Regex(/\b([\p{Upper}]\.\s*){1,5}/, Document.text) R;
+
+--==========================================================
+-- Actual Rules
+--==========================================================
+
+/**
+ * Translation for Rule 1
+ * Handles names of persons like Mr. Vladimir E. Putin
+ */
+/*
+<rule annotation=Person id=1>
+<token attribute={etc}INITIAL{etc}>CANYWORD</token>
+<internal>
+<token attribute={etc}>CAPSPERSON</token>
+<token attribute={etc}>INITIALWORD</token>
+<token attribute={etc}>CAPSPERSON</token>
+</internal>
+</rule>
+*/
+ 
+ create view Person1 as
+ select CombineSpans(CP1.name, CP2.name) as person
+ from   Initial I,
+        CapsPerson CP1,
+        InitialWord IW,
+        CapsPerson CP2
+ where  FollowsTok(I.initial, CP1.name, 0, 0)
+   and  FollowsTok(CP1.name, IW.word, 0, 0)
+   and  FollowsTok(IW.word, CP2.name, 0, 0);
+ 
+/**
+ * Translation for Rule 1a
+ * Handles names of persons like Mr. Vladimir Putin
+ */
+/* 
+<rule annotation=Person id=1a>
+<token attribute={etc}INITIAL{etc}>CANYWORD</token>
+<internal>
+<token attribute={etc}>CAPSPERSON</token>{1,3}
+</internal>
+</rule>*/
+
+
+ create view Person1a as
+ select CP1.name as person
+ from   Initial I,
+        CapsPerson CP1
+ where  FollowsTok(I.initial, CP1.name, 0, 0);
+
+/**
+ * Translation for Rule 3
+ * Find person names  like Thomas B.M. David
+ */
+ /*
+<rule annotation=Person id=3>
+<internal>
+<token attribute={etc}PERSON{etc}>CAPSPERSON</token>
+<token attribute={etc}>INITIALWORD</token>
+<token attribute={etc}PERSON{etc}>CAPSPERSON</token>
+</internal>
+</rule>*/
+
+ create view Person3 as
+ select CombineSpans(P1.name, P2.name) as person
+ from   Person P1,
+        InitialWord IW,
+        Person P2
+ where  FollowsTok(P1.name, IW.word, 0, 0)
+   and  FollowsTok(IW.word, P2.name, 0, 0);
+ 
+ /**
+ * Translation for Rule 3r1
+ * 
+ * This relaxed version of rule '3' will find person names  like Thomas B.M. David
+ * But it only insists that the first word is in the person dictionary
+ */
+ /*
+<rule annotation=Person id=3r1>
+<internal>
+<token attribute={etc}PERSON:ST:FNAME{etc}>CAPSPERSON</token>
+<token attribute={etc}>INITIALWORD</token>
+<token attribute={etc}>CAPSPERSON</token>
+</internal>
+</rule>
+*/
+
+create view Person3r1 as
+ select CombineSpans(FN.firstname, CP.name) as person
+ from   FirstName FN,
+        InitialWord IW,
+        CapsPerson CP
+ where  FollowsTok(FN.firstname, IW.word, 0, 0)
+   and  FollowsTok(IW.word, CP.name, 0, 0);
+
+/**
+ * Translation for Rule 3r2
+ * 
+ * This relaxed version of rule '3' will find person names  like Thomas B.M. David
+ * But it only insists that the second word is in the person dictionary
+ */
+/*
+<rule annotation=Person id=3r2>
+<internal>
+<token attribute={etc}>CAPSPERSON</token>
+<token attribute={etc}>INITIALWORD</token>
+<token attribute={etc}PERSON:ST:LNAME{etc}>CAPSPERSON</token>
+</internal>
+</rule>*/
+
+create view Person3r2 as
+select CombineSpans(CP.name, LN.lastname) as person
+from   LastName LN,
+       InitialWord IW,
+       CapsPerson CP
+where  FollowsTok(CP.name, IW.word, 0, 0)
+  and  FollowsTok(IW.word, LN.lastname, 0, 0);
+
+/**
+ * Translation for Rule 4
+ *
+ * This rule will find person names  like David Thomas
+ */
+ /*
+ <rule annotation=Person id=4>
+<internal>
+<token attribute={etc}PERSON:ST:FNAME{etc}>CAPSPERSON</token>
+<token attribute={etc}PERSON:ST:LNAME{etc}>CAPSPERSON</token>
+</internal>
+</rule>
+*/
+create view Person4 as
+select CombineSpans(FN.firstname, LN.lastname) as person
+from   FirstName FN,
+       LastName LN
+where  FollowsTok(FN.firstname, LN.lastname, 0, 0); 
+
+/**
+ * Translation for Rule4a
+ * This rule will find person names  like Thomas, David
+ */
+ /*
+<rule annotation=Person id=4a>
+<internal>
+<token attribute={etc}PERSON:ST:LNAME{etc}>CAPSPERSON</token>
+<token attribute={etc}>\,</token>
+<token attribute={etc}PERSON:ST:FNAME{etc}>CAPSPERSON</token>
+</internal>
+</rule>
+ */
+create view Person4a as
+select CombineSpans(FN.firstname, LN.lastname) as person
+from   FirstName FN,
+       LastName LN
+where  FollowsTok(FN.firstname, LN.lastname, 1, 1)
+ and   MatchesRegex(/\,/,SpanBetween(FN.firstname, LN.lastname)); 
+
+/**
+ * Translation for Rule2
+ *
+ * This rule will handles names of persons like B.M. Thomas David, where Thomas occurs in some person dictionary
+ */
+ /*
+<rule annotation=Person id=2>
+<internal>
+<token attribute={etc}>INITIALWORD</token>
+<token attribute={etc}PERSON{etc}>CAPSPERSON</token>
+<token attribute={etc}>CAPSPERSON</token>
+</internal>
+</rule>
+*/
+
+create view Person2 as
+select CombineSpans(IW.word, CP.name) as person
+from   InitialWord IW,
+       Person P,
+       CapsPerson CP
+where  FollowsTok(IW.word, P.name, 0, 0)
+  and  FollowsTok(P.name, CP.name, 0, 0);
+
+/**
+ * Translation for Rule 2a
+ *
+ * The rule handles names of persons like B.M. Thomas David, where David occurs in some person dictionary
+ */
+/*
+<rule annotation=Person id=2a>
+<internal>
+<token attribute={etc}>INITIALWORD</token>
+<token attribute={etc}>CAPSPERSON</token>
+<token attribute={etc}>NEWLINE</token>?
+<token attribute={etc}PERSON{etc}>CAPSPERSON</token>
+</internal>
+</rule>
+*/
+
+create view Person2a as
+select CombineSpans(IW.word, P.name) as person
+from   InitialWord IW,
+	   CapsPerson CP,
+       Person P
+where  FollowsTok(IW.word, CP.name, 0, 0)
+  and  FollowsTok(CP.name, P.name, 0, 0);
+
+
+/**
+ * Translation for Rule 4r1
+ * This relaxed version of rule '4' will find person names  Thomas, David
+ * But it only insists that the FIRST word is in some person dictionary
+ */
+/*
+<rule annotation=Person id=4r1>
+<internal>
+<token attribute={etc}PERSON:ST:FNAME{etc}>CAPSPERSON</token>
+<token attribute={etc}>NEWLINE</token>?
+<token attribute={etc}>CAPSPERSON</token>
+</internal>
+</rule>
+*/
+create view Person4r1 as
+select CombineSpans(FN.firstname, CP.name) as person
+from   FirstName FN,
+	   CapsPerson CP
+where  FollowsTok(FN.firstname, CP.name, 0, 0);
+  
+
+/**
+ * Translation for Rule 4r2
+ *
+ * This relaxed version of rule '4' will find person names  Thomas, David
+ * But it only insists that the SECOND word is in some person dictionary
+ */
+ /*
+<rule annotation=Person id=4r2>
+<token attribute={etc}>ANYWORD</token>
+<internal>
+<token attribute={etc}>CAPSPERSON</token>
+<token attribute={etc}>NEWLINE</token>?
+<token attribute={etc}PERSON:ST:LNAME{etc}>CAPSPERSON</token>
+</internal>
+</rule>
+*/
+create view Person4r2 as
+select CombineSpans(CP.name, LN.lastname) as person
+from   CapsPerson CP,
+       LastName LN
+where  FollowsTok(CP.name, LN.lastname, 0, 0);
+
+
+/**
+ * Translation for Rule 5
+ *
+ * This rule will find other single token person first names
+ */
+ /* 
+<rule annotation=Person id=5>
+<internal>
+<token attribute={etc}>INITIALWORD</token>?
+<token attribute={etc}PERSON:ST:FNAME{etc}>CAPSPERSON</token>
+</internal>
+</rule>
+*/
+create view Person5 as
+select CombineSpans(IW.word, FN.firstname) as person
+from   InitialWord IW,
+       FirstName FN
+where  FollowsTok(IW.word, FN.firstname, 0, 0);
+
+
+/**
+ * Translation for Rule 6
+ *
+ * This rule will find other single token person last names
+ */
+ /* 
+<rule annotation=Person id=6>
+<internal>
+<token attribute={etc}>INITIALWORD</token>?
+<token attribute={etc}PERSON:ST:LNAME{etc}>CAPSPERSON</token>
+</internal>
+</rule>
+*/
+
+create view Person6 as
+select CombineSpans(IW.word, LN.lastname) as person
+from   InitialWord IW,
+       LastName LN
+where  FollowsTok(IW.word, LN.lastname, 0, 0);
+
+--==========================================================
+-- End of rules
+--
+-- Create final list of names based on all the matches extracted
+--
+--==========================================================
+/**
+ * Union all the person names identified by the above rules
+ */
+create view PersonAll as	
+    (select P.person as person from Person1 P)
+union all  
+    (select P.person as person from Person1a P)
+union all  
+    (select P.person as person from Person3 P)
+union all  
+    (select P.person as person from Person3r1 P)
+union all  
+    (select P.person as person from Person3r2 P)
+union all  
+    (select P.person as person from Person4 P)
+union all  
+    (select P.person as person from Person4a P)
+union all  
+    (select P.person as person from Person2 P)
+union all  
+    (select P.person as person from Person2a P)
+union all  
+    (select P.person as person from Person4r1 P)
+union all  
+    (select P.person as person from Person4r2 P)
+union all  
+    (select P.person as person from Person5 P)
+union all  
+    (select P.person as person from Person6 P)
+union all
+    (select P.firstname as person from FirstName P)
+union all
+    (select P.lastname as person from LastName P);
+
+/**
+ * Sentence annotator
+ */   
+
+create view sentence as
+extract 
+    split using B.boundary 
+        retain right split point
+        on B.text
+        as sentence
+from (
+    extract 
+        D.text as text,
+        regex /(([\.\?!]+\s)|(\n\s*\n))/ on D.text as boundary
+        from Document D
+		-- Filter the candidate boundaries.
+		having Not(ContainsDict('dictionaries/abbreviations.dict', 
+            CombineSpans(LeftContextTok(boundary, 1), boundary)))
+) B;
+
+output view sentence;
+   
+/**
+ * Keep only names in the same sentence
+ */
+create view TurePersons as
+select PA.person as person
+from PersonAll PA,
+     sentence S
+where Contains(S.sentence, PA.person);
+     
+/**
+ * Consolidate all the person names identified
+ */
+create view Persons as
+select C.person as person
+from TurePersons C
+consolidate on C.person;
+--from   Consolidate(TurePersons.person) C;		
+
+/**
+ * Output the final list of person names
+ */
+select P.person as person
+into PersonName
+from Persons P;

@@ -1,0 +1,39 @@
+module EmailAddress;
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText;
+
+require document with columns
+text Text;
+
+-- ****************************************************************************
+-- Purpose : Extract email addresses from plain text
+-- Examples :
+--			joe@abc.com
+--          124.344@xyz.com
+--
+-- ****************************************************************************
+
+/**
+ * Rule 1: identifies emails
+ * Examples: 
+ *          joe@abc.com
+ *          jane@xyz.org
+ */
+ 
+create view Email1 as
+select R.match as annot
+from (extract regex /((([\p{L}\p{Nd}]\p{M}*)([\p{L}\p{Nd}_-]\p{M}*)*(\.([\p{L}\p{Nd}_-]\p{M}*)+)*@([\p{L}\p{Nd}_-]\p{M}*)+(\.([\p{L}\p{Nd}_-]\p{M}*)+)*\.(((\p{Nd}\p{M}*){1,3})|((\p{L}\p{M}*){2,3})|(aero|coop|info|museum|name))))/ 
+ 		with flags 'CASE_INSENSITIVE'
+ 		on between 1 and 15 tokens in D.text 
+ 			as match 
+ 	  from DocumentText D) R;
+
+
+/**
+ * Output internet email address
+ */
+
+ create view InternetEmailFinal as
+ select Email1.annot as email
+ from Email1
+ consolidate on Email1.annot;

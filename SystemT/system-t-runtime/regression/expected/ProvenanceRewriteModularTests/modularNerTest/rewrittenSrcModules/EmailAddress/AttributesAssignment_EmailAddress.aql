@@ -1,0 +1,116 @@
+module EmailAddress;
+
+
+create view EmailAddressWithAttr as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    E.__auto__id as InternetEmailFinal_____sep_____E____id,
+    regex /^([^@]+)@([^@]+)$/
+    with flags 'DOTALL'
+    on E.email
+    return group 0 as reference
+       and group 1 as local
+       and group 2 as domain
+  from InternetEmailFinal E;
+
+output view EmailAddressWithAttr;
+
+create view EmailAddressWithoutAttr as
+  select  Op.email as email,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__104__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__104__TempOp__1 Op,
+        __Minus__104__Temp __t
+  where Equals(Op.email, __t.email);
+
+output view EmailAddressWithoutAttr;
+
+create view EmailAddressWithAttrAll as
+  (select  Op.email as email,
+            Op.local as local,
+            Op.domain as domain,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__105__TempOp__0 Op)
+  union all
+  (select  Op.email as email,
+            Op.local as local,
+            Op.domain as domain,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__105__TempOp__1 Op);
+
+output view EmailAddressWithAttrAll;
+
+create view EmailAddress_ as
+  select  E.email as email,
+          E.local as local,
+          E.domain as domain,
+          E.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          E.__auto__id as EmailAddressWithAttrAll_____sep_____E____id
+  from  EmailAddressWithAttrAll E;
+
+output view EmailAddress_;
+
+create view __Minus__104__Temp as
+  select  __t.email as email
+  from  
+    ((select  Op.email as email
+      from  __Minus__104__TempOp__1 Op)
+    minus
+    (select  Op.email as email
+      from  __Minus__104__TempOp__2 Op)
+    ) __t
+  group by __t.email;
+
+output view __Minus__104__Temp;
+
+create view __Minus__104__TempOp__1 as
+  select  E.email as email,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          E.__auto__id as InternetEmailFinal_____sep_____E____id
+  from  InternetEmailFinal E;
+
+output view __Minus__104__TempOp__1;
+
+create view __Minus__104__TempOp__2 as
+  select  E.reference as email,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          E.__auto__id as EmailAddressWithAttr_____sep_____E____id
+  from  EmailAddressWithAttr E;
+
+output view __Minus__104__TempOp__2;
+
+create view __Union__105__TempOp__0 as
+  select  E.reference as email,
+          E.local as local,
+          E.domain as domain,
+          E.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          E.__auto__id as EmailAddressWithAttr_____sep_____E____id
+  from  EmailAddressWithAttr E;
+
+output view __Union__105__TempOp__0;
+
+create view __Union__105__TempOp__1 as
+  select  E.email as email,
+          '' as local,
+          '' as domain,
+          E.email as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          E.__auto__id as EmailAddressWithoutAttr_____sep_____E____id
+  from  EmailAddressWithoutAttr E;
+
+output view __Union__105__TempOp__1;
+

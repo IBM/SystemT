@@ -1,0 +1,146 @@
+module nullargs;
+
+require document with columns text Text;
+
+-- This test suite tests every span-input predicate function 
+-- to see if it returns null if a null is passed in as input.
+-- (It outputs a regex match on success.)
+
+-- Technically the null literal as an argument to a function is not valid AQL 
+-- but it is still handled correctly.  
+
+-- Contains
+
+create view ContainsTest as
+select 'Contains' as testFunc,
+       N.firstArg as firstArg,
+       N.secondArg as secondArg,
+       O.nullCol as nullCol,
+	   Contains(N.firstArg, N.secondArg) as match,
+	   Contains(N.firstArg,O.nullCol) as match2,
+	   Contains(O.nullCol,N.firstArg) as match3
+from _NullArgs N,_OnlyArg O;
+
+output view ContainsTest;
+
+
+-- ContainsDict
+
+create view ContainsDictTest as
+select 'ContainsDict' as testFunc,
+       O.onlyArg as onlySpanArg,
+       O.nullCol as nullCol,
+	   ContainsDict('FirstName.dict', O.onlyArg) as match,
+	   ContainsDict('FirstName.dict',O.nullCol) as match2
+from _OnlyArg O;
+
+output view ContainsDictTest;
+
+
+-- ContainsDicts
+
+create view ContainsDictsTest as
+select 'ContainsDicts' as testFunc,
+       O.onlyArg as onlySpanArg,
+       O.nullCol as nullCol,
+	   ContainsDicts('FirstName.dict', 'LastName.dict', O.onlyArg) as match,
+	   ContainsDicts('FirstName.dict', 'LastName.dict', O.nullCol) as match2
+from _OnlyArg O;
+
+output view ContainsDictsTest;
+
+
+-- ContainsRegex
+
+create view ContainsRegexTest as
+select 'ContainsRegex' as testFunc,
+       O.onlyArg as onlySpanArg,
+       O.nullCol as nullCol,
+	   ContainsRegex(/Z/, O.onlyArg) as match,
+	   ContainsRegex(/Z/,O.nullCol) as match2
+from _OnlyArg O;
+
+output view ContainsRegexTest;
+
+
+-- Follows
+
+create view FollowsTest as
+select 'Follows' as testFunc,
+       N.firstArg as firstArg,
+       N.secondArg as secondArg,
+       O.nullCol as nullCol,
+	   Follows(N.firstArg, N.secondArg, 1, 2) as match,
+	   Follows(N.firstArg,O.nullCol,1,2) as match2,
+	   Follows(O.nullCol,N.firstArg,1,2) as match3
+from _NullArgs N,_OnlyArg O;
+
+output view FollowsTest;
+
+
+-- FollowsTok
+
+create view FollowsTokTest as
+select 'FollowsTok' as testFunc,
+       N.firstArg as firstArg,
+       N.secondArg as secondArg,
+       O.nullCol as nullCol,
+	   FollowsTok(N.firstArg, N.secondArg, 1, 2) as match,
+	   FollowsTok(O.nullCol,  N.secondArg, 1, 2) as match2,
+	   FollowsTok(N.firstArg,O.nullCol,1,2) as match3
+from _NullArgs N,_OnlyArg O;
+
+output view FollowsTokTest;
+
+
+-- GreaterThan
+
+create view GreaterThanTest as
+select 'GreaterThan' as testFunc,
+       GetLength(N.firstArg) as firstArg,
+       GetLength(N.secondArg) as secondArg,
+	   GreaterThan(GetLength(N.firstArg), GetLength(N.secondArg)) as match
+from _NullArgs N;
+
+output view GreaterThanTest;
+
+
+-- MatchesDict
+
+create view MatchesDictTest as
+select 'MatchesDict' as testFunc,
+       O.onlyArg as onlySpanArg,
+       O.nullCol as nullCol,
+	   MatchesDict('FirstName.dict', O.onlyArg) as match,
+	   MatchesDict('FirstName.dict',O.nullCol) as match2
+from _OnlyArg O;
+
+output view MatchesDictTest;
+
+
+-- MatchesRegex
+
+create view MatchesRegexTest as
+select 'MatchesRegex' as testFunc,
+       O.onlyArg as onlySpanArg,
+       O.nullCol as nullCol,
+	   MatchesRegex(/Z/, O.onlyArg) as match,
+	   MatchesRegex(/Z/,O.nullCol) as match2
+from _OnlyArg O;
+
+output view MatchesRegexTest;
+
+
+-- Overlaps
+
+create view OverlapsTest as
+select 'Overlaps' as testFunc,
+       N.firstArg as firstArg,
+       N.secondArg as secondArg,
+       O.nullCol as nullCol,
+	   Overlaps(N.firstArg, N.secondArg) as match,
+	   Overlaps(O.nullCol,N.secondArg) as match2,
+	   Overlaps(N.firstArg,O.nullCol) as match3
+from _NullArgs N, _OnlyArg O;
+
+output view OverlapsTest;

@@ -1,0 +1,969 @@
+-------------------------------------------------------------------------------
+-- URL.aql from Java Revision No 311
+--
+-- URL parsing for W3 local analysis.
+--
+-- Depends on HTML.aql,SelfRef.aql
+--
+-- Produces the following output views:
+-- 		a. BluepediaSpecial: URLs that point to pages in the Bluepedia wiki
+--
+-- Based on Huiayu's original Java implementation.
+-- Author: Fred Reiss <frreiss@us.ibm.com>
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+--The approach of SelfRef.aql leads to change the URL.aql. In SelfRef , we have to compare the normalized link url with the 
+--normalized page url ,by changing URL.aql same block of code can be used to normalize the link url.
+--changes are as follow 
+--1.Added unique identification for each tupple in the output as urlid
+--2.'Page' flag is used to maintain the type of URL 1 is for page url and 2 is for link URL.
+--3.carry forward  urlid and Page
+--4.The view which has more the one view in 'from' (join), added where predicate over urlid 
+--5.Split URLforNormalization view from URL aql ,based on type of url for page URL and link URL
+--6.View below URLforNormalization are working on normalized URL of page URL, added where predicate over 'Page'
+--------------------------------------------------------------------------------------------
+--Changes as of date 11 June 2011
+--Changed the logic of dedup path as it has mismatch with java
+--Changed the logic of dedup query as it has mismatch with java
+-------------------------------------------------------------------------------
+-- Declarations for UDFs that are specific to the URL annotator
+-------------------------------------------------------------------------------
+-- UDF for generating URI
+create function GenerateURI(str String)
+return String like str
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!GenerateURI'
+language java
+deterministic
+return null on null input;
+
+--UDF for creating output url
+create function GetOutputUrl(str String)
+return String like str
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!GetOutputUrl'
+language java
+deterministic
+return null on null input;
+
+--udf for creating hostname
+create function GetHost1(s1 String,s2 String)
+return String like s1
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!GetHost1'
+language java
+deterministic
+return null on null input;
+
+--UDF for creating NSF path
+create function GetNSF(before String,after String,group1match String)
+return String --like nsf
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!GetNSF'
+language java
+deterministic
+return null on null input;
+
+--UDF for creating a query
+create function NormalizeQuery(query Text)
+return String 
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!NormalizeQuery'
+language java
+deterministic
+return null on null input;
+
+--UDF for creating the URI of Normalized string
+create function GetNormalizedString(scheme String,host1 String,port String,index String,query String)
+return String like scheme
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!GetNormalizedString'
+language java
+deterministic
+return null on null input;
+
+--UDF for creating URI of MoreNormalized string
+create function GetMoreNormalizedString(scheme String,host2 String,port String,ESP2 String,query String)
+return String like scheme
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!GetMoreNormalizedString'
+language java
+deterministic
+return null on null input;
+
+--UDF for creating Dedup string
+create function GetDedup(scheme String,host2 String,ESP2 String,query Span,esp2 String)
+return String like scheme
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!GetDedup'
+language java
+deterministic
+return null on null input;
+
+-------------------------------------------------------------------------------
+
+--union link url with the page url 
+--added unique identification for each tupple in the output as urlid
+--Page flag is used to mantain the type of URL 1 is for page url and 2 is for link URL.
+create view MainUrls as
+(
+	select 2 as page ,L.anchortext as anchortext,L.anchorurl as anchorurl,AutoID() as urlid,L.resolvurl as url
+	from ResolveRelativeURL L
+	where NotNull(L.resolvurl)
+	  and Not(Equals(GetText(L.resolvurl),''))
+	-- Laura 8/26: 
+	--      limit the number of anchor ULRs passing through the URL annotator 
+	--      to avoid Out of Memory issues
+	--      TODO: investigate why the joins on url.id do not get optimized properly
+    limit 200
+)
+union all
+(
+	select 1 as page,'dummy' as anchortext,'dummy' as anchorurl,AutoID() as urlid,D.label as url
+	from Document D
+	where NotNull(D.label) 
+	  and Not(Equals(GetText(D.label),''))
+);
+
+--Seprated page URL as it it used in other AQL files 
+create view PageMainUrls as 
+select * from MainUrls U
+where Equals(U.page,1);
+
+--extracting host,port,path and query from URL 
+create view AllURLs as
+select 
+	MU.url as url,
+	GetURL(GetText(MU.url),1) as proto,GetURL(GetText(MU.url),2) as host,
+	GetPort(GetText(MU.url)) as port,
+	GetURL(GetText(MU.url),3) as actualPath,
+	GetURL(GetText(MU.url),4) as query,
+	GetURL(GetText(MU.url),5) as fragment,
+	MU.page as page,
+	MU.anchortext as anchortext,
+	MU.urlid as urlid,
+	MU.anchorurl as anchorurl
+from MainUrls MU  
+;
+-------------------------------------------------------------------------------
+--Added by Deepak
+
+--dictionary for discard_schemes
+create dictionary Discard_Schemes as (
+	'mailto','javascript'
+);
+
+--check for URI not null
+create view URICheck as
+select GenerateURI(GetText(U.url)) as Uri,U.urlid as urlid,U.page as page,U.anchortext as anchortext
+from AllURLs U 
+where NotNull(U.url) ;
+
+-- using UDF for creating uri which contain discard_schemes
+create view URLDiscardSchemes as
+select GetOutputUrl(GetText(U.Uri)) as _url_2,'' as host,'' as port,'' as actualPath,'' as query,URL.proto as proto,URL.fragment as fragment,
+U.urlid as urlid,U.page as page,U.anchortext as anchortext
+from URICheck U,AllURLs URL
+where MatchesDict('Discard_Schemes',URL.proto) and Equals(U.urlid,URL.urlid)  ;
+
+create view URL as
+(select 
+	AU.proto as proto,
+	AU.host as host,
+	AU.port as port,
+	AU.actualPath as actualPath,
+	AU.query as query,
+	AU.fragment as fragment,
+	AU.url as url,
+	AU.urlid as urlid,
+	AU.page as page,
+	AU.anchortext as anchortext
+from AllURLs AU)
+minus
+(select GetText(UD.proto) as proto,GetText(UD.host) as host,
+UD.port as port,GetText(UD.actualPath) as actualPath,GetText(UD.query) as query,
+UD.fragment as fragment,GetText(UD._url_2) as url,UD.urlid as urlid,UD.page as page,UD.anchortext as anchortext
+from URLDiscardSchemes UD);
+
+create view PageURL as 
+select U.*, GetURL(GetText(U.url), 0) as normUrl
+from URL U
+where Equals(U.page,1);
+
+--matching host with host pattern regex 
+--i/p: w3-3.ibm.com
+--o/p: prefix -> w3 hostname -> ibm.com
+create view HostPatternRegex1 as
+select HPR.prefix as prefix,HPR.hostname as hostname,HPR.urlid as urlid,HPR.page as page
+from(
+extract
+		U.urlid as urlid,
+		U.page as page,
+		regex /\A(?:(w3|www)(-.+)?\.)((?:\w+\.)*ibm\.com)\Z/ on U.host
+		return group 1 as prefix
+		and group 3 as hostname
+		from URL U
+	)HPR;
+	
+--extracting the values which do not match the regex.
+--i/p: Not matching U.host i.e w3-3.ibm.com
+--o/p: _host_2 -> xweb330.almaden.ibm.com
+create view HostPatternRegex2 as
+select U.host as _host_1,U.host as _host_2,U.urlid as urlid,U.page as page
+from URL U
+where Not(MatchesRegex(/\A(?:(w3|www)(-.+)?\.)((?:\w+\.)*ibm\.com)\Z/,U.host));
+
+--check whether the hostname is Not NULL
+--i/p: ibm.com
+--o/p: ibm.com
+create view CheckhostnamenotNull as
+select HPR.hostname as host2,HPR.urlid as urlid,HPR.page as page
+from HostPatternRegex1 HPR
+where NotNull(HPR.hostname);
+
+--check for hostname is null
+create view CheckhostnameNull as
+select '' as _host_2,HPR.urlid as urlid,HPR.page as page
+from HostPatternRegex1 HPR
+where Not(NotNull(HPR.hostname));
+
+--combining Checkhostname notNull that is non null hostname values with hostname null
+--o/p: _host_2 -> ibm.com
+create view hostnameFinal as
+(select H2.host2 as _host_2,H2.urlid as urlid,H2.page as page
+from CheckhostnamenotNull H2)
+union all
+(select CH._host_2 as _host_2,CH.urlid as urlid,CH.page as page
+from CheckhostnameNull CH);
+
+--udf for combining the host name where prefix value is not null
+--i/p: w3 and ibm.com
+--o/p: w3.ibm.com
+create view CreateHost1 as
+select GetHost1(GetText(HPR.prefix),GetText(H2._host_2)) as host1,H2.urlid as urlid,H2.page as page
+from HostPatternRegex1 HPR,hostnameFinal H2
+where NotNull(HPR.prefix) and Equals(HPR.urlid,H2.urlid);
+
+--get host name where prefix is null
+create view CheckprefixNull as
+select H2.host2 as host2,H2.urlid as urlid,H2.page as page
+from HostPatternRegex1 HPR,CheckhostnamenotNull H2
+where Not(NotNull(HPR.prefix)) and Equals(HPR.urlid,H2.urlid) ;
+
+--final value for host1
+--o/p: _host1_1 -> w3.rchland.ibm.com _host1_1 -> www.alphaworks.ibm.com
+create view Host2Final as
+(select H1.host1 as _host1_1,H1.urlid as urlid,H1.page as page
+from CreateHost1 H1)
+union all
+(select GetText(CP.host2) as _host1_1,CP.urlid as urlid,CP.page as page
+from CheckprefixNull CP);
+
+--Combining urls matching and not matching hostname pattern 
+--For matching urls, host name is populated in CreateHost1 view
+--o/p: _host_1 -> w3.ibm.com
+--o/p: _host_1 -> xweb330.almaden.ibm.com
+create view createHostFinal as
+(select GetText(HPR2._host_1) as _host_1,U.url as url,HPR2.urlid as urlid,HPR2.page as page
+from HostPatternRegex2 HPR2,URL U 
+where Equals(HPR2.urlid,U.urlid) )
+union all
+(select CH._host1_1 as _host_1,U.url as url,CH.urlid as urlid,CH.page as page
+from Host2Final CH,URL U
+where Equals(CH.urlid,U.urlid) );
+
+--combining hostnameFinal with HostPatternRegex2
+--o/p: _host_2 -> ibm.com _host_2 -> alphaworks.ibm.com
+create view createHostFinal2 as
+(select U.url as url,HNF._host_2 as _host_2,HNF.urlid as urlid,HNF.page as page
+from hostnameFinal HNF,URL U
+where Equals(HNF.urlid,U.urlid) )
+union all
+(select U.url as url,HPR2._host_1 as _host_2,HPR2.urlid as urlid,HPR2.page as page
+from HostPatternRegex2 HPR2,URL U
+where Equals(HPR2.urlid,U.urlid) );
+
+-------------------------------------------------------------------------------
+--normalize_path ()
+
+--extracting the ending slash pattern
+--i/p: /~pw/eclipse/
+--o/p: match -> /
+create view EndingSlashMatch as
+select U.actualPath as path,U.fragment as fragment,U.match as match,U.urlid as urlid,U.page as page
+from
+(
+		extract
+			U.urlid as urlid,
+			U.page as page,
+			U.fragment as fragment,
+			U.actualPath as actualPath,
+			regex /\/$/ on U.actualPath as match
+		from URL U
+) U ;
+
+--removing the ending slash from the actual path
+--i/p: /~pw/eclipse/
+--o/p: path -> /~pw/eclipse
+create view EndingSlashPattern as
+select SP.path as path, SpanBetween(LeftContext(SP.path,0),SP.match) as B,SP.urlid as urlid,SP.page as page
+from EndingSlashMatch SP
+where Not(Equals(GetText(SP.fragment),''));
+
+--subtracting the urls, for which ending slash is removed from entire URL set
+create view NotEndingwithSlash as
+(select U.actualPath as path1 ,U.urlid as urlid,U.page as page from URL U)
+minus
+(select ESP1.path as path1,ESP1.urlid as urlid,ESP1.page as page from EndingSlashPattern ESP1);
+
+-- combining the paths ending with slashes and without slashes
+--o/p: /BlueMailUI/_static_/dojo/src/validate/jp.js
+--o/p: /~pw/eclipse
+create view EndSlashFinal as
+(select ES.path1 as path1,ES.urlid as urlid,ES.page as page from NotEndingwithSlash ES)
+union all
+(select ESP1.B as path1,ESP1.urlid as urlid,ESP1.page as page from EndingSlashPattern ESP1);
+
+--extracting the data for index page pattern 
+--i/p: /en/index.php
+--o/p: /index.php
+create view IndexPageMatch as
+select U.match as match,U.path1 as path1,U.urlid as urlid,U.page as page
+from
+(
+		extract
+			ESF.urlid as urlid,
+			ESF.page as page,
+			ESF.path1 as path1,
+			regex /\/(?:(?:index|home|top|homepage)?\.\w+)?\Z/ on ESF.path1 as match
+		  from EndSlashFinal ESF
+)U;
+
+--extracting the path by removing the matched value from IndexPageMatch
+--i/p: /en/index.php
+--o/p: /en
+create view IndexPagePattern as
+select IP.path1 as originalPath, --SpanBetween(LeftContext(IP.path1,0),IP.match) as path,
+--RightContextTok(SpanBetween(LeftContext(IP.path1,0),IP.match),1) as rightslash,
+CombineSpans(SpanBetween(LeftContext(IP.path1,0),IP.match),RightContextTok(SpanBetween(LeftContext(IP.path1,0),IP.match),1)) as path1,
+IP.urlid as urlid,IP.page as page
+from IndexPageMatch IP;
+
+--subtracting the EndSlashFinal from IndexPagePattern to retain the 
+--remaining paths other than those following the index page pattern
+create view NotMatchingIndexPagePattern as
+(select ESF.path1 as path1,ESF.urlid as urlid,ESF.page as page from EndSlashFinal ESF)
+minus
+(select IPP.originalPath as path1,IPP.urlid as urlid,IPP.page as page from IndexPagePattern IPP);
+
+--combining the paths matching IndexPagePattern and the remaining paths which do not follow
+--index page pattern.
+create view IndexFinal as
+(select I.path1 as path1,U.url as url ,U.urlid as urlid,U.page as page from NotMatchingIndexPagePattern I,URL U
+where Equals(I.urlid,U.urlid) )
+union all
+(select IPP.path1 as path1,U.url as url ,U.urlid as urlid,U.page as page from IndexPagePattern IPP,URL U
+where Equals(IPP.urlid,U.urlid) );
+
+-- extracting the data from JCT pattern
+--i/p: /jct03001ps/ibm/executivecorner/quarantello_kevin.html
+--o/p: /jct03001ps/
+create view JCTPatternMatch as
+select J.path1 as path1,J.match as match,J.urlid as urlid,J.page as page
+from(
+	extract
+		IF.urlid as urlid,
+		IF.page as page,
+		IF.path1 as path1,
+		regex /\/jct\d+[a-z]+\// on IF.path1 as match
+		--return group 1 as match
+		from IndexFinal IF
+	)J
+	;
+--i/p: /jct03001ps/ibm/executivecorner/quarantello_kevin.html
+--o/p: ibm/executivecorner/quarantello_kevin.html
+create view JCTMatchRemoved as
+select JCTM.path1 as path1,
+SpanBetween(JCTM.match,RightContext(JCTM.path1,0)) as path2slash,
+JCTM.urlid as urlid,JCTM.page as page
+from JCTPatternMatch JCTM;
+
+--taking left 1 token and combining the spans ('/','ibm/executivecorner/quarantello_kevin.html')
+--i/p: ibm/executivecorner/quarantello_kevin.html
+--o/p: /ibm/executivecorner/quarantello_kevin.html
+create view JCT as
+select CombineSpans(LeftContextTok(JC.path2slash,1),JC.path2slash) as path2slash,
+JC.urlid as urlid,JC.page as page
+from JCTMatchRemoved JC;
+
+--subtracting the jct pattern from IndexFinal for 
+--obtaining the remaining paths
+create view NotMatchingJctPattern as
+(select IF.path1 as path1 ,IF.urlid as urlid,IF.page as page from IndexFinal IF)
+minus
+(select JCT.path1 as path1 ,JCT.urlid as urlid,JCT.page as page from JCTPatternMatch JCT);
+
+-- combining the paths matching the jct pattern from JCTToLower view
+--and remaining paths that do not match the JCT pattern from NotMatchingJctPattern view 
+create view JCTFinal as
+(select JCTM.path1 as path1,JCTM.urlid as urlid,JCTM.page as page from NotMatchingJctPattern JCTM)
+union all
+(select JCT.path2slash as path1,JCT.urlid as urlid,JCT.page as page from JCT JCT);
+
+--converting the paths matching the jct pattern to lower case
+create view JCTTolower as
+select toLowerCase(JC.path1) as path2slash,JC.urlid as urlid,JC.page as page
+from JCTFinal JC;
+
+create view EndingSlash as
+select U.path2slash as path2slash,U.match as match,U.urlid as urlid,U.page as page
+from
+(
+		extract
+			JCTF.urlid as urlid,
+			JCTF.page as page,
+			JCTF.path2slash as path2slash,
+			regex /\/$/ on JCTF.path2slash as match
+		from JCTTolower JCTF
+)U ;
+
+--extracting paths ending with slash
+--create view EndingSlash as
+--select J.path2slash as path2slash,E.match as match
+--from EndingSlashMatch E,JCTTolower J
+--where Overlaps(J.path2slash,E.match) ;
+--extracting the path ending with a slash
+create view EndingSlashPatternafterJCT as
+select SP.path2slash as path2slash, SpanBetween(LeftContext(SP.path2slash,0),SP.match) as path2,
+SP.urlid as urlid,SP.page as page
+from EndingSlash SP;
+
+--subtracting the ending slash paths from the original paths which do not match the ending slash pattern
+create view NoEndingwithSlash as
+(select JCTF.path2slash as path1,JCTF.urlid as urlid,JCTF.page as page from JCTTolower JCTF)
+minus
+(select ESP2.path2slash as path1 ,ESP2.urlid as urlid,ESP2.page as page from  EndingSlashPatternafterJCT ESP2);
+
+--combining the paths matching the endining slash pattern and
+--the paths that do not match the ending slash pattern
+create view EndingSlashPatternFinal as
+(select U.url as url,SP2.path1 as path2,U.urlid as urlid,U.page as page from NoEndingwithSlash SP2,URL U
+where Equals(SP2.urlid,U.urlid) )
+union all
+(select U.url as url,ESP2.path2 as path2,U.urlid as urlid,U.page as page from EndingSlashPatternafterJCT ESP2,URL U
+where Equals(ESP2.urlid,U.urlid) );
+
+--i/p: /newsflash.nsf/0/6453B3A0EC7EC875C12572E30043F4FE
+--o/p: group1match -> 6453B3A0EC7EC875C12572E30043F4FE
+--o/p: before -> /newsflash
+--o/p: after -> ''
+create view NSFmatch as
+select U.path as path, U.group1match as group1match,
+SpanBetween(LeftContext(U.path,0), U.fullmatch) as before,
+SpanBetween(U.fullmatch, RightContext(U.path,0)) as after,
+U.urlid as urlid,U.page as page
+from(
+extract
+ESP2.urlid as urlid,
+ESP2.page as page,
+ESP2.path2 as path,
+regex /\.nsf\/(?:0|[\dA-Fa-f]{32})\/([\dA-Fa-f]{32})/ on ESP2.path2
+return group 0 as fullmatch
+and group 1 as group1match
+from EndingSlashPatternFinal ESP2
+)U;
+
+--using the above udf for creating the nsf path
+--o/p: /newsflash.nsf/6453B3A0EC7EC875C12572E30043F4FE
+create view CreateNSF as
+select GetNSF(GetText(NSFM.before),GetText(NSFM.after),GetText(NSFM.group1match)) as path3
+,NSFM.urlid as urlid,NSFM.page as page
+from NSFmatch NSFM;
+
+--subtracting the paths that do not match the nsf pattern.
+create view NSFMinus as
+(select ESP2.path2 as path2,ESP2.urlid as urlid,ESP2.page as page from EndingSlashPatternFinal ESP2)
+minus
+(select NSF.path as path2,NSF.urlid as urlid,NSF.page as page from NSFmatch NSF);
+
+--combining the paths matching the nsf pattern and paths 
+-- that do not match NSF pattern.
+create view NSFFinal as
+(select NSFM.path2 as path3,U.url as url,U.urlid as urlid,U.page as page from NSFMinus NSFM,URL U
+where Equals(NSFM.urlid,U.urlid) )
+union all
+(select CNSF.path3 as path3,U.url as url,U.urlid as urlid,U.page as page from CreateNSF CNSF,URL U
+where Equals(CNSF.urlid,U.urlid) );
+
+
+
+
+-------------------------------------------------------------------------------
+-- normalize_port()
+--dictionary for ports 80 and 443
+create dictionary PortNumbers as (
+	'443','80'
+);
+
+--contains urls where port is not available
+--setting such ports value to -1
+create view PortUnavailable as
+select '-1' as port,U.url as url,U.urlid as urlid,U.page as page
+from URL U
+where Not(NotNull(U.port)) ;
+
+--contains urls where port matches the dictionary 'PortNumbers'
+-- setting such ports value to -1
+
+create view PortsMatching as
+select '-1' as port,U.url as url,U.urlid as urlid,U.page as page
+from URL U
+where NotNull(U.port) and  MatchesDict('PortNumbers',U.port) 
+;
+
+--extracting the values for ports not matching dictionary 'PortNumbers'
+
+create view PortsNotmatching as
+select U.port as port,U.url as url,U.urlid as urlid,U.page as page
+from URL U
+where Not(MatchesDict('PortNumbers',U.port))
+and NotNull(U.port) ;
+
+-- final view for ports
+--i/p: url -> https://xweb330.almaden.ibm.com:8443/BlueMailUI/_static_/dojo/src/validate/jp.js
+--o/p: port -> 8443
+create view PortFinal as
+(select PM.port as port,PM.url as url,PM.urlid as urlid,PM.page as page
+from PortsMatching PM)
+union all
+(select PNM.port as port,PNM.url as url,PNM.urlid as urlid,PNM.page as page
+from PortsNotmatching PNM)
+union all
+(select PU.port as port,PU.url as url,PU.urlid as urlid,PU.page as page
+from PortUnavailable PU);
+
+
+
+-------------------------------------------------------------------------------
+-- normalize_query()
+--splitting the query using _ampersand pattern
+--i/p: ?title=Bluepedia:Discussions&action=edit
+--o/p: title=Bluepedia:Discussions
+--o/p: action=edit
+--create view Splitquery as
+-------------------------------------------------------------------------------------------------------------------------
+--that this block can be replaced with an EXTRACT SPLIT statement,
+-- once its semantics are modified to allow additional attributes to pass through
+/*
+create view Splitquery1 as
+			extract
+			S.query as query,
+			S.urlid as urlid,
+			S.page as page,
+			regex /&/ on S.query as boundary
+			from URL S
+			having NotNull(query);
+			
+output view URL;
+
+create view FirstSplitquery as
+select S.query as query,
+			S.urlid as urlid,
+			S.page as page,
+			SpanBetween(LeftContext(S.query,0),S.boundary) as splitquery
+from Splitquery1 S;
+
+create view LastSplitquery as
+select S.query as query,
+			S.urlid as urlid,
+			S.page as page,
+			SpanBetween(S.boundary,RightContext(S.query,0)) as splitquery
+from Splitquery1 S;
+
+create view MidSplitquery as
+select 	S.query as query,
+			S.urlid as urlid,
+			S.page as page,SpanBetween(S.boundary,S1.boundary) as splitquery
+from Splitquery1 S,Splitquery1 S1
+where FollowsTok(S.boundary, S1.boundary, 0, 100) and  Equals(S.urlid,S1.urlid) and Equals(S.page,S1.page) ;
+
+create view Splitqueryt as
+(select S.query as query,S.urlid as urlid,S.page as page,S.splitquery as splitquery
+from MidSplitquery S
+where Not(ContainsRegex(/&/,S.splitquery) ))
+union all
+(select S.query as query,S.urlid as urlid,S.page as page,S.splitquery as splitquery
+from LastSplitquery S
+where Not(ContainsRegex(/&/,S.splitquery) ))
+union all
+(select S.query as query,S.urlid as urlid,S.page as page,S.splitquery as splitquery
+from FirstSplitquery S
+where Not(ContainsRegex(/&/,S.splitquery) ));
+
+create view Splitquery as
+select S.query as query,S.urlid as urlid,S.page as page,S.splitquery as splitquery
+from Splitqueryt S 
+order by GetBegin(S.splitquery);
+
+--output view Splitquery1;
+
+-------------------------------------------------------------------------------------------------------------------------
+-- extracting the queries without ampersand
+--i/p: ?identifier=3038158
+--o/p: identifier=3038158
+
+--final query with and without _ampersand in it
+
+create view QuerywithoutAnd as
+select U.query as query,U.urlid as urlid,U.page as page
+from URL U
+where Not(ContainsRegex(/&/,U.query))
+and NotNull(U.query);
+
+create view QueryFinal as
+(select SQ.splitquery as splitquery,SQ.query as query,SQ.urlid as urlid,SQ.page as page
+from Splitquery SQ )
+--where Equals(SQ.Page,U.Page) and Equals(SQ.urlid,U.urlid) )
+union all
+(select QWA.query as splitquery,QWA.query as query,QWA.urlid as urlid,QWA.page as page
+from QuerywithoutAnd QWA);
+--where Equals(QWA.urlid,U.urlid) and Equals(QWA.Page,U.Page));
+
+--Dictionary for ignored query strings
+create dictionary Ignored_Queries as (
+	'opendocument','main','opendatabase','open','printable'
+);
+-- Remove query segments to be ignored
+create view QueryRetained as
+select Q.query as query,Q.splitquery as splitquery,Q.urlid as urlid,Q.page as page
+from QueryFinal Q
+--retain only segments that do not match any of the ignored entries
+where Not(MatchesDict('Ignored_Queries', Q.splitquery)) ;
+
+--creating List of query segments
+create view QueryFinalGroup as
+select QG.query as query,QG.urlid as urlid,QG.page as page,
+List(QG.splitquery) as querygrp
+from QueryRetained QG 
+group by QG.query,QG.urlid,QG.page ;
+*/
+--Normalized query by passing list to UDF.
+--o/p: title=Bluepedia:Discussions&action=edit
+/*
+create view NormalizedQueryNonEmpty as
+select U.url as url,U.urlid as urlid,U.page as page,CreateQuery(QFG.querygrp) as retainstr
+,U.anchortext as anchortext
+from QueryFinalGroup QFG,URL U
+where Equals(QFG.urlid,U.urlid) ;
+*/
+
+create view NormalizedQueryNonEmpty as
+select U.url as url,U.urlid as urlid,U.page as page,
+	   NormalizeQuery(U.query) as retainstr,U.anchortext as anchortext
+from URL U;
+
+-- URL ids for which the query string is empty, null, or ignored
+create view NormalizedQueryEmpty as
+(select U.url as url,U.urlid as urlid,U.page as page,U.anchortext as anchortext from URL U)
+minus
+(select U.url as url,U.urlid as urlid,U.page as page,U.anchortext as anchortext from NormalizedQueryNonEmpty U);
+
+-- Add URL ids for which the normalized query is empty
+-- so that they are not ignored by the rest of the annotator
+create view NormalizedQuery as
+(select U.url as url,U.urlid as urlid,U.page as page,U.retainstr as retainstr, U.anchortext as anchortext from NormalizedQueryNonEmpty U)
+union all
+(select U.url as url,U.urlid as urlid,U.page as page,'' as retainstr, U.anchortext as anchortext from NormalizedQueryEmpty U);
+
+--output view NormalizedQuery;
+-------------------------------------------------------------------------------
+
+-- combining the host and port for Normalized URL
+--o/p: host -> xweb330.almaden.ibm.com port -> 8443
+create view HostPortCombined as
+select CHF._host_1 as host,P.port as port,P.url as url,P.urlid as urlid,P.page as page
+from createHostFinal CHF,PortFinal P
+where Equals(CHF.urlid,P.urlid) ;
+
+-- combining the query and path for Normalized URL
+--o/p: path -> /en  query -> title=Bluepedia:Discussions&action=edit
+create view QueryPathCombined as
+select IF.path1 as path,RQ.retainstr as query,RQ.url as url,RQ.urlid as urlid,RQ.page as page
+,RQ.anchortext as anchortext
+from IndexFinal IF,NormalizedQuery RQ
+where Equals(IF.urlid,RQ.urlid) ;
+
+
+create view URLforNormalization as
+select HP.host as host,HP.port as port,QP.path as path,QP.query as query,QP.url as url
+,QP.urlid as urlid,QP.page as page,QP.anchortext as anchortext
+from HostPortCombined HP,QueryPathCombined QP
+where Equals(HP.urlid,QP.urlid) ;
+
+
+
+/*Need to remove this code block
+create view LinkURLforNormalization as
+select U.host as host,U.port as port,U.path as path,U.query as query,U.url as url
+,U.urlid as urlid,U.page as page,U.anchortext as anchortext
+from AllforNormalization U
+where Equals(U.page,2);
+
+create view URLforNormalization as
+(select U.host as host,U.port as port,U.path as path,U.query as query,U.url as url
+,U.urlid as urlid,U.page as page,U.anchortext as anchortext
+from AllforNormalization U)
+minus
+(select U.host as host,U.port as port,U.path as path,U.query as query,U.url as url
+,U.urlid as urlid,U.page as page,U.anchortext as anchortext
+from LinkURLforNormalization U);
+*/
+------------------------------------------------------------------------------------------------------------------
+--combining host and port for More Normalized URL
+--o/p: host -> xweb330.almaden.ibm.com port -> 8443
+create view HostPortCombinedMoreNorm as
+select CHF2._host_2 as host,P.port as port,P.url as url
+,P.urlid as urlid,P.page as page
+from createHostFinal2 CHF2,PortFinal P
+where Overlaps(CHF2.url,P.url) and Equals(CHF2.urlid,P.urlid);
+
+--combining the query and path for More Normalized URL
+--o/p: path -> /en query -> title=Bluepedia:Discussions&action=edit
+create view QueryPathCombinedMoreNorm as
+select toLowerCase(ESP2.path2) as path,RQ.retainstr as query,RQ.url as url
+,RQ.urlid as urlid,RQ.page as page
+from EndingSlashPatternFinal ESP2,NormalizedQuery RQ
+where Overlaps(ESP2.url,RQ.url) and Equals(ESP2.urlid,RQ.urlid);
+
+--More Normalized URL
+create view URLforMoreNormalized as
+select HP.host as host,HP.port as port,QP.path as path,QP.query as query,QP.url as url
+,HP.urlid as urlid,HP.page as page
+from HostPortCombinedMoreNorm HP,QueryPathCombinedMoreNorm QP
+where Equals(HP.urlid,QP.urlid)  ;
+
+
+
+--combining the host and path for Dedup
+--o/p: host -> xweb330.almaden.ibm.com path -> /BlueMailUI/_static_/dojo/src/validate/jp.js 
+create view HostPathCombinedDedup as
+select CH2._host_2 as host,NSF.path3 as path,CH2.url as url,NSF.urlid as urlid,NSF.page as page
+from createHostFinal2 CH2,NSFFinal NSF
+where Overlaps(CH2.url,NSF.url) and Equals(CH2.urlid,NSF.urlid) ;
+
+-- combining the query and ending slash
+--o/p: query -> title=Bluepedia:Discussions&action=edit
+--o/p: pathfornsf -> /en
+create view NormalizedQuery1 as
+select * from 
+NormalizedQuery N;
+
+
+create view EndingSlashPatternFinal1 as
+select * from 
+EndingSlashPatternFinal N;
+
+
+create view QueryEndingSlashCombinedDedup as
+select RQS.url as url1,ESP2.url as url2,RQS.retainstr as query,ESP2.path2 as pathfornsf,ESP2.urlid as urlid,ESP2.page as page
+from NormalizedQuery1 RQS,EndingSlashPatternFinal1 ESP2
+where Overlaps(RQS.url,ESP2.url) and Equals(RQS.urlid,ESP2.urlid);
+
+create view QueryEndingSlashCombinedDedup1 as
+select D.query as query,D.pathfornsf as pathfornsf,D.urlid as urlid,D.page as page
+from QueryEndingSlashCombinedDedup D
+where Overlaps(D.url1,D.url2) ;
+
+--URL for Dedup string
+create view URLDedup as
+select HPC.host as host,HPC.path as path,QES.query as query,QES.pathfornsf as pathfornsf,HPC.url as url
+,HPC.urlid as urlid,HPC.page as page
+from HostPathCombinedDedup HPC,QueryEndingSlashCombinedDedup1 QES
+where Equals(HPC.urlid,QES.urlid) ;
+
+-- combining the Normalized and More Normalized URL
+create view NormalizationMoreNormalizedCombined as
+select N.host as host,N.port as port,N.path as path,N.query as query,
+MN.host as hostMN,MN.port as portMN,MN.path as pathmn,MN.query as querymn
+,N.urlid as urlid,N.page as page,N.anchortext as anchortext
+from URLforNormalization N,URLforMoreNormalized MN 
+where Equals(N.urlid,MN.urlid)  ;
+
+-- Final URL combining NormalizationMoreNormalizedCombined and URLDedup
+create view URLFinal as
+select 
+	NM.host as host, NM.port as port, NM.path as path, NM.query as query,
+	NM.hostMN as hostmn, NM.portMN as portmn, NM.pathmn as pathmn, NM.querymn as querymn,
+	D.host as hostdedup, D.path as pathdedup, D.query as querydedup, D.pathfornsf as pathfornsf, D.url as url,
+	D.urlid as urlid,D.page as page,NM.anchortext as anchortext
+from NormalizationMoreNormalizedCombined NM,URLDedup D 
+where Equals(NM.urlid,D.urlid) ;
+
+
+
+-- Normalized,More Normalized and Dedup strings combined in a single view
+-- for both page URL and link URLs
+create view NormMoreNormDedupForAllURLs as
+select 
+	GetNormalizedString(GetText(U.proto),GetText(UF.host),GetText(UF.port),GetText(UF.path),GetText(UF.query)) as normalizedURL ,
+	GetMoreNormalizedString(GetText(U.proto),GetText(UF.hostmn),GetText(UF.portmn),GetText(UF.pathmn),GetText(UF.querymn)) as moreNormalizedURL,
+	GetDedup(GetText(U.proto),GetText(UF.hostdedup),GetText(UF.pathdedup),UF.querydedup,GetText(UF.pathfornsf)) as dedupString,
+	GetText(U.proto) as proto,
+	GetText(UF.host) as host,
+	GetText(UF.port) as port,
+	GetText(UF.path) as path,
+	GetText(UF.query) as query,
+	U.urlid as urlid,
+	U.page as page,
+	UF.anchortext as anchortext
+from URLFinal UF,URL U
+where Equals(UF.urlid,U.urlid);
+
+
+-- Normalized,More Normalized and Dedup strings combined in a single view
+-- for Page URL only
+create view NormMoreNormDedup as
+select *
+from NormMoreNormDedupForAllURLs U
+where Equals(U.page,1) ;
+
+-- Normalized,More Normalized and Dedup strings combined in a single view
+-- for link URLs only
+create view NormMoreNormDedupForLinkURLs as
+(select * from NormMoreNormDedupForAllURLs U)
+minus
+(select * from NormMoreNormDedup U);
+
+
+--split dedup string for obtaining dedup path and dedup query
+--o/p: deduppath -> /en
+--o/p: dedupquery -> title=Bluepedia:Discussions&action=edit
+--------------------------------------------------------------------------------------------
+-- Rajshri: following block of code is not used in this annotator, 
+-- 	        may be it is used in other annotator, so i am not commenting it
+-- Laura 8/25: this block is not used anymore, commenting it out
+--------------------------------------------------------------------------------------------
+--Start of block
+/*
+create view SplitDedup as
+select S.match as match,S.dedupString as dedupString,
+SpanBetween(LeftContext(S.dedupString,0), S.match) as deduppath,
+SpanBetween(S.match,RightContext(S.dedupString,0)) as dedupquery
+,S.urlid as urlid,S.page as page
+from(
+		extract 
+			DS.urlid as urlid,
+			DS.page as page,
+			DS.dedupString as dedupString,
+			regex /\?/ on DS.dedupString as match
+		from NormMoreNormDedup DS
+		limit 1
+	)S;
+
+--extracting Dedup path which do not have query associated with it
+--o/p: /bluemailui/_static_/dojo/src/validate/jp.js
+create view Dedupwithoutquery as
+select UF.pathdedup as dedupString,UF.urlid as urlid,UF.page as page
+from NormMoreNormDedup DS,URLFinal UF
+where Not(ContainsRegex(/\?/,DS.dedupString)) and Equals(DS.urlid,UF.urlid) ;
+
+--combining the paths which have query associated with it and
+--which do not have query associated with it
+--final value for Dedup path
+create view DedupPathFinal as
+(select DP.deduppath as deduppath ,DP.urlid as urlid,DP.page as page
+from SplitDedup DP)
+union all
+(select DWQ.dedupString as deduppath ,DWQ.urlid as urlid,DWQ.page as page
+from Dedupwithoutquery DWQ);
+*/
+-- Compute hash code of dedup path
+--o/p: urlPathHash -> -173643040
+/*
+create view UrlPathHash as
+select HashCode(GetText(DP.deduppath)) as urlPathHash,DP.deduppath as deduppath,D.dedupString as dedupString
+,D.urlid as urlid,D.page as page
+from DedupPathFinal DP,NormMoreNormDedup D
+where Equals(DP.urlid,D.urlid) ;
+*/
+--End of block
+-------------------------------------------------------------------------------
+--New Code Added by Rajshri
+--Dedup Path and its Hash Value
+--o/p: deduppath -> /en
+--This view  is considering only page URL
+---------------------------------------------------------------------------------
+create view UrlPathHash as
+select HashCode(GetText(DP.path3)) as urlPathHash,
+	   DP.path3 as deduppath, 
+	   D.dedupString as dedupString,
+	   DP.urlid as urlid,DP.page as page
+from NSFFinal DP,NormMoreNormDedup D
+where Equals(DP.page,1) and Equals(DP.urlid,D.urlid) ;
+
+----------------------------------------------------------------------
+--New Code Added by Rajshri
+--compute hash code of dedup query
+--o/p: urlQueryHash -> 226726276
+--This view  is considering only page URL
+----------------------------------------------------------------------
+create view NSFQueryHash as
+select D.retainstr as query,0 as urlQueryHash
+,D.urlid as urlid,D.page as page
+from NSFmatch N,NormalizedQuery1 D
+where Equals(N.urlid,D.urlid)and Equals(D.page,1);
+
+--This view  is considering only page URL
+create view NonNSFQueryHash as
+(select D.retainstr as query
+,D.urlid as urlid,D.page as page
+from NormalizedQuery1 D where Equals(D.page,1))
+minus 
+(select D.query as query
+,D.urlid as urlid,D.page as page
+from NSFQueryHash D);
+
+--This view  is considering only page URL
+create view UrlQueryHash as
+(select HashCode(GetString(D.query)) as urlQueryHash,D.query as query
+,D.urlid as urlid,D.page as page
+from NonNSFQueryHash D)
+union all
+(select D.urlQueryHash as urlQueryHash,D.query as query
+,D.urlid as urlid,D.page as page
+from NSFQueryHash D);
+
+--combining the url path hash and query hash
+--o/p: urlPathHash -> -173643040
+--o/p: urlQueryHash -> 0
+--This view  is considering only page URL
+create view UrlPathQueryHashCombined as
+select 
+	PH.urlPathHash as urlPathHash, PH.deduppath as path,
+	QH.urlQueryHash as urlQueryHash, QH.query as query,
+	PH.dedupString as dedupString,
+	QH.urlid as urlid, QH.page as page
+from UrlPathHash PH, UrlQueryHash QH
+where Equals(QH.urlid,PH.urlid) ;
+
+--Final Normalized URL 
+--containing the Normalized String,More Normalized String,Dedup String,Url path hash and query hash
+--This view  is considering only page URL
+create view FinalNormalizedUrlwithHashes as 
+select 
+	NM.normalizedURL as normalizedURL, NM.moreNormalizedURL as moreNormalizedURL, NM.dedupString as dedupString,
+	PQ.urlPathHash as urlPathHash,PQ.urlQueryHash as urlQueryHash,
+	NM.proto as proto,
+	NM.host as host,
+	NM.port as port,
+	NM.path as path,
+	NM.query as query,
+	PQ.urlid as urlid,PQ.page as page
+from NormMoreNormDedup NM, UrlPathQueryHashCombined PQ
+where Equals(NM.urlid,PQ.urlid) ;
+
+
+-- Page URL normalized with all components
+/*
+create view PageURLNorm as
+select 
+	U.normalizedURL as url,
+	U.proto as proto,
+	U.host as host,
+	U.port as port,
+	U.path as path,
+	U.query as query
+from FinalNormalizedUrlwithHashes U;
+*/

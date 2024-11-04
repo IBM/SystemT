@@ -1,0 +1,36 @@
+module genericModule;
+
+
+create function conflictName(
+  p1 Span  ,p2 Span)
+return Span like p1
+external_name 'udfjars/udfs.jar:com.ibm.test.udfs.udf1!combineSpans'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create view MyTest as
+  select  conflictName(D.text, D.text) as res,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as Document_____sep_____D____id
+  from  Document D;
+
+output view MyTest;
+
+
+
+create view conflictName as
+  select  D.text as text,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as Document_____sep_____D____id
+  from  Document D;
+
+output view conflictName;
+
+
+

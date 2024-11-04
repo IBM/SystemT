@@ -1,0 +1,87 @@
+-- Patterns to identify Sports teams
+  
+----------------------------------------------------------
+-- DICTIONARY MATCHING 
+----------------------------------------------------------
+-- ToDo: clean up the shortname dictionary
+
+-- Sudarshan regex : 10/12/2011 : lines 18, 28, 36, 44 and 52 - should the \p{Lu}\p{M}* below be grouped together, inside the [ ] ? 
+-- Had the above doubt because am still unsure if \p{Lu}\p{M}* is read as one character or unicode point within the [ ] or two 
+-- if the latter, then it should be grouped, for the [ ] instructs the engine to output only that one unicode point / character whichever matched.
+-- I have grouped them at least on two occasions together when changing the regex syntax, so a clarification here would help me attend to them too if those changes need to be reverted.
+create view SoccerTeam as
+extract 
+	    --dictionary 'orgs/orgs/sports/uefa_football_club_list_fullnames.dict'
+	    dictionary 'orgs/orgs/sports/org_sports_soccer_world_mixed.dict'
+               --and 'orgs/orgs/sports/mls_football_club_with_location.dict'
+               and 'orgs/orgs/sports/org_sports_soccer_usa_withLoc_en.dict' 
+        on D.text as org
+from Doc D
+having MatchesRegex(/[\p{Lu}\p{M}*\d].+/, org)
+consolidate on org;
+
+
+
+create view BaseballTeam as
+extract 
+	    --dictionary 'orgs/orgs/sports/baseball_clubs_with_location.dict'
+	    dictionary 'orgs/orgs/sports/org_sports_baseball_usa_withLoc_en.dict'
+        on D.text as org
+from Doc D
+having MatchesRegex(/[\p{Lu}\p{M}*\d].+/, org)
+consolidate on org;
+
+create view BasketballTeam as
+extract 
+	    --dictionary 'orgs/orgs/sports/basketball_clubs_with_location.dict'
+	    dictionary 'orgs/orgs/sports/org_sports_basketball_usa_withLoc_en.dict'
+        on D.text as org
+from Doc D
+having MatchesRegex(/[\p{Lu}\p{M}*\d].+/, org)
+consolidate on org;
+
+create view HockeyTeam as
+extract 
+	    --dictionary 'orgs/orgs/sports/hockey_clubs_with_location.dict'
+	    dictionary 'orgs/orgs/sports/org_sports_hockey_usa_withLoc_en.dict'
+        on D.text as org
+from Doc D
+having MatchesRegex(/[\p{Lu}\p{M}*\d].+/, org)
+consolidate on org;
+
+create view AmericanFootballTeam as
+extract 
+	    --dictionary 'orgs/orgs/sports/american_football_clubs_with_location.dict'
+	    dictionary 'orgs/orgs/sports/org_sports_football_usa_withLoc_en.dict'
+        on D.text as org
+from Doc D
+having MatchesRegex(/[\p{Lu}\p{M}*\d].+/, org)
+consolidate on org;
+
+
+create view OrgSportsTeamCand as
+select O.org as org
+from
+(
+	(select O.org from SoccerTeam O)
+	union all
+	(select O.org from BaseballTeam O)
+	union all
+	(select O.org from BasketballTeam O)
+	union all
+	(select O.org from HockeyTeam O)
+	union all
+	(select O.org from AmericanFootballTeam O)
+) O
+consolidate on O.org;
+
+
+create view OrgSportsTeamValid as
+select * from OrgSportsTeamCand;
+
+
+------------------------------------------------------------------
+
+
+create view OrgSportsTeamAll as
+select O.org as org from OrgSportsTeamValid O;

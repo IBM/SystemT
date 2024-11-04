@@ -1,0 +1,162 @@
+-- ***********************************************************************
+-- ***                        UDF declarations                        ****
+-- ***********************************************************************
+create function CalculateOverride(urlPath Text)
+return String
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.GeoUDF!CalculateOverride'
+language java
+deterministic
+return null on null input;
+
+-- ***********************************************************************
+
+
+-- ***********************************************************************
+-- ***                       URL PATH                                 ****
+-- ***********************************************************************
+
+create dictionary IgnoreURLPathCountriesDict as(
+	'ag','cc','cm','do','gp','hr','it','km','ls','pg','sd','sj','so','st','ws'
+);
+
+-- Split the URL path into segments
+create view URLPathSplit as
+extract
+    split using U.slash
+        on U.path
+        as match
+	from (
+		-- Find slashes in the URL path
+		extract 
+			U.actualPath as path, 
+			regex /\// on U.actualPath as slash 
+		from PageURL U
+	) U;
+
+-- Make sure to retain singleton segments, due to bug in extract split statement
+-- limit result to 3 segments
+create view URLPathSeg as
+select P.seg as seg
+from
+(
+	(select U.actualPath as seg from PageURL U where Not(ContainsRegex(/\//, U.actualPath)) )
+	union all
+	(select S.match as seg from URLPathSplit S)
+) P
+limit 3;
+
+
+-- Retain those segments that do not match the ignore country code dictionary
+create view URLPathFirst3Seg as
+select P.seg as seg
+from URLPathSeg P
+where MatchesRegex(/[a-zA-Z]{2}/, P.seg)
+  and Not(MatchesDict('IgnoreURLPathCountriesDict', P.seg));
+
+-- ***********************************************************************
+-- ***                        META COUNTRY                            ****
+-- ***********************************************************************
+
+create dictionary IgnoreCountriesDict as
+(
+	'US','GB'
+);
+
+-- Extract individual country codes from the list of codes of the country META tag.
+-- We handle two separate cases:
+-- 1) list contains two or more country codes separated by commas
+-- 2) the list contains a single country code
+-- And we take the union of the results
+create view MetaCountrySplit as
+extract
+    split using S2.comma
+        on S2.content
+        as country
+	from (
+		-- Find commas in the content field of country entries
+		extract 
+			C.content as content, 
+			regex /,\s*/ on C.content as comma 
+		from MetaCountry C
+	) S2;
+
+
+create view MetaCountryWithCountryCand as
+(select M.content as country from MetaCountry M where Not(ContainsRegex(/,/, M.content)) )
+union all
+(select S.country as country from MetaCountrySplit S);
+
+
+-- Retain the country code entries that have exactly two letters, 
+-- are not in the list of ignored country codes, and  
+-- match the country_code_list dictionary
+create view Country_MetaCountry_2letters as
+extract  
+	    dictionary 'GeoCountryCodeDict' on C.country as match
+from MetaCountryWithCountryCand C
+having MatchesRegex(/[a-zA-Z]{2}/, match) 
+	and Not(MatchesDict('IgnoreCountriesDict', match));
+
+	
+-- ***********************************************************************
+-- ***                        META LANGUAGE                           ****
+-- ***********************************************************************
+
+-- Inspect the language META tags contents and retain the country codes
+-- E.g., if the content is "en-US" we retain only the last two characters "US"
+-- Retain the entries that are not in the list of ignored country codes.
+create view Country_MetaLanguage_2letters as
+extract 
+		regex /(\w{2})[-_](\w{2})/
+			on L.content
+			return group 2 as match
+from MetaLanguage L
+having Not(MatchesDict('IgnoreCountriesDict', match))
+   and MatchesDict('GeoCountryCodeDict', match);
+
+
+-- ***********************************************************************
+-- ***                        URL HOST                                ****
+-- ***********************************************************************
+
+create dictionary IgnoreURLHostCountriesDict as
+(
+	'DE'
+);
+
+create view Country_URLHost_2letters as
+extract  
+		regex /\b(\w{2})(|\.ibm\.com|\.lotus\.com|\.cognos\.com)$/ on U.host 
+			return group 1 as match
+from PageURL U
+having MatchesDict('GeoCountryCodeDict', match);
+-- Implement the postprocessing step: if ("URLHost:DE".equals(country_evidence)) overwrite attribute "countries" with "N/A";
+-- Laura 8/6: moved into CountryWithEvidence to match Java behavior which retains the "URLHost:DE" evidence
+--and Not(MatchesDict('IgnoreURLHostCountriesDict',match));
+
+
+-- ***********************************************************************
+-- ***   High-quality Country and Region annotations from URL HOST    ****
+-- ***********************************************************************
+
+-- Check if the page is an ibm host
+create view IsIBMHost as
+select U.host
+from PageURL U
+where MatchesRegex(/(.+)\.(ibm|lotus|cognos)\.com/, U.host);
+
+-- If page is IBM host, and the path is not null, call the procedure CalculateOverride
+-- to compute high-quality region and country annotations
+create view GeoHQ as
+extract O.regioncountry as regioncountry,
+	    regex /([^\|]*)\|(.*)/ on O.regioncountry
+	    	return group 1 as region 
+	   		   and group 2 as country
+from
+(
+	select CalculateOverride(U.actualPath) as regioncountry
+	from IsIBMHost, PageURL U
+	where NotNull(U.actualPath)
+) O
+having Not(Equals('|', GetText(regioncountry)));
+

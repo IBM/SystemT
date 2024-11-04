@@ -1,0 +1,230 @@
+module genericModule;
+
+
+create function FixMonth(
+  month String)
+return Text
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.DateUDF!fixMonth'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create function FixDay(
+  date String)
+return Text
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.DateUDF!fixDay'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create view DateStamp as
+  select  T.match as content,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as PTag_____sep_____T____id
+  from  PTag T
+  where NotNull(T.id)
+     and MatchesRegex(/date-stamp/, T.id);
+
+output view DateStamp;
+
+create view MetaWithContent as
+  select  T.name as name,
+          T.content as content,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as MetaOriginal_____sep_____T____id
+  from  MetaOriginal T
+  where NotNull(T.name)
+     and NotNull(T.content);
+
+output view MetaWithContent;
+
+create view DateStampDateCand as
+  select  GetText(S.year) as year,
+          FixMonth(GetText(S.month)) as month,
+          GetText(S.day) as day,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as __Subquery__3__Temp_____sep_____S____id
+  from  __Subquery__3__Temp S;
+
+output view DateStampDateCand;
+
+create view DateStampDate as
+  select  D.year as year,
+          D.month as month,
+          D.day as day,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as DateStampDateCand_____sep_____D____id
+  from  DateStampDateCand D
+  where NotNull(D.month);
+
+output view DateStampDate;
+
+create view MetaDescriptionDate as
+  select  GetText(S.year) as year,
+          GetText(S.month) as month,
+          GetText(S.day) as day,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as __Subquery__4__Temp_____sep_____S____id
+  from  __Subquery__4__Temp S;
+
+output view MetaDescriptionDate;
+
+create dictionary "IBMEffectiveDict"
+with case insensitive
+as (
+  'IBM.Effective'
+);
+
+
+create view MetaIBMEffectiveDate as
+  select  GetText(S.year) as year,
+          GetText(S.month) as month,
+          GetText(S.day) as day,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as __Subquery__5__Temp_____sep_____S____id
+  from  __Subquery__5__Temp S;
+
+output view MetaIBMEffectiveDate;
+
+create dictionary "DCDateDict"
+with case insensitive
+as (
+  'dc.date'
+);
+
+
+create view MetaDCDateDate as
+  select  GetText(S.year) as year,
+          GetText(S.month) as month,
+          GetText(S.day) as day,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as __Subquery__6__Temp_____sep_____S____id
+  from  __Subquery__6__Temp S;
+
+output view MetaDCDateDate;
+
+create view MetadcdateDate as
+  select  GetText(S.year) as year,
+          GetText(S.month) as month,
+          GetText(S.day) as day,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as __Subquery__7__Temp_____sep_____S____id
+  from  __Subquery__7__Temp S;
+
+output view MetadcdateDate;
+
+create view UrlDateDate as
+  select  GetText(S.year) as year,
+          GetText(S.month) as month,
+          FixDay(GetText(S.day)) as day,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as __Subquery__8__Temp_____sep_____S____id
+  from  __Subquery__8__Temp S;
+
+output view UrlDateDate;
+
+create view __Subquery__3__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    T.__auto__id as DateStamp_____sep_____T____id,
+    regex /\A(?:Published|Updated) on\s+(\d{1,2})\s+(\w+)\s+(\d{4})\z/
+    with flags 'DOTALL'
+    on T.content
+    return group 1 as day
+       and group 2 as month
+       and group 3 as year
+  from DateStamp T;
+
+output view __Subquery__3__Temp;
+
+create view __Subquery__4__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    T.__auto__id as MetaDescription_____sep_____T____id,
+    regex /\AIBM Research\s*:\s+(\d{2})\/(\d{2})\/(\d{4})\s+\d{2}:\d{2}\s+[AP]M\z/
+    with flags 'DOTALL'
+    on T.content
+    return group 1 as month
+       and group 2 as day
+       and group 3 as year
+  from MetaDescription T;
+
+output view __Subquery__4__Temp;
+
+create view __Subquery__5__Temp as
+  extract T.name as name,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    T.__auto__id as MetaWithContent_____sep_____T____id,
+    regex /\A(\d+)-(\d+)-(\d+)\z/
+    with flags 'DOTALL'
+    on T.content
+    return group 1 as year
+       and group 2 as month
+       and group 3 as day
+  from MetaWithContent T
+  having MatchesDict('IBMEffectiveDict', name);
+
+output view __Subquery__5__Temp;
+
+create view __Subquery__6__Temp as
+  extract T.name as name,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    T.__auto__id as MetaWithContent_____sep_____T____id,
+    regex /\A(\d{4})-(\d{2})-(\d{2})\z/
+    with flags 'DOTALL'
+    on T.content
+    return group 1 as year
+       and group 2 as month
+       and group 3 as day
+  from MetaWithContent T
+  having MatchesDict('DCDateDict', name);
+
+output view __Subquery__6__Temp;
+
+create view __Subquery__7__Temp as
+  extract T.name as name,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    T.__auto__id as MetaWithContent_____sep_____T____id,
+    regex /\A(\d{2})-(\d{2})-(\d{4})\z/
+    with flags 'DOTALL'
+    on T.content
+    return group 1 as month
+       and group 2 as day
+       and group 3 as year
+  from MetaWithContent T
+  having MatchesDict('DCDateDict', name);
+
+output view __Subquery__7__Temp;
+
+create view __Subquery__8__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    T.__auto__id as UrlDate_____sep_____T____id,
+    regex /\A(\d{4})(\d{2})(\d{2})\z/
+    with flags 'DOTALL'
+    on T.content
+    return group 1 as year
+       and group 2 as month
+       and group 3 as day
+  from UrlDate T;
+
+output view __Subquery__8__Temp;
+

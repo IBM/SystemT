@@ -1,0 +1,248 @@
+module genericModule;
+
+
+create view H1SegWithDelimiter as
+  select  Op.match as match,
+          Op.elem as elem,
+          AutoID() as __auto__id
+  from  __Base__H1SegWithDelimiter__Temp Op;
+
+output view H1SegWithDelimiter;
+
+create view H1SegNoDelimiter as
+  select  H.match as match,
+          Chomp(H.match) as elem,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          H.__auto__id as H1_____sep_____H____id
+  from  H1 H
+  where Not(ContainsRegex(/\s*[\|—]\s*|\s*[-:]\s+/, H.match));
+
+output view H1SegNoDelimiter;
+
+create view H1SegStartsWithDelimiter as
+  select  H.match as match,
+          Chomp(H.match) as elem,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          H.__auto__id as H1_____sep_____H____id
+  from  H1 H
+  where ContainsRegex(/\A\s*[\|—]\s*|\s*[-:]\s+/, H.match);
+
+output view H1SegStartsWithDelimiter;
+
+create view H1SegCand as
+  select  S.match as match,
+          S.elem as elem,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as __Subquery__378__Temp_____sep_____S____id
+  from  __Subquery__378__Temp S
+  where Not(Equals(GetLength(S.elem), 0));
+
+output view H1SegCand;
+
+create view H1Seg as
+  select  __t2.match as match,
+          __t2.elem as elem,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__379__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__379__Temp__1 __t1,
+        __Consolidate__379__Temp__2 __t2
+  where Contains(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.match, __t2.elem;
+
+output view H1Seg;
+
+create view Seg as
+  (select  Op.match as match,
+            Op.elem as elem,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__380__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            Op.elem as elem,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__380__TempOp__1 Op);
+
+output view Seg;
+
+create view TitleH1WithID as
+  (select  Op.match as match,
+            Op.id as id,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__381__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            Op.id as id,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__381__TempOp__1 Op);
+
+output view TitleH1WithID;
+
+create view SegWithID as
+  select  S.elem as elem,
+          T.id as id,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as Seg_____sep_____S____id,
+          T.__auto__id as TitleH1WithID_____sep_____T____id
+  from  Seg S,
+        TitleH1WithID T
+  where Equals(T.match, S.match)
+  order by T.id, S.elem;
+
+output view SegWithID;
+
+create view SegIDAll as
+  select  Op.id as id,
+          AutoID() as __auto__id
+  from  __Base__SegIDAll__Temp Op;
+
+output view SegIDAll;
+
+create view __Base__H1SegWithDelimiter__Temp as
+  extract E.match as match,
+    split using E.delim
+    on E.match as elem
+  from 
+(extract H.match as match,
+  regex /\s*[\|—]\s*|\s*[-:]\s+/
+  with flags 'DOTALL'
+  on H.match
+  return group 0 as delim
+from H1 H
+) E;
+
+output view __Base__H1SegWithDelimiter__Temp;
+
+create view __Base__SegIDAll__Temp as
+  select  S.id as id
+  from  SegWithID S
+  group by S.id;
+
+output view __Base__SegIDAll__Temp;
+
+create view __Consolidate__379__Temp__1 as
+  select  S.match as match,
+          S.elem as elem,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as H1SegCand_____sep_____S____id,
+          S.elem as __consolidate__target
+  from  H1SegCand S;
+
+output view __Consolidate__379__Temp__1;
+
+create view __Consolidate__379__Temp__2 as
+  select  __t1.match as match,
+          __t1.elem as elem,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__379__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'NotContainedWithin';
+
+output view __Consolidate__379__Temp__2;
+
+create view __Subquery__378__Temp as
+  (select  Op.match as match,
+            Op.elem as elem,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__377__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            Op.elem as elem,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__377__TempOp__1 Op)
+  union all
+  (select  Op.match as match,
+            Op.elem as elem,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__377__TempOp__2 Op);
+
+output view __Subquery__378__Temp;
+
+create view __Union__377__TempOp__0 as
+  select  S.match as match,
+          Chomp(S.elem) as elem,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as H1SegWithDelimiter_____sep_____S____id
+  from  H1SegWithDelimiter S;
+
+output view __Union__377__TempOp__0;
+
+create view __Union__377__TempOp__1 as
+  select  S.match as match,
+          Chomp(S.elem) as elem,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as H1SegNoDelimiter_____sep_____S____id
+  from  H1SegNoDelimiter S;
+
+output view __Union__377__TempOp__1;
+
+create view __Union__377__TempOp__2 as
+  select  S.match as match,
+          Chomp(S.elem) as elem,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as H1SegStartsWithDelimiter_____sep_____S____id
+  from  H1SegStartsWithDelimiter S;
+
+output view __Union__377__TempOp__2;
+
+create view __Union__380__TempOp__0 as
+  select  Chomp(S.title) as match,
+          S.elem as elem,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as TitleSeg_____sep_____S____id
+  from  TitleSeg S;
+
+output view __Union__380__TempOp__0;
+
+create view __Union__380__TempOp__1 as
+  select  Chomp(S.match) as match,
+          S.elem as elem,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as H1Seg_____sep_____S____id
+  from  H1Seg S;
+
+output view __Union__380__TempOp__1;
+
+create view __Union__381__TempOp__0 as
+  select  Chomp(T.title) as match,
+          -1 as id,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as FirstTitle_____sep_____T____id
+  from  FirstTitle T;
+
+output view __Union__381__TempOp__0;
+
+create view __Union__381__TempOp__1 as
+  select  Chomp(H.match) as match,
+          AutoID() as id,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          H.__auto__id as H1_____sep_____H____id
+  from  H1 H;
+
+output view __Union__381__TempOp__1;
+

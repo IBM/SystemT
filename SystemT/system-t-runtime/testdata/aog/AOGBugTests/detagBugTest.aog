@@ -1,0 +1,73 @@
+###############################################################################
+# detagBug.aog
+#
+# AOG plan for a query that was causing a problem with the handling of 
+# the output schema of the detag statement.
+###############################################################################
+
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+($Doc, $Meta) =
+  Detag(
+    ("meta", (
+      "__SCHEMA__" => "Meta",
+      "name" => "name",
+      "content" => "content"
+    )),
+    "text",
+    "Doc",
+    "true",
+    $Document
+  );
+
+$MetaKeywords =
+    Select(
+      MatchesRegex(
+        RegexConst(/keywords/, "SimpleRegex"),
+        GetCol("M.name")
+      ),
+      Project(
+        "NULL",
+        (
+          "content" =>   "M.content",
+          "name" =>   "M.name"
+
+        ),
+        $Meta
+      ) 
+  );
+
+$MetaKeywordsComma =
+  Project(
+    "NULL",
+    (
+      "K.content" =>   "content",
+      "comma" =>   "comma"
+
+    ),
+    FastRegex(
+      /,\s*/,
+      (
+        0 =>   "comma"
+
+      ),
+      "K.content",
+      Project(
+        "NULL",
+        (
+          "M.content" =>   "K.content"
+
+        ),
+        $MetaKeywords
+      )
+    )
+  );
+
+  
+Output: $Doc, $MetaKeywords, $MetaKeywordsComma;
+
+

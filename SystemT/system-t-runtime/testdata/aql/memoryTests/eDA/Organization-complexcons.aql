@@ -1,0 +1,67 @@
+-- collect locations completely contained within addresses
+create view OrgWithinUrlEmailPlace as
+    select O.org as org
+    from OrgSentence O, UrlEmailPlace UEP
+    where Contains (UEP.match, O.org);
+
+-- collect organizations, overlapping with time annotations
+create view OrgOverlapTime as
+    select O.org as org
+    from OrgSentence O, Times t
+    where Overlaps(t.match, O.org);
+
+create view InvalidOrg as
+	(select OP.org as org from OrgWithinUrlEmailPlace OP)
+	union all
+	(select OP.org as org from OrgOverlapTime OP);
+
+-- filter the first 2 views from the organization annotations	
+create view ValidOrg as 
+	(select O.org as org from OrgSentence O)
+	minus
+	(select OP.org as org from InvalidOrg OP);
+
+-- remove duplicates 
+create view ValidOrgConsolidated as
+    select C.org as org
+    from ValidOrg C
+    consolidate on C.org;
+
+/* extend already identified organization annotations to
+ include the partnership company extansions, if present */
+create view FinalOrgExpanded as
+    select CombineSpans(CO.match, C.org) as org
+    from ValidOrgConsolidated C,
+	    CapsOrg CO
+    where ContainsDict('OrgPartnershipDict', C.org)
+        and FollowsTok(CO.match, C.org, 0, 2)
+        and MatchesRegex(/\s*,?\s*&\s*/, SpanBetween(CO.match, C.org));
+
+/* unit of all the organization annotations, i.e. organizations within
+    Lotus Notes e-mail, with partnership suffix and other identified
+    organization annotations */
+create view FinalOrgAll as
+	(select O.org as org from ValidOrgConsolidated O)
+	union all
+	(select O.org as org from FinalOrgExpanded O)
+	union all
+	(select O.match as org from OrgWithinNotesEmail1 O)
+	union all
+	(select O.match as org from OrgWithinNotesEmail2 O);
+
+-- remove duplicates
+create view FinalOrgConsolidated as
+    select C.org as org 
+    from FinalOrgAll C
+    consolidate on C.org;
+
+create view FinalOrgConsolidatedWithoutDots as
+    select O.org as org from FinalOrgConsolidated O;
+
+-- all the addresses, organizations and locations united in one view	
+create view UrlEmailPlaceOrg as 
+     (select R.loc as match from FinalPlaceConsolidated R)
+     union all
+     (select R.org as match from FinalOrgConsolidatedWithoutDots R)
+     union all
+     (select R.match as match from AllCityStateCountry R); 

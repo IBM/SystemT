@@ -1,0 +1,66 @@
+-- Yunyao: created on 05/22/2008
+
+-- Additional state abbreviations
+create view CanadianProvinceStrongAbbrev  as
+select D.match as match
+from   Dictionary('location/statesOrProvinces/provinceAbbrev-canada.dict',  'Exact', Doc.text) D;
+
+create view CanadianProvinceWeakAbbrev  as
+select D.match as match
+from   Dictionary('location/statesOrProvinces/provinceAbbrev-canada.dict',  Doc.text) D;
+
+	
+-- states for major countries other than US and Canada
+
+
+create view StatesFromOtherMajorCountries as
+extract
+    dictionaries
+        'location/statesOrProvinces/provinces-china.dict'
+    and 'location/statesOrProvinces/provinces-russia.dict'
+    and 'location/statesOrProvinces/states-india.dict'
+    and 'location/statesOrProvinces/states-france.dict'
+    and 'location/statesOrProvinces/states-italy.dict'
+    and 'location/statesOrProvinces/states-iran.dict'
+    and 'location/statesOrProvinces/states-mexico.dict'
+    and 'location/statesOrProvinces/states-australia.dict'
+    and 'location/statesOrProvinces/provinces-southKorea.dict'
+    and 'location/statesOrProvinces/autoCommunities-spain.dict'
+    and 'location/statesOrProvinces/provinces-turkey.dict'
+    and 'location/statesOrProvinces/states-brazil.dict'
+    and 'location/statesOrProvinces/prefectures-japan.dict'       
+--NOTE: more dictionaries can be added here
+    with flags 'Exact'
+        on D.text   
+        as match
+from Doc D;
+	
+--output view StatesFromMajorCountries;
+
+-- major cities around the world
+create view MajorCity as
+extract
+    dictionaries
+		'location/cities/majorCity_world.dict'
+	and 'location/cities/majorCities.dict'
+	and 'location/cities/city_bayarea.dict'
+	-- major cities for countries with GDP of top 20 in the world (except for US and Germany)
+	and 'location/cities/majorCities-china.dict'
+	and 'location/cities/majorCities-UK.dict'
+	and 'location/cities/majorCities-russia.dict'
+	and 'location/cities/majorCities-france.dict'
+	and 'location/cities/majorCities-iran.dict'
+	and 'location/cities/majorCities-india.dict'
+	and 'location/cities/majorCities-brazil.dict'
+	and 'location/cities/majorCities-italy.dict'
+	and 'location/cities/majorCities-mexico.dict'
+	and 'location/cities/majorCities-southKorea.dict'
+	and 'location/cities/majorCities-spain.dict'
+	and 'location/cities/majorCities-indonesia.dict'
+	and 'location/cities/majorCities-australia.dict'
+	and 'location/cities/majorCities-taiwan.dict'
+	and 'location/cities/majorCities-turkey.dict'
+	and 'location/cities/majorCities-netherlands.dict'
+	    on D.text   
+        as match
+	from Doc D;

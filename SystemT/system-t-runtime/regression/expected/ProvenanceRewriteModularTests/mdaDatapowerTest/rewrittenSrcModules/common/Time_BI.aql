@@ -1,0 +1,329 @@
+module common;
+
+
+create view Time1 as
+  select  CombineSpans(td.match, wkd.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          td.__auto__id as TwoDigitsInterval_____sep_____td____id,
+          wkd.__auto__id as WKDay_____sep_____wkd____id
+  from  TwoDigitsInterval td,
+        WKDay wkd
+  where FollowsTok(td.match, wkd.match, 0, 0);
+
+output view Time1;
+
+create view Time2 as
+  select  CombineSpans(wkd.match, td.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          td.__auto__id as TwoDigitsInterval_____sep_____td____id,
+          wkd.__auto__id as WKDay_____sep_____wkd____id
+  from  TwoDigitsInterval td,
+        WKDay wkd
+  where FollowsTok(wkd.match, td.match, 0, 0);
+
+output view Time2;
+
+create view Time2Plus as
+  select  CombineSpans(t.match, tz.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          t.__auto__id as Time2_____sep_____t____id,
+          tz.__auto__id as TimeZone_____sep_____tz____id
+  from  Time2 t,
+        TimeZone tz
+  where FollowsTok(t.match, tz.match, 0, 0);
+
+output view Time2Plus;
+
+create view Time4 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__32__Temp_____sep_____R____id
+  from  __Subquery__32__Temp R;
+
+output view Time4;
+
+create view MysteryRegex_part1 as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /([+-](?:2[0-3]|[01]?[0-9])(?::?(?:[0-5]?[0-9])))/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as match
+  from Document D;
+
+output view MysteryRegex_part1;
+
+create view MysteryRegex_part2 as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /([0-9]{4})+/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as match
+  from Document D;
+
+output view MysteryRegex_part2;
+
+create view Time4Follows3 as
+  select  Op.match as match,
+          AutoID() as __auto__id
+  from  __Base__common__Time4Follows3__Temp Op;
+
+output view Time4Follows3;
+
+create view YearFollowsTime4 as
+  select  CombineSpans(t4.match, year.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          t4.__auto__id as Time4_____sep_____t4____id,
+          year.__auto__id as FourDigits_____sep_____year____id
+  from  Time4 t4,
+        FourDigits year
+  where Follows(t4.match, year.match, 0, 1);
+
+output view YearFollowsTime4;
+
+create view TimeOptMsTz as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /(2[0-3]|[0-1][0-9]|[0-9]):([0-5][0-9]):([0-5][0-9])([\.\:][0-9]+)?(Z|[+-](?:2[0-3]|[0-1][0-9]):[0-5][0-9])?/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as match
+  from Document D;
+
+output view TimeOptMsTz;
+
+create view TimeOptMsTz_a as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /:(2[0-3]|[0-1][0-9]|[0-9]):([0-5][0-9]):([0-5][0-9])([\.\:][0-9]+)?(Z|[+-](?:2[0-3]|[0-1][0-9]):[0-5][0-9])?/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as match
+  from Document D;
+
+output view TimeOptMsTz_a;
+
+
+
+create view TimeOptMsTz_c as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /((:)\d{2}(:)\d{2}(:)\d{2}( )(\+|-)\d{4})/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as match
+  from Document D;
+
+output view TimeOptMsTz_c;
+
+create view TimeAll as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__33__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__33__TempOp__1 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__33__TempOp__2 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__33__TempOp__3 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__33__TempOp__4 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__33__TempOp__5 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__33__TempOp__6 Op);
+
+output view TimeAll;
+
+create view Times as
+  select  __t2.match as match,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__34__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__34__Temp__1 __t1,
+        __Consolidate__34__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.match;
+
+output view Times;
+
+create view TimeOutput as
+  select  __t2.span as span,
+          __t2.text as text,
+          __t2.field_type as field_type,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__35__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__35__Temp__1 __t1,
+        __Consolidate__35__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.span, __t2.text, __t2.field_type;
+
+output view TimeOutput;
+
+export view common.TimeOutput;
+
+
+create view __Base__common__Time4Follows3__Temp as
+  extract pattern <T.match> '('? <TZ.match> ')'? <M1.match>? <M2.match>?
+  return group 0 as match
+  from  Time4 T,
+        TimeZone TZ,
+        MysteryRegex_part1 M1,
+        MysteryRegex_part2 M2
+  consolidate on match using 'ContainedWithin';
+
+output view __Base__common__Time4Follows3__Temp;
+
+create view __Consolidate__34__Temp__1 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as TimeAll_____sep_____R____id,
+          R.match as __consolidate__target
+  from  TimeAll R;
+
+output view __Consolidate__34__Temp__1;
+
+create view __Consolidate__34__Temp__2 as
+  select  __t1.match as match,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__34__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__34__Temp__2;
+
+create view __Consolidate__35__Temp__1 as
+  select  R.match as span,
+          GetText(R.match) as text,
+          GetString('Time') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as Times_____sep_____R____id,
+          R.match as __consolidate__target
+  from  Times R;
+
+output view __Consolidate__35__Temp__1;
+
+create view __Consolidate__35__Temp__2 as
+  select  __t1.span as span,
+          __t1.text as text,
+          __t1.field_type as field_type,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__35__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__35__Temp__2;
+
+create view __Subquery__32__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____Document____id,
+    regex /((2[0-3]|[0-1][0-9]|[0-9]):([0-5][0-9])(:\d{2}((\.|,|:)\d{3})*)?)/
+    with flags 'DOTALL'
+    on Document.text
+    return group 0 as match
+  from Document Document;
+
+output view __Subquery__32__Temp;
+
+create view __Union__33__TempOp__0 as
+  select  t.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          t.__auto__id as Time1_____sep_____t____id
+  from  Time1 t;
+
+output view __Union__33__TempOp__0;
+
+create view __Union__33__TempOp__1 as
+  select  t.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          t.__auto__id as Time2_____sep_____t____id
+  from  Time2 t;
+
+output view __Union__33__TempOp__1;
+
+create view __Union__33__TempOp__2 as
+  select  t.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          t.__auto__id as Time2Plus_____sep_____t____id
+  from  Time2Plus t;
+
+output view __Union__33__TempOp__2;
+
+create view __Union__33__TempOp__3 as
+  select  t.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          t.__auto__id as Time4_____sep_____t____id
+  from  Time4 t;
+
+output view __Union__33__TempOp__3;
+
+create view __Union__33__TempOp__4 as
+  select  t.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          t.__auto__id as Time4Follows3_____sep_____t____id
+  from  Time4Follows3 t;
+
+output view __Union__33__TempOp__4;
+
+create view __Union__33__TempOp__5 as
+  select  t.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          t.__auto__id as TimeOptMsTz_____sep_____t____id
+  from  TimeOptMsTz t;
+
+output view __Union__33__TempOp__5;
+
+create view __Union__33__TempOp__6 as
+  select  t.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          t.__auto__id as YearFollowsTime4_____sep_____t____id
+  from  YearFollowsTime4 t;
+
+output view __Union__33__TempOp__6;
+

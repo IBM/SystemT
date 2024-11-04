@@ -1,0 +1,133 @@
+-----------------------------------------------------------------------------
+-- lookupTest.aql
+--
+-- AQL side of ICD9Tests.lookupTest()
+-----------------------------------------------------------------------------
+
+-- Read in the lookup table from a shared external file.
+include 'codeTable.aql';
+
+-- Create a dictionary from the lookup table.
+create dictionary ICD9PhraseDict from table ICD9
+with entries from phrase;
+
+-- Find all matches of the dictionary.
+create view ICD9Phrase as
+extract dictionary ICD9PhraseDict on D.text as phrase
+from Document D;
+
+-- Map matches back to their ICD9 codes.
+create view ICD9CodeAll as
+select I.code as code, P.phrase as phrase
+from ICD9Phrase P, ICD9 I
+where Equals(ToLowerCase(P.phrase), ToLowerCase(I.phrase));
+
+-- this is the straight up negation. 'does not have XXX' etc.
+create view NegClue as
+extract
+	dictionaries 'negClue.dict'
+	on D.text
+	as clue
+from Document D;
+
+-- this is the prefix negation. 'XXX is missing' etc.
+create view NegCluePre as
+extract
+	dictionaries 'negCluePre.dict'
+	on D.text
+	as clue
+from Document D;
+
+create view WrongCode as
+select C.*
+from NegClue N,
+	 ICD9CodeAll C
+where FollowsTok(N.clue, C.phrase, 0, 0);
+
+output view WrongCode;
+
+create view WrongCodePrefix as
+select C.*
+from NegCluePre N,
+	 ICD9CodeAll C
+where FollowsTok(C.phrase, N.clue, 0, 1);
+
+output view WrongCodePrefix;
+
+-- Yunyao: 05/25/2010
+-- identify list of possible code
+create dictionary ListClueDict as(
+	',', 'or', ', or', '/'
+);
+
+create view ListClue as
+extract
+	dictionaries 'ListClueDict'
+	on D.text
+	as clue
+from Document D;
+
+-- one or two token followed by "," 
+create view ListItemCandidateAll as
+	(select LeftContextTok(C.clue, 1) as match from ListClue C)
+	union all
+	(select LeftContextTok(C.clue, 2) as match from ListClue C where Not(ContainsDict('ListClueDict', LeftContextTok(C.clue, 2))))
+	union all
+	(select RightContextTok(C.clue, 1) as match from ListClue C)
+	union all
+	(select RightContextTok(C.clue, 2) as match from ListClue C where Not(ContainsDict('ListClueDict', RightContextTok(C.clue, 2))));
+	
+create view ListItemCandidate as
+select C.*
+from ListItemCandidateAll C
+consolidate on C.match;
+
+create view ListCandidateAll as
+extract blocks
+	with count between 2 and 20
+	and separation between 0 and 4 characters
+	on L.match as list
+from ListItemCandidate L;
+
+create view ListCandidate as
+select C.* 
+from ListCandidateAll C
+consolidate on C.list;
+
+output view ListCandidate;
+
+-- find list associated with negative clues
+create view NegativeList as
+select L.* from ListCandidate L,  NegClue C 
+where FollowsTok(C.clue, L.list, 0, 3) 
+  and Not(ContainsRegex(/[\r\t\.]/, SpanBetween(C.clue, L.list)));
+
+output view NegativeList;
+
+create view NegativeCode as
+select C.* from ICD9CodeAll C, NegativeList L
+where Contains(L.list, C.phrase);
+
+output view NegativeCode;
+output view ICD9CodeAll;
+
+create view ICD9Code3a as
+	(select C.* from ICD9CodeAll C)
+	minus
+	((select C.* from ICD9CodeAll C, WrongCode W where Contains(W.phrase, C.phrase))
+	union all
+	(select C.* from ICD9CodeAll C, WrongCodePrefix WP where Contains(WP.phrase, C.phrase)));  
+	
+output view ICD9Code3a;
+
+create view ICD9Code as
+	(select C.* from ICD9CodeAll C)
+	minus
+	(
+	(select C.* from ICD9CodeAll C, WrongCode W where Contains(W.phrase, C.phrase))
+	union all
+	(select C.* from ICD9CodeAll C, NegativeList L where Contains(L.list, C.phrase))
+	union all
+	(select C.* from ICD9CodeAll C, WrongCodePrefix WP where Contains(WP.phrase, C.phrase)));  
+
+output view ICD9Code;

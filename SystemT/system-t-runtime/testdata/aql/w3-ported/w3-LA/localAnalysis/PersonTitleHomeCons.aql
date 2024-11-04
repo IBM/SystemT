@@ -1,0 +1,190 @@
+-------------------------------------------------------------------------------
+-- PersonTitleHomeCons.aql
+--
+-- Final decision procedure for classifying Homepage annotations into TitleHome and PersonHome
+--
+-- This file produces the contents of the following local analysis outputs:
+--      a. TitleHome
+--      b. PersonHome
+-- It is the union of PersonalHomepage and OtherHomepage in original implementation
+--
+-- Depends on HTML.aql, Semlabel.aql, HomepageFeatures.aql, PersonTitleHome.aql
+-- Based on Huiayu's original Java implementation.
+--
+-- Author: Laura Chiticariu
+-------------------------------------------------------------------------------
+
+-- All Homepage annotations
+create view HomepageAll as
+(select H.name as name, H.type as type, H.label as label from HomePageWithTypeAndLabel H)
+union all
+-- If login code matches URL, select (almost) all H1s as potential TitleHome annotations
+(select H.match as name, 'TitleHome' as type, 'topics_login' as label from H1 H, SemlabelLoginCode S where Not(ContainsRegex(/\AStart of main content/, H.match)));
+
+-- Select the first homepage annotation
+create view HomepageFirst as
+select H.*
+from HomepageAll H
+order by H.name
+limit 1;
+
+-- Select the first personal homepage annotation
+create view PersonalHomepageFirst as
+select H.*
+from HomepageAll H
+where Equals('PersonHome', GetText(H.type))
+order by H.name
+limit 1;
+
+-- Select the first title home annotation, only if no PersonHome
+create view TitleHomepageFirst as
+select H.*
+from HomepageFirst H, (select Count(*) as cnt from PersonalHomepageFirst) P
+where Equals(0, P.cnt);
+
+
+------------------------------------------------------------------
+--       Final cleanup of PersonHome and TitleHome
+------------------------------------------------------------------
+
+-- Union together the personal and title home annots to be cleaned
+create view HomepageToClean as
+(select H.name as name, H.label as label, 'PersonHome' as type from PersonalHomepageFirst H)
+union all
+(select H.name as name, H.label as label, 'TitleHome' as type from TitleHomepageFirst H);
+
+
+-- Remove tokens such as Homepage, Information Page from the end
+create view HomepageFirstCleanTailAll as
+select Chomp(CombineSpans(LeftContext(H.name,0),LeftContext(H.tail,0))) as name, 
+       H.name as oldName, H.label as label, H.type as type 
+from 
+	(
+		extract H.name as name,
+				H.label as label,
+				H.type as type,
+				dictionary 'homepage/skipHomeTail.dict' 
+					on H.name as tail
+		from HomepageToClean H
+		having Equals(GetEnd(tail), GetEnd(name))
+		   and Not(Equals(tail, name))
+		consolidate on tail
+	) H;
+
+
+-- Remaining homepages with no tail to clean
+create view HomepageFirstCleanTailRest as
+(select H.name as name, H.label as label, H.type as type from HomepageToClean H)
+minus
+(select H.oldName as name, H.label as label, H.type as type from HomepageFirstCleanTailAll H);
+
+-- All homepages, with the tail cleaned up
+create view HomepageFirstCleanTail as
+(select H.name as name, H.label as label, H.type as type from HomepageFirstCleanTailRest H)
+union all
+(select H.name as name, H.label as label, H.type as type from HomepageFirstCleanTailAll H);
+
+-- Remove tokens such as 'Welcome to' from the beginning
+create view HomepageFirstCleanHeadAll as
+select Chomp(CombineSpans(RightContext(H.head,0),RightContext(H.name,0))) as name, 
+       H.name as oldName, H.label as label, H.type as type 
+from 
+	(
+		extract H.name as name,
+				H.label as label,
+				H.type as type,
+				dictionary 'homepage/skipHomeHead.dict' 
+					on H.name as head
+		from HomepageFirstCleanTail H
+		having Equals(GetBegin(head), GetBegin(name))
+		   and Not(Equals(head, name))
+		consolidate on head
+	) H;
+
+
+-- Remaining homepages with no head to clean
+create view HomepageFirstCleanHeadRest as
+(select H.name as name, H.label as label, H.type as type from HomepageFirstCleanTail H)
+minus
+(select H.oldName as name, H.label as label, H.type as type from HomepageFirstCleanHeadAll H);
+
+-- All homepages, with the head and tail cleaned up
+create view HomepageFirstCleanHead as
+(select H.name as name, H.label as label, H.type as type from HomepageFirstCleanHeadRest H)
+union all
+(select H.name as name, H.label as label, H.type as type from HomepageFirstCleanHeadAll H);
+
+
+-- Final cleanup of things like 's
+create view HomepageFirstCleanAll as
+select Chomp(CombineSpans(LeftContext(H.name,0),LeftContext(H.match,0))) as name, 
+       H.name as oldName, H.label as label, H.type as type 
+from 
+	(
+		extract H.name as name,
+				H.label as label,
+				H.type as type,
+				regex /'s\s*\z/  --'
+					on H.name as match
+		from HomepageFirstCleanHead H
+	) H;
+
+
+-- Remaining homepages with nothing to clean
+create view HomepageFirstCleanRest as
+(select H.name as name, H.label as label, H.type as type from HomepageFirstCleanHead H)
+minus
+(select H.oldName as name, H.label as label, H.type as type from HomepageFirstCleanAll H);
+
+-- All homepages cleaned-up
+create view HomepageFirstClean as
+(select H.name as name, H.label as label, H.type as type from HomepageFirstCleanRest H)
+union all
+(select H.name as name, H.label as label, H.type as type from HomepageFirstCleanAll H);
+
+
+
+
+
+------------------------------------------------------------------
+--       PersonHome final output
+------------------------------------------------------------------
+
+-- Union all PersonHome annotations
+create view PersonHome as
+( select O.person as name_text, O.begin as name_begin, O.end as name_end, 'orgChart' as label from OrgChart O)
+--union all
+--( select O.person as name_text, O.begin as name_begin, O.end as name_end, 'orgChartServlet' as label from OrgChartServlet O)
+union all
+( select GetText(H.name) as name_text, GetBegin(Remap(H.name)) as name_begin, GetEnd(Remap(H.name)) as name_end, H.label as label from HomepageFirstClean H where Equals('PersonHome', GetText(H.type)) );
+
+
+------------------------------------------------------------------
+--       TitleHome final output
+------------------------------------------------------------------
+
+-- output TitleHome only if no PersonHome
+/*
+create view TitleHome as
+select GetText(H.name) as name_text, GetBegin(Remap(H.name)) as name_begin, GetEnd(Remap(H.name)) as name_end, H.label as label 
+from HomepageFirst H, (select Count(*) as cnt from PersonHome) P
+where 
+	--Equals('TitleHome', GetText(H.type));
+	Equals(0, P.cnt);
+*/	
+
+create view TitleHome as
+select GetText(H.name) as name_text, GetBegin(Remap(H.name)) as name_begin, GetEnd(Remap(H.name)) as name_end, H.label as label 
+from HomepageFirstClean H
+where Equals('TitleHome', GetText(H.type));
+
+
+------------------------------------------------------------------
+-- Homepage final output (TitleHome union PersonHome) for Snippet
+------------------------------------------------------------------
+create view HomePage as
+(select H.name_text as name from PersonHome H)
+union all
+(select H.name_text as name from TitleHome H);
+
+

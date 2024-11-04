@@ -1,0 +1,71 @@
+create view CountryCandidate as
+select
+	D.match as match
+from
+	Dictionary('country.dict', 'Exact', Doc.text) D;
+	
+create view USStateCandidate  as
+select
+		D.match as match
+	from
+		Dictionary('stateList.dict',  Doc.text) D;
+
+create view CanadianProvinceCandidate  as
+select
+		D.match as match
+	from
+		Dictionary('location/province_canada.dict',  Doc.text) D;
+		
+create view StateCandidate as
+	(select C.match as match from USStateCandidate C)
+	union all	
+	(select C.match as match from CanadianProvinceCandidate C);
+		
+-- The following do exact dictionary matching may missing entries such as 'Al', 'Ms'
+ -- to avoid false positives in weak rules (e.g. the one w/o zipcode)	
+ create view USStateStrongAbbrev  as
+	select
+		D.match as match
+	from
+		Dictionary('stateListAbbrev.dict',  'Exact', Doc.text) D;
+
+create view USStateWeakAbbrev  as
+	select
+		D.match as match
+	from
+		Dictionary('stateListAbbrev.dict',  Doc.text) D;
+		
+		
+create view StateStrongAbbrev as
+	(select A.match as match from USStateStrongAbbrev A)
+	union all
+	(select A.match as match from CanadianProvinceStrongAbbrev A);
+	
+create view StateWeakAbbrev as
+	(select A.match as match from USStateWeakAbbrev A)
+	union all
+	(select A.match as match from CanadianProvinceWeakAbbrev A);
+		
+  create view StateStrongAll
+	as
+	(select S.match as match from StateCandidate S)
+	union all 
+	 (select S.match as match from StateStrongAbbrev S);	
+	 
+  create view StateWeakAll
+	as
+	(select S.match as match from StateCandidate S)
+	union all 
+	 (select S.match as match from StateWeakAbbrev S);	
+
+create view USCity as
+	select
+		D.match as match
+	from
+		Dictionary('city.dict', 'Exact', Doc.text) D;	
+
+create view GermanCities as
+	select
+		D.match as match 
+	from
+		Dictionary('city_german.dict', Doc.text) D;  

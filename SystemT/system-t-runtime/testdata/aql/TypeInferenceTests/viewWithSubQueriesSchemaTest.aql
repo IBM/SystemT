@@ -1,0 +1,30 @@
+-------------------------------------------------------------------------------
+-- personphone.aql
+-------------------------------------------------------------------------------
+
+-- Declare a dictionary of first names.
+create dictionary FirstNameDict
+from file 'dictionaries/first.dict'
+with language as 'en';
+
+-- Find first names, using an exhaustive dictionary.
+create view FirstName as
+extract dictionary FirstNameDict on D.text as name
+from Document D
+having MatchesRegex(/[A-Z][a-z]*/, name);
+
+-- Find phone numbers, using a pair of regular expressions.
+create view PhoneNumber as
+extract regexes /\+?\([1-9]\d{2}\)\d{3}-\d{4}/ and /\+?[Xx]\.?\d{4,5}/
+	on D.text as num
+from Document D;
+
+-- Find instances of first name followed within 50 chars by phone number
+create view PersonPhone as
+select F.name, P.num,
+	CombineSpans(F.name, P.num) as personphone
+from FirstName F, PhoneNumber P
+where Follows(F.name, P.num, 0, 50)
+consolidate on CombineSpans(F.name, P.num) using 'ContainedWithin';
+
+output view PersonPhone;

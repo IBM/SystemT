@@ -1,0 +1,66 @@
+-------------------------------------------------------------------------------
+-- split.aql
+--
+-- [#148046] Extract split returns no answers when string to be split starts with a split point
+-- and there is a single split point.
+-------------------------------------------------------------------------------
+
+create view CommaSplit as
+extract 
+	B.comma as comma,
+    split using B.comma 
+        on B.text
+        as elem
+from 
+	(
+    	extract 
+       		D.text as text,
+        	regex /,/ on D.text as comma
+        	from Document D
+    ) B;
+
+output view CommaSplit;
+
+create view Mytest as
+extract 
+    split using A.boundary
+        on A.text
+        as text
+    from(
+        extract
+            X.text as text, 
+            regex
+                /#/
+            on X.text as boundary
+            from Document X 
+    )A
+having Not(MatchesRegex(/\s*[\s\p{Punct}]*\s*/, text));
+output view Mytest;
+
+
+create view Mytest2 as
+select X.text as text from
+(
+	(
+		extract 
+	    	split using A.boundary
+	        	on A.text
+	        	as text
+	    from(
+	        extract
+	            X.text as text, 
+	            regex
+	                /@/
+	            on X.text as boundary
+	            from Mytest X 
+	    	)A
+	) 
+	union all
+	(
+		select X.text as text from Mytest X where Not(ContainsRegex(/@/, X.text))
+	)
+) X
+where Not(MatchesRegex(/\s*[\s\p{Punct}]*\s*/, X.text));
+output view Mytest2;
+
+

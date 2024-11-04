@@ -1,0 +1,55 @@
+module module1; 
+-- TODO: Add AQL content here 
+-- Define a dictionary of financial metrics
+-- Example: gross profit margin, cash flow, diluted earnings per share
+create dictionary MetricDict
+from file 'dictionaries/metric.dict'
+with language as 'en';
+
+-- Identify mentions of financial metrics
+-- Example: gross profit margin, cash flow, diluted earnings per share
+create view Metric as
+extract dictionary 'MetricDict' 
+	on D.text as match
+from Document D;
+
+export view Metric;
+
+-- Identify mentions of numbers with optional decimals
+-- Example: 7, 49, 11.2
+create view Number as
+extract regex /\d+(\.\d+)?/ 
+	on R.text as match
+from Document R; 
+
+
+-- Define a dictionary of financial amount units
+-- Example: million, billion
+create dictionary UnitDict
+from file 'dictionaries/unit.dict'
+with language as 'en';
+
+-- Indentify mentions of financial amount units
+-- Example: million, billion
+create view Unit as
+extract dictionary 'UnitDict' 
+	on R.text as match
+from Document R; 
+
+export view Unit;
+
+-- Identify sentence boundaries as either:
+-- 	(a) two new lines separated by 0 or more whitespace, or
+-- 	(b) end of sentence punctuation (.?!) that does not overlap with a common abbreviation
+create view SentenceBoundary as
+extract regex /(\n\s*\n)|([\.\?!]+\s)/
+	on D.text as match
+from Document D
+-- Filter out common abbreviations
+having Not(ContainsDict('dictionaries/abbreviation.dict', 
+		CombineSpans(LeftContextTok(match, 1), match)));
+		
+export view SentenceBoundary;
+
+
+

@@ -1,0 +1,52 @@
+-- splitFunction.aql
+-- Test to verify that one can run a function on the output of an extract split statement
+
+detag Document.text as Doc
+annotate 
+	element 'title' as AllTitle;
+
+--output view AllTitle;
+--output view Doc;
+
+select Remap(T.match) as title
+into TitleTag
+from AllTitle T;
+	
+	
+-- Select the first and second segments of the title delimited by |
+-- Also, strip 'IBM' from the beginning of the first segment
+create view TempTitleSegs as
+
+	extract
+		T.match as title,
+		regex /\A(IBM\s*)?([^\|]*)\|?([^\|]*)\|?(\.*)/
+		on T.match
+		return group 2 as seg1
+		and group 3 as seg2
+	from AllTitle T;
+
+--output view TempTitleSegs;
+
+-- Create a dummy view using an extract .. split function
+create view dummy as
+		extract 
+			GetText(T1.seg2) as seg2,
+			split using T1.delim on T1.seg1 as seg1		
+		from 
+		(
+			extract
+				T.seg1 as seg1,
+				T.seg2 as seg2,
+				regex /\s*[Ii]ntranet\s*\Z/ on T.seg1 as delim			
+			from TempTitleSegs T
+		) T1;
+		
+output view dummy;
+	
+-- Use a function on top of the dummy view
+create view SpanOffsets as 
+  select GetBegin(D.seg1) as offsetBegin, GetEnd(D.seg1) as offsetEnd
+  from dummy D;
+
+output view SpanOffsets;
+

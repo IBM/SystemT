@@ -1,0 +1,432 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module Disambiguation;
+
+-- VBJ matches within Location - to filter out
+create view OrgTokenWithinLocation as
+select O.*
+from OrgToken O, LocationConsolidated L
+where Contains (L.loc, O.organization);
+
+
+-- VBJ matches within Person - to filter out if needed (currently not done)
+create view OrgTokenWithinPerson as
+select O.*
+from OrgToken O, PersonBeforeFinalOrgFilter P
+where Contains (P.person, O.organization);
+
+-- VBJ matches filtered
+create view OrgTokenFiltered as
+(select * from OrgToken)
+minus
+(
+	(select O.original, O.organization from OrgTokenWithRightCapsWord O)
+	union all
+	(select O.original, O.organization from OrgTokenWithLeftCapsWord O)
+	union all
+	(select * from OrgTokenWithinLocation)
+	union all
+	(select * from OrgTokenWithinPerson)
+);
+
+-- Final VBJ matches to be unioned with the rest of orgs
+create view OrganizationVBJ as
+select *
+from OrgTokenFiltered O
+where Not(MatchesDict('NegativeCluesForOrganization', O.organization))
+  and Not(MatchesDict('WorldNationalities', O.organization))
+  and Not(MatchesDict('CardinalDirections', O.organization))
+  and Not(MatchesDict('SuffixesForOrganizations', O.organization))
+  and Not(MatchesDict('ProfessionBasedSuffixesForOrganizations', O.organization))
+  and Not(MatchesDict('AuxiliarySuffixesForOrganizations', O.organization))
+  and Not(MatchesDict('WorldEthnicities', O.organization))
+  and Not(MatchesDict('FiltersForOrganizationAbbreviations', O.organization))
+  and Not(MatchesDict('EducationalQualifications', O.organization));
+  
+create view  OrganizationUnsorted as
+(select O.organization as organization, O.type as type, O.reference as reference from OrganizationFull O )
+union all
+(select O.organization as organization, '' as type, O.organization as reference from OrganizationVBJ O)
+;
+
+create view OrganizationInvalid1 as
+select O.organization as organization, O.type as type 
+from OrganizationUnsorted O
+where MatchesDict('NegativeCluesForOrganizationShort', 'Exact', O.organization);
+
+-- Organizations with preposition as first token
+create view OrganizationInvalid2 as
+select O.organization as organization, O.type as type 
+from OrganizationUnsorted O
+where MatchesDict('PrepositionsInEnglish', SubSpanTok(O.organization, 0,1));
+
+-- Organizations strictly contained in Person
+create view OrganizationInvalid3 as
+select O.organization as organization, O.type as type 
+from OrganizationUnsorted O, PersonBeforeFinalOrgFilter P
+where Contains(P.person, O.organization)
+  and Not(Equals(P.person, O.organization));
+
+create view OrganizationInvalid as
+(select O.organization as organization, O.type as type from OrganizationInvalid1 O)
+union all
+(select O.organization as organization, O.type as type from OrganizationInvalid2 O)
+union all
+(select O.organization as organization, O.type as type from OrganizationInvalid3 O);
+
+
+create view OrgUnsortedFiltered as
+(select O.organization as organization, O.type as type from OrganizationUnsorted O)
+minus
+(select O.organization as organization, O.type as type from OrganizationInvalid O);
+
+
+create view OrganizationMixed as
+select O.organization as organization, O.type as type 
+from OrgUnsortedFiltered O
+consolidate on O.organization
+order by O.organization;
+
+---------------------------------------------------------
+
+create view WrongPerson1 as
+select P.person as person 
+from  PersonCandidatesAll P,
+	  WrongPersonLeftClue LC
+where FollowsTok(LC.clue, P.person, 0, 1)
+  and MatchesRegex(/\s*,?\s*/,SpanBetween(LC.clue, P.person));
+  
+create view WrongPerson2 as
+select P.person as person 
+from  PersonCandidatesAll P,
+	  WrongPersonRightClue RC
+where FollowsTok(P.person, RC.clue,  0, 1)
+  and MatchesRegex(/\s*,?\s*/,SpanBetween(P.person, RC.clue));
+  
+-- remove person appears in quotation mark
+create view WrongPerson4 as
+select P.person as person
+from PersonCandidatesAll P
+where MatchesRegex(/.*"\s*/, LeftContext(P.person,2))
+  and MatchesRegex(/.*"\s*/, RightContext(P.person,2));
+
+-- remove person appearances in location
+create view WrongPerson5 as
+select P.person as person
+from PersonCandidatesAll P,
+     LocationConsolidated L
+where Contains(L.loc, P.person)
+  and Not(Equals(L.loc, P.person));
+  
+-- remove person appearances in organization
+create view WrongPerson6 as
+select P.person as person
+from PersonCandidatesAll P,
+     OrganizationConsolidated L
+where Contains(L.organization, P.person);
+
+  
+create view WrongPerson as
+	(select P.pos as person from Position P)
+	union all
+	(select P.person as person from WrongPerson1 P)
+	union all
+	(select P.person as person from WrongPerson2 P)
+	union all
+	(select P.person as person from WrongPerson5 P)
+	union all
+	(select P.person as person from WrongPerson6 P);
+	
+
+create view WrongPersonTokenCandidates as
+select CW.name as person
+from 
+(select toUpperCase(WP.person) as personNormalized from WrongPerson WP) WP,
+(select CW.name as name, toUpperCase(CW.name) as nameNormalized from ValidCapsPersonCandidates CW) CW
+where Equals(GetText(WP.personNormalized), GetText(CW.nameNormalized));
+
+
+create view WrongPersonToken as 
+	(select P.* from WrongPersonTokenCandidates P)
+	union all
+	(select P.* from WrongPerson P)
+	 --------------------------------------------------------------
+     -- NOTE: Customization Point
+     --------------------------------------------------------------
+     -- Yunyao: Added on 11/04/2013
+     --         Specify invalid person candidate to be removed
+     --------------------------------------------------------------
+     union all
+     ( select P.person as person from PersonCandidatesAll P, InvalidPersonCustom IP
+       where Contains(IP.match, P.person));	
+
+
+output view InvalidPersonCustom;
+
+-- avoid matching person in MapLocation
+create view PersonWithAttrAllInvalid as
+select P.person as person, P.first as first, P.middle as middle, P.last as last, P.reference as reference
+from PersonWithAttrAll P,
+	 MapLocation_ L
+where Contains(L.reference, P.reference);
+
+create view PersonWithAttrAllValid as
+	(select P.person as person, P.first as first, P.middle as middle, P.last as last, P.reference as reference from PersonWithAttrAll P)
+	minus
+	(select P.person as person, P.first as first, P.middle as middle, P.last as last, P.reference as reference from PersonWithAttrAllInvalid P);
+	
+
+-- remove Person candidates identified using core rules that overlap with the strong person candidates
+create view PersonWithAttrAllValidOverlap as
+select P1.* 
+from PersonWithAttrAllValid P1,
+	 StrongPersonCandidates P2
+where Overlaps(P1.person, P2.person)
+ and  Not(Contains(P1.person,P2.person))
+ and  Not(Equals(P1.person, P2.person));
+
+create view PersonWithAttrAllValidNonOverlap as
+	(select P.* from PersonWithAttrAllValid P)
+	minus
+	(select P.* from PersonWithAttrAllValidOverlap P);
+
+create view StrongPersonCandidatesTokens as
+	(select R.match as person, '' as first, '' as middle, '' as last, R.match as reference from  
+		(extract regex /[^\s\.]{2,}(\s+[^\s\.]{2,})?/ on S.person as match from StrongPersonCandidates S) R)
+	union all
+	(select R.match as person, '' as first, '' as middle, '' as last, R.match as reference from  
+		(extract regex /[^\s\.]{2,}/ on S.person as match from StrongPersonCandidates S) R)
+	union all
+	(select P.person as person, P.first as first, P.middle as middle, P.last as last, P.reference as reference from PersonWithAttrAllValidNonOverlap P);
+		
+create view StrongPersonCandidatesTokensDedup as
+select GetText(PT.person) as person
+from StrongPersonCandidatesTokens PT
+group by GetText(PT.person);
+
+create view StrongPersonTokenCandidates as
+select CW.name as person
+from 
+(select toUpperCase(SP.person) as personNormalized from StrongPersonCandidatesTokensDedup SP) SP,
+(select CW.name as name, toUpperCase(CW.name) as nameNormalized from ValidCapsPersonCandidates CW) CW
+where Equals(GetText(SP.personNormalized), GetText(CW.nameNormalized));
+
+create view PersonCandidatesAll as
+	(select P.person as person, P.first as first, P.middle as middle, P.last as last, P.reference as reference from PersonWithAttrAllValidNonOverlap P)
+	union all
+	(select P.person as person, '' as first, '' as middle, '' as last, P.person as reference from StrongPersonCandidates P)
+	union all
+	(select P.person as person, '' as first, '' as middle, '' as last, P.person as reference from StrongPersonTokenCandidates P);
+
+create view PersonCandidatesValidAll as
+	(select P.* from PersonCandidatesAll P)
+	minus
+	(select P.* from PersonCandidatesAll P, WrongPersonToken W where Overlaps(P.person, W.person));
+	
+create view PersonCandidatesValid as
+select P.* from PersonCandidatesAll P;
+	
+	
+create view PersonConsolidated as
+select P.* 
+from PersonCandidatesValid P
+consolidate on P.person;
+
+-- extend single names to the next non-word and non-whitespace character to the right
+create view  PersonConsolidatedExtended1 as
+select CombineSpans(P1.person, P2.name) as person, RightContextTok(P2.name, 1) as context
+from PersonConsolidated P1,
+     CapsPerson P2
+where FollowsTok(P1.person, P2.name, 0, 0)
+  and Not(MatchesRegex(/[\r\n\t]/, P1.person))
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(P1.person, P2.name)))
+  and MatchesRegex(/[ ]*[^\w\d]/, RightContextTok(P2.name, 1));
+ 
+-- extended single token name, for cases such as Francois-Rene ( Vicomte de ) Chateaubriand
+create view  PersonConsolidatedExtended1_1 as
+select CombineSpans(P.person, CP.name) as person
+from PersonConsolidated P,
+     CapsPerson CP
+where FollowsTok(P.person, CP.name, 3, 4)
+  and Not(ContainsRegex(/\s/, P.person))
+  and MatchesRegex(/[ ]+[("][ ]*((\p{Lu}\p{M}*(\p{Ll}\p{M}*)+([ ]+([\p{Lu}\p{Ll}]\p{M}*)+[ ]*)?)|(\p{Lu}\p{M}*\.){1,2})[)"][ ]+/, SpanBetween(P.person, CP.name));
+
+create view  PersonConsolidatedExtended1_2 as
+select CombineSpans(P.person, CP.person) as person
+from PersonConsolidated P,
+     PersonConsolidated CP
+where FollowsTok(P.person, CP.person, 3, 4)
+  and Not(ContainsRegex(/\s/, P.person))
+  and MatchesRegex(/[ ]+[("][ ]*[^)"]+[)"][ ]+/, SpanBetween(P.person, CP.person)); --"
+
+-- combine names next to each other together on the same line
+create view PersonConsolidatedExtended3 as
+select CombineSpans(P1.person, P2.person) as person
+from PersonConsolidated P1,
+     PersonConsolidated P2
+where FollowsTok(P1.person, P2.person, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(P1.person, P2.person)));
+  
+-- combine names that are overlapping with each other
+create view PersonConsolidatedExtended4 as
+select CombineSpans('IgnoreOrder', P1.person, P2.person) as person
+from PersonConsolidated P1,
+     PersonConsolidated P2
+where Overlaps(P1.person, P2.person)
+  and Not(Contains(P1.person, P2.person))
+  and Not(Contains(P2.person, P1.person))
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(P1.person, P2.person)));
+  
+-- extend to the right Name-lowercaseWord
+create view PersonConsolidatedRightContext as
+select RightContext(P.person, 10) as lc
+from PersonConsolidated P;
+
+create view PersonConsolidatedRightContextSelect as
+extract 
+	regex/^(-(\p{Ll}\p{M}*)+)[\s,.;]+.*/
+	   on C.lc 
+    	return group 1 as name
+from PersonConsolidatedRightContext C;
+
+create view PersonConsolidatedExtended5 as
+select CombineSpans(P.person, C.name) as person
+from PersonConsolidated P,
+     PersonConsolidatedRightContextSelect C
+where FollowsTok(P.person, C.name, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(P.person, C.name)));  
+  
+         
+-- for instances such as "5. M [Abreu-Campos] ( Portugal ) Maia"
+create view PersonConsolidatedExtended6 as
+select CombineSpans(I.word, P.person) as person
+from WeakInitialWord I,
+	 PersonConsolidated P
+where FollowsTok(I.word, P.person, 0, 0)
+	    and MatchesRegex(/\W+\s*/, LeftContextTok(I.word, 1));	  
+
+-- for instances such as "[Sweitzer, Tara]; Lees, [Lisa]"
+create view PersonConsolidatedExtended7 as
+select CombineSpans(C.name, P.person) as person
+from CapsPerson C,
+	 PersonConsolidated P
+where FollowsTok(C.name, P.person, 0, 1)
+	  and MatchesRegex(/[ ]*[,]?[ ]*/, SpanBetween(C.name, P.person))
+	  and MatchesRegex(/;[ ]*/, LeftContextTok(C.name, 1));
+	  	  
+
+create view PersonConsolidatedExtendedAll as
+	(select P.* from PersonConsolidatedExtended1_1 P)
+ 	union all
+ 	(select P.* from PersonConsolidatedExtended1_2 P)
+ 	union all
+ 	(select P.* from PersonConsolidatedExtended3 P)
+ 	union all
+ 	(select P.* from PersonConsolidatedExtended4 P)
+ 	union all
+ 	(select P.* from PersonConsolidatedExtended5 P)
+ 	union all
+ 	(select P.* from PersonConsolidatedExtended6 P)
+ 	 union all
+ 	(select P.* from PersonConsolidatedExtended7 P);
+
+create view PersonConsolidatedAll as
+ 	(select P.person as person, P.first as first, P.middle as middle, P.last as last, P.reference as reference from PersonConsolidated P)
+ 	union all
+ 	(select P.person as person, '' as first, '' as middle, '' as last, P.person as reference from PersonConsolidatedExtendedAll P);
+ 	
+
+create view PersonConsolidatedAllValid as
+select P.* from PersonConsolidatedAll P;
+
+create view PersonBeforeFinalOrgFilter as
+select P.* 
+from PersonConsolidatedAllValid P
+consolidate on P.person
+using 'LeftToRight';
+
+create view PersonMixed as
+	(select P.* from PersonBeforeFinalOrgFilter P)
+	minus
+	(select P.* from PersonBeforeFinalOrgFilter P, OrganizationMixed O where Contains(O.organization, P.person));
+	
+---------------------------------------------------------
+
+-- remove candidate that has already been identified as organization
+create view LocationTokenCandidatesConsolidatedInvalid as
+select L.loc as loc
+from OrganizationMixed O,
+     LocationTokenCandidatesConsolidated L
+where Contains(O.organization, L.loc);
+
+create view LocationTokenCandidatesConsolidatedValid as
+	(select L.* from LocationTokenCandidatesConsolidated L)
+	minus
+	(select L.* from LocationTokenCandidatesConsolidatedInvalid L);
+
+
+create view LocationExtendedValidAreOrg as
+select L.*
+from LocationExtendedValidAll L,
+     OrganizationMixed O
+where Overlaps(O.organization, L.loc);
+
+create view LocationExtendedInvalid as
+	select L.* from LocationExtendedValidAreOrg L;
+
+create view LocationExtendedValidAllFiltered as
+	(select L.* from LocationExtendedValidAll L)
+	minus 
+	(select L.* from LocationExtendedInvalid L);     
+
+create view LocationValidAll as
+	(select L.loc as loc from LocationExtendedValidAllFiltered L)
+	union all
+	(select L.loc as loc from LocationTokenCandidatesConsolidatedValid L);
+
+
+create view CombinedLocation4 as
+select CombineSpans(C1.loc, C2.loc) as loc
+from   LocationValidAll C1,
+       LocationValidAll C2
+where  FollowsTok(C1.loc, C2.loc, 0, 1)
+  and  MatchesRegex(/\.?[ ]+/, SpanBetween(C1.loc, C2.loc))
+  and  MatchesRegex(/([^\s\w]|(\p{Ll}\p{M}*)+|[\r\n]*)\s*/, LeftContextTok(C1.loc, 1))
+  and  MatchesRegex(/\s*((\p{Ll}\p{M}*)+|[^\s\w])/, RightContextTok(C2.loc, 1));
+
+
+create view LocationValidAllExtended as
+	(select L.* from LocationValidAll L)
+	union all
+	(select L.* from CombinedLocation4 L);
+	
+create view LocationExtendedValidConsolidated as
+select L.loc as loc
+from LocationValidAllExtended L
+consolidate on L.loc
+using 'LeftToRight';
+
+
+create view LocationFinal as
+select C.loc as loc
+from LocationExtendedValidConsolidated C
+consolidate on C.loc;
+		
+create view LocationMixed as
+select C.loc as loc
+from LocationFinal C
+order by C.loc;

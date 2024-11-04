@@ -1,0 +1,87 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module FinancialEvents; 
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText;
+
+import view CompanyInfoShort from module FinancialAnnouncements as CompanyInfoShort;
+import view CompanyInfoLong from module FinancialAnnouncements as CompanyInfoLong;
+
+import view ShortText from module CommonFeatures as ShortText;
+import view LongText from module CommonFeatures as LongText;
+import view ParagraphSentence from module CommonFeatures as ParagraphSentence;
+
+import view Person_ from module Disambiguation as Person_;
+
+import view AddressFinal from module Address as AddressFinal;
+
+import dictionary ConjunctionsInEnglish from module FinancialDictionaries as ConjunctionsInEnglish;
+
+-- For Acquisition events
+
+import dictionary PositiveCluesBetweenCompanyNamesInAcquisitionEvents from module FinancialDictionaries as PositiveCluesBetweenCompanyNamesInAcquisitionEvents;
+import dictionary PositiveCluesInRightContextForCompanyNamesInAcquisitionEvents from module FinancialDictionaries as PositiveCluesInRightContextForCompanyNamesInAcquisitionEvents;
+import dictionary PositiveCluesInLeftContextForCompanyNamesInAcquisitionEvents from module FinancialDictionaries as PositiveCluesInLeftContextForCompanyNamesInAcquisitionEvents;
+import dictionary PositiveCluesIndicatingSaleInAcquisitionEvents from module FinancialDictionaries as PositiveCluesIndicatingSaleInAcquisitionEvents;
+import dictionary PositiveCluesIndicatingBuyerInAcquisitionEvents from module FinancialDictionaries as PositiveCluesIndicatingBuyerInAcquisitionEvents;
+import dictionary PositiveCluesForAcquisitionCancellations from module FinancialDictionaries as PositiveCluesForAcquisitionCancellations;
+import dictionary PositiveCluesForAcquisitionAnnouncements from module FinancialDictionaries as PositiveCluesForAcquisitionAnnouncements;
+import dictionary PositiveCluesForAcquisitionPlans from module FinancialDictionaries as PositiveCluesForAcquisitionPlans;
+import dictionary PositiveCluesForAcquisitionPostponement from module FinancialDictionaries as PositiveCluesForAcquisitionPostponement;
+import dictionary PositiveCluesForAcquisitionUpdates from module FinancialDictionaries as PositiveCluesForAcquisitionUpdates;
+import dictionary PositiveCluesForAcquisitionRumors from module FinancialDictionaries as PositiveCluesForAcquisitionRumors;
+
+-- For Alliance events
+
+import dictionary PositiveCluesBetweenOrganizationsInAllianceEvents from module FinancialDictionaries as PositiveCluesBetweenOrganizationsInAllianceEvents;
+import dictionary PositiveCluesInLeftContextOfOrganizationsInAllianceEvents from module FinancialDictionaries as PositiveCluesInLeftContextOfOrganizationsInAllianceEvents;
+import dictionary PositiveCluesInRightContextOfOrganizationsInAllianceEvents from module FinancialDictionaries as PositiveCluesInRightContextOfOrganizationsInAllianceEvents;
+import dictionary PositiveCluesForAllianceCancellations from module FinancialDictionaries as PositiveCluesForAllianceCancellations;
+import dictionary PositiveCluesForAllianceAnnouncements from module FinancialDictionaries as PositiveCluesForAllianceAnnouncements;
+import dictionary PositiveCluesForAlliancePlans from module FinancialDictionaries as PositiveCluesForAlliancePlans;
+import dictionary PositiveCluesForAlliancePostponement from module FinancialDictionaries as PositiveCluesForAlliancePostponement;
+import dictionary PositiveCluesForAllianceUpdates from module FinancialDictionaries as PositiveCluesForAllianceUpdates;
+import dictionary PositiveCluesForAllianceRumors from module FinancialDictionaries as PositiveCluesForAllianceRumors;
+import dictionary FiltersInRightContextForAllianceEvents from module FinancialDictionaries as FiltersInRightContextForAllianceEvents;
+
+-- For Joint venture events
+
+import dictionary PositiveCluesBetweenOrganizationsInJointVentureEvents from module FinancialDictionaries as PositiveCluesBetweenOrganizationsInJointVentureEvents;
+import dictionary PositiveCluesInLeftContextOfOrganizationsInJointVentureEvents from module FinancialDictionaries as PositiveCluesInLeftContextOfOrganizationsInJointVentureEvents;
+import dictionary PositiveCluesInRightContextOfOrganizationsInJointVentureEvents from module FinancialDictionaries as PositiveCluesInRightContextOfOrganizationsInJointVentureEvents;
+import dictionary PositiveCluesForJointVentureCancellations from module FinancialDictionaries as PositiveCluesForJointVentureCancellations;
+import dictionary PositiveCluesForJointVentureAnnouncements from module FinancialDictionaries as PositiveCluesForJointVentureAnnouncements;
+import dictionary PositiveCluesForJointVenturePlans from module FinancialDictionaries as PositiveCluesForJointVenturePlans;
+import dictionary PositiveCluesForJointVenturePostponement from module FinancialDictionaries as PositiveCluesForJointVenturePostponement;
+import dictionary PositiveCluesForJointVentureUpdates from module FinancialDictionaries as PositiveCluesForJointVentureUpdates;
+import dictionary PositiveCluesForJointVentureRumors from module FinancialDictionaries as PositiveCluesForJointVentureRumors;
+import dictionary FiltersInLeftContextForJointVentureEvents from module FinancialDictionaries as FiltersInLeftContextForJointVentureEvents;
+
+-- For Merger events
+
+import dictionary PositiveCluesBetweenOrganizationsInMergerEvents from module FinancialDictionaries as PositiveCluesBetweenOrganizationsInMergerEvents;
+import dictionary PositiveCluesInLeftContextOfOrganizationsInMergerEvents from module FinancialDictionaries as PositiveCluesInLeftContextOfOrganizationsInMergerEvents;
+import dictionary PositiveCluesInRightContextOfOrganizationsInMergerEvents from module FinancialDictionaries as PositiveCluesInRightContextOfOrganizationsInMergerEvents;
+import dictionary PositiveCluesForMergerCancellations from module FinancialDictionaries as PositiveCluesForMergerCancellations;
+import dictionary PositiveCluesForMergerAnnouncements from module FinancialDictionaries as PositiveCluesForMergerAnnouncements;
+import dictionary PositiveCluesForMergerPlans from module FinancialDictionaries as PositiveCluesForMergerPlans;
+import dictionary PositiveCluesForMergerPostponement from module FinancialDictionaries as PositiveCluesForMergerPostponement;
+import dictionary PositiveCluesForMergerUpdates from module FinancialDictionaries as PositiveCluesForMergerUpdates;
+import dictionary PositiveCluesForMergerRumors from module FinancialDictionaries as PositiveCluesForMergerRumors;
+
+require document with columns
+text Text;

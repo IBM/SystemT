@@ -1,0 +1,46 @@
+-- for Ro
+create view PersonEqualsToDate as
+(
+	select P.person as person from PersonSentence P, Month M
+	where Equals(M.match, P.person)
+)
+union all
+(
+	select P.person as person from PersonSentence P, WKDay_Ro W
+	where Equals(W.match, P.person)
+);
+
+
+
+create view InvalidPerson as
+	(select P1.person as person from PersonWithinUrlEmailPlaceOrg P1)
+	union all
+	(select P1.person as person from PersonOverlapsWithCities P1)
+	union all
+	(select P1.person as person from PersonOverlapsWithOrgs P1)
+	union all
+	(select P1.person as person from PersonEqualsToCities P1)
+--	union all
+--	(select P1.person as person from PersonEqualsToCountry P1)
+--	union all
+--	(select P1.person as person from PersonFilterDict P1)
+	-- Bogdan: for Ro
+	union all
+	(select P1.person as person from PersonEqualsToDate P1)
+;
+
+--output view InvalidPerson;
+
+
+create view InvalidCapsPerson as
+select CP.name as name
+from CapsPerson CP,
+	 UrlEmailPlaceOrg UEP
+where Contains(UEP.match, CP.name)
+  and Not(Contains(CP.name, UEP.match))  
+  --and Not(ContainsDict('month-ro.dict', CP.name))
+  and Not(ContainsDict('time_months_ro.dict', CP.name))
+  --and Not(ContainsDict('weekday-ro.dict', CP.name))
+  and Not(ContainsDict('time_week_days_ro.dict', CP.name))
+  --and Not(ContainsDict('weekday-ro-noD.dict', CP.name));
+  and Not(ContainsDict('time_week_days_noDiac_ro.dict', CP.name));

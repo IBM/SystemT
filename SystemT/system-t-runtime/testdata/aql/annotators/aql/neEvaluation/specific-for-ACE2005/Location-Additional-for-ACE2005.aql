@@ -1,0 +1,74 @@
+create dictionary CountryAbbrevDict as
+(
+    'US', 'U.S.', 'U.K.','United States'
+);
+
+create view CountryAbbrev as
+	extract
+		dictionaries 'CountryAbbrevDict'
+		with flags 'Exact'
+		on D.text   
+        as country
+		from Doc D;
+
+create view ACE2005MissingLocation as
+	extract
+		dictionaries 'location/ace2005/ace2005missingLocation.dict'
+		with flags 'Exact'
+		on D.text
+		as location
+		from Doc D;		
+
+create view AdditionalCities as
+	extract 
+		dictionaries 
+			'location/cities/majorCities-iraq.dict'
+		and 'location/cities/majorCities-alghanistan.dict'	
+		and 'location/cities/majorCities-israel.dict'
+		on D.text
+		as city
+		from Doc D
+		having MatchesRegex(/\p{Lu}\p{M}*.+/, city);
+
+
+create view AdditionaLocationCandidate as
+	(select C.match as loc from MajorCity C where MatchesRegex(/\p{Lu}\p{M}*.+/, C.match))
+	union all
+	(select S.match as loc from StateStrongAbbrevAll S)
+	union all
+	(select C.country as loc from CountryAbbrev C)
+	union all
+	(select C.city as loc from AdditionalCities C)
+	union all
+	(select S.match as loc from StatesFromMajorCountries S)
+	union all
+	(select L.location as loc from ACE2005MissingLocation L);
+	
+create view AdditionaLocationInvalid1 as
+select R.loc as loc
+from   AdditionaLocationCandidate R,
+	   PersonFinalAllWithoutDots P
+where  Contains(P.person, R.loc);
+  --and  Not(Equals(P.person, R.loc));      
+
+create view AdditionaLocationInvalid2 as
+select R.loc as loc
+from   AdditionaLocationCandidate R,
+	   FinalOrgConsolidatedWithoutDots O 
+where  Contains(O.org, R.loc)
+  and  Not(Equals(O.org, R.loc));   
+
+create view AdditionaLocationInvalid3 as
+select R.loc as loc
+from   AdditionaLocationCandidate R,
+	   FinalOrgConsolidatedWithoutDots O 
+where  Overlaps(O.org, R.loc)
+  and  Not(Contains(O.org, R.loc));
+  		
+create view AdditionaLocationInvalid as
+	(select A.* from  AdditionaLocationInvalid1 A)
+	union all
+	(select A.* from  AdditionaLocationInvalid2 A)
+	union all
+	(select A.* from  AdditionaLocationInvalid3 A);
+-----------------------------------------------------

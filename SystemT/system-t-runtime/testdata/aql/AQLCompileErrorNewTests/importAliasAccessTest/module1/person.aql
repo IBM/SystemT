@@ -1,0 +1,57 @@
+module module1;
+
+---------------------------------------------------------------------------------------
+-------- Inline dictionary
+---------------------------------------------------------------------------------------
+create dictionary SalutationDict as  
+(
+  'rev.', 'col.', 'reverend', 'prof.', 'professor',
+  'lady', 'miss.', 'mrs.', 'mrs', 'mr.', 'pt.', 'ms.',
+  'messrs.', 'dr.', 'master.', 'marquis', 'monsieur',
+  'ds', 'di','herr', 'Fraeulein', 'Doktor', 'Herr Doktor',
+  'Frau Doktor','Herr Professor', 'Frau professor', 'Baron', 'graf'
+);
+export dictionary SalutationDict;
+
+---------------------------------------------------------------------------------------
+-------- OnDisk dictionary
+---------------------------------------------------------------------------------------
+create dictionary FirstNamesDict
+from file 'dict/strictFirst.dict';
+
+export dictionary FirstNamesDict;
+
+---------------------------------------------------------------------------------------
+---------- Table
+---------------------------------------------------------------------------------------
+create table NameToLocation (name Text, location Text) as
+values 
+	('IBM', 'USA'), 
+	('Enron', 'Hell'), 
+	('Yahoo', 'Santa Clara'),
+	('Acme Fake Company Names', 'Somewhere');
+	
+export table NameToLocation;
+
+---------------------------------------------------------------------------------------
+------  Function
+---------------------------------------------------------------------------------------
+
+create function myToUpperCase(inputText String)
+return String
+external_name 'StringUtil.jar:com.ibm.udf.test.StringUtil!toUpperCase'
+language java
+deterministic
+return null on null input;
+
+export function myToUpperCase;
+
+---------------------------------------------------------------------------------------
+-------- View
+---------------------------------------------------------------------------------------
+
+create view DocCopy as
+select D.label as label, D.text as text
+from Document D;
+
+export view DocCopy;

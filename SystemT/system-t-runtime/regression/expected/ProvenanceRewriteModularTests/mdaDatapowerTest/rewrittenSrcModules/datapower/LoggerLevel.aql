@@ -1,0 +1,210 @@
+module datapower;
+
+
+create dictionary "loggerLevel_base"
+with case exact
+as (
+  'info',
+  'debug',
+  'notice',
+  'warning',
+  'error',
+  'warn'
+);
+
+
+create view loggerLevelUnfiltered as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'loggerLevel_base'
+    on D.text as loggerLevel
+  from Document D;
+
+output view loggerLevelUnfiltered;
+
+create view loggerLevel as
+  select  D.loggerLevel as span,
+          GetText(D.loggerLevel) as text,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as loggerLevelUnfiltered_____sep_____D____id
+  from  loggerLevelUnfiltered D
+  where MatchesRegex(/\[/, LeftContext(D.loggerLevel, 1))
+     and MatchesRegex(/\]/, RightContext(D.loggerLevel, 1));
+
+output view loggerLevel;
+
+create view LoggerLevelOutput as
+  select  D.span as span,
+          D.text as text,
+          GetString('LoggerLevel') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as loggerLevel_____sep_____D____id
+  from  loggerLevel D;
+
+output view LoggerLevelOutput;
+
+export view datapower.LoggerLevelOutput;
+
+
+create view loggerApp_base as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /[a-zA-Z]+/
+    with flags 'DOTALL'
+    on between 1 and 1 tokens in D.text
+    return group 0 as match
+  from Document D;
+
+output view loggerApp_base;
+
+create view loggerAppUnfiltered as
+  select  C.match as span,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as loggerApp_base_____sep_____C____id
+  from  loggerApp_base C
+  where MatchesRegex(/\[/, LeftContext(C.match, 1))
+     and MatchesRegex(/\]/, RightContext(C.match, 1));
+
+output view loggerAppUnfiltered;
+
+create view loggerAppFiltered_1 as
+  select  Op.span as span,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__43__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__43__TempOp__1 Op,
+        __Minus__43__Temp __t
+  where Equals(Op.span, __t.span);
+
+output view loggerAppFiltered_1;
+
+create view LoggerAppFiltered as
+  select  loggerApp.span as span,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          level.__auto__id as loggerLevel_____sep_____level____id,
+          loggerApp.__auto__id as loggerAppFiltered_1_____sep_____loggerApp____id
+  from  loggerLevel level,
+        loggerAppFiltered_1 loggerApp
+  where Follows(loggerApp.span, level.span, 0, 2);
+
+output view LoggerAppFiltered;
+
+create view LoggerAppOutput as
+  select  D.span as span,
+          GetString(D.span) as text,
+          GetString('LoggerApp') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as LoggerAppFiltered_____sep_____D____id
+  from  LoggerAppFiltered D;
+
+output view LoggerAppOutput;
+
+export view datapower.LoggerAppOutput;
+
+
+create view loggerDomainFiltered_1 as
+  select  Op.span as span,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__44__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__44__TempOp__1 Op,
+        __Minus__44__Temp __t
+  where Equals(Op.span, __t.span);
+
+output view loggerDomainFiltered_1;
+
+create view LoggerDomainFiltered as
+  select  loggerDomainFilt1.span as span,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          loggerApp.__auto__id as LoggerAppFiltered_____sep_____loggerApp____id,
+          loggerDomainFilt1.__auto__id as loggerDomainFiltered_1_____sep_____loggerDomainFilt1____id
+  from  LoggerAppFiltered loggerApp,
+        loggerDomainFiltered_1 loggerDomainFilt1
+  where Follows(loggerDomainFilt1.span, loggerApp.span, 0, 2);
+
+output view LoggerDomainFiltered;
+
+create view LoggerDomainOutput as
+  select  D.span as span,
+          GetString(D.span) as text,
+          GetString('LoggerDomain') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as LoggerDomainFiltered_____sep_____D____id
+  from  LoggerDomainFiltered D;
+
+output view LoggerDomainOutput;
+
+export view datapower.LoggerDomainOutput;
+
+
+create view __Minus__43__Temp as
+  select  __t.span as span
+  from  
+    ((select  Op.span as span
+      from  __Minus__43__TempOp__1 Op)
+    minus
+    (select  Op.span as span
+      from  __Minus__43__TempOp__2 Op)
+    ) __t
+  group by __t.span;
+
+output view __Minus__43__Temp;
+
+create view __Minus__43__TempOp__1 as
+  select  C.span as span,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as loggerAppUnfiltered_____sep_____C____id
+  from  loggerAppUnfiltered C;
+
+output view __Minus__43__TempOp__1;
+
+create view __Minus__43__TempOp__2 as
+  select  D.span as span,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as loggerLevel_____sep_____D____id
+  from  loggerLevel D;
+
+output view __Minus__43__TempOp__2;
+
+create view __Minus__44__Temp as
+  select  __t.span as span
+  from  
+    ((select  Op.span as span
+      from  __Minus__44__TempOp__1 Op)
+    minus
+    (select  Op.span as span
+      from  __Minus__44__TempOp__2 Op)
+    ) __t
+  group by __t.span;
+
+output view __Minus__44__Temp;
+
+create view __Minus__44__TempOp__1 as
+  select  C.span as span,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as loggerAppFiltered_1_____sep_____C____id
+  from  loggerAppFiltered_1 C;
+
+output view __Minus__44__TempOp__1;
+
+create view __Minus__44__TempOp__2 as
+  select  D.span as span,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as LoggerAppFiltered_____sep_____D____id
+  from  LoggerAppFiltered D;
+
+output view __Minus__44__TempOp__2;
+

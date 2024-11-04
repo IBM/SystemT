@@ -1,0 +1,40 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- quotesTest.aql
+--
+-- A test of using double quotes to specify awkward table and column names.
+-------------------------------------------------------------------------------
+
+-- Find first names, using an exhaustive dictionary.
+create view FirstName as
+select D."match" as "span containing first name"
+from Dictionary('dictionaries/first.dict', Document.text) "D"
+where MatchesRegex(/\A[A-Z][a-z]*\Z/, "D"."match");
+
+-- Find phone numbers, using a pair of regular expressions.
+create view "Telephone Number" as
+(
+    select "R"."match" as "num"
+    from Regex(/\+?\([1-9]\d{2}\)\d{3}-\d{4}/, Document.text) R
+)
+union all
+(
+    select R.match as num
+    from Regex(/\+?[Xx]\.?\d{4,5}/, Document.text) R
+);
+
+-- Find instances of first name followed within 50 chars by phone number
+create view "IBM Omnifind Person-Phone Relationship Extractor" as
+select CombineSpans(F."span containing first name", P.num) as personphone,
+     F."span containing first name" as name,
+     "P".num as "com.ibm.phone.Number"   
+from FirstName "F", "Telephone Number" P
+where Follows(F."span containing first name", P.num, 0, 50);
+
+-- Remove overlap between annotations and persist as "PersonPhone"
+create view ComIBMPersonPhone as select PPA.personphone as personphone
+from "IBM Omnifind Person-Phone Relationship Extractor" PPA
+consolidate on PPA.personphone;
+
+output view ComIBMPersonPhone as 'com.ibm.PersonPhone';

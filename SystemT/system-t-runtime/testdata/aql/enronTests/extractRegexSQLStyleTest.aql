@@ -1,0 +1,29 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- extractRegexSQLStyle.aql
+--
+-- Tests for bug #14840: AQL parser does not deescape backslashes in SQL-like regular expressions
+-- Verify how the parser handles regular expressions in SQL-style syntax
+-- (e.g. surrounded by single quote, not forward slashes)
+-------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
+-- 
+
+create view Phone as
+extract regexes '\\d{3}-\\d{4}' on D.text as match
+from Document D;
+
+create view NewLine as
+extract regexes '\\n' on D.text as match
+from Document D;
+
+create view BackSlash as
+extract regexes '\\\\' on D.text as match
+from Document D;
+
+output view Phone;
+output view NewLine;
+output view BackSlash;
+

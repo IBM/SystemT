@@ -1,0 +1,122 @@
+module genericModule;
+
+
+create view CapsWord as
+  extract 'CapsWord' as type,
+    1 as typeInt,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /[A-Z].*/
+    with flags 'DOTALL'
+    on between 1 and 1 tokens in D.text
+    return group 0 as match
+  from Document D;
+
+output view CapsWord;
+
+
+
+create view Extract1 as
+  extract C.type as type,
+    C.typeInt as typeInt,
+    C.match as match,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    C.__auto__id as CapsWord_____sep_____C____id,
+    regex /[A-Z]+/
+    with flags 'DOTALL'
+    on C.match
+    return group 0 as match1
+  from CapsWord C;
+
+output view Extract1;
+
+
+
+create view Extract2 as
+  extract C.type as type,
+    C.typeInt as typeInt,
+    C.match as match,
+    C.match1 as match1,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    C.__auto__id as __Subquery__1__Temp_____sep_____C____id,
+    regex /[A-Z]+/
+    with flags 'DOTALL'
+    on C.match
+    return group 0 as match2
+  from __Subquery__1__Temp C;
+
+output view Extract2;
+
+
+
+create view Union3 as
+  (select  Op.type as type,
+            Op.typeInt as typeInt,
+            Op.match as match,
+            Op.match1 as match1,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__2__TempOp__0 Op)
+  union all
+  (select  Op.type as type,
+            Op.typeInt as typeInt,
+            Op.match as match,
+            Op.match1 as match1,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__2__TempOp__1 Op);
+
+output view Union3;
+
+
+
+create view __Subquery__1__Temp as
+  extract C.type as type,
+    C.typeInt as typeInt,
+    C.match as match,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    C.__auto__id as CapsWord_____sep_____C____id,
+    regex /[A-Z].*/
+    with flags 'DOTALL'
+    on C.match
+    return group 0 as match1
+  from CapsWord C;
+
+output view __Subquery__1__Temp;
+
+create view __Union__2__TempOp__0 as
+  extract C.type as type,
+    C.typeInt as typeInt,
+    C.match as match,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    C.__auto__id as CapsWord_____sep_____C____id,
+    regex /[A-Z]+/
+    with flags 'DOTALL'
+    on C.match
+    return group 0 as match1
+  from CapsWord C;
+
+output view __Union__2__TempOp__0;
+
+create view __Union__2__TempOp__1 as
+  extract C.type as type,
+    C.typeInt as typeInt,
+    C.match as match,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    C.__auto__id as CapsWord_____sep_____C____id,
+    regex /[A-Z].*/
+    with flags 'DOTALL'
+    on C.match
+    return group 0 as match1
+  from CapsWord C;
+
+output view __Union__2__TempOp__1;
+

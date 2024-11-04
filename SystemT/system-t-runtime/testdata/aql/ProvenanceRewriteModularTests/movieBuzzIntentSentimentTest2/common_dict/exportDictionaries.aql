@@ -1,0 +1,102 @@
+module common_dict; 
+
+create view ME_Entries as 
+	select D.text as text
+	from Document D;
+	
+	
+-- File to export all dictionaries in this module
+
+-------------------------------------------------------------------
+
+-- From ME_LA_DictsAndTables.aql
+
+export dictionary ME_LA_Alias_USCities_Dict;
+export dictionary ME_LA_Alias_NonUSCities_Dict;
+export dictionary ME_LA_Alias_USStates_Dict;
+export dictionary ME_LA_Alias_Countries_Dict;
+export dictionary ME_LA_StatesDict;
+export dictionary ME_LA_StateAbbrvsDict;
+export dictionary ME_LA_CitiesDict;
+export dictionary ME_LA_AmbiguousCitiesDict;
+export dictionary ME_LA_PopulousNonUSCitiesDict;
+export dictionary ME_LA_CountryDict;
+
+-------------------------------------------------------------------
+
+-- From Individual_Dicts.aql
+
+export dictionary ME_Comics_Keywords_English_Short;
+export dictionary ME_Comics_NegativeClues;
+export dictionary MovieTopicDict;
+
+--------------------------------------------------------------------
+
+-- From Grammatical_Dicts.aql
+
+export dictionary MET_ConjunctionsPreps_Dict;
+export dictionary MET_Adversary_ConjunctionsPreps_Dict;
+export dictionary MET_Conditional_ConjunctionsPreps_Dict;
+export dictionary MET_ConjunctivePunct_Dict;
+export dictionary MET_EnglishClues_Dict;
+export dictionary MET_Negation_Dict;
+
+---------------------------------------------------------------------
+
+-- From Sentiment_Bad_Dicts.aql , Sentiment_Beautiful_Dicts.aql , Sentiment_Boring_Dicts.aql & 
+-- From Sentiment_Exciting_Dicts.aql , Sentiment_Good_Dicts.aql , Sentiment_Interesting_Dicts.aql & Sentiment_Sexy_Dicts.aql
+-- From Sentiment_Ugly_Dicts.aql , Sentiment_Vb_Dislike_Dicts.aql & Sentiment_Vb_Like_Dicts.aql
+
+export dictionary BAD_Dict;
+export dictionary BEAUTIFUL_Dict;
+export dictionary BORING_Dict;
+export dictionary EXCITING_Dict;
+export dictionary GOOD_Dict;
+export dictionary INTERESTING_Dict;
+export dictionary SEXY_Dict;
+export dictionary UGLY_Dict;
+export dictionary VB_DISLIKE_Dict;
+export dictionary VB_LIKE_Dict;
+
+----------------------------------------------------------------------
+
+-- From ME_Dicts.aql
+
+export dictionary ME_Ambiguous_Movies_Dict;
+export dictionary ME_Movies_Nicknames_Dict;
+export dictionary ME_HighlyAmbiguous_Movies_Dict;
+export dictionary ME_Star_Dict;
+export dictionary ME_Role_Dict;
+export dictionary ME_Director_Dict;
+export dictionary ME_Writer_Dict;
+export dictionary ME_Movies_ContextTags_Dict;
+export dictionary ME_Movie_Goers_Dict;
+export dictionary ME_Movie_Goers_Ambiguous_Dict;
+export dictionary ME_MovieStudios_Dict;
+export dictionary ME_MovieCategClue_Dict;
+export dictionary ME_Movie_Goers_ContextWords_Dict;
+export dictionary ME_Studios_Dict;
+
+--------------------------------------------------------------------------
+
+create view ME_MovieGoers_FromDict as
+	(
+	extract  D.text as text, 'ME_Movie_Goers_Dict' as prov, dictionary 'ME_Movie_Goers_Dict' on D.text as match
+	from ME_Entries D
+	)
+	union all
+	(
+	extract  D.text as text, 'ME_Movie_Goers_Ambiguous_Dict' as prov, dictionary 'ME_Movie_Goers_Ambiguous_Dict' on D.text as match
+	from ME_Entries D
+	having ContainsDict('ME_Movie_Goers_ContextWords_Dict', text)
+	)
+	;
+	
+export view ME_MovieGoers_FromDict;
+	
+create view  ME_MovieGoers_FromDict_Consolidated as 
+	select D.text
+	from  ME_MovieGoers_FromDict D
+	consolidate on D.text;	
+	
+export view ME_MovieGoers_FromDict_Consolidated; 

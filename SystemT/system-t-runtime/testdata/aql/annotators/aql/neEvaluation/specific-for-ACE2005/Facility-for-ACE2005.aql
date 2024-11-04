@@ -1,0 +1,212 @@
+-- Yunyao: created on 08/31/2009 to extract facilities including
+--     1. public places (e.g. parks, parking lots, etc)
+--     2. commerical places (e.g., nightclub, pubs)
+--     3. associated buildings (e.g., mills, castles)
+--     4. structures (e.g. bridges, ports, dams)
+
+create view FacilitySuffix as
+	extract
+    dictionaries
+        'location/facilities/suffix-building.dict' 
+    and 'location/facilities/suffix-commericalPlace.dict'
+    and 'location/facilities/suffix-publicPlace.dict'
+    and 'location/facilities/suffix-structure.dict'
+    and 'location/ace2005/suffix-facility-ace2005.dict'
+        on D.text   
+        as match     
+        from Doc D;
+        
+create view FacilityPrefix as
+	extract
+		dictionaries
+			'location/ace2005/prefix-facility-ace2005.dict'
+		on D.text
+		as match
+	from Doc D;        
+ 
+create view CapsFacilityCandidate1 as
+    select
+        R.match as match
+    from
+       RegexTok(/(\p{Upper}[\p{Lower}\&\.-\/]{1,20})/, 25, Doc.text) R;
+
+create view CapsFacilityCandidate2 as
+    select
+        R.match as match
+    from
+       RegexTok(/(\p{Upper}[\p{Lower}\&\.-\/]{1,20})((\s+|-)(\p{Upper}[\p{Lower}\&\.-\/]{1,20}))/, 25, Doc.text) R;
+
+create view CapsFacilityCandidate as
+	(select C.match as match from CapsFacilityCandidate1 C)
+	union all
+	(select C.match as match from CapsFacilityCandidate2 C);
+
+create view CapsFacility as
+	(select C.* from CapsFacilityCandidate C)
+	minus
+	(select F.* from FacilityFilter F);
+	
+
+-- no facility name should contain the following entries
+create dictionary FacilityStrongFilterDict as (
+	'That', 'At', 'The', 'Now'
+);
+        
+create dictionary WrongFacilitySuffixDict as (
+	'Well', 'Club'
+);        
+    
+-- facility candidate based on pattern
+create dictionary StrongLeftContextClueDict as (
+	'into', 'at', 'tour of', 'tours of'
+);
+
+
+-- tour of
+create view PatternBasedFAC1 as
+select C.match as facility
+from CapsFacilityCandidate C
+where ContainsDict('StrongLeftContextClueDict', LeftContextTok(C.match, 2))
+  and Not(MatchesDict('country.dict', C.match));
+	
+--output view PatternBasedFAC1;
+
+create dictionary WrongFacRightContextDict as (
+	'briefing', 'news', 'conference', 'meeting', 'said', 'could'
+); 
+          
+-- Note: this view requires view CapsPlaceOnetoTwo defined in Address.aql 
+create view FacilityAll as
+(select CombineSpans(C.match, F.match) as facility 
+from CapsFacility C,
+	 FacilitySuffix F
+where FollowsTok(C.match, F.match, 0, 0)
+  and Not(ContainsDict('FacilityStrongFilterDict', C.match))
+  and Not(ContainsDict('WrongFacilitySuffixDict', F.match)))
+union all
+(select CombineSpans(C.match, F.match) as facility 
+from CapsFacility C,
+	 FacilitySuffix F
+where FollowsTok(C.match, F.match, 2, 2)
+  and MatchesRegex(/'s[ ]*/, SpanBetween(C.match, F.match))
+  and Not(ContainsDict('FacilityStrongFilterDict', C.match))
+  and Not(MatchesRegex(/([a-z]+\s*)+/, F.match)))
+union all
+(select CombineSpans(F.match, C.match) as facility 
+from CapsFacility C,
+	 FacilityPrefix F
+where FollowsTok(F.match, C.match, 0, 0)
+  and Not(ContainsDict('FacilityStrongFilterDict', C.match)))
+union all
+(extract dictionaries 
+		'location/ace2005/ace2005missingFacility.dict'
+	on D.text as facility 
+from Doc D)
+union all
+(extract dictionaries 
+	'misc/airportCode.dict'
+	with flags 'Exact'
+	on D.text as facility 
+from Doc D)
+union all
+(extract dictionaries 'location/ace2005/ace2005ambigousFacility.dict' on D.text as facility from Doc D 
+ having MatchesRegex(/.*\s*(at|outside)\s+(the\s+)?/, 'CASE_INSENSITIVE', LeftContextTok(facility, 2))
+ and Not(ContainsDict('WrongFacRightContextDict', RightContextTok(facility, 1))))
+union all
+(select R.road as facility from Road R)	
+--union all
+--(select F.* from PatternBasedFAC1 F)
+union all
+(select L.match as facility from Landmark_Facility L);
+
+create dictionary InvalidFacilityClue as (
+	'a', 'an', 'for the'
+);
+
+create dictionary InvalidFacility as (
+	'Fort'
+);
+
+-- avoid matching "Clinton White House"
+create view USPresidentLastName as
+extract 
+	dictionaries 'names/famous/USPresidentLastName.dict' 
+	on D.text
+	as lastname
+from Doc D
+having MatchesRegex(/\p{Lu}\p{M}*.*/, lastname);
+
+create view WhiteHouse as
+select SubSpanTok(RightContextTok(L.lastname, 2), 0, 2) as loc, 
+	   CombineSpans(L.lastname, RightContextTok(L.lastname, 2)) as wrongLoc
+from USPresidentLastName L
+where MatchesRegex(/\s*White\s*House/,RightContextTok(L.lastname, 2));
+
+
+create view FacilityInvalid as
+(select F.facility as facility
+from FacilityAll F
+where ContainsDict('InvalidFacilityClue', LeftContextTok(F.facility,2)))
+union all
+(select F.facility as facility
+from FacilityAll F
+where MatchesRegex(/"/, LeftContextTok(F.facility, 1))
+  and MatchesRegex(/"/, RightContextTok(F.facility, 1)))
+union all
+(select F.facility as facility
+from FacilityAll F
+where MatchesRegex(/\s*\p{Lu}\p{M}*.*/, RightContextTok(F.facility, 1)))
+union all
+(select F.* from FacilityAll F, WhiteHouse W where Overlaps(W.loc, F.facility))
+union all
+(select F.* from FacilityAll F where ContainsDict('InvalidFacility', F.facility));
+
+create view FacilityAsCity as
+select F.*
+from FacilityAll F
+where MatchesDict('city.dict', F.facility);
+
+--output view FacilityAsCity;
+
+create view FacilityValid as
+	(select F.* from FacilityAll F)
+	minus
+	(select F.* from FacilityInvalid F);
+
+-- extend the facility found with state names	
+create view FacilityExtended as
+select CombineSpans(S.match, F.facility) as facility
+from StrongStateAll S,
+	 FacilityValid F
+where FollowsTok(S.match, F.facility, 0, 0)
+  and Not(ContainsRegex(/[\r\n]/, SpanBetween(S.match, F.facility)));	 
+	
+	
+-- find new facility based on conjunction
+create view FacilityConj as
+select  C.match as facility
+from FacilityValid F, 
+	 CapsFacility C
+where FollowsTok(F.facility, C.match, 1, 2)
+  and MatchesRegex(/\s*and\s*(the)?\s*/, SpanBetween(F.facility, C.match))
+  and MatchesRegex(/[^\s\w]/, RightContext(C.match, 1));
+  
+--output view FacilityConj;
+		
+create view FacilityExtendedAll as
+	(select F.* from FacilityExtended F)
+	union all
+	(select F.* from FacilityValid F)
+	union all
+	(select F.* from FacilityConj F);
+	
+
+	
+create view Facility as
+select F.* 
+from  FacilityExtendedAll F
+-- allow no line break
+where Not(ContainsRegex(/((\r\n|\t){2,}|(\r|\t){2,}|(\n|\t){2,})/, F.facility))
+consolidate on F.facility;
+
+output view Facility;

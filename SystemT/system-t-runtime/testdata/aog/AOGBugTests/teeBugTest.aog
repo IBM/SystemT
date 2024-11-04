@@ -1,0 +1,64 @@
+###############################################################################
+# teeBug.aog
+#
+# Test case for a bug where the Tee operator was freeing buffers prematurely.
+###############################################################################
+
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+$Zipcode =
+Project(
+  (
+    "match" => "match"
+  ),
+      Regex(
+        /\b[0-9]{5}(\-[0-9]{4})?\b/, (0 => "match"), "DOTALL",
+        "text",
+        $Document
+      )
+);
+
+$A = $Zipcode;
+
+$B = Union($Zipcode, $A);
+
+
+$C =
+Union(
+   $Zipcode,
+   $B
+);
+
+$D =
+Project(
+  (
+    "match" => "match"
+  ),
+     SortMergeJoin(
+        FollowedByTok(
+          GetCol("match"),
+          GetCol("Sawcos.match"),
+          IntConst(0),
+          IntConst(1)
+        ),
+           $Zipcode,
+        Project(
+          (
+            "match" => "Sawcos.match"
+          ),
+          $A
+        )
+    )
+);
+
+$Out =
+Union(
+    $D,
+    $B
+);
+
+Output: $Out;

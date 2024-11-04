@@ -1,0 +1,85 @@
+-- ************************************************************
+-- Used for filtering Person names containing a single new line
+-- Currently used by all versions, except SEC
+-- ************************************************************
+
+create dictionary InvalidFwdBlockTokens as(
+	'To', 'Cc', 'Bcc', 'Sent', 'Subject', 'Mime-Version'
+);
+
+
+
+create view P1 as
+select P.person as person
+	from PersonStrongWithNewLine P, ForwardBlock FB
+	where Contains(FB.annot, P.person) 
+	  and ContainsRegex(/[\n\r\t]{2,}/, P.person)
+	  and Not(ContainsDict('InvalidFwdBlockTokens', 'Exact', P.person));
+	  
+create view P2 as
+	  select P.person as person
+	from PersonWeak1WithNewLine P, ForwardBlock FB
+	where Contains(FB.annot, P.person) 
+	  and ContainsRegex(/[\n\r\t]{2,}/, P.person)
+	  and Not(ContainsDict('InvalidFwdBlockTokens', 'Exact', P.person));
+	  
+create view P3 as
+select P.person as person
+	from PersonWeak2WithNewLine P, ForwardBlock FB
+	where Contains(FB.annot, P.person) 
+	  and ContainsRegex(/[\n\r\t]{2,}/, P.person)
+	  and Not(ContainsDict('InvalidFwdBlockTokens', 'Exact', P.person));
+	  
+output view P1;
+output view P2;
+output view P3;
+
+-- remove entries with new lines, except the ones in forward blocks	
+create view PersonStrong as
+(
+	select P.person as person
+	from PersonStrongWithNewLine P
+	where Not(ContainsRegex(/[\n\r\t]/, P.person))
+)
+union all
+(
+	select P.person as person
+	from PersonStrongWithNewLine P, ForwardBlock FB
+	where Contains(FB.annot, P.person) 
+	  and Not(ContainsRegex(/[\n\r\t]{2,}/, P.person))
+	  and Not(ContainsDict('InvalidFwdBlockTokens', 'Exact', P.person))
+)
+;
+
+create view PersonWeak1 as
+(
+	select P.person as person
+	from PersonWeak1WithNewLine P
+	where Not(ContainsRegex(/[\n\r\t]/, P.person))
+)
+union all
+(
+	select P.person as person
+	from PersonWeak1WithNewLine P, ForwardBlock FB
+	where Contains(FB.annot, P.person) 
+	  and Not(ContainsRegex(/[\n\r\t]{2,}/, P.person))
+	  and Not(ContainsDict('InvalidFwdBlockTokens', 'Exact', P.person))
+	  
+);
+
+create view PersonWeak2NoNewLine as
+(
+	select P.person as person
+	from PersonWeak2WithNewLine P
+	where Not(ContainsRegex(/[\n\r\t]/, P.person))
+)
+union all
+(
+	select P.person as person
+	from PersonWeak2WithNewLine P, ForwardBlock FB
+	where Contains(FB.annot, P.person) 
+	  and Not(ContainsRegex(/[\n\r\t]{2,}/, P.person))
+	  and Not(ContainsDict('InvalidFwdBlockTokens', 'Exact', P.person))
+);
+
+

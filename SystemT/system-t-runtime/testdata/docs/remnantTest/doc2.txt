@@ -1,0 +1,21 @@
+Checkin: Watchdog API
+Frederick R Reiss
+ 
+to:
+Rajasekar Krishnamurthy, Sriram Raghavan, Yunyao Li
+11/06/2007 02:15 PM
+Cc:
+Shivakumar Vaithyanathan
+Default custom expiration date:
+ 
+11/05/2008
+Show Details
+Hi all,
+I've added some hooks for telling an operator graph to stop processing and return what results it has.  The procedure for doing so is:
+1. (From the watchdog thread) Interrupt the thread that is running the graph by calling Thread.interrupt()
+2. (From the main thread) Once the thread detects the interrupt, an InterruptedException will be thrown; catch the exception in your top-level code and collect any available results.
+3. Call OperatorGraphRunner.resetGraph() to clean up any internal state before your next call to pushDoc().
+Note that Thread.interrupt() is an *asynchronous* call; it may take some time before the main thread realizes it's been interrupted.
+I've checked the code into AnnotationAlgebra and updated SystemT.jar in code yellow.
+There is some example code in the methods SQLEnronTests.watchdogTest() and SQLEnronTests.neWatchdogTest().
+Fred

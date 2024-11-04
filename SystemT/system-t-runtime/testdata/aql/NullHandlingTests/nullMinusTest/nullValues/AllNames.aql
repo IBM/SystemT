@@ -1,0 +1,55 @@
+module nullValues;
+
+-- verifies that type inference of a minus statement with nulls returns the correct field type
+create view BasicMinus as
+  (
+    select
+      F.match as firstName, null as lastName, null as middleName 
+    from
+      FirstName F
+  )
+  minus 
+  (
+    select
+      null as firstName, L.match as lastName, null as middleName  -- null span for first name
+    from
+      LastName L
+  );
+
+-- output schema should be (Span, Null, Null)
+output view BasicMinus;
+
+create view AllNames as
+  (
+    select
+      F.match as firstName, null as lastName, null as middleName 
+    from
+      FirstName F
+  )
+  union all 
+  (
+    select
+      null as firstName, L.match as lastName, null as middleName  -- null span for first name
+    from
+      LastName L
+  );
+  
+output view AllNames;
+
+create view AllMinusMartha as 
+  ( 
+    select 
+      A.firstName as firstName
+    from 
+      AllNames A
+  )
+  minus
+  (
+    select
+      M.match as firstName
+    from
+      Martha M
+  );
+
+output view AllMinusMartha;
+      

@@ -1,0 +1,249 @@
+create view Doc as
+select D.text as text
+from DocScan D;
+
+create dictionary SalutationDict as
+(
+	'rev.', 'col.', 'reverend', 'prof.', 'professor', 
+	'lady', 'miss.', 'mrs.', 'mrs', 'mr.', 'pt.', 'ms.',
+	'messrs.', 'dr.', 'master.', 'marquis', 'monsieur',
+	'ds', 'di','herr', 'Fraeulein', 'Doktor', 'Herr Doktor', 
+	'Frau Doktor','Herr Professor', 'Frau professor', 'Baron', 'graf'
+);
+
+create dictionary CapsPersonDict as
+(''
+);
+
+-- Find dictionary matches for all title initials
+create view Salutation as
+---select D.match as salutation
+extract dictionary 'SalutationDict' 
+on D.text as salutation 
+from Doc D;
+
+-- Find capitalized words that look like person  names and not in the non-name dictionary
+create view CapsPersonCand as
+select R.match as word
+from   RegexTok(/\b\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}\b/, 10, Doc.text) R; --'
+ 
+create view CapsPerson as
+select C.word as word from CapsPersonCand C
+where  Not(ContainsDict('CapsPersonDict', C.word));
+ 
+ -- Find initial words 
+create view InitialWord as
+select R.match as word
+from RegexTok(/\b([\p{Upper}]\.\s*){1,5}\b/, 10, Doc.text) R;
+ 
+-- Find dictionary matches for all last names
+create view LastNameDict as
+extract dictionary 'strictLast.dict'
+on D.text as last
+from Doc D;
+
+create view LastName as
+select D.last as last
+from   LastNameDict D
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.last);	
+
+-- Find dictionary matches for all first names
+-- Mostly US first names
+
+create view FirstNameDict as
+extract dictionary 'strictFirst.dict'
+on D.text as first
+from Doc D;
+
+create view FirstName as
+select D.first as first
+from   FirstNameDict D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.first);
+ 
+-- Rule R1 <FirstName><LastName>
+create view FNLN as
+select CombineSpans(FN.first, LN.last) as name
+from FirstName FN, LastName LN
+where FollowsTok(FN.first, LN.last,0,0);
+
+-- Rule R2 <CapsPerson><LastName>
+create view CPLN as
+select CombineSpans(CP.word, LN.last) as name
+from CapsPerson CP, LastName LN
+where FollowsTok(CP.word, LN.last,0,0);
+
+-- Rule R3 <FirstName><CapsPerson>
+create view FNCP as
+select CombineSpans(FN.first, CP.word) as name
+from FirstName FN, CapsPerson CP
+where FollowsTok(FN.first, CP.word,0,0);
+
+-- Rule R4 <LastName>,<FirstName>
+create view LNCFN as
+select CombineSpans(LN.last,FN.first) as name
+from FirstName FN, LastName LN
+where FollowsTok(LN.last,FN.first,0,1) and ContainsRegex(/,/,SpanBetween(LN.last, FN.first));
+
+-- Rule R5 <CapsPerson>,<FirstName>
+create view CPCFN as
+select CombineSpans(CP.word,FN.first) as name
+from CapsPerson CP, FirstName FN
+where FollowsTok(CP.word,FN.first,0,1) and ContainsRegex(/,/,SpanBetween(CP.word, FN.first));
+
+-- Rule R6 <LastName>,<CapsPerson>
+create view LNCCP as
+select CombineSpans(LN.last,CP.word) as name
+from LastName LN, CapsPerson CP
+where FollowsTok(LN.last,CP.word,0,1) and ContainsRegex(/,/,SpanBetween(LN.last, CP.word));
+
+
+-- Rule R7 <Salutation><CapsPerson>
+create view SCP as
+select CP.word as name
+from Salutation S, CapsPerson CP
+where FollowsTok(S.salutation,CP.word,0,0);
+  
+  
+-- Rule R8 <Salutation><CapsPerson><CapsPerson>
+create view SCPCP as
+select CombineSpans(CP1.word,CP2.word) as name
+from Salutation S, CapsPerson CP1,CapsPerson CP2
+where FollowsTok(S.salutation,CP1.word,0,0) and
+      FollowsTok(CP1.word,CP2.word,0,0);
+ 
+-- Rule R9 <InitialWord><LastName>
+create view IWLN as
+select CombineSpans(IW.word, LN.last) as name
+from InitialWord IW, LastName LN
+where FollowsTok(IW.word, LN.last,0,0);
+
+-- Rule R10 <InitialWord><FirstName>
+create view IWFN as
+select CombineSpans(IW.word, FN.first) as name
+from InitialWord IW, FirstName FN
+where FollowsTok(IW.word, FN.first,0,0);
+
+-- Rule R11 <FirstName><InitialWord><LastName>
+create view FNIWLN as
+select CombineSpans(FN.first,LN.last) as name
+from FirstName FN, InitialWord IW, LastName LN
+where FollowsTok(FN.first,IW.word,0,0) and FollowsTok(IW.word, LN.last,0,0);
+
+-- Rule R12 <CapsPerson><InitialWord><CapsPerson>
+create view CPIWCP as
+select CombineSpans(CP1.word,CP2.word) as name
+from CapsPerson CP1, InitialWord IW, CapsPerson CP2
+where FollowsTok(CP1.word,IW.word,0,0) and FollowsTok(IW.word, CP2.word,0,0);
+
+
+create view PersonLastFirstAll as
+(select P.name as person from LNCFN P)
+union all 
+(select P.name as person from CPCFN P)
+union all 
+(select P.name as person from LNCCP P);
+
+create view PersonFirstLastAll as
+(select P.first as person from FirstName P) 
+union all
+(select P.last as person from LastName P)
+union all
+(select P.name as person from FNLN P)
+union all 
+(select P.name as person from CPLN P)
+union all 
+(select P.name as person from FNCP P)
+union all 
+(select P.name as person from SCP P)
+union all 
+(select P.name as person from SCPCP P)
+union all 
+(select P.name as person from IWLN P)
+union all 
+(select P.name as person from IWFN P)
+union all 
+(select P.name as person from FNIWLN  P)
+union all 
+(select P.name as person from CPIWCP  P);
+
+create view PersonLastFirstCand as
+select P.person as person 
+from PersonLastFirstAll P;
+
+create view PersonFirstLastCand as
+select P.person as person 
+from PersonFirstLastAll P;
+
+
+
+--PersonLastFirst overlapping PersonFirstLast 
+create view PersonLastFirstInvalid as
+select LF.person as person 
+from PersonLastFirstCand LF, PersonFirstLastCand FL
+where Overlaps(LF.person, FL.person);
+
+-- remove candidates PersonLastFirst overlapping PersonFirstLast (FirstLast is a stronger clue)
+create view PersonLastFirstValid as
+(select P.person as person from PersonLastFirstCand P) 
+minus
+(select P.person as person from PersonLastFirstInvalid P);
+
+
+create view PersonCand as
+(select P.person as person from PersonLastFirstValid P) 
+union all
+(select P.person as person from PersonFirstLastCand P);
+ 
+ -- 'Committee', 'T', 'concert', 'Petersen', 'Keith'
+create dictionary PersonRightContext as
+(''
+);
+
+create dictionary PersonLeftContext as
+(''
+);
+
+create view PersonBeforeConsolidate as
+select P.person as person from PersonCand P
+where Not(ContainsDict('PersonRightContext', RightContextTok(P.person, 1)))
+and Not(ContainsDict('PersonLeftContext', LeftContextTok(P.person, 1)));
+
+-- Persons that are a substring of another Person
+create view PersonInvalid as
+select P1.person as person
+from PersonBeforeConsolidate P1, PersonBeforeConsolidate P2
+where Contains(P2.person, P1.person) and Not(Equals(P1.person, P2.person));
+
+
+create view PersonValid as
+(select P.person from PersonBeforeConsolidate P)
+minus
+(select P.person from PersonInvalid P);
+
+create view Person as
+select P.person as person 
+from PersonBeforeConsolidate P
+--from PersonValid P
+consolidate on P.person using 'ExactMatch'
+--consolidate on P.person using 'ContainedWithin'
+order by GetBegin(P.person);
+
+/*
+create view PersonP as
+(select PRC.person as person from PersonRC PRC)
+union all
+(select PLC.person as person from PersonLC PLC);
+*/
+
+create view PersonExact as
+select P.person as person from PersonBeforeConsolidate P
+consolidate on P.person using 'ExactMatch'
+order by GetBegin(P.person);
+
+create view Diff as
+(select * from PersonExact)
+minus
+(select * from Person);
+
+output view Diff;
+output view Person;

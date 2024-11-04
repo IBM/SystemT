@@ -1,0 +1,53 @@
+-- Test case for incorrect regex match on detagged text containing "'"
+
+require document with columns text Text;
+
+detag Document.text into Doc;
+
+
+create view CompanyInfo as
+extract regex 
+	/Elbit Systems/
+on D.text as name
+from Doc D;
+
+
+create view SubsidiaryClue as
+extract regex 
+	/Subsidiary/
+on D.text as match
+from Doc D;
+
+output view CompanyInfo;
+output view SubsidiaryClue;
+
+
+-- match patterns of the form "[company-name]'s subsidiary"
+-- Should match "Elbit Systems' Subsidiary" but does not
+create view ParentCompanyInfo1 as
+select C.name as originalmatch,
+	   CombineSpans(C.name, S.match) as match
+from CompanyInfo C, SubsidiaryClue S
+where FollowsTok(C.name, S.match, 0, 1) ;
+      
+
+-- This matches "Elbit Systems' Subsidiary" (but note predicate allows for 3 tokens between company name and subsidiary clue)
+create view ParentCompanyInfo2 as
+select C.name as originalmatch,
+	   CombineSpans(C.name, S.match) as match
+from CompanyInfo C, SubsidiaryClue S
+where FollowsTok(C.name, S.match, 0, 3) ;
+      
+
+-- The regex should match but does not
+create view ParentCompanyInfo3 as
+select C.name as originalmatch,
+	   CombineSpans(C.name, S.match) as match
+from CompanyInfo C, SubsidiaryClue S
+where FollowsTok(C.name, S.match, 0, 3) and
+      MatchesRegex(/\s*'\s*/, SpanBetween(C.name, S.match)); --'
+
+
+output view ParentCompanyInfo1;
+output view ParentCompanyInfo2;
+output view ParentCompanyInfo3;

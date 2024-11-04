@@ -1,0 +1,317 @@
+module webaccess;
+
+
+--  ****************************************************************************
+--	@ragunathan July 07 2011
+--	
+--  Annotator Type: 
+--	Base 
+--  
+--	Purpose: 
+--	Extract SCHEME, DOMAIN/HOSTNAME, PORT, ROOT from the REFERRER URL in a record of a weblog 
+--  This AQL extracts the above mentioned entities in the following 4 types of occurrences
+--  1. (scheme, domain, port, root) 2.(scheme, domain, root)
+--	3. (scheme, host, port, root) 4. (scheme, host, root)
+--	
+--	Eg:
+--	1. For the record
+--		189.222.1.30 - - [23/May/2011:23:51:00] "GET /flower_store/category.screen?category_id=PLANTS HTTP/1.1" 200 10567 "http://mystore.splunk.com:9080/flower_store/cart.do?action=purchase&itemId=EST-14&JSESSIONID=SD5SL10FF8ADFF3" "Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.8.0.10) Gecko/20070223 CentOS/1.5.0.10-0.1.el4.centos Firefox/1.5.0.10" 323 1845
+--	output:
+--		(http, mystore.splunk.com, 9080, flower_store)
+--	
+--  2. For the record
+--		189.222.1.30 - - [23/May/2011:23:51:00] "GET /flower_store/category.screen?category_id=PLANTS HTTP/1.1" 200 10567 "http://mystore.splunk.com/flower_store/cart.do?action=purchase&itemId=EST-14&JSESSIONID=SD5SL10FF8ADFF3" "Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.8.0.10) Gecko/20070223 CentOS/1.5.0.10-0.1.el4.centos Firefox/1.5.0.10" 323 1845
+--	output:
+--		(http, mystore.splunk.com, flower_store)
+--
+--	3. For the record
+--		189.222.1.30 - - [23/May/2011:23:51:00] "GET /flower_store/category.screen?category_id=PLANTS HTTP/1.1" 200 10567 "http://mystore:9080/flower_store/cart.do?action=purchase&itemId=EST-14&JSESSIONID=SD5SL10FF8ADFF3" "Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.8.0.10) Gecko/20070223 CentOS/1.5.0.10-0.1.el4.centos Firefox/1.5.0.10" 323 1845
+--	output:
+--		(http, mystore, 9080, flower_store)
+--
+--	4. For the reocrd
+--		189.222.1.30 - - [23/May/2011:23:51:00] "GET /flower_store/category.screen?category_id=PLANTS HTTP/1.1" 200 10567 "http://myhostname/flower_store/cart.do?action=purchase&itemId=EST-14&JSESSIONID=SD5SL10FF8ADFF3" "Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.8.0.10) Gecko/20070223 CentOS/1.5.0.10-0.1.el4.centos Firefox/1.5.0.10" 323 1845
+--	output:
+--		(http, myhostname, flower_store)
+-- ****************************************************************************
+
+import view URLAll from module common;
+import view hostname from module common;
+
+create view referrer as
+select U.annot as referrer_uri
+from common.URLAll U;
+
+create view referrer_scheme as 
+extract 
+	regex /(([a-z]{3,}):\/\/)/ on R.referrer_uri
+	return group 1 as scheme_with_slash and
+	 group 2 as scheme_without_slash
+from referrer R;
+
+create view referrer_domain as
+	select hn.hostname as domain
+	from 
+		referrer_scheme s,
+		common.hostname hn
+	where
+		Follows(s.scheme_with_slash, hn.hostname, 0, 0);
+		
+create view referrer_host as
+extract 
+	regex /(([a-z]{3,}:\/\/)([a-zA-Z-]{1,})[:\/])/ on U.annot
+	return group 3 as host
+from common.URLAll U;
+
+create view possible_ports as
+extract
+	regex /((:)([0-9]{1,5}))/ on U.annot
+	return group 1 as pport_with_colon
+	and group 2 as colon
+	and group 3 as pport
+from common.URLAll U;
+
+create view referrer_host_ports as
+   select pp.pport as port, pp.pport_with_colon as port_with_colon
+	from 
+		possible_ports pp,
+		referrer_host rh
+	where
+		Follows(rh.host, pp.pport_with_colon, 0, 0);
+
+create view referrer_domain_ports as
+   select pp.pport as port, pp.pport_with_colon as port_with_colon
+	from 
+		possible_ports pp,
+		referrer_domain rd
+	where
+		Follows(rd.domain, pp.pport_with_colon, 0, 0);
+		
+ create view referrer_domain_port_combined as
+	select
+ 		CombineSpans(rd.domain, rdp.port_with_colon) as domain_and_port
+	from
+		referrer_domain rd,
+		referrer_domain_ports rdp
+ 	where
+		Follows(rd.domain, rdp.port_with_colon, 0, 0);
+
+ create view referrer_host_port_combined as
+	select
+ 		CombineSpans(rh.host, rhp.port_with_colon) as host_and_port
+	from
+		referrer_host rh,
+		referrer_host_ports rhp
+ 	where
+		Follows(rh.host, rhp.port_with_colon, 0, 0);
+		
+create view possible_roots as
+extract 
+	regex /(\/[a-zA-Z0-9_.-]{1,})/ on U.annot as possible_root
+from common.URLAll U;
+
+create view domain_roots_with_slash as
+	select pr.possible_root as slash_roots
+	from 
+		possible_roots pr,
+		referrer_domain_port_combined rdnp
+	where
+		Follows(rdnp.domain_and_port, pr.possible_root, 0, 0);
+
+create view referrer_domain_roots_without_slash as
+extract 
+	regex /(\/)([a-zA-Z0-9_.-]{1,})/ on rws.slash_roots
+	return group 2 as roots
+from domain_roots_with_slash rws;
+
+--
+create view domain_roots_with_slash_not_considering_port as
+	select pr.possible_root as slash_roots
+	from 
+		possible_roots pr,
+		referrer_domain rd
+	where
+		Follows(rd.domain, pr.possible_root, 0, 0);
+
+create view referrer_domain_roots_without_slash_not_considering_port as
+extract 
+	regex /(\/)([a-zA-Z0-9_.-]{1,})/ on r.slash_roots
+	return group 2 as roots
+from domain_roots_with_slash_not_considering_port r;
+--
+
+create view host_roots_with_slash as
+	select pr.possible_root as slash_roots
+	from 
+		possible_roots pr,
+		referrer_host_port_combined rhnp
+	where
+		Follows(rhnp.host_and_port, pr.possible_root, 0, 0);
+
+create view referrer_host_roots_without_slash as
+extract 
+	regex /(\/)([a-zA-Z0-9_.-]{1,})/ on hrws.slash_roots
+	return group 2 as roots
+from host_roots_with_slash hrws;
+
+--
+create view host_roots_with_slash_not_considering_port as
+	select pr.possible_root as slash_roots
+	from 
+		possible_roots pr,
+		referrer_host rh
+	where
+		Follows(rh.host, pr.possible_root, 0, 0);
+
+create view referrer_host_roots_without_slash_not_considering_port as
+extract 
+	regex /(\/)([a-zA-Z0-9_.-]{1,})/ on r.slash_roots
+	return group 2 as roots
+from host_roots_with_slash_not_considering_port r;
+--
+
+create function getReferrerCategoryWithPort(scheme String, domainOrHost String, port String, root String)
+	return String
+	external_name 'logAAqlUDFs.jar:com.ibm.logparse.aql.Util!getCategory'
+	language java
+	deterministic
+	return null on null input;
+	
+create function getReferrerCategoryWithoutPort(scheme String, domainOrHost String, root String)
+	return String
+	external_name 'logAAqlUDFs.jar:com.ibm.logparse.aql.Util!getCategory'
+	language java
+	deterministic
+	return null on null input;
+	
+create view referrer_domain_type1 as
+	select 
+			ref.referrer_uri as referrer_uri_span,
+			GetText(ref.referrer_uri) as referrer_uri_text,
+			rs.scheme_without_slash as scheme,
+			GetText(rs.scheme_without_slash) as scheme_text,
+			rd.domain as domain,
+			GetText(rd.domain) as domain_text,
+			rdp.port as port,
+			GetText(rdp.port) as port_text,
+			rdrws.roots as root,
+			GetText(rdrws.roots) as root_text,
+			getReferrerCategoryWithPort(GetString(rs.scheme_without_slash), GetString(rd.domain), GetString(rdp.port), GetString(rdrws.roots)) as category
+	from 
+		referrer ref,
+		referrer_scheme rs,
+		referrer_domain rd,
+		referrer_domain_ports rdp,
+		referrer_domain_roots_without_slash rdrws;
+
+--without port
+create view referrer_domain_type2 as
+	select 
+			ref.referrer_uri as referrer_uri_span,
+			GetText(ref.referrer_uri) as referrer_uri_text,
+			rs.scheme_without_slash as scheme,
+			GetText(rs.scheme_without_slash) as scheme_text,
+			rd.domain as domain,
+			GetText(rd.domain) as domain_text,
+			r.roots as root,
+			GetText(r.roots) as root_text,
+			getReferrerCategoryWithoutPort(GetString(rs.scheme_without_slash), GetString(rd.domain), GetString(r.roots)) as category
+	from 
+		referrer ref,
+		referrer_scheme rs,
+		referrer_domain rd,
+		referrer_domain_roots_without_slash_not_considering_port r;
+
+create view referrer_host_type1 as
+	select 
+			ref.referrer_uri as referrer_uri_span,
+			GetText(ref.referrer_uri) as referrer_uri_text,
+			rs.scheme_without_slash as scheme,
+			GetText(rs.scheme_without_slash) as scheme_text,
+			rh.host as host,
+			GetText(rh.host) as host_text,
+			rhp.port as port,
+			GetText(rhp.port) as port_text,
+			rhrws.roots as root,
+			GetText(rhrws.roots) as root_text,
+			getReferrerCategoryWithPort(GetString(rs.scheme_without_slash), GetString(rh.host), GetString(rhp.port), GetString(rhrws.roots)) as category
+	from 
+		referrer ref,
+		referrer_scheme rs,
+		referrer_host rh,
+		referrer_host_ports rhp,
+		referrer_host_roots_without_slash rhrws;
+
+--without port
+create view referrer_host_type2 as
+	select 
+			ref.referrer_uri as referrer_uri_span,
+			GetText(ref.referrer_uri) as referrer_uri_text,
+			rs.scheme_without_slash as scheme,
+			GetText(rs.scheme_without_slash) as scheme_text,
+			rh.host as host,
+			GetText(rh.host) as host_text,
+			r.roots as root,
+			GetText(r.roots) as root_text,
+			getReferrerCategoryWithoutPort(GetString(rs.scheme_without_slash), GetString(rh.host), GetString(r.roots)) as category
+	from 
+		referrer ref,
+		referrer_scheme rs,
+		referrer_host rh,
+		referrer_host_roots_without_slash_not_considering_port r;
+		
+create function getTheNullSpan(span Span)
+	return String
+	external_name 'logAAqlUDFs.jar:com.ibm.logparse.aql.Util!getNullSpan'
+	language java
+	deterministic
+	return null on null input;
+		
+create view referrerDetails as 
+(select R.referrer_uri_span as referrer_uri_span, R.referrer_uri_text as referrer_uri_text, R.scheme as scheme, R.scheme_text as scheme_text, getTheNullSpan(R.scheme) as host, getTheNullSpan(R.scheme) as host_text, R.domain as domain, R.domain_text as domain_text, R.port as port, R.port_text as port_text, R.root as root, R.root_text as root_text, R.category as category from referrer_domain_type1 R)
+union all
+(select R.referrer_uri_span as referrer_uri_span, R.referrer_uri_text as referrer_uri_text, R.scheme as scheme, R.scheme_text as scheme_text, getTheNullSpan(R.scheme) as host, getTheNullSpan(R.scheme) as host_text, R.domain as domain, R.domain_text as domain_text, getTheNullSpan(R.scheme) as port, getTheNullSpan(R.scheme) as port_text, R.root as root, R.root_text as root_text, R.category as category from referrer_domain_type2 R)
+union all
+(select R.referrer_uri_span as referrer_uri_span, R.referrer_uri_text as referrer_uri_text, R.scheme as scheme, R.scheme_text as scheme_text, R.host as host, R.host_text as host_text, getTheNullSpan(R.scheme) as domain, getTheNullSpan(R.scheme) as domain_text, R.port as port, R.port_text as port_text, R.root as root, R.root_text as root_text, R.category as category from referrer_host_type1 R)
+union all
+(select R.referrer_uri_span as referrer_uri_span, R.referrer_uri_text as referrer_uri_text, R.scheme as scheme, R.scheme_text as scheme_text, R.host as host, R.host_text as host_text, getTheNullSpan(R.scheme) as domain, getTheNullSpan(R.scheme) as domain_text, getTheNullSpan(R.scheme) as port, getTheNullSpan(R.scheme) as port_text, R.root as root, R.root_text as root_text, R.category as category from referrer_host_type2 R);
+
+create view referrerDetailsOutputInterim as
+select 
+	R.referrer_uri_span as referrer_uri_span, 
+	R.referrer_uri_text as referrer_uri_text, 
+	R.scheme as scheme, 
+	R.scheme_text as scheme_text, 
+	R.host as host, 
+	R.host_text as host_text, 
+	R.domain as domain, 
+	R.domain_text as domain_text, 
+	R.port as port, 
+	R.port_text as port_text, 
+	R.root as root, 
+	R.root_text as root_text, 
+	R.category as category 
+from 
+	referrerDetails R
+consolidate on R.referrer_uri_span;
+
+create view HttpReferrerOutput as
+select
+	R.referrer_uri_span as span,
+	R.referrer_uri_text as text,
+	R.scheme as scheme,
+	R.scheme_text as scheme_text,
+	R.host as host,
+	R.host_text as host_text,
+	R.domain as domain,
+	R.domain_text as domain_text,
+	R.port as port,
+	R.port_text as port_text,
+	R.root as root,
+	R.root_text as root_text,
+	R.category as category,
+	GetString('Referrer') as field_type
+from
+	referrerDetailsOutputInterim R;
+	
+export view HttpReferrerOutput;

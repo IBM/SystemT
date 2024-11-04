@@ -1,0 +1,215 @@
+module nullargs;
+
+require document with columns text Text;
+
+-- This test suite tests every span-input scalar function 
+-- to see if it returns null if a null is passed in as input.
+-- (It outputs a regex match on success.)
+--
+-- Technically the null literal as an argument to a function is not valid AQL 
+-- but it is still handled correctly.  
+
+-- Chomp
+
+create view ChompTest as
+select 'Chomp' as testFunc,
+       N.firstArg as firstArg,
+       O.nullCol as nullCol,
+       Chomp(N.firstArg) as firstChomp,
+	   Chomp(O.nullCol) as nullChomp
+from _NullArgs N, _OnlyArg O;
+
+output view ChompTest;
+
+-- CombineSpans
+
+create view CombineSpansTest as
+select 'CombineSpans' as testFunc,
+       N.firstArg as firstArg,
+       N.secondArg as secondArg,
+       O.nullCol as nullCol,
+	   CombineSpans(N.firstArg, N.secondArg) as match,
+	   CombineSpans(O.nullCol,N.secondArg) as match2,
+	   CombineSpans(N.firstArg,O.nullCol) as match3
+from _NullArgs N, _OnlyArg O;
+
+output view CombineSpansTest;
+
+
+-- GetLanguage
+
+create view GetLanguageTest as
+select 'GetLanguage' as testFunc,
+       O.onlyArg as onlySpanArg,
+       O.nullCol as nullCol,
+	   GetLanguage(O.onlyArg) as match,
+	   GetLanguage(O.nullCol) as match2
+from _OnlyArg O;
+
+output view GetLanguageTest;
+
+
+-- LeftContext
+
+create view LeftContextTest as
+select 'LeftContext' as testFunc,
+       O.onlyArg as onlySpanArg,
+       O.nullCol as nullCol,
+	   LeftContext(O.onlyArg, 3) as match,
+	   LeftContext(O.nullCol, 3) as match2
+from _OnlyArg O;
+
+output view LeftContextTest;
+
+-- LeftContextTok
+
+create view LeftContextTokTest as
+select 'LeftContextTok' as testFunc,
+       O.onlyArg as onlySpanArg,
+       O.nullCol as nullCol,
+	   LeftContextTok(O.onlyArg, 3) as match,
+	   LeftContextTok(O.nullCol, 3) as match2
+from _OnlyArg O;
+
+output view LeftContextTokTest;
+
+-- RightContext
+
+create view RightContextTest as
+select 'RightContext' as testFunc,
+       O.onlyArg as onlySpanArg,
+       O.nullCol as nullCol,
+	   RightContext(O.onlyArg, 3) as match,
+	   RightContext(O.nullCol, 2) as match2
+from _OnlyArg O;
+
+output view RightContextTest;
+
+-- RightContextTok
+
+create view RightContextTokTest as
+select 'RightContextTok' as testFunc,
+       O.onlyArg as onlySpanArg,
+       O.nullCol as nullCol,
+	   RightContextTok(O.onlyArg, 3) as match,
+	   RightContextTok(O.nullCol, 3) as match2
+from _OnlyArg O;
+
+output view RightContextTokTest;
+
+
+-- Remap
+
+create view RemapTest as
+select 'Remap' as testFunc,
+       O.onlyArg as onlySpanArg,
+	   Remap(null) as match    -- can't remap using O.onlyArg as it's a non-derived Text
+from _OnlyArg O;
+
+output view RemapTest;
+
+
+-- SpanBetween
+
+create view SpanBetweenTest as
+select 'SpanBetween' as testFunc,
+       N.firstArg as firstArg,
+       N.secondArg as secondArg,
+       O.nullCol as nullCol,
+	   SpanBetween(N.firstArg, N.secondArg) as match,
+	   SpanBetween(O.nullCol, N.secondArg) as match2,
+	   SpanBetween(N.firstArg,O.nullCol) as match3
+from _NullArgs N, _OnlyArg O;
+
+output view SpanBetweenTest;
+
+
+-- SpanIntersection
+
+create view SpanIntersectionTest as
+select 'SpanIntersection' as testFunc,
+       N.firstArg as firstArg,
+       N.secondArg as secondArg,
+       O.nullCol as nullCol,
+	   SpanIntersection(N.firstArg, N.secondArg) as match,
+	   SpanIntersection(N.firstArg, O.nullCol) as match2,
+	   SpanIntersection(O.nullCol, N.secondArg) as match3
+from _NullArgs N,_OnlyArg O;
+
+output view SpanIntersectionTest;
+
+
+-- SubSpanTok
+
+create view SubSpanTokTest as
+select 'SubSpanTok' as testFunc,
+       O.onlyArg as onlySpanArg,
+       O.nullCol as nullCol,
+	   SubSpanTok(O.onlyArg, 2, 3) as match,
+	   SubSpanTok(O.nullCol, 2, 3) as match2
+from _OnlyArg O;
+
+output view SubSpanTokTest;
+
+-- ToLowerCase
+
+create view ToLowerCaseTest as
+select 'ToLowerCase' as testFunc,
+       O.onlyArg as onlySpanArg,
+       O.nullCol as nullCol,
+	   ToLowerCase(O.onlyArg) as match,
+	   ToLowerCase(O.nullCol) as match2
+from _OnlyArg O;
+
+output view ToLowerCaseTest;
+
+
+-- GetBegin
+
+create view GetBeginTest as
+select 'GetBegin' as testFunc,
+       O.onlyArg as onlySpanArg,
+       O.nullCol as nullCol,
+	   GetBegin(O.onlyArg) as match,
+	   GetBegin(O.nullCol) as match2
+from _OnlyArg O;
+
+output view GetBeginTest;
+
+
+-- GetEnd
+
+create view GetEndTest as
+select 'GetEnd' as testFunc,
+       O.onlyArg as onlySpanArg,
+       O.nullCol as nullCol,
+	   GetEnd(O.onlyArg) as match,
+	   GetEnd(O.nullCol) as match2
+from _OnlyArg O;
+
+output view GetEndTest;
+
+-- GetLength
+
+create view GetLengthTest as
+select 'GetLength' as testFunc,
+       O.onlyArg as onlySpanArg,
+       O.nullCol as nullCol,
+	   GetLength(O.onlyArg) as match,
+	   GetLength(O.nullCol) as match2
+from _OnlyArg O;
+
+output view GetLengthTest;
+
+-- GetLengthTok
+
+create view GetLengthTokTest as
+select 'GetLengthTok' as testFunc,
+       O.onlyArg as onlySpanArg,
+       O.nullCol as nullCol,
+	   GetLengthTok(O.onlyArg) as match,
+	   GetLengthTok(O.nullCol) as match2
+from _OnlyArg O;
+
+
+output view GetLengthTokTest;

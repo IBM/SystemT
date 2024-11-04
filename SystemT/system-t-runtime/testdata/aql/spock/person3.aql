@@ -1,0 +1,63 @@
+-- Find first names using a dictionary
+create view FirstName as 
+select D.match as first
+from Dictionary("spock/strictfirst.dict", DocScan.text) D
+where MatchesRegex(/[A-Z][a-z]*/, D.match);
+
+-- Find last names using a dictionary
+create view LastName as 
+select D.match as last
+from Dictionary("spock/strictlast.dict", DocScan.text) D
+where MatchesRegex(/[A-Z][a-z]*/, D.match);
+
+-- Find capitalized words using a regular expression
+create view CapsPerson as
+select R.match as word
+from   Regex(/\b\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}\b/, DocScan.text) R ;
+
+-- Rule R1 <FirstName><LastName>
+create view FNLN as
+select CombineSpans(FN.first, LN.last) as name
+from FirstName FN, LastName LN
+where FollowsTok(FN.first, LN.last,0,0);
+
+-- Rule R2 <CapsPerson><LastName>
+create view CPLN as
+select CombineSpans(CP.word, LN.last) as name
+from CapsPerson CP, LastName LN
+where FollowsTok(CP.word, LN.last,0,0);
+
+-- Rule R3 <FirstName><CapsPerson>
+create view FNCP as
+select CombineSpans(FN.first, CP.word) as name
+from FirstName FN, CapsPerson CP
+where FollowsTok(FN.first, CP.word,0,0);
+
+-- union Rule R2, R3
+create view WeakPersons as
+(select R.name as name from CPLN R)
+union all
+(select R.name as name from FNCP R);
+
+-- Identify WeakPersons overlapping with R1
+create view WeakPersonsToDelete as
+select WP.name as name
+from FNLN R, WeakPersons WP
+where Overlaps(R.name, WP.name);
+
+-- WeakPersons that do not overlap with R1
+create view WeakPersonsRemaining as 
+(select R.name as name from WeakPersons R)
+minus 
+(select R.name as name from WeakPersonsToDelete R);
+
+
+-- Union results of R1 and remaining weak persons
+create view AllPersons as
+(select R.name as name from FNLN R)
+union all
+(select R.name as name from WeakPersonsRemaining R);
+
+select R.name as name
+into Person
+from  AllPersons R;

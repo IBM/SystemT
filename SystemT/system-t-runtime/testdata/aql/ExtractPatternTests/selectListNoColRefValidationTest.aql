@@ -1,0 +1,56 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test cases for extension to sequence patterns to pass through attributes
+-- Verifies that extra items in select list do not contain a col reference 
+-- if the pattern is simple (i.e., it contains atoms of type: regex, dict or 
+-- token gap, and does not contain any column references. 
+--
+-------------------------------------------------------------------------------
+
+create view LowWord as
+extract 'LowWord' as type,
+	regex /[a-z]*/ on 1 token in D.text as match
+from Document D;
+
+-- This should compile: the select list doesn't have a col ref
+create view ColRef1 as
+extract 'CapsWord' as type,
+	pattern /[A-Z].*/ as match
+from Document D;
+
+output view ColRef1;
+
+-- This should not compile: the select list has a col ref D.text, but the pattern expression does not have a mention of "D"
+-- Should fail with: Invalid column references [D.text] in SELECT list: the PATTERN expression does not have column references, and cannot propagate additional fields to the output
+create view ColRef2 as
+extract D.text, 
+	pattern /[A-Z].*/ as match
+from Document D;
+
+output view ColRef2;
+
+-- This should not compile: the select list has a col ref D.*, but the pattern expression does not have a mention of "D"
+-- Should fail with: Invalid elements [<L>.*] in SELECT list: the PATTERN expression does not have column references, and cannot propagate additional attributes to the output 
+create view ColRef3 as
+extract L.*, GetText(L.match) as match_text, 
+	pattern /[A-Z].*/ as pat
+from LowWord L;
+
+output view ColRef3;
+
+-- This should not compile: the select list has a col ref L.text inside a function call, but the pattern expression does not have a mention of "D"
+-- Should fail with: Invalid elements [L.match] in SELECT list: the PATTERN expression does not have column references, and cannot propagate additional attributes to the output
+create view ColRef4 as
+extract GetText(L.match) as match_text, 
+	pattern /[A-Z].*/ as pat
+from LowWord L;
+
+output view ColRef4;
+
+-- This should not compile: we don's support extract *
+-- Should fail with: Encountered " "*" "* ".
+create view ColRef5 as
+extract *, 
+	pattern /[A-Z].*/ as pat
+from LowWord L;
+

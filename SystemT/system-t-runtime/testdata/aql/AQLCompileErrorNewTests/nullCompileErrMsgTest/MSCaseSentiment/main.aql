@@ -1,0 +1,105 @@
+module MSCaseSentiment;
+
+create dictionary ImplicitSentimentPatternDic as
+	('ActionWNegAdv', 'ExtrNegActs', 'NoWayToDesired', 'ImperToTgt', 'TgtNotDoesExpected', 
+	'TgtNeedRevision', 'TgtNeedToBeRevised');
+	
+create dictionary ExplicitSentimentPatternDic as
+	('SpkNotDoesPosOnTgt', 'TgtNotDoesPos', 'TgtIsNotPos', 'TgtHasNegAdj', 'TgtIsNeg');
+
+create view NegativeSentimentImplicit as
+	select S.*
+	from NegativeSentiment S
+	where MatchesDict('ImplicitSentimentPatternDic', S.PatternCode);
+--output view NegativeSentimentImplicit;
+
+create view NegativeSentimentExplicit as
+	select S.* 
+	from NegativeSentiment S
+	where MatchesDict('ExplicitSentimentPatternDic', S.PatternCode);
+--output view NegativeSentimentExplicit;
+
+create view NegativeSentimentRemainder1 as
+	(select S.* 
+	from NegativeSentiment S)
+	minus
+	(select S.*
+	from NegativeSentimentImplicit S);
+	
+create view NegativeSentimentRemainder as
+	(select S.* 
+	from NegativeSentimentRemainder1 S)
+	minus
+	(select S.*
+	from NegativeSentimentExplicit S);
+--output view NegativeSentimentRemainder;
+
+-- 'High Negative' --> 1
+-- 'Medium Negative' --> 2
+-- 'Low Negative' --> 3
+-- 'Neutral' --> 4 (Ideally, 'Facts or No-Sentiment' --> NULL)
+-- 'Low Positive' --> 5
+-- 'Medium Positive' --> 6
+-- 'High Positive' --> 7
+
+create view SentimentPre as
+	(select S.text, S.Pattern, S.target as NormalizedObject, S.target as Object, S.target as Target, 'N (1)' as Polarity, 
+	'High Negative (1)' as Degree
+	from NegativeSentimentExplicit S)
+	union all
+	(select S.text, S.Pattern, S.target as NormalizedObject, S.target as Object, S.target as Target, 'N (1)' as Polarity, 
+	'Low Negative (3)' as Degree
+	from NegativeSentimentImplicit S)
+	union all
+	(select S.text, S.Pattern, S.target as NormalizedObject, S.target as Object, S.target as Target, 'P (3)' as Polarity, 
+	'Low Positive (5)' as Degree
+	from PositiveSentiment S);
+
+create dictionary BadTargetDic as
+	('be', 'can', 'done', 'first', 'get', 'have', 'help', 'her', 'I\'d', 'I\'m', 'it', 'it\'s', 'I', 'me', 'no one', 'nothing', 
+	'one', 'plus', 'problem', 'problems', 'reason', 'sent', 'someone', 'something', 'that', 'them', 'they', 'thing', 'things', 
+	'this', 'us', 'user', 'you', 'way', 'we', 'what', 'which', 'who', '/', ':');
+
+create view SentimentBadTarget as
+	select S.*
+	from SentimentPre S
+	where MatchesDict('BadTargetDic', S.Target);
+--output view SentimentBadTarget;
+
+create view SentimentGoodTarget as
+	(select S.*
+	from SentimentPre S)
+	minus
+	(select S.*
+	from SentimentBadTarget S);
+--output view SentimentGoodTarget;
+
+create view SentimentPre2 as
+	(select S.text, S.Pattern, LeftContext(S.NormalizedObject,0) as NormalizedObject, LeftContext(S.Object,0) as Object, LeftContext(S.Target,0) as Target, S.Polarity, S.Degree
+	from SentimentBadTarget S)
+	union all
+	(select S.text, S.Pattern, S.NormalizedObject, S.Object, S.Target, S.Polarity, S.Degree
+	from SentimentGoodTarget S);
+	
+-- Keep sentiment that appears in any of the unstructured fields
+-- We modified sentences so the Subject is also considered for ActionAPI processing,
+-- because noun phrases in subject are used to bootstrap the taxonomy
+create view SentimentPre3 as
+select S.* 
+from SentimentPre2, Field_Unstructured F
+where Contains(F.field, S.text);
+
+create view SentimentDebug as
+	select S.text, S.Target, S.Pattern
+	from SentimentPre2 S;
+--output view SentimentDebug;
+
+create view Sentiment as
+	select 
+	       GetString(S.NormalizedObject) as NormalizedObject, 
+	       GetString(S.Object) as Object, 
+	       GetString(S.Target) as Target,
+	       S.Object as ObjectSpan,
+	       S.Polarity,
+	       S.Degree
+	from SentimentPre2 S;

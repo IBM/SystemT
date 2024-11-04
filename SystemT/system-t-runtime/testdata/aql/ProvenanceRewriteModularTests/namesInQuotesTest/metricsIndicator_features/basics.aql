@@ -1,0 +1,79 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+--*****************************************************************************
+-- BigInsights TextAnalytics sample Indicator extractor
+-- 
+-- File name: aql/Indicator/basics.aql
+-- Description: Basic Feature rules
+--*****************************************************************************
+
+
+module metricsIndicator_features;
+
+
+-- Note that all import statements in a given AQL script must be right below the top level
+-- module statement and above all other AQL statements.
+ 
+import dictionary metrics from module metricsIndicator_dictionaries as MetricDict;
+import dictionary units from module metricsIndicator_dictionaries as UnitDict;
+import dictionary abbreviations from module metricsIndicator_dictionaries as AbbreviationDict;
+
+--------------------------------------------------------------------------------------------
+
+-- Identify mentions of financial metrics
+-- Example: gross profit margin, cash flow, diluted earnings per share
+
+create view Metric as
+extract dictionary 'MetricDict' 
+	on D.text as match
+from Document D;
+
+--------------------------------------------------------------------------------------------
+
+-- Identify mentions of numbers with optional decimals
+-- Example: 7, 49, 11.2
+
+create view Number as
+extract regex /\d+(\.\d+)?/ 
+	on R.text as match
+from Document R; 
+
+--------------------------------------------------------------------------------------------
+
+-- Indentify mentions of financial amount units
+-- Example: million, billion
+
+create view Unit as
+extract dictionary 'UnitDict' 
+	on R.text as match
+from Document R; 
+
+--------------------------------------------------------------------------------------------
+
+-- Identify sentence boundaries as either:
+-- 	(a) two new lines separated by 0 or more whitespace, or
+-- 	(b) end of sentence punctuation (.?!) that does not overlap with a common abbreviation
+
+create view SentenceBoundary as
+extract regex /(\n\s*\n)|([\.\?!]+\s)/
+	on D.text as match
+from Document D
+-- Filter out common abbreviations
+having Not(ContainsDict('AbbreviationDict', 
+		CombineSpans(LeftContextTok(match, 1), match)));
+		
+---------------------------------------------------------------------------------------------

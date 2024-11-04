@@ -1,0 +1,20 @@
+-- detag the document if it contains html or xml tags
+-- detag Document.text as Doc
+-- detect content_type always;
+  
+-- add sentence boundary detection
+create view Sentences as
+extract
+    split using B.boundary
+        retain right split point
+        on B.text
+        as sentenceText
+from (
+    extract
+        D.text as text,
+        regex /(([\.\?!]+[\s]*)|(\n\s*\n))/ on D.text as boundary
+        from Doc D
+    -- Filter the candidate boundaries.
+    having Not(ContainsDict('abbreviation.dict',
+            CombineSpans(LeftContextTok(boundary, 1), boundary)))
+) B;

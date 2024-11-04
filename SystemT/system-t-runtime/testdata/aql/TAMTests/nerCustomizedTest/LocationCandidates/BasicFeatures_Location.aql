@@ -1,0 +1,94 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module LocationCandidates;
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText;
+
+import dictionary LeftContextCluesPositive from module Dictionaries as LeftContextCluesPositive;
+import dictionary RightContextCluesPositive from module Dictionaries as RightContextCluesPositive;
+import dictionary CardinalDirections from module Dictionaries as CardinalDirections;
+import dictionary LeftContextCluesPositiveForLocation from module Dictionaries as LeftContextCluesPositiveForLocation;
+import dictionary LeftContextCluesPositiveWeakForLocation from module Dictionaries as LeftContextCluesPositiveWeakForLocation;
+import dictionary RightContextCluesPositiveForLocation from module Dictionaries as RightContextCluesPositiveForLocation;
+import dictionary LeftContextCluesNegativeForLocation from module Dictionaries as LeftContextCluesNegativeForLocation;
+import dictionary RightContextCluesNegativeForLocation from module Dictionaries as RightContextCluesNegativeForLocation;
+import dictionary RolesInOrganizations from module Dictionaries as RolesInOrganizations;
+
+require document with columns
+text Text;
+
+
+create view RightMergeableContext as
+select D.match as match
+from (extract dictionary 'RightContextCluesPositive' 
+	with flags 'Exact' 
+		on D.text as match from DocumentText D) D;
+
+create view LeftMergeableContext as
+	extract
+		dictionaries 'LeftContextCluesPositive'
+				and 'CardinalDirections'
+			with flags 'Exact'
+			on D.text   
+        	as clue
+			from DocumentText D;
+			
+create view LocationLeftClue as
+extract
+    dictionary 'LeftContextCluesPositiveForLocation'
+        on D.text   
+        as clue
+from DocumentText D;
+
+create view LocationWeakLeftClue as
+extract
+	dictionary 'LeftContextCluesPositiveWeakForLocation'
+		on D.text
+		as clue
+from DocumentText D;
+
+create view LocationRightClue as
+extract
+    dictionary 'RightContextCluesPositiveForLocation'
+        on D.text   
+        as clue
+from DocumentText D;
+
+-- "east of ... "
+create view DirectionAll as
+select 
+	D.match as match
+from  
+	(extract 
+		dictionary 'CardinalDirections' 
+		on D.text as match 
+		from DocumentText D
+	) D;
+
+create view WrongLocationLeftClue as
+extract 
+	dictionaries 'LeftContextCluesNegativeForLocation' and 'RolesInOrganizations'
+	on D.text
+	as clue
+from DocumentText D;
+
+create view WrongLocationRightClue as
+extract 
+	dictionary 'RightContextCluesNegativeForLocation'
+	on D.text
+	as clue
+from DocumentText D;

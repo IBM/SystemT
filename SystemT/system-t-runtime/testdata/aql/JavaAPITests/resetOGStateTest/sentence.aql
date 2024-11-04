@@ -1,0 +1,42 @@
+--Extract all sentences from document by filtering the list of abbreviations.
+create view DefaultSentences as
+ extract
+     split using B.boundary
+         retain right split point
+         on B.text
+         as sentenceText
+ from (
+     extract
+         D.text as text,
+         regex /(([\.\?!]+[\s]*)|(\n\s*\n))|\u3002|\u2022/ on D.text as boundary --2022 for bullet
+         from Document D
+     -- Filter the candidate boundaries.
+     having Not(ContainsDict('abbreviation.dict','Exact',
+             CombineSpans(LeftContextTok(boundary, 1), boundary)))
+       ) B;
+--output view DefaultSentences;
+       
+create view SplitPoints as
+extract
+         regex /(([\.\?!]+[\s]*)|(\n\s*\n))|\u3002|\u2022/ on D.text as boundary --2022 for bullet
+         from Document D
+     -- Filter the candidate boundaries.
+     having Not(ContainsDict('abbreviation.dict','Exact',
+             CombineSpans(LeftContextTok(boundary, 1), boundary)));
+output view SplitPoints;
+
+
+--create dictionary SmallDict as(
+--	'mobilskal'
+--);
+--
+--create view SmallDictView as 
+--extract dictionary 'SmallDict' on D.text as match
+--from Document D;
+--
+--create view Join as
+--select CombineSpans(D.match, P.boundary)
+--from SmallDictView D, SplitPoints P
+--where FollowsTok(D.match, P.boundary, 0, 0);
+--
+--output view Join;

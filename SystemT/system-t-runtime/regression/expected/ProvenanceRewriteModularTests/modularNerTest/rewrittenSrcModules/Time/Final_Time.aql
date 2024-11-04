@@ -1,0 +1,45 @@
+module Time;
+
+
+create view Times as
+  select  __t2.match as match,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__52__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__52__Temp__1 __t1,
+        __Consolidate__52__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.match;
+
+output view Times;
+
+export view Time.FourDigits;
+
+
+export view Time.TwoDigitsInterval;
+
+
+export view Time.WKDay;
+
+
+export view Time.Times;
+
+
+create view __Consolidate__52__Temp__1 as
+  select  T.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as TimesExtendedAll_____sep_____T____id,
+          T.match as __consolidate__target
+  from  TimesExtendedAll T;
+
+output view __Consolidate__52__Temp__1;
+
+create view __Consolidate__52__Temp__2 as
+  select  __t1.match as match,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__52__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__52__Temp__2;
+

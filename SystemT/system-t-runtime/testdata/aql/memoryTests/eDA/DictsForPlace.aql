@@ -1,0 +1,410 @@
+--Tatiana: modified 28.01.09 merged with the AdditionalDictsForPlace.aql
+
+--------------------------------------------------------------------------
+--------             Language-specific Dictionaries              ---------
+--------------------------------------------------------------------------
+/* The language dependent filterLocation dictionaries are loaded only
+ in case the document has the corresponding language,
+ otherwise they are empty. E.g. if the language is set to 'en',
+ the FilterGermanLocation and FilterSpanishLocation are empty.*/
+
+create dictionary FilterGermanLocationDict 
+    from file 'dictionaries/de/filterGermanLocation.dict'
+    with language as 'de';
+
+create view FilterGermanLocation as
+    extract dictionary 'FilterGermanLocationDict'
+            on D.text   
+    as match
+    from Document D;
+    
+---------------
+    
+create dictionary FilterSpanishLocationDict 
+    from file 'dictionaries/es/filterSpanishLocation.dict'
+    with language as 'es';
+
+create view FilterSpanishLocation as
+    extract dictionary 'FilterSpanishLocationDict'
+            on D.text   
+    as match
+    from Document D;
+    
+----------------
+    
+create dictionary FilterEnglishLocationDict 
+    from file 'dictionaries/en/filterEnglishLocation.dict'
+    with language as 'en';
+
+create view FilterEnglishLocation as
+    extract dictionary 'FilterEnglishLocationDict'
+            on D.text   
+    as match
+    from Document D;
+    
+----------------
+--filterFrenchLocation
+  
+create dictionary FilterFrenchLocationDict 
+    from file 'dictionaries/fr/filterFrenchLocation.dict'
+    with language as 'fr';
+
+create view FilterFrenchLocation as
+    extract dictionary 'FilterFrenchLocationDict'
+            on D.text   
+    as match
+    from Document D;
+
+-- Armin 20-04-2009 
+-- avoid matches US$ US $, Canada$, Canada $ as locations
+create view CurrencyFalsePositive as
+    extract regex /((US|Canada))/ on D.text as match   -- New Zealand etc. can be included here if necessary
+	from Document D;
+
+create view Dollar as
+    extract regex /(\$|Dollar)/ on D.text as match            -- Euro, Pound and Yen not necessary because British and Japanese are adjectives, other currencies very seldom
+	from Document D;
+
+create view CountryFromCurrency1 as                          -- for English, German the sequence is US$
+select C.match as match
+       from CurrencyFalsePositive C,
+	        Dollar CN
+		where FollowsTok(C.match, CN.match, 0, 1);
+
+create view CountryFromCurrency2 as                          --for French the sequence is $US
+select C.match as match
+       from CurrencyFalsePositive C,
+	        Dollar CN
+		where FollowsTok(CN.match, C.match, 0, 1);   
+		
+create view CountryFromCurrency as
+(select C.match as match from CountryFromCurrency1 C)
+union all
+(select C.match as match from CountryFromCurrency2 C);
+
+/* The union of all the view contains only one dictionary,
+    depending on the language of the document*/
+    
+create view FilterLocation as
+    (select D.match as match
+        from FilterGermanLocation D)
+    union all
+    (select D.match as match
+        from FilterSpanishLocation D)
+    union all
+    (select D.match as match
+        from FilterEnglishLocation D)
+	union all
+	(select D.match as match 
+	    from CountryFromCurrency D)
+    union all
+    (select D.match as match
+        from FilterFrenchLocation D);
+-------------------------------------------------------------------
+----                    Country                                ----
+-------------------------------------------------------------------
+/*The strategy of language-dependent dictionary choice is the same
+    as for filterLocation dictionaries above, with the eception 
+    for English countries - they are loaded for every language, as
+    English is still the business correspondence language and it's
+    a high chance, that English is present in any language
+    
+  All the dictionaries match case sensitively, to avoid false positives*/
+create dictionary CountryEnglishDict 
+    from file 'dictionaries/en/country_english.dict'
+    --with language as 'en';
+	with case exact;
+    
+create dictionary CountryGermanDict 
+    from file 'dictionaries/de/country_german.dict'
+    with language as 'de';
+    
+create dictionary CountrySpanishDict 
+    from file 'dictionaries/es/country_spanish.dict'
+    with language as 'es';
+	
+create dictionary CountryFrenchDict
+   from file 'dictionaries/fr/country_french.dict'
+	with language as 'fr';
+            
+create view CountryEnglish as
+    extract dictionary 'CountryEnglishDict'
+            on D.text   
+    as match
+    from Document D;
+    
+create view CountryGerman as
+    extract dictionary 'CountryGermanDict'
+            on D.text   
+    as match
+    from Document D;
+    
+create view CountrySpanish as
+    extract dictionary 'CountrySpanishDict'
+            on D.text   
+    as match
+    from Document D;
+	
+create view CountryFrench as
+    extract dictionary 'CountryFrenchDict'
+	        on D.text
+	as match
+	from Document D;
+    
+/* Contains at least English countries, with possibly
+    one more country list for either German or Spanish(or French)*/
+	
+create view Country as
+    (select D.match as match
+        from CountryEnglish D)
+    union all
+    (select D.match as match
+        from CountryGerman D)
+    union all
+    (select D.match as match
+        from CountrySpanish D)
+	union all
+	(select D.match as match
+	    from CountryFrench D);
+
+-------------------------------------------------------------------
+--     States and other administrative divisions                 --
+-------------------------------------------------------------------
+--The administrative division dictionaries are not language dependent        
+create view USState  as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/en/stateListEn.dict',  Document.text) D;
+		
+create view GEState as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/de/stateListGe.dict',  Document.text) D;        
+
+-- spanish state list includes large administrative divisions of Spain, Chile, Mexico, Venezuela
+create view ESState as
+    select
+        D.match as match
+    from
+        Dictionary('dictionaries/es/stateListEs.dict', Document.text) D;
+
+--Canada,France,Switzerland and Belgium
+
+create view FRState as
+   select 
+	     D.match as match
+	from
+	     Dictionary('dictionaries/fr/stateListFr.dict', Document.text) D;
+		
+--union of the state dicionaries for all the 3 languages
+create view State as
+	(select C.match as match from USState C)
+	union all
+	(select C.match as match from GEState C)
+    union all
+	(select C.match as match from ESState C)
+	union all
+	(select C.match as match from FRState C);
+    
+-------------------------------------------------------------------
+		
+-- Additional American states dictionaries are used for address extraction in Place.aql
+-- The following do exact dictionary matching may missing entries such as 'Al', 'Ms'
+-- to avoid false positives in weak rules (e.g. the one w/o zipcode)	
+create view StateStrongAbbrev  as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/en/stateListAbbrev_english.dict',  'Exact', Document.text) D;
+
+create view StateWeakAbbrev  as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/en/stateListAbbrev_english.dict',  Document.text) D;
+		
+create view StateStrongAll
+	as
+	(select S.match as match from USState S)
+	union all 
+	 (select S.match as match from StateStrongAbbrev S);	
+	 
+create view StateWeakAll
+	as
+	(select S.match as match from USState S)
+	union all 
+	 (select S.match as match from StateWeakAbbrev S);
+     
+-------------------------------------------------------------------
+--                             Cities                            --
+-------------------------------------------------------------------
+/* English cities are loaded for all the languages. Case sensitive match.
+    German and Spanish dictionaries are loaded only for the corresponding
+    languages. GermanCities is used for German addresses. The tactics for
+    Spanish, Mexican, and other Spanish-based addresses is still to be
+    decided for. If there is no need for address etxraction to distinguish
+    between Spanish and Mexican cities, the dictionaries may be merged.      	
+
+ USCity very likely contains also Australian and British cities. Needs a check.*/
+create view USCity as
+	select
+		D.match as match
+	from
+		Dictionary('dictionaries/en/city_english.dict', 'Exact', Document.text) D;
+        
+-------	
+
+create dictionary GermanCitiesDict 
+    from file 'dictionaries/de/city_german.dict'
+    with language as 'de'
+    and case exact;
+    
+create view GermanCities as
+    extract dictionary 'GermanCitiesDict'
+            on D.text   
+    as match
+    from Document D;
+       
+------- 
+
+create dictionary CitySpainDict 
+    from file 'dictionaries/es/city_spanish.dict'
+    with language as 'es'
+    and case exact;
+    
+create view CitySpain as
+    extract dictionary 'CitySpainDict'
+            on D.text   
+    as match
+    from Document D; 
+        
+create dictionary CityMexicoDict 
+    from file 'dictionaries/es/city_mexico.dict'
+    with language as 'es'
+    and case exact;
+    
+create view CityMexico as
+    extract dictionary 'CitySpainDict'
+            on D.text   
+    as match
+    from Document D;
+                
+create view SpanishCities as
+	(select C.match as match from CitySpain C)
+	union all
+	(select C.match as match from CityMexico C);
+
+create dictionary FrenchCitiesDict 
+    from file 'dictionaries/fr/city_french.dict'
+    with language as 'fr'
+    and case exact;
+    
+create view FrenchCities as
+    extract dictionary 'FrenchCitiesDict'
+            on D.text   
+    as match
+    from Document D;
+--------
+
+/* allCity_world_filtered.dict contains the largest(the threshold is defined for
+    each country, depending on its size/density) and/or famous cities, as well
+    as capitols in all the supported languages */	
+-- all cities merged from different files
+create view AllCities as
+	select 
+		D.match as match
+	from
+	    Dictionary('dictionaries/allCity_world_filtered.dict', 'Exact', Document.text) D;
+                
+/* allCity_world_problematic.dict contains the cities, filtered from the
+   allCity_world_filtered.dict, containing spelling analogues in the names dictionaries.
+   Problematic cities are regarded to be locations only when a strong location clue is
+   provided. For more details see CityStateCountry.aql */
+    
+-- list of cities, that can also be used as personal names        
+create view ProblematicCities as
+	select 
+		D.match as match
+	from
+		Dictionary('dictionaries/allCity_world_problematic.dict', 'Exact', Document.text) D;
+        
+-------------------------------------------------------------------
+--                        Continents                             --
+-------------------------------------------------------------------
+/* English continents are loaded for all the languages. Case sensitive match.
+    German and Spanish dictionaries are loaded only for the corresponding
+    languages. */
+
+create dictionary ContinentEnglishDict 
+    from file 'dictionaries/en/continent_english.dict'
+    with case exact;        
+
+create view ContinentsEnglish as
+    extract dictionary 'ContinentEnglishDict'
+            on D.text   
+    as match
+    from Document D;
+    
+-------
+            
+create dictionary ContinentGermanDict 
+    from file 'dictionaries/de/continent_german.dict'
+    with language as 'de'
+    and case exact;        
+
+create view ContinentsGerman as
+    extract dictionary 'ContinentGermanDict'
+            on D.text   
+    as match
+    from Document D;
+    
+-------
+    
+create dictionary ContinentSpanishDict 
+    from file 'dictionaries/es/continent_spanish.dict'
+    with language as 'es'
+    and case exact;        
+
+create view ContinentsSpanish as
+    extract dictionary 'ContinentSpanishDict'
+            on D.text   
+    as match
+    from Document D;
+    
+-------
+    
+create dictionary ContinentFrenchDict 
+    from file 'dictionaries/fr/continent_french.dict'
+    with language as 'fr'
+    and case exact;        
+
+create view ContinentsFrench as
+    extract dictionary 'ContinentFrenchDict'
+            on D.text   
+    as match
+    from Document D;
+        
+/* Contains at least English continents, with possibly
+    one more country list for eather German, Spanish
+    or French*/
+create view ContinentsAll as
+    (select D.match as match from ContinentsEnglish D)
+	union all
+	(select D.match as match from ContinentsGerman D)
+    union all
+	(select D.match as match from ContinentsSpanish D)
+    union all
+	(select D.match as match from ContinentsFrench D);
+    
+---------------------------------------------------------------------
+    
+/* provided for the locations, which are not city names, continents,
+    countries, states, like Caribbean, etc. When the dictionary gets
+    larger, it may make sense to create a separate dictionary for
+    each language. */
+create view MiscellaneousPlace as
+    select D.match as match
+    from
+        Dictionary('dictionaries/miscellaneous_place.dict', 'Exact', Document.text) D;

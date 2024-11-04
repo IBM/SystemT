@@ -1,0 +1,115 @@
+module Person_Candidates;
+
+create view PersonStrongWithNewLine as
+	(select P.person as person from Person1 P)
+union all  
+    (select P.person as person from Person1a_more P)
+union all  
+    (select P.person as person from Person3 P)
+union all  
+    (select P.person as person from Person4 P)
+union all
+	(select P.person as person from Person3P1 P)
+union all
+	(select P.person as person from ChineseFullName P)
+union all
+	(select P.person as person from ThreeTokenPerson P)
+union all
+	(select P.* from PatternBasedPerson P);
+	   
+create view PersonStrongSingleTokenOnlyAll as  
+    (select P.person as person from Person5 P)
+union all  
+    (select P.person as person from Person6 P)
+union all
+    (select P.firstname as person from FirstName P)
+union all
+    (select P.lastname as person from LastName P)
+union all  
+    (select P.person as person from Person1a P)
+union all
+	(select P.person as person from FamousPeople P);
+	
+	
+-- remove those may be part of another entity
+create view PersonStrongSingleTokenOnly as
+	(select P.* from PersonStrongSingleTokenOnlyAll P)
+    minus
+    (select P.lastname as person from WrongLastNameAll P);	
+	
+	
+-- to expand person names with suffix
+create view PersonStrongSingleTokenOnlyExpanded1 as
+select CombineSpans(P.person,S.suffix) as person
+from
+	PersonStrongSingleTokenOnly P,
+	PersonSuffix S
+where 
+	FollowsTok(P.person, S.suffix, 0, 0);			
+	
+-- extend single token person with a single initial
+create view PersonStrongSingleTokenOnlyExpanded2 as
+	select Chomp(CombineSpans(R.person, RightContext(R.person,3))) as person
+	from PersonStrongSingleTokenOnly R
+	-- to match names like Kathy S.
+	where MatchesRegex(/ +[\p{Lu}\p{M}*]\b\.?\s*/, RightContext(R.person,3));
+	
+create view PersonStrongSingleTokenAll as
+	(select P.person as person from PersonStrongSingleTokenOnly P)
+	union all 
+	(select P.person as person from PersonStrongSingleTokenOnlyExpanded1 P)
+	union all 
+	(select P.person as person from PersonStrongSingleTokenOnlyExpanded2 P);
+
+
+create view PersonStrongSingleToken as
+select P.person as person
+from PersonStrongSingleTokenAll P
+where 
+  Not(MatchesRegex(/[ ]*[\u0093\u0094\u2018\u2019\u0022\u0027\u00AB\u00BB\u201A\u201B\u201C\u201D\u201E\u301D\u301E\u301F]\p{M}*[^sld]/, RightContextTok(P.person, 2)));  	
+			
+	
+/**
+ * Union all matches found by weak rules
+ */
+create view PersonWeak1WithNewLine as  
+	(select P.person as person from Person3r1 P)
+union all  
+    (select P.person as person from Person3r2 P)
+union all
+	(select P.person as person from Person4r1 P)
+union all  
+    (select P.person as person from Person4r2 P)
+union all  
+	(select P.person as person from Person2 P)
+union all  
+    (select P.person as person from Person2a P)
+union all
+	(select P.person as person from Person3P2 P)
+union all
+	(select P.person as person from Person3P3 P);
+	
+
+-- weak rules that identify (LastName, FirstName)
+create view PersonWeak2WithNewLineBasic as
+    (select P.person as person from Person4a P)
+union all 
+    (select P.person as person from Person4aextended P)
+union all 
+    (select P.person as person from Person4ar1 P)
+union all
+    (select P.person as person from Person4ar2 P);
+    
+-- to identify (LastName, FirstName Initial.)
+create view PersonWeak2WithNewLineExpanded as
+select CombineSpans(P.person, IW.word) as person
+from PersonWeak2WithNewLineBasic P, InitialWord IW
+where FollowsTok(P.person, IW.word, 0, 0);
+
+--(LastName, FirstName) unioned with (LastName, FirstName Initial.)
+create view PersonWeak2WithNewLine as
+    (select P.person as person from PersonWeak2WithNewLineBasic P)
+union all 
+    (select P.person as person from PersonWeak2WithNewLineExpanded P);
+	
+	

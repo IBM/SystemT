@@ -1,0 +1,481 @@
+----------------------------------------------------
+-- High precision rules: no need for filtering
+----------------------------------------------------
+create view LongCapsPlace as
+select CombineSpans(CP1.match, CP2.match) as match
+from CapsPlace CP1,
+     CapsPlace CP2
+where FollowsTok(CP1.match, CP2.match, 0, 1)
+  and MatchesRegex(/\s*(-|de)?\s*/, SpanBetween(CP1.match, CP2.match))
+  and Not(MatchesRegex(/([tT]he|an?)/, CP1.match));  
+  
+create view HyphenatedLongCapsPlace1 as
+select CombineSpans(CP1.match, CP2.match) as match
+from CapsPlace CP1,
+     CapsPlace CP2
+where FollowsTok(CP1.match, CP2.match, 3, 3)
+  and MatchesRegex(/-(\p{L}\p{M}*)+-/, SpanBetween(CP1.match, CP2.match));
+
+create view HyphenatedLongCapsPlace2 as
+select CombineSpans(LeftContextTok(CP.match, 2), CP.match) as match
+from CapsPlace CP
+where MatchesRegex(/al-/, LeftContextTok(CP.match, 2));
+
+  
+create view CapsInitial as
+extract
+	regex /(\p{Lu}\p{M}*\.?){1,2}/
+	on between 1 and 4 tokens in D.text
+	as word
+from Doc D;  
+  
+create view CapsPlaceWithInitial1 as
+select CombineSpans(I.word, CP.match) as match
+from   CapsInitial I,
+       CapsPlace CP
+where FollowsTok(I.word, CP.match, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(I.word, CP.match)));
+  
+create view CapsPlaceWithInitial2 as
+select CombineSpans(CP.match, I.word) as match
+from CapsInitial I,
+     CapsPlace CP
+where FollowsTok(CP.match, I.word, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(I.word, CP.match)));
+  
+create view AllCapsPlace as
+extract
+	regex	/(\p{Lu}\p{M}*){2,}/
+		on 1 token in D.text
+		as match
+from Doc D
+having MatchesRegex(/\s*,/, RightContextTok(match, 1))
+   and MatchesRegex(/[\r\n]/, LeftContext(match, 1));
+  
+create view RelaxedCapsPlaceAll as
+	(select CP.* from CapsPlace CP)
+	union all
+	(select CP.* from LongCapsPlace CP)
+	union all
+	(select CP.* from HyphenatedLongCapsPlace1 CP)
+	union all
+	(select CP.* from HyphenatedLongCapsPlace2 CP)
+	union all
+	(select CP.* from CapsPlaceWithInitial1 CP)
+	union all
+	(select CP.* from CapsPlaceWithInitial2 CP)
+	union all
+	(select O.* from AllCapsPlace O);
+	
+create view RelaxedCapsPlace as
+select CP.*
+from RelaxedCapsPlaceAll CP
+where Not(ContainsDict('pos/preps-list', SubSpanTok(CP.match, 1, 1)))
+  and Not(MatchesDict('pos/dets-list', CP.match));
+
+create view ExtraLongCapsPlace as
+select CombineSpans(CP1.match, CP2.match) as match
+from RelaxedCapsPlace CP1,
+     RelaxedCapsPlace CP2
+where FollowsTok(CP1.match, CP2.match, 1, 1)
+  and MatchesRegex(/\s*de\s*/, SpanBetween(CP1.match, CP2.match));
+  
+create view AllRelaxedCapsPlace as
+	(select CP.* from RelaxedCapsPlace CP)
+	union all
+	(select CP.* from ExtraLongCapsPlace CP);
+
+-- Cargo Flow Trend
+-- Saarbruecken 626 up 28.3 
+-- [Muenster] / Osnabrueck 382 up 28.2
+-- Tempelhof 202 down 60.0 
+
+--Laura: replaced with version below for performance
+/*
+create view CargoFlowStatLine as
+	extract 
+	 regex /([\r\n][^\r\n]*)\s+((\d{1,3},)?\d{3}\s+(up|down)\s*\d{1,2}\.\d{1,2}[^\r\n]*)/
+			on D.text 
+			return group 0 as line
+			  and  group 1 as cities
+			  and  group 2 as stat
+			from Doc D;
+			
+create view PatternBasedLocation1 as
+select C.match as loc
+from CapsPlaceOnetoTwo C,
+     CargoFlowStatLine S
+where Contains(S.line, C.match)
+  and FollowsTok(C.match, S.stat, 0, 5)
+  and Not(ContainsRegex(/([a-z]+\s+){2,}|sales/, S.cities));
+*/	
+
+create view CargoFlowStatLineClue as
+select S.stat as stat, LeftContextTok(S.stat, 10) as lc
+from
+(
+	extract 
+	 regex /(\d{1,3},)?\d{3}\s+(up|down)\s*\d{1,2}\.\d{1,2}/
+			on D.text 
+			return group 0 as stat
+			from Doc D
+) S;
+
+create view CargoFlowStatLine as
+extract S.stat as stat, 
+		regex /[^\r\n]*\s+\z/ on S.lc as cities
+from CargoFlowStatLineClue S
+having Not(ContainsRegex(/([a-z]+\s+){2,}|sales/, cities))
+   and Not(ContainsRegex(/[\n\r]/, cities));
+			
+			
+--output view CargoFlowStatLine;
+
+create view PatternBasedLocation1 as
+select C.match as loc
+from CapsPlaceOnetoTwo C,
+     CargoFlowStatLine S
+where Contains(S.cities, C.match)
+  and FollowsTok(C.match, S.stat, 0, 5);
+
+-- Commodity Price By City
+--Dewas 45 Yellow 12,700-12,950 12,900-13,150 12,900-13,100 
+--Black 11,900-12,100 
+--Mandsaur 10 Yellow 12,600-12,750 12,700-12,850 
+--Neemuch n.a Yellow - - 
+create view CommondityPriceLine as
+	extract
+		regexes /[\r\n](\p{L}+)\s+\d{1,2}\s+\p{L}+\s*(\s*((\d{1,2},)?\d{3})\s*-\s*((\d{1,2},)?\d{3}))+[^\r\n\p{L}]*/
+	    	and /[\r\n](\p{L}+)\s+(\s*(\d{1,2},)?\d{3})\s*-\s*((\d{1,2},)?\d{3})+[^\r\n]*/
+			and /[\r\n](\p{L}+)\s+(n.a.?)\s+\p{L}+\s*(-\s*-)[^\r\n]*/
+			on D.text
+			return group 1 as city
+			from Doc D;
+-- For the second line of each news article
+-- <Location>, <Location>? -- DATE
+-- Laura: replaced with more efficient version below
+ /*
+create view NewsReportSecondLine as
+	extract
+		regex /[\r\n]\s*(([a-zA-Z]+-?[a-zA-Z]+[ ]*){1,3})(,[ ]*([a-zA-Z]+[ ]*){1,3})?\s*\d{4}\-\d{2}-\d{2}\s*[\r\n]/
+		 on D.text
+		 return group 1 as city
+		    and group 4 as country
+		    and group 0 as line
+		 from Doc D;
+*/
+
+create view DateForSecondLine as
+select D.date as date, Chomp(LeftContextTok(D.date, 13)) as lc
+from
+(
+	extract
+		regex /\d{4}\-\d{2}-\d{2}/
+		 on D.text
+		 as date
+		 from Doc D
+	having ContainsRegex(/[\n\r]/, RightContextTok(date,1))
+) D;
+
+create view NewsReportSecondLine as
+select L.city as city, L.country as country, CombineSpans(L.line, L.date) as line
+from
+(
+extract 
+	D.date as date,
+	regex /[\r\n]\s*(([a-zA-Z]+-?[a-zA-Z]+[ ]*){1,3})(,[ ]*([a-zA-Z]+[ ]*){1,3})?\z/
+		on D.lc
+		return group 1 as city
+		    and group 4 as country
+		    and group 0 as line
+from DateForSecondLine D
+) L;
+
+
+--output view DateForSecondLine;
+--output view NewsReportSecondLine;
+		 
+----output view NewsReportSecondLine;
+		 
+create view CountryFromNewsReportSecondLine as
+select L.country as country
+from   NewsReportSecondLine L
+where NotNull(L.country);
+	 
+create view LocationFromNewsReportSecondLine as
+	(select R.match as loc 
+	 from Regex(/[^\s].*[^\s]/, NewsReportSecondLine.city) R)
+	union all
+	(select R.match as loc
+	 from Regex(/[^\s].*[^\s]/, CountryFromNewsReportSecondLine.country) R);
+
+-- based on cricket score report: At Cardiff :
+create view CricketLocation as
+select C.match as match
+from RelaxedCapsPlace C
+where MatchesRegex(/At\s+/, LeftContextTok(C.match, 1))
+  and MatchesRegex(/\s*:/, RightContextTok(C.match, 1));
+
+-- for Clean tanker fixtures and enquiries such as 
+-- Tenacity 70 24/08 [Mideast] / [South Korea] W145 Samsung .
+create view OneToTwoAllCapsWord as 
+extract 
+    regex /(\p{Lu}\p{M}*){2,}([ ](\p{Lu}\p{M}*){2,})?/
+        on between 1 and 2 tokens in D.text 
+        as match 
+from Doc D;
+
+create view RelaxedCapsPlaceOnetoTwo as
+	(select W.* from OneToTwoAllCapsWord W)
+	union all
+	(select W.* from CapsPlaceOnetoTwo W);
+
+create view PatternBasedLocation2All as
+select CP1.match as loc1, CP2.match as loc2
+from RelaxedCapsPlaceOnetoTwo CP1,
+     RelaxedCapsPlaceOnetoTwo CP2
+where FollowsTok(CP1.match, CP2.match, 1, 1)
+  and MatchesRegex(/[ ]*\/[ ]*/, SpanBetween(CP1.match, CP2.match))
+  and MatchesRegex(/[\d]{1,2}\/[\d]{1,2}[ ]*/, LeftContextTok(CP1.match, 3));
+  		 
+  		
+create view PatternBasedLocation2 as
+	(select P.loc1 as loc from PatternBasedLocation2All P)
+	union all
+	(select P.loc2 as loc from PatternBasedLocation2All P);
+
+-- for cases like "- MED / BLACK SEA "	
+create view PatternBasedLocation3All as
+select C1.match as match1, C2.match as match2
+from OneToTwoAllCapsWord C1,
+	 OneToTwoAllCapsWord C2
+where FollowsTok(C1.match, C2.match, 1, 1)
+  and MatchesRegex(/[ ]*\/[ ]*/, SpanBetween(C1.match, C2.match))
+  and MatchesRegex(/[\r\n]-[ ]*/, LeftContext(C1.match, 3));	 
+
+create view PatternBasedLocation3 as
+	(select C.match1 as loc from PatternBasedLocation3All C)
+	union all
+	(select C.match2 as loc from PatternBasedLocation3All C);
+	
+-- for cases like "traveling to"
+create dictionary LocationLeftClueDict as
+(
+    'travelling to', 'city of', 'comes from', 'flown to',
+    'west of', 'east of', 'north of', 'south of', 'outside of', 'near',
+    'located in', 'arrived at','visit to','outside', 'head to', 'depart for',
+    'district of', 'town of', 'municipality of', 'village of', 'outskirts of',
+    'sent to', 'bound for', 'suburb of', 'mayor of', 'provinces of'
+);
+
+create view LocationLeftClue as
+extract
+    dictionary 'LocationLeftClueDict'
+        on D.text   
+        as clue
+from Doc D;
+	
+create view PatternBasedLocation4 as
+select CP.match as loc
+from LocationLeftClue C,
+	 CapsPlaceOnetoTwo CP
+where FollowsTok(C.clue, CP.match, 0, 0)
+-- avoid matching month
+  and Not(MatchesRegex(/\s*\d+/, RightContextTok(CP.match, 1)));
+
+--output view PatternBasedLocation4;
+
+-- for cases like  'at ***.'
+create dictionary LocationWeakLeftClueDict as
+(
+    'at', 'streets in', 'centre of', 'move to','capital of', 'into', 'state of'
+);
+
+create view LocationWeakLeftClue as
+extract
+	dictionary 'LocationWeakLeftClueDict'
+		on D.text
+		as clue
+from Doc D;
+
+create view PatternBasedLocation5 as
+select CP.match as loc
+from LocationWeakLeftClue L,
+	 AllRelaxedCapsPlace CP
+where FollowsTok(L.clue, CP.match, 0, 0)
+    and MatchesRegex(/[ ]*([\r\n.;:(,]|(\p{Ll}\p{M}*)+|--).*/, RightContextTok(CP.match, 2));
+  
+--output view PatternBasedLocation5;  
+  
+-- for cases like "Van province"
+create dictionary LocationRightClueDict as
+(	
+	'province', 'subdivision', 'suburb', 'village'
+);
+
+create view LocationRightClue as
+extract
+    dictionary 'LocationRightClueDict'
+        on D.text   
+        as clue
+from Doc D;
+	
+create view PatternBasedLocation6 as
+select CP.match as loc
+from CapsPlaceOnetoTwo CP,
+	 LocationRightClue C	 
+where FollowsTok(CP.match, C.clue, 0, 0);
+
+--output view PatternBasedLocation6;
+
+create view PatternBasedLocation7 as
+select CP.match as loc
+from CapsPlace CP
+where MatchesRegex(/(in)\s+/, LeftContextTok(CP.match, 1))
+  and MatchesRegex(/\s+,\s*(an?)/, RightContextTok(CP.match, 2))
+  and Not(ContainsDict('month.dict', CP.match));
+  
+-- in City, State
+create view StateClue as
+	(select S.* from StateWeakAll S)
+	union all
+	(select S.* from StateStrongAll S);
+	
+create view PatternBasedLocation8 as
+select CP.match as loc
+from RelaxedCapsPlace CP,
+     StateClue S
+where FollowsTok(CP.match, S.match, 1, 1)
+  and MatchesRegex(/(in|\.|and)\s+/, LeftContextTok(CP.match, 1))
+  and MatchesRegex(/\s*,\s*/, SpanBetween(CP.match, S.match))
+  and MatchesRegex(/[A-Z].*/, S.match);
+
+--output view PatternBasedLocation8;
+
+create view PatternBasedLocation9 as
+select CP.match as loc
+from RelaxedCapsPlace CP
+where MatchesRegex(/[Ii]n\s*/, LeftContextTok(CP.match, 1))
+  and MatchesRegex(/\s*[:,]/, RightContextTok(CP.match, 1))
+  and Not(ContainsDict('month.dict', CP.match));
+  
+--output view PatternBasedLocation9;
+
+create view PatternBasedLocation10 as
+select CP.match as loc
+from CapsPlace CP
+where MatchesRegex(/from\s*/, LeftContextTok(CP.match, 1))
+  and MatchesRegex(/\s*to/, RightContextTok(CP.match, 1))
+  and Not(ContainsDict('month.dict', CP.match));
+
+--output view PatternBasedLocation10;
+
+-- the official *** news agency
+create view PatternBasedLocation11 as
+select CP.match as loc
+from CapsPlace CP
+where MatchesRegex(/.*the[ ]+(official[ ]+)?[ ]*/, LeftContextTok(CP.match, 2))
+  and MatchesRegex(/[ ]+news[ ]+agency/, RightContextTok(CP.match, 2));
+  
+-- ***, 80 miles ...
+create view PatternBasedLocation12 as
+select CP.match as loc
+from CapsPlace CP
+where MatchesRegex(/\s*,\s(about\s+)?\d{1,2}\s+(miles|kms).*/, RightContextTok(CP.match, 4));
+
+--output view PatternBasedLocation12;
+
+-- "east of ... "
+create view DirectionAll as
+select D.match as match
+from   Dictionary('direction.dict', Doc.text) D;
+
+create view PatternBasedLocation13 as
+select CP.match as loc
+from RelaxedCapsPlace CP,
+     DirectionAll D
+where FollowsTok(D.match, CP.match, 1, 2)
+  and MatchesRegex(/\s*of\s+(the)?\s*/, SpanBetween(D.match, CP.match))
+  and Not(ContainsDict('misc/ethnicGroup.dict', CP.match)); 
+  
+--output view DirectionAll;
+--output view PatternBasedLocation13;
+
+-- the *** border
+create dictionary LocationWeakRightClueDict as
+(	
+	'area', 'border', 'treaty'
+);
+
+create view PatternBasedLocation14 as
+select CP.match as loc
+from RelaxedCapsPlace CP
+where MatchesRegex(/the\s*/, LeftContextTok(CP.match, 1))
+  and ContainsDict('LocationWeakRightClueDict', RightContextTok(CP.match, 1))
+  and Not(ContainsDict('misc/ethnicGroup.dict', CP.match))
+  and Not(ContainsDict('nationality.dict', CP.match));
+  
+--output view PatternBasedLocation14;
+--output view RelaxedCapsPlace;
+
+-- city state pattern at the beginning of each line
+create view PatternBasedLocation15 as
+select CP.match as loc
+from RelaxedCapsPlace CP,
+     StateStrongAll S
+where FollowsTok(CP.match, S.match, 0, 1)
+  and MatchesRegex(/[ ]*[,]?[ ]*/, SpanBetween(CP.match, S.match))
+  and MatchesRegex(/[\r\n]/, LeftContext(CP.match, 1));
+
+--output view PatternBasedLocation15;
+
+-- through *** in
+create view PatternBasedLocation16 as
+select CP.match as loc
+from RelaxedCapsPlaceAll CP
+where MatchesRegex(/(through|in|at)\s*/, LeftContextTok(CP.match, 1))
+  and MatchesRegex(/\s*(in|near|at|outside)/, RightContextTok(CP.match, 1));
+  
+--output view PatternBasedLocation16;
+
+
+create view PatternBasedLocation as
+	(select P.* from PatternBasedLocation1 P)
+	union all
+	(select P.* from PatternBasedLocation2 P)
+	union all
+	(select P.* from PatternBasedLocation3 P)
+	union all
+	(select P.* from PatternBasedLocation4 P)
+	union all
+	(select P.* from PatternBasedLocation5 P)
+	union all
+	(select P.* from PatternBasedLocation6 P)
+	union all
+	(select P.* from PatternBasedLocation7 P)
+	union all
+	(select P.* from PatternBasedLocation8 P)
+	union all
+	(select P.* from PatternBasedLocation9 P)
+	union all
+	(select P.* from PatternBasedLocation10 P)
+	union all
+	(select P.* from PatternBasedLocation11 P)
+	union all
+	(select P.* from PatternBasedLocation12 P)
+	--union all
+	--(select P.* from PatternBasedLocation13 P)
+	union all
+	(select P.* from PatternBasedLocation14 P)
+	union all
+	(select P.* from PatternBasedLocation15 P)
+	union all
+	(select P.* from PatternBasedLocation16 P)
+	union all
+	(select P.* from LocationFromNewsReportSecondLine P)
+	union all
+	(select P.city as loc from CommondityPriceLine P)
+	union all
+	(select C.match as loc from CricketLocation C); 
+
+--output view PatternBasedLocation;

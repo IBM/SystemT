@@ -1,0 +1,42 @@
+module was;
+
+-- *****************************************************
+-- Extracts class name or a fully qualified class name in the given document (i.e. a logical log entry/record) that
+-- (i) immediately follows an EventType 
+-- (ii) surrounded by a single whitespace
+-- Eg:
+--	[12/31/11 0:31:24:484 PST] 00000189 servlet       I com.ibm.ws.webcontainer.servlet.ServletWrapper doDestroy SRVE0253I: [MyHRService-v1] [/services/corp_svc/myhr/MyHRWebService/V1] [org.kp.svc.corp_svc.myhr.myhrorginfoservice.v1.MyHrOrgInfoSoapImpl]: Destroy successful.
+-- Here 'com.ibm.ws.webcontainer.servlet.ServletWrapper' following 'I' (an eventType indicating 'Info') is the class name of our interest
+-- *****************************************************
+
+create view Classname_ws_base as 
+select 
+	R.match 
+from 
+	Regex(/((?:[a-zA-Z])+)(\.)*((?:\w|-|_|\.|\$)*)(\.)*([A-Z](?:\w|\$)*)/,
+        Document.text) R;    
+    	
+create view Classname_ws_interim as 
+    select C.match
+    from Classname_ws_base C
+    where MatchesRegex(/\s/, LeftContext(C.match, 1))
+    and MatchesRegex(/\s/, RightContext(C.match, 1));
+
+create view Classname_ws as
+select 
+	classname_wsI.match as classname_ws
+from 
+	EventType_sysoutErr eventTypeF,
+	Classname_ws_interim classname_wsI
+where 
+	FollowsTok(eventTypeF.eventType, classname_wsI.match, 0, 0);	
+
+create view Classname_wsOutputInterim as
+select D.classname_ws as classname_ws_Span, GetText(D.classname_ws) as classname_ws_Text
+from Classname_ws D;
+
+create view ClassnameWSOutput as
+select D.classname_ws_Span as span, D.classname_ws_Text as text, GetString('ClassnameWS') as field_type
+from Classname_wsOutputInterim D;
+
+export view ClassnameWSOutput;

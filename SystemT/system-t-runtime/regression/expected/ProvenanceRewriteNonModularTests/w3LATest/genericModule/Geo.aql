@@ -1,0 +1,57 @@
+module genericModule;
+
+
+create function ConstructEvidence(
+  srcType String  ,srcContent String)
+return Text
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.GeoUDF!ConstructEvidence'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create function MapRegion(
+  regions String  ,countries String)
+return Text
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.GeoUDF!MapRegion'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create view W3GeographyCand as
+  select  C.evidence as countryevidence,
+          C.country as countries,
+          R.evidence as regionevidence,
+          R.region as regions,
+          S.evidence as siteevidence,
+          S.site as sites,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as GeoCountry_____sep_____C____id,
+          R.__auto__id as GeoRegion_____sep_____R____id,
+          S.__auto__id as GeoSite_____sep_____S____id
+  from  GeoCountry C,
+        GeoRegion R,
+        GeoSite S;
+
+output view W3GeographyCand;
+
+create view W3Geography as
+  select  W.countryevidence as countryevidence,
+          W.countries as countries,
+          W.regionevidence as regionevidence,
+          W.regions as regions,
+          W.siteevidence as siteevidence,
+          W.sites as sites,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          W.__auto__id as W3GeographyCand_____sep_____W____id
+  from  W3GeographyCand W;
+
+output view W3Geography;
+

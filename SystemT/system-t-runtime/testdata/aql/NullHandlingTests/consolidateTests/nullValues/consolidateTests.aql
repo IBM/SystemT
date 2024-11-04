@@ -1,0 +1,161 @@
+module nullValues;
+
+-- This ensures that consolidation policies are functioning correctly with nulls
+
+require document with columns text Text;
+
+------------------------------------------------------------------------------
+-- Tests of the CONSOLIDATE clause
+------------------------------------------------------------------------------
+
+-- AllNames contains some nulls
+
+create view AllNames as
+  (
+    select
+      F.match as firstName, null as middleName, null as lastName, F.length as length  -- null span for last name
+    from
+      FirstNameWithLength F
+  )
+  union all
+  (
+    select
+      null as firstName, null as middleName, L.match as lastName, null as length -- null span for first name and length
+    from
+     LastName L
+  );
+  
+-- Testing consolidate clause with default policy ContainedWithin 
+create view ContainedWithinPolicyTest as
+select 
+	A.length as length,
+	A.firstName as firstName,
+	A.middleName as middleName,
+	A.lastName as lastName
+from AllNames A
+consolidate on A.lastName
+  using 'ContainedWithin';
+
+output view ContainedWithinPolicyTest;
+
+
+-- Testing consolidate clause with policy NotContainedWithin 
+create view NotContainedWithinPolicyTest as
+select 
+	A.length as length,
+	A.firstName as firstName,
+	A.middleName as middleName,
+	A.lastName as lastName
+from AllNames A
+consolidate on A.lastName
+  using 'NotContainedWithin';
+
+output view NotContainedWithinPolicyTest;
+
+
+-- Testing consolidate clause with policy ContainsButNotEqual
+-- THIS IS THE ONLY POLICY TO RETAIN ALL NULL SPANS
+create view ContainsButNotEqualPolicyTest as
+select 
+	A.length as length,
+	A.firstName as firstName,
+	A.middleName as middleName,
+	A.lastName as lastName
+from AllNames A
+consolidate on A.lastName
+  using 'ContainsButNotEqual';
+
+output view ContainsButNotEqualPolicyTest;
+
+
+-- Testing consolidate clause with policy ExactMatch
+create view ExactMatchPolicyTest as
+select 
+	A.length as length,
+	A.firstName as firstName,
+	A.middleName as middleName,
+	A.lastName as lastName
+from AllNames A
+consolidate on A.lastName
+  using 'ExactMatch';
+
+output view ExactMatchPolicyTest;
+
+
+-- Testing consolidate clause with policy LeftToRight
+create view LeftToRightPolicyTest as
+select 
+	A.length as length,
+	A.firstName as firstName,
+	A.middleName as middleName,
+	A.lastName as lastName
+from AllNames A
+consolidate on A.lastName
+  using 'LeftToRight';
+
+output view LeftToRightPolicyTest;
+
+-- Testing all policies of consolidate clause with null column
+-- PZ added for defect 99489
+create view ConsolidateNullCol as
+  select  A.firstName as firstName,A.length as len,
+          null as nullie
+  from  AllNames A;
+  
+create view ConsolidateCWNullColTest as
+  select A.firstName,A.nullie 
+  from ConsolidateNullCol A
+  consolidate on A.nullie
+  using 'ContainedWithin';
+   
+ output view ConsolidateCWNullColTest;
+ 
+ create view ConsolidateNotCWNullColTest as
+  select A.firstName,A.nullie 
+  from ConsolidateNullCol A
+  consolidate on A.nullie
+  using 'NotContainedWithin';
+   
+ output view ConsolidateNotCWNullColTest;
+ 
+ create view ConsolidateNENullColTest as
+  select A.firstName,A.nullie 
+  from ConsolidateNullCol A
+  consolidate on A.nullie
+  using 'ContainsButNotEqual';
+   
+ output view ConsolidateNENullColTest;
+ 
+  create view ConsolidateEMNullColTest as
+  select A.firstName,A.nullie 
+  from ConsolidateNullCol A
+  consolidate on A.nullie
+  using 'ExactMatch';
+   
+ output view ConsolidateEMNullColTest;
+ 
+ create view ConsolidateLTRNullColTest as
+  select A.firstName,A.nullie 
+  from ConsolidateNullCol A
+  consolidate on A.nullie
+  using 'LeftToRight';
+   
+ output view ConsolidateLTRNullColTest;
+ 
+ create view ConsolidateLTRP1NullColTest as
+  select A.firstName,A.nullie,A.len 
+  from ConsolidateNullCol A
+  consolidate on A.nullie
+  using 'LeftToRight' with priority from A.len;
+   
+ output view ConsolidateLTRP1NullColTest;
+ 
+-- null column should be allowed as priority
+
+ create view ConsolidateLTRP2NullColTest as
+  select A.firstName,A.nullie
+  from ConsolidateNullCol A
+  consolidate on A.firstName
+  using 'LeftToRight' with priority from A.nullie;
+   
+ output view ConsolidateLTRP2NullColTest;

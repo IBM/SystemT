@@ -1,0 +1,42 @@
+-----------------------------------------------------------------------------
+-- lookupTest.aql
+--
+-- AQL side of ICD9Tests.lookupTest()
+-----------------------------------------------------------------------------
+
+-- Read in the lookup table from a shared external file.
+include 'rawCodeTable.aql';
+
+-- Create a dictionary from the lookup table.
+create dictionary ICD9PhraseDict from table ICD9
+with entries from phrase;
+
+-- Find all matches of the dictionary.
+create view ICD9Phrase as
+extract dictionary ICD9PhraseDict on D.text as phrase
+from Document D;
+
+-- Map matches back to their ICD9 codes.
+create view ICD9Code as
+select I.code as code, P.phrase as phrase
+from ICD9Phrase P, ICD9 I
+where Equals(ToLowerCase(P.phrase), ToLowerCase(I.phrase));
+
+create dictionary PositiveClueDict as (
+	'reveals'
+);
+
+create view PositiveClue as
+extract
+	dictionaries 'PositiveClueDict'
+	on D.text as clue
+from Document D;
+
+create view SingleDisease as
+select C.*
+from  PositiveClue CL,
+	  ICD9Code C
+where FollowsTok(CL.clue, C.phrase, 0, 0);
+     
+output view SingleDisease;
+output view ICD9Code;

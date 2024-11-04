@@ -1,0 +1,19 @@
+module test;
+
+-- Document has a text and a url fields
+require document with columns
+	text Text
+	and url Text;
+
+-- Mix of spans over the text and url document fields	
+-- Spans over url are serialized with the docref attribute, those over text are not
+create view SpanOverText as
+	extract regex /[a-z]+/ on 1 token in D.text as match
+	from Document D;
+	
+create view SpanOverUrl as
+	extract regex /[a-z]+/ on 1 token in D.url as match
+	from Document D;
+	
+output view SpanOverText as 'SpanOverText';
+output view SpanOverUrl as 'SpanOverUrl';

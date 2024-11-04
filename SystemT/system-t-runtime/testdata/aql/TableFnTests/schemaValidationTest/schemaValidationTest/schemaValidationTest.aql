@@ -1,0 +1,106 @@
+module schemaValidationTest;
+require document with columns text Text;
+
+-- Test of schema validation for table functions.
+
+-- Declare a simple table function, but with the wrong output schema.
+-- This error will be masked by problems with input schema, so we throw in 
+-- another problem with the "return null on null input" clause.
+create function MyTableFunc1( intArg Integer )
+return table( stringVal Text )
+external_name 
+    -- Path relative to module root; udfjars is inside <project root>/testdata
+    '../../../../udfjars/tableFnTestsUDFs.jar:com.ibm.test.udfs.BasicTableFunc!eval'
+language java
+deterministic
+return null on null input;
+
+-- Declare another copy of the same table function, with the wrong input
+-- schema.  
+create function MyTableFunc2( intArg Integer, badArg Integer )
+return table( stringVal Text, realVal Float )
+external_name 
+    -- Path relative to module root; udfjars is inside <project root>/testdata
+    '../../../../udfjars/tableFnTestsUDFs.jar:com.ibm.test.udfs.BasicTableFunc!eval'
+language java
+deterministic
+called on null input;
+
+-- Declare another copy of the same table function, with both schemas
+-- incorrect.  The output schema problem will be masked by the input schema
+-- problem.
+create function MyTableFunc3( intArg Integer, badArg Integer )
+return table( stringVal Text )
+external_name 
+    -- Path relative to module root; udfjars is inside <project root>/testdata
+    '../../../../udfjars/tableFnTestsUDFs.jar:com.ibm.test.udfs.BasicTableFunc!eval'
+language java
+deterministic
+called on null input;
+
+-- Declare a table function with the same problems as MyTableFunc2, except that
+-- it isn't called in any view.  We should still see the same compile errors 
+-- regarding input schema.  
+create function MyTableFunc4( intArg Integer, badArg Integer )
+return table( stringVal Text, realVal Float )
+external_name 
+    -- Path relative to module root; udfjars is inside <project root>/testdata
+    '../../../../udfjars/tableFnTestsUDFs.jar:com.ibm.test.udfs.BasicTableFunc!eval'
+language java
+deterministic
+called on null input;
+
+
+-- Declare a scalar function with locator inputs, with the wrong output schema
+create function MyScalarFunc1( 
+    firstArg table( spanVal Span ) as locator,
+    secondArg table( spanVal Span, strVal Text ) as locator
+)
+return Integer
+external_name 
+    -- Path relative to module root; udfjars is inside <project root>/testdata
+    '../../../../udfjars/tableFnTestsUDFs.jar:com.ibm.test.udfs.TableConsumingScalarFunc!eval'
+language java
+deterministic
+return null on null input;
+
+-- Declare a scalar function with locator inputs, with an additional
+-- (incorrect) argument
+create function MyScalarFunc2( 
+    firstArg table( spanVal Span ) as locator,
+    secondArg table( spanVal Span, strVal Text ) as locator,
+    badThirdArg Span
+)
+return String
+external_name 
+    -- Path relative to module root; udfjars is inside <project root>/testdata
+    '../../../../udfjars/tableFnTestsUDFs.jar:com.ibm.test.udfs.TableConsumingScalarFunc!eval'
+language java
+deterministic
+called on null input;
+
+
+
+-- Create views that call all the first three functions.  Vary the calling methods, so as
+-- to exercise as much code as possible.
+create view TabFuncOutput1 as
+select * from MyTableFunc1(3);
+
+output view TabFuncOutput1;
+
+create view TabFuncOutput2 as
+select F.stringVal as strval from MyTableFunc2(3) F;
+
+output view TabFuncOutput2;
+
+-- This used to fail for comparing String and Text.  It should not fail with removal of String type.
+create view TabFuncOutput3 as
+select 
+    case 
+        when Equals('Hello world', F.stringVal) then 'Yo'
+        else 'Moo'
+    as dummyCol
+from MyTableFunc3(2) F;
+
+output view TabFuncOutput3;
+

@@ -1,0 +1,72 @@
+-------------------------------------------------------------------------------
+-- GeoMappingPreprocess.aql
+--
+-- Collect geography dictionaries from geo mapping tables
+--
+-- Depends on:
+-- 				dicts/geo/countryMapping_EN.aql
+-- 				dicts/geo/regionMapping_EN.aql
+-- 				dicts/geo/siteMapping_EN.aql
+--
+-- Author: Laura Chiticariu <chiti@us.ibm.com>
+-------------------------------------------------------------------------------
+
+
+-- *****************************************************************
+-- ***                       COUNTRY                            ****
+-- *****************************************************************
+
+create view CountryMapping as
+select toUpperCase(T.term) as name, toUpperCase(T.normalForm) as code
+from countryMapping_EN T;
+
+create dictionary GeoCountryNameDict
+from table countryMapping_EN
+with entries from term;
+
+create dictionary GeoCountryCodeDict
+from table countryMapping_EN
+with entries from normalForm;
+
+-- Negative clue dictionary to account for the fact that Runtime needs 
+-- the country code US to be specified as a country variant,
+-- causing many mistakes in local analysis (
+-- e.g., en-us in URL, and "us" token in meta description, title, H1s)
+-- This dictionary is used for filtering matches on any features 
+-- where we look for country names only (no codes).
+create dictionary GeoCountryNameInvalid as(
+	'US'
+);
+
+
+-- *****************************************************************
+-- ***                       REGION                             ****
+-- *****************************************************************
+
+create view RegionMapping as
+select toUpperCase(T.term) as name, toUpperCase(T.normalForm) as code
+from regionMapping_EN T;
+
+create dictionary GeoRegionNameDict
+from table regionMapping_EN
+with entries from term;
+
+create dictionary GeoRegionCodeDict
+from table regionMapping_EN
+with entries from normalForm;
+
+-- *****************************************************************
+-- ***                       SITE                             ****
+-- *****************************************************************
+
+create view SiteMapping as
+select toUpperCase(T.term) as name, toUpperCase(T.normalForm) as code
+from siteMapping_EN T;
+
+create dictionary GeoSiteNameDict
+from table siteMapping_EN
+with entries from term;
+
+create dictionary GeoSiteCodeDict
+from table siteMapping_EN
+with entries from normalForm;

@@ -1,0 +1,71 @@
+module webaccess;
+
+
+create view Username_base as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__48__Temp_____sep_____R____id
+  from  __Subquery__48__Temp R;
+
+output view Username_base;
+
+create view Username_interim as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as Username_base_____sep_____C____id
+  from  Username_base C
+  where Not(MatchesRegex(/\./, LeftContext(C.match, 1)))
+     and Not(MatchesRegex(/\./, RightContext(C.match, 1)));
+
+output view Username_interim;
+
+create view Username as
+  select  usernameI.match as username,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          lognameF.__auto__id as Logname_____sep_____lognameF____id,
+          usernameI.__auto__id as Username_interim_____sep_____usernameI____id
+  from  Logname lognameF,
+        Username_interim usernameI
+  where FollowsTok(lognameF.logname, usernameI.match, 0, 0);
+
+output view Username;
+
+create view UsernameOutputInterim as
+  select  D.username as username_Span,
+          GetText(D.username) as username_Text,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as Username_____sep_____D____id
+  from  Username D;
+
+output view UsernameOutputInterim;
+
+create view UsernameOutput as
+  select  U.username_Span as span,
+          U.username_Text as text,
+          GetString('Username') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as UsernameOutputInterim_____sep_____U____id
+  from  UsernameOutputInterim U;
+
+output view UsernameOutput;
+
+export view webaccess.UsernameOutput;
+
+
+create view __Subquery__48__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____Document____id,
+    regex /[\w\_.]+/
+    with flags 'DOTALL'
+    on Document.text
+    return group 0 as match
+  from Document Document;
+
+output view __Subquery__48__Temp;
+

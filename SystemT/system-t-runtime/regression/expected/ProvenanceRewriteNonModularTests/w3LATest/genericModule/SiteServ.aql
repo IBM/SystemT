@@ -1,0 +1,84 @@
+module genericModule;
+
+
+create view UrlCountry as
+  extract D.label as url,
+    D.text as Dtext,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /\/siteserv\/[^\/]+\/(.+)\/locations.html/
+    with flags 'DOTALL'
+    on D.label
+    return group 1 as countryname
+  from Document D;
+
+output view UrlCountry;
+
+create view CityUrl as
+  extract D.label as label,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /<a href=\"([^\/][^>\"]+index.html)\">([^<]+)<\/a>/
+    with flags 'DOTALL'
+    on D.text
+    return group 1 as url
+       and group 2 as cityname
+  from Document D;
+
+output view CityUrl;
+
+create view EscapingCity as
+  select  UnescapeHTML(GetText(D.cityname)) as cityname,
+          D.url as url,
+          D.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as CityUrl_____sep_____D____id
+  from  CityUrl D;
+
+output view EscapingCity;
+
+create view FinalUrl as
+  select  D.url as url1,
+          resolveUrl(GetText(C.url), GetText(D.url)) as url,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as UrlCountry_____sep_____C____id,
+          D.__auto__id as CityUrl_____sep_____D____id
+  from  UrlCountry C,
+        CityUrl D
+  where Equals(C.url, D.label);
+
+output view FinalUrl;
+
+create view CountryNameCity as
+  select  C.countryname as countryname,
+          D.cityname as city,
+          D.url as url1,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as UrlCountry_____sep_____C____id,
+          D.__auto__id as EscapingCity_____sep_____D____id
+  from  UrlCountry C,
+        EscapingCity D
+  where Equals(C.url, D.label);
+
+output view CountryNameCity;
+
+create view SiteServ as
+  select  GetText(C.countryname) as countryname,
+          C.city as city,
+          U.url as url,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          U.__auto__id as FinalUrl_____sep_____U____id,
+          C.__auto__id as CountryNameCity_____sep_____C____id
+  from  FinalUrl U,
+        CountryNameCity C
+  where Equals(U.url1, C.url1)
+  order by C.city;
+
+output view SiteServ;
+

@@ -1,0 +1,54 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- chomp.aql
+--
+-- Test of the Chomp() scalar function.
+-------------------------------------------------------------------------------
+
+-- Find first names, using an exhaustive dictionary.
+create view FirstName as
+select D.match as name
+from Dictionary('dictionaries/first.dict', Document.text) D
+where MatchesRegex(/\A[A-Z][a-z]*\Z/, D.match);
+
+-- Add some whitespace to the left and right.
+create view FirstNameLeft as
+select CombineSpans(LeftContext(F.name, 1), F.name) as name
+from FirstName F;
+
+create view FirstNameRight as
+select CombineSpans(F.name, RightContext(F.name,1)) as name
+from FirstName F;
+
+create view FirstNameBoth as
+select CombineSpans(LeftContext(F.name, 1), RightContext(F.name,1)) as name
+from FirstName F;
+
+-- Try applying the function to all the inputs we've created.
+create view FNChomp as
+select Chomp(F.name) as name
+from FirstName F;
+
+create view LeftChomp as
+select Chomp(F.name) as name
+from FirstNameLeft F;
+
+create view RightChomp as
+select Chomp(F.name) as name
+from FirstNameRight F;
+
+create view BothChomp as
+select Chomp(F.name) as name
+from FirstNameBoth F;
+
+output view FirstName;
+output view FirstNameLeft;
+output view FirstNameRight;
+output view FirstNameBoth;
+
+output view FNChomp;
+output view LeftChomp;
+output view RightChomp;
+output view BothChomp;
+

@@ -1,0 +1,29 @@
+-------------------------------------------------------------------------------
+--
+-- Tests for common errors with REQUIRE statements.
+--
+-------------------------------------------------------------------------------
+
+
+
+require document with columns
+	text Text;
+	
+require document with columns
+	text Text;
+	
+	
+create view ShortWord as
+extract 'LowWord' as type,
+	regex /[a-z]{3,7}/ on 1 token in D.text as match
+from Document D;
+
+create view TwoToThreeShortWords as
+extract blocks
+	with count between 2 and 3
+	and separation between 0 and 10 characters
+	on S.match as capswords
+from ShortWord S;
+
+output view TwoToThreeShortWords;
+	

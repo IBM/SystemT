@@ -1,0 +1,26 @@
+-------------------------------------------------------------------------------
+-- adjacentFollowsTokBug.aql
+--
+-- Test for a bug in the implementation of AdjacentJoin
+-- with the slow path evaluation.
+-- #166957:	ArrayIndexOutOfBoundsException in AdjacentJoin.evalSlowPath()
+-------------------------------------------------------------------------------
+
+
+create view FourDigits as
+extract 
+	regex /((20)|(19)|(18)|(17)|(16))[\d][\d]/ on D.text as match
+from Document D;
+
+create view Date13 as
+	select
+		CombineSpans(y1.match, y2.match) as match
+	from
+		FourDigits y1,
+		FourDigits y2
+	where
+		FollowsTok(y1.match, y2.match, 1, 1)
+	and MatchesRegex(/\s*-\s*/, SpanBetween(y1.match, y2.match));
+	
+--output view FourDigits;
+output view Date13;

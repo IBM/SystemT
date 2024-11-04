@@ -1,0 +1,23 @@
+module StateOrProvince;
+
+import view Country_ from module Country as Country_;
+import view StateStrongAll from module CommonFeatures as StateStrongAll;
+
+
+create view StateCountry as
+select S.match as state, C.country as country, C.continent as continent, CombineSpans(S.match, C.reference) as reference
+from StateStrongAll S,
+	 Country_ C
+where FollowsTok(S.match, C.country, 0, 1)
+  and MatchesRegex(/\s*[,]?\s*/, SpanBetween(S.match, C.country))
+  and Not(ContainsRegex(/[\n\r]/, SpanBetween(S.match, C.country)));
+  
+create view StateAll as
+	(select S.state as stateorprovince, S.country as country, S.continent as continent, S.reference as reference from StateCountry S)
+	union all
+	(select S.match as stateorprovince, '' as country, '' as continent, S.match as reference from StateCandidateValid S);
+
+create view StateOrProvince_ as
+select S.stateorprovince as stateorprovince, S.country as country, S.continent as continent, S.reference as reference
+from StateAll S
+consolidate on S.stateorprovince;

@@ -1,0 +1,57 @@
+CreateExternalView("ExternalView1",
+"ExternalViewFromJson1",
+  (
+    "match" => "Text",
+    "id" => "Float"
+  )
+);
+$ExternalView1 = ExternalViewScan("ExternalView1");
+$Document = DocScan(
+  (
+    "text" => "Text",
+    "label" => "Text"
+  )
+);
+$ExternalView1_Copy =
+Project(
+  (
+    "W.match" => "match",
+    "W.id" => "id",
+    "@@genericModule@@ExternalView1_Copy@@__auto__id" => "__auto__id",
+    "@@genericModule@@ExternalView1_Copy@@__stmt__type" => "__stmt__type",
+    "@@genericModule@@ExternalView1_Copy@@ExternalView1_____sep_____W____id" => "ExternalView1_____sep_____W____id",
+    "@@genericModule@@ExternalView1_Copy@@Document_____sep_____D____id" => "Document_____sep_____D____id"
+  ),
+  ApplyFunc(
+    IntConst(
+      -1
+    ) => "@@genericModule@@ExternalView1_Copy@@Document_____sep_____D____id",
+    ApplyFunc(
+      IntConst(
+        -1
+      ) => "@@genericModule@@ExternalView1_Copy@@ExternalView1_____sep_____W____id",
+      ApplyFunc(
+        StringConst(
+          "STMT_TYPE_SELECT"
+        ) => "@@genericModule@@ExternalView1_Copy@@__stmt__type",
+        ApplyFunc(
+          AutoID()
+ => "@@genericModule@@ExternalView1_Copy@@__auto__id",
+          NLJoin(
+            True(),
+            $Document,
+            Project(
+              (
+                "id" => "W.id",
+                "match" => "W.match"
+              ),
+              $ExternalView1
+            )
+          )
+        )
+      )
+    )
+  )
+);
+
+Output: $ExternalView1_Copy;

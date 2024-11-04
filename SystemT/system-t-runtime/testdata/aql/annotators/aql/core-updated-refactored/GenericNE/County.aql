@@ -1,0 +1,76 @@
+/*create dictionary ClueCountyDict as
+('county');*/
+
+create view CountyClue as
+select D.match as match
+--from   Dictionary('ClueCountyDict', Doc.text) D;
+from (extract dictionary 'location/clues/loc_county_posClue_en.dict' on D.text as match from Doc D) D;
+
+/*create dictionary FilterCountyDict as
+('the', 'for');*/
+
+create view WeakCounty as
+	select D.match as match
+	--from   Dictionary('county.dict', Doc.text) D
+	--from (extract dictionary 'country.dict' on D.text as match from Doc D) D
+	from (extract dictionary 'loc_world_countries_en.dict' on D.text as match from Doc D) D
+	-- Sudarshan regex : 10/12/2011 - change to unicode equivalent and include combination marks - line 16
+	--where MatchesRegex(/\p{Upper}.+/, D.match);
+	where MatchesRegex(/\p{Lu}\p{M}*.+/, D.match);
+
+create view CountyCandidates1 as
+select CombineSpans(C.match, CC.match) as match
+from CapsPlaceOnetoTwo C,
+	 CountyClue CC
+where FollowsTok(C.match, CC.match, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, C.match))
+  and Not(ContainsRegex(/[\r\n\t]{2}/, SpanBetween(C.match, CC.match)))
+  --and Not(ContainsDict('FilterCountyDict', C.match));
+  and Not(ContainsDict('location/clues/filter_loc_county_en.dict', C.match));
+
+create view CountyCandidates2 as
+select CombineSpans(C.match, CC.match) as match
+from WeakCounty C,
+	 CountyClue CC
+where FollowsTok(C.match, CC.match, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, C.match))
+  and Not(ContainsRegex(/[\r\n\t]{2}/, SpanBetween(C.match, CC.match)));
+
+-- county that are not state/city
+create view CityorStateOrCountry as
+	(select C.match as match from CityAll C)
+	union all
+	(select S.match as match from StateCandidate S)
+	union all
+	(select C.match as match from CountryCandidate C);
+
+create view CountyWrong as
+select C.match as match
+from WeakCounty C,
+	 CityorStateOrCountry CSC
+where Equals(C.match, CSC.match);
+
+create view StrongCounty as
+	(select C.match as match from WeakCounty C)
+	minus
+	(select C.match as match from CountyWrong C);
+  
+create view CountyCandidates3 as
+select C.match as match
+from StateCandidate S,
+	 WeakCounty C
+where FollowsTok(C.match, S.match, 1, 1)
+  and MatchesRegex(/\s*\(\s*/, SpanBetween(C.match, S.match))
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(C.match, S.match)));
+  
+create view CountyCandidates as
+	(select C.match as match from CountyCandidates1 C)
+	union all
+	(select C.match as match from CountyCandidates2 C)
+	union all
+	(select C.match as match from CountyCandidates3 C);
+    
+create view CountyConsolidated as
+select C.match as match
+from CountyCandidates C
+consolidate on C.match;

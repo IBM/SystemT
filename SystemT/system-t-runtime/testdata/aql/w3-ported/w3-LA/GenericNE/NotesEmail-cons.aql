@@ -1,0 +1,49 @@
+
+-- Merge overlapping Person name and notes email
+  create view PersonNotesEmail as
+  select CombineSpans(P.person, E.annot) as annot
+  from FinalPersonConsolidated P,
+       Email2 E
+  where Overlaps(P.person, E.annot)
+    and Not(Contains(E.annot, P.person))
+    and GreaterThan(GetBegin(E.annot), GetBegin(P.person)); 
+    
+  create view ValidPersonNotesEmail as
+  select E.annot as annot
+  from PersonNotesEmail E
+  where Not(MatchesRegex(/([^\s\/]+\s+){3}.+/, E.annot));
+  
+ /**
+  * Output Likely Personal Notes email
+  */
+ create view AllPersonalNotesEmail as
+ 	(select E.annot as annot from ValidPersonNotesEmail E)
+ 	union all 
+ 	(select E.annot as annot from Email2_b E);
+ 
+  -- change output to remove url/email
+ -- select C.annot as email
+ -- into PersonalNotesEmail
+ create view PersonalNotesEmail as
+ select C.annot as email
+ from AllPersonalNotesEmail C
+ consolidate on C.annot;
+  
+  
+ /**
+  * Output all Notes email
+  */
+ 
+ create view AllNotesEmail as
+ 	(select E.annot as annot from ValidPersonNotesEmail E)
+ 	union all 
+ 	(select E.annot as annot from Email2 E);
+ 	
+ -- change output to remove url/email
+  -- select C.annot as email
+  -- into NotesEmail
+  create view NotesEmail as
+  select C.annot as email
+  from AllNotesEmail C
+  consolidate on C.annot;
+ 

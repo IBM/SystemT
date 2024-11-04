@@ -1,0 +1,119 @@
+-------------------------------------------------------------------------------
+-- URLDedupSpecial.aql  
+--
+-- Calculates special dedup strings for URLs using patterns provided 
+-- by the Shared Faceted Search Service (SFSS).
+-- This will override the default dedup string calculated by the 
+-- URL annotator ( in URL.aql)
+-- 
+-- Depends on URL.aql
+--
+-------------------------------------------------------------------------------
+
+
+-- KnowledgeView
+-- Pattern: "syntheticKey=" + SYN_KEY
+-- Document id: SYN_KEY
+create view UrlID_KnowledgeView as
+extract regex /syntheticKey=([^&]+)/ on U.url
+	return group 1 as id
+from PageURL U;
+
+
+-- IGSDF
+-- Pattern: ".com/MethodWebUMF/browse/guidance.htm?ID=" + URL_ENDING_STRING
+-- Document ids: ".com/methodwebumf/browse/guidance.htm?id=" + lowercase(URL_ENDING_STRING)
+create view UrlID_IGSDF as
+select toLowerCase(U.id) as id
+from 
+(
+	extract regex /\.com\/MethodWebUMF\/browse\/guidance\.htm\?ID=([^&]+)/ on U.url
+		return group 0 as id
+	from PageURL U
+) U;
+
+
+-- RAM (including iRAM, OracleRAM, SAPReal) 
+-- Pattern: "generalDetails.faces?guid=" + DOC_ID
+-- Document id: DOC_ID
+create view UrlID_RAM as
+extract regex /generalDetails\.faces\?guid=([^&]+)/ on U.url
+	return group 1 as id
+from PageURL U;
+
+
+-- Quickr
+-- Pattern: "/lotus/mypoc/?uri=wcm%3a" + WCM_ID
+-- Pattern: "/lotus/mypoc/?uri=wcm:" + WCM_ID
+-- Document id: "urn:lsid:ibm.com:wcm:" + WCM_ID
+create view UrlID_Quickr as
+select StringConcat2('urn:lsid:ibm.com:wcm:', GetString(U.id)) as id
+from 
+(
+	extract regex /\/lotus\/mypoc\/\?uri=wcm((%3a)|:)([^&]+)/ on U.url
+		return group 3 as id
+	from PageURL U
+) U;
+
+
+-- SalesOne 
+-- Pattern: "salesone/ShowDoc.wss?docid=" + DOC_ID
+-- Document id: DOC_ID
+create view UrlID_SalesOne as
+extract regex /salesone\/ShowDoc\.wss\?docid=([^&]+)/ on U.url
+	return group 1 as id
+from PageURL U;
+
+
+-- SalesSupportInformation (SSI) 
+-- Pattern 1: "support/ShowDoc.wss?docid=" + ID + "&infotype=" + TYPE + "&infosubtype=" + SUBT
+-- Pattern 2: "support/ShowDoc.wss?htmlfid=" + ID + "&infotype=" + TYPE + "&infosubtype=" + SUBT
+-- Document id: TYPE + SUBT + ID
+create view UrlID_SSI as
+extract regex /support\/ShowDoc\.wss\?((docid)|(htmlfid))=(([^&]+)&infotype=([^&]+)&infosubtype=([^&]+))/ on U.url
+	return group 4 as id
+from PageURL U;
+
+
+-- eXtremeLeverage 
+-- Pattern: "xl/portal/content?synKey=" + SYN_KEY
+-- Document id: SYN_KEY
+create view UrlID_eXtremeLeverage as
+extract regex /xl\/portal\/content\?synKey=([^&]+)/ on U.url
+	return group 1 as id
+from PageURL U;
+
+
+-- For MediaLibrary the URL pattern is
+-- Pattern: "medialibrary/media_view?id=" + M_ID
+-- Document id: M_ID
+create view UrlID_MediaLibrary as
+extract regex /medialibrary\/media_view\?id=([^&]+)/ on U.url
+	return group 1 as id
+from PageURL U;
+
+
+--****************************************************
+-- Union together all patterns 
+--****************************************************
+create view URLDedupSpecialCand as
+(select * from UrlID_KnowledgeView)
+union all
+(select * from UrlID_IGSDF)
+union all
+(select * from UrlID_RAM)
+union all
+(select * from UrlID_Quickr)
+union all
+(select * from UrlID_SalesOne)
+union all
+(select * from UrlID_SSI)
+union all
+(select * from UrlID_eXtremeLeverage)
+union all
+(select * from UrlID_MediaLibrary);
+
+create view URLDedupSpecial as
+select GetString(U.id) as id
+from URLDedupSpecialCand U
+limit 1;

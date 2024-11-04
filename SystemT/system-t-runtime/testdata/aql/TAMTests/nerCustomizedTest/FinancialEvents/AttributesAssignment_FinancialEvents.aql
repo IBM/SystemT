@@ -1,0 +1,296 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module FinancialEvents; 
+
+create view Merger_ as
+select E.stockexchange1 as stockexchange1, E.stocksymbol1 as stocksymbol1, E.company1 as company1, 
+	   E.stockexchange2 as stockexchange2, E.stocksymbol2 as stocksymbol2, E.company2 as company2,
+	   E.stockexchange3 as stockexchange3, E.stocksymbol3 as stocksymbol3, E.company3 as company3,
+	   E.companycreated as companycreated,
+	   E.date as date, E.datestring as datestring,
+	   E.status as status, E.reference as reference
+from
+(
+	(
+		select E.exchange1 as stockexchange1, E.ticker1 as stocksymbol1, E.company1 as company1, 
+		  	   E.exchange2 as stockexchange2, E.ticker2 as stocksymbol2, E.company2 as company2,
+		  	   '' as stockexchange3, '' as stocksymbol3, '' as company3,
+		  	   '' as companycreated,
+		  	   '' as date, '' as datestring,
+		  	   E.status as status, E.match as reference
+		from MergerWithStatusShort E
+	)
+	union all
+	(
+		select E.exchange1 as stockexchange1, E.ticker1 as stocksymbol1, E.company1 as company1, 
+		  	   E.exchange2 as stockexchange2, E.ticker2 as stocksymbol2, E.company2 as company2,
+		  	   E.exchange3 as stockexchange3, E.ticker3 as stocksymbol3, E.company3 as company3,
+		  	   '' as companycreated,
+		  	   '' as date, '' as datestring,
+		  	   E.status as status, E.match as reference
+		from MergerWithStatusLong E
+		where Not(ContainsRegex(/\n[^\n]{5,200}\n/, E.match)) and
+		      Not(ContainsRegex(/\>/, E.match))
+	)
+) E
+consolidate on E.reference;
+
+
+
+create view Acquisition_ as
+select E.stockexchange1 as stockexchange1, E.stocksymbol1 as stocksymbol1, E.company1 as company1, 
+	   E.stockexchange2 as stockexchange2, E.stocksymbol2 as stocksymbol2, E.company2 as company2,
+	   E.stockexchange3 as stockexchange3, E.stocksymbol3 as stocksymbol3, E.company3 as company3,
+	   E.date as date, E.datestring as datestring,
+	   E.status as status, E.reference as reference
+from
+(
+	(
+		select E.exchange1 as stockexchange1, E.ticker1 as stocksymbol1, E.company1 as company1, 
+		  	   E.exchange2 as stockexchange2, E.ticker2 as stocksymbol2, E.company2 as company2,
+		  	   E.exchange3 as stockexchange3, E.ticker3 as stocksymbol3, E.company3 as company3,
+		  	   '' as date, '' as datestring,
+		  	   E.status as status, E.match as reference
+		from AcquisitionWithStatusShort E
+	)
+	union all
+	(
+		select E.exchange1 as stockexchange1, E.ticker1 as stocksymbol1, E.company1 as company1, 
+		  	   E.exchange2 as stockexchange2, E.ticker2 as stocksymbol2, E.company2 as company2,
+		  	   E.exchange3 as stockexchange3, E.ticker3 as stocksymbol3, E.company3 as company3,
+		  	   '' as date, '' as datestring,
+		  	   E.status as status, E.match as reference
+		from AcquisitionWithStatusLong E
+		where Not(ContainsRegex(/\n[^\n]{5,200}\n/, E.match)) and
+		      Not(ContainsRegex(/\>/, E.match))
+	) 
+) E
+consolidate on E.reference;
+
+
+
+create view JointVenture_ as
+select E.stockexchange1 as stockexchange1, E.stocksymbol1 as stocksymbol1, E.company1 as company1, 
+	   E.stockexchange2 as stockexchange2, E.stocksymbol2 as stocksymbol2, E.company2 as company2,
+	   E.stockexchange3 as stockexchange3, E.stocksymbol3 as stocksymbol3, E.company3 as company3,
+	   E.companycreated as companycreated,
+	   E.date as date, E.datestring as datestring,
+	   E.status as status, E.reference as reference
+from
+(
+	(
+		select E.exchange1 as stockexchange1, E.ticker1 as stocksymbol1, E.company1 as company1, 
+		  	   E.exchange2 as stockexchange2, E.ticker2 as stocksymbol2, E.company2 as company2,
+		  	   E.exchange3 as stockexchange3, E.ticker3 as stocksymbol3, E.company3 as company3,
+		  	   '' as companycreated,
+		  	   '' as date, '' as datestring,
+		  	   E.status as status, E.match as reference
+		from JointVentureWithStatusShort E
+	)
+	union all
+	(
+		select E.exchange1 as stockexchange1, E.ticker1 as stocksymbol1, E.company1 as company1, 
+		  	   E.exchange2 as stockexchange2, E.ticker2 as stocksymbol2, E.company2 as company2,
+		  	   E.exchange3 as stockexchange3, E.ticker3 as stocksymbol3, E.company3 as company3,
+		  	   '' as companycreated,
+		  	   '' as date, '' as datestring,
+		  	   E.status as status, E.match as reference
+		from JointVentureWithStatusLong E
+		where Not(ContainsRegex(/\n[^\n]{5,200}\n/, E.match)) and
+		      Not(ContainsRegex(/\>/, E.match))
+	) 
+) E
+consolidate on E.reference;
+
+
+
+create view Alliance_ as
+select E.stockexchange1 as stockexchange1, E.stocksymbol1 as stocksymbol1, E.company1 as company1, 
+	   E.stockexchange2 as stockexchange2, E.stocksymbol2 as stocksymbol2, E.company2 as company2,
+	   E.stockexchange3 as stockexchange3, E.stocksymbol3 as stocksymbol3, E.company3 as company3,
+	   E.date as date, E.datestring as datestring,
+	   E.status as status, E.reference as reference
+from
+(
+	(
+		select E.exchange1 as stockexchange1, E.ticker1 as stocksymbol1, E.company1 as company1, 
+		  	   E.exchange2 as stockexchange2, E.ticker2 as stocksymbol2, E.company2 as company2,
+		  	   E.exchange3 as stockexchange3, E.ticker3 as stocksymbol3, E.company3 as company3,
+		  	   '' as date, '' as datestring,
+		  	   E.status as status, E.match as reference
+		from AllianceWithStatusShort E
+	)
+	union all
+	(
+		select E.exchange1 as stockexchange1, E.ticker1 as stocksymbol1, E.company1 as company1, 
+		  	   E.exchange2 as stockexchange2, E.ticker2 as stocksymbol2, E.company2 as company2,
+		  	   E.exchange3 as stockexchange3, E.ticker3 as stocksymbol3, E.company3 as company3,
+		  	   '' as date, '' as datestring,
+		  	   E.status as status, E.match as reference
+		from AllianceWithStatusLong E
+		where Not(ContainsRegex(/\n[^\n]{5,200}\n/, E.match)) and
+		      Not(ContainsRegex(/\>/, E.match))
+	) 
+) E
+consolidate on E.reference;
+
+create view Merger as
+select 
+	C.company1 as company1, C.company1_detag as company1_detag, GetText(C.company1) as company1_text, GetText(C.company1_detag) as company1_detag_text,  
+	C.stockexchange1 as stockexchange1, 
+	C.stocksymbol1 as stocksymbol1, 
+	C.company2 as company2, C.company2_detag as company2_detag, GetText(C.company2) as company2_text, GetText(C.company2_detag) as company2_detag_text, 
+	C.stockexchange2 as stockexchange2, 
+	C.stocksymbol2 as stocksymbol2, 
+	C.company3 as company3,
+	C.stockexchange3 as stockexchange3, 
+	C.stocksymbol3 as stocksymbol3, 	
+	C.companycreated as companycreated,
+	C.date as date, 
+	C.datestring as datestring,
+	C.status as status, 
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text
+from
+(
+	select
+		Remap(C.company1) as company1, C.company1 as company1_detag, 
+		C.stockexchange1 as stockexchange1, 
+		C.stocksymbol1 as stocksymbol1, 
+		Remap(C.company2) as company2, C.company2 as company2_detag,
+		C.stockexchange2 as stockexchange2, 
+		C.stocksymbol2 as stocksymbol2, 
+		C.company3 as company3,
+		C.stockexchange3 as stockexchange3, 
+		C.stocksymbol3 as stocksymbol3, 	
+		C.companycreated as companycreated,
+		C.date as date, 
+		C.datestring as datestring,
+		C.status as status, 
+		Remap(C.reference) as match, C.reference as match_detag
+	from Merger_ C
+) C
+;
+
+
+create view Acquisition as
+select
+	C.company1 as company1, C.company1_detag as company1_detag, GetText(C.company1) as company1_text, GetText(C.company1_detag) as company1_detag_text,  
+	C.stockexchange1 as stockexchange1, 
+	C.stocksymbol1 as stocksymbol1, 
+	C.company2 as company2, C.company2_detag as company2_detag, GetText(C.company2) as company2_text, GetText(C.company2_detag) as company2_detag_text, 
+	C.stockexchange2 as stockexchange2, 
+	C.stocksymbol2 as stocksymbol2, 
+	C.company3 as company3,
+	C.stockexchange3 as stockexchange3, 
+	C.stocksymbol3 as stocksymbol3, 	
+	C.date as date, 
+	C.datestring as datestring,
+	C.status as status, 
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text
+from
+(
+	select 
+		Remap(C.company1) as company1, C.company1 as company1_detag, 
+		C.stockexchange1 as stockexchange1, 
+		C.stocksymbol1 as stocksymbol1, 
+		Remap(C.company2) as company2, C.company2 as company2_detag,
+		C.stockexchange2 as stockexchange2, 
+		C.stocksymbol2 as stocksymbol2, 
+		C.company3 as company3,
+		C.stockexchange3 as stockexchange3, 
+		C.stocksymbol3 as stocksymbol3, 	
+		C.date as date, 
+		C.datestring as datestring,
+		C.status as status, 
+		Remap(C.reference) as match, C.reference as match_detag
+	from Acquisition_ C
+) C
+;
+
+
+create view Alliance as
+select 
+	C.company1 as company1, C.company1_detag as company1_detag, GetText(C.company1) as company1_text, GetText(C.company1_detag) as company1_detag_text,  
+	C.stockexchange1 as stockexchange1, 
+	C.stocksymbol1 as stocksymbol1, 
+	C.company2 as company2, C.company2_detag as company2_detag, GetText(C.company2) as company2_text, GetText(C.company2_detag) as company2_detag_text, 
+	C.stockexchange2 as stockexchange2, 
+	C.stocksymbol2 as stocksymbol2, 
+	C.company3 as company3,
+	C.stockexchange3 as stockexchange3, 
+	C.stocksymbol3 as stocksymbol3, 	
+	C.date as date, 
+	C.datestring as datestring,
+	C.status as status, 
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text
+from
+(
+	select 
+		Remap(C.company1) as company1, C.company1 as company1_detag, 
+		C.stockexchange1 as stockexchange1, 
+		C.stocksymbol1 as stocksymbol1, 
+		Remap(C.company2) as company2, C.company2 as company2_detag,
+		C.stockexchange2 as stockexchange2, 
+		C.stocksymbol2 as stocksymbol2, 
+		C.company3 as company3,
+		C.stockexchange3 as stockexchange3, 
+		C.stocksymbol3 as stocksymbol3, 	
+		C.date as date, 
+		C.datestring as datestring,
+		C.status as status, 
+		Remap(C.reference) as match, C.reference as match_detag
+	from Alliance_ C
+) C
+;
+
+
+create view JointVenture as
+select 
+	C.company1 as company1, C.company1_detag as company1_detag, GetText(C.company1) as company1_text, GetText(C.company1_detag) as company1_detag_text,  
+	C.stockexchange1 as stockexchange1, 
+	C.stocksymbol1 as stocksymbol1, 
+	C.company2 as company2, C.company2_detag as company2_detag, GetText(C.company2) as company2_text, GetText(C.company2_detag) as company2_detag_text, 
+	C.stockexchange2 as stockexchange2, 
+	C.stocksymbol2 as stocksymbol2, 
+	C.company3 as company3,
+	C.stockexchange3 as stockexchange3, 
+	C.stocksymbol3 as stocksymbol3, 	
+	C.companycreated as companycreated,
+	C.date as date, 
+	C.datestring as datestring,
+	C.status as status, 
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text
+from
+(
+	select 
+		Remap(C.company1) as company1, C.company1 as company1_detag, 
+		C.stockexchange1 as stockexchange1, 
+		C.stocksymbol1 as stocksymbol1, 
+		Remap(C.company2) as company2, C.company2 as company2_detag,
+		C.stockexchange2 as stockexchange2, 
+		C.stocksymbol2 as stocksymbol2, 
+		C.company3 as company3,
+		C.stockexchange3 as stockexchange3, 
+		C.stocksymbol3 as stocksymbol3, 	
+		C.companycreated as companycreated,
+		C.date as date, 
+		C.datestring as datestring,
+		C.status as status, 
+		Remap(C.reference) as match, C.reference as match_detag
+	from JointVenture_ C
+) C
+;

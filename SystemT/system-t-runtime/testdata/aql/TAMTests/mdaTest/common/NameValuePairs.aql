@@ -1,0 +1,164 @@
+module common;
+
+/** EXTRACTS NAME-VALUE PAIRS SEPARATED BY "=" or ":"
+The extraction of the name and value stops at non-alpha_numeric characters, but it allows "_"
+and "-".  
+-- Exclude if part of XML, where name/value pairs are explicitly in a different format
+Candidates for pairs are filtered based on the format of the names
+-- Exclude if part of stack trace errors, of the form "java:34"
+-- Detect nesting and exclude those cases for now (like in APS message body examples)
+-- Finally, IF VALUE IS PART OF AN ENTITY THAT EXTENDS BEYOND THE BOUNDARIES OF VALUE (IpAddress, Id) CORRECT THE VALUE
+**/ 
+
+/*
+create view NameValueCands as 
+  -- extract regex /[A-Za-z][A-Za-z\-\_\.]*(:|=)\(?\[?<?\{?[A-Za-z0-9][A-Za-z0-9\-\_@\.]*\}?>?\]?\)?/ on D.text as match
+  extract regex /[A-Za-z][A-Za-z\-\_\.]*\s?(:|=)\s?((\(?[A-Za-z0-9][A-Za-z0-9\-\_@\.]*\%\)?)|(\[?[A-Za-z0-9][A-Za-z0-9\-\_@\.]*\%\]?)|(\[?[A-Za-z0-9][A-Za-z0-9\-\_@\.]*\]?)|(\<?[A-Za-z0-9][A-Za-z0-9\-\_@\.]*\%>?)|(\{?[A-Za-z0-9][A-Za-z0-9\-\_@\.]\%*\}?))/
+  on D.text as match
+   from Document D;*/
+   
+create function getNameValueCategory(field_type String, nameStr String, valueStr String)
+	return String
+	external_name 'lib/logAAqlUDFs.jar:com.ibm.logparse.aql.Util!getCategory'
+	language java
+	deterministic
+	return null on null input;
+
+create view NameValueCandsUnfiltered as 
+    extract regex -- /[A-Za-z][A-Za-z\-\_\.]*\s?(=)\s?[\(\[<]?[A-Za-z0-9][A-Za-z0-9\-\_@\.\:]*\%[\)\]>]?/
+     /[A-Za-z][A-Za-z\d\-\_\.]*\s?(=)\s?(\(|\[|<)?[A-Za-z0-9][A-Za-z0-9\-\_@\.\:]*\%?(\)|\]|>)?/
+    on D.text as match
+    from Document D;
+
+
+-- make sure that if the pattern contains a bracket, then it must contain matching brackets
+create view NameValueCands as 
+    (
+    select D.match
+    from NameValueCandsUnfiltered D
+    where Not(ContainsRegex(/[\(\)\]\[><]/,D.match))
+    )
+    union all
+    (
+    select D.match
+    from NameValueCandsUnfiltered D
+    where ContainsRegex(/[\(\)\]\[><]/,D.match)
+    and MatchesRegex(/.*(=)((\([^\(\)\]\[><]*\))|(\[[^\(\)\]\[><]*\])|(<[^\(\)\]\[><]*>))/,D.match)
+    );
+ 
+
+ 
+-- DETECT NESTING 
+-- of the form name1:nam22:val, where the name from one pair overlaps with the value from a a previous pair;keep
+-- the second pair nam22:val
+
+create view NameValuePairsNested as
+    select D2.match
+    from NameValueCands D1, NameValueCands D2
+    where Overlaps(D1.match, D2.match)
+    and GreaterThan(GetEnd(D2.match),GetEnd(D1.match));
+ 
+ /* 
+create view NameValuePairsToFilter as
+   ( -- IF IN XML
+   select D.match as match
+   from NameValueCands D, XMLBlockInterim X
+   where Overlaps (X.xblock, D.match)
+   )
+   union all
+   ( --in contains "java" in name
+   select D.match as match
+   from NameValueCands D
+   where ContainsRegex(/java\:/, D.match)
+   )
+   union all
+   (
+   select D.match as match
+   from NameValuePairsNested D
+   )
+   ;*/
+   
+create view NameValuePairsToFilter as
+   ( --in contains "java" in name
+   select D.match as match
+   from NameValueCands D
+   where ContainsRegex(/java\:/, D.match)
+   )
+   union all
+   (
+   select D.match as match
+   from NameValuePairsNested D
+   )
+   ;
+create view NameValuePairsBlock as
+    (
+    select D.match as match
+    from  NameValueCands D
+    )
+    minus
+    (
+    select D.match as match
+    from NameValuePairsToFilter D
+    );
+
+create view NameValuePairs as 
+    extract regex /(.*)\s?(=)\s?(.*)/ on D.match
+    return group 1 as name
+     and group 3 as value
+     and group 0 as full
+    from NameValuePairsBlock D;
+    
+-- IF VALUE IS PART OF AN ENTITY THAT EXTENDS BEYOND THE BOUNDARIES OF VALUE (IpAddress, Id) CORRECT THE VALUE
+create view ExtendedValueCands as 
+   ( -- ip address
+   select I.ipAddress_Span as extent, N.name as name, N.value as value, N.full as full
+   from IPAddressInterim I,  NameValuePairs N
+   where Overlaps(I.ipAddress_Span, N.value)
+   )
+   union all
+   ( -- id
+   select I.Id_Span as extent, N.name as name, N.value as value, N.full as full
+   from IDInterim I,  NameValuePairs N
+   where Overlaps(I.Id_Span, N.value)
+   );
+
+-- KEEP ONLY THE EXTENSIONS THAT GO FURTHER TO THE RIGHT THAN THE ORIGINAL VALUE
+
+create view ExtendedValue as
+    select E.extent, E.name, E.value, E.full
+    from ExtendedValueCands E
+    where GreaterThan(GetEnd(E.extent), GetEnd(E.value));
+
+
+create view NameValuePairsNotExtended as
+    (
+    select N.name as name, N.value as value, N.full as full
+    from NameValuePairs N
+    )
+    minus
+    (
+    select N.name as name, N.value as value, N.full as full
+    from ExtendedValue N
+    );
+
+
+create view NameValuePairsExtended as 
+    (
+    select N.name, N.value, N.full
+    from NameValuePairsNotExtended N
+    )
+    union all
+    (
+    select E.name, CombineSpans(E.extent, E.value) as value, CombineSpans(E.name, E.extent) as full
+    from ExtendedValue E
+    );
+    
+create view NameValuePairsInterim as 
+    select N.full as Pair_Span, GetText(N.name) as Name_Text, GetText(N.value) as Name_Value
+    from NameValuePairsExtended N; 
+
+create view NameValuePairOutput as
+select D.Pair_Span as span, D.Name_Value as text, D.Name_Text as field_type, getNameValueCategory(GetString('NameValuePair'), GetString(D.Name_Text),GetString(D.Name_Value)) as category
+from NameValuePairsInterim D;
+
+export view NameValuePairOutput;

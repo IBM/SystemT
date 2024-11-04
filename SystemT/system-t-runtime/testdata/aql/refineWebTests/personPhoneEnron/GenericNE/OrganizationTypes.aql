@@ -1,0 +1,54 @@
+--- Identify different types of organizations
+create view OrganizationEducational as
+select O.organization as organization, 'Educational' as type, O.reference as reference
+from OrganizationConsolidated O
+where ContainsDict('OrganizationType_Education.dict', O.organization)
+  and Not(ContainsDict('OrganizationType_Company.dict', O.organization))
+  and Not(ContainsDict('OrganizationType_Medical.dict', O.organization));
+
+create view OrganizationGovernment as
+select O.organization as organization, 'Government' as type, O.reference as reference
+from OrganizationConsolidated O
+where Or(ContainsDict('OrganizationType_Government.dict', O.organization),
+         ContainsDict('organization_government.dict', O.organization))
+  and Not(ContainsDict('OrganizationType_Company.dict', O.organization))
+  and Not(ContainsDict('OrganizationType_Education.dict', O.organization));
+
+create view OrganizationMedical as
+select O.organization as organization, 'Medical' as type, O.reference as reference
+from OrganizationConsolidated O
+where ContainsDict('OrganizationType_Medical.dict', O.organization)
+  and Not(ContainsDict('OrganizationType_Company.dict', O.organization));
+    
+create view OrganizationOthers as
+select O.organization as organization, 'Others' as type, O.reference as reference
+from OrganizationConsolidated O
+where ContainsDict('OrganizationType_Others.dict', O.organization)
+  and Not(ContainsDict('OrganizationType_Company.dict', O.organization))
+  and Not(ContainsDict('OrganizationType_Medical.dict', O.organization));
+
+create view OrganizationWithTypes as
+	(select O.organization as organization, O.type as type, O.reference as reference from OrganizationEducational O)
+	union all
+	(select O.organization as organization, O.type as type, O.reference as reference from OrganizationGovernment O)
+	union all
+	(select O.organization as organization, O.type as type, O.reference as reference from OrganizationMedical O)
+	union all
+	(select O.organization as organization, O.type as type, O.reference as reference from OrganizationOthers O);
+  
+create view OrganizationCompany as
+	(select O.organization as organization, O.reference as reference from OrganizationConsolidated O)
+	minus
+	(select O.organization as organization, O.reference as reference from OrganizationWithTypes O);
+  
+create view OrganizationWithAttrs as
+	(select O.organization as organization, O.type as type, O.reference as reference from OrganizationWithTypes O)
+	union all
+	(select O.organization as organization, 'Company' as type, O.reference as reference from OrganizationCompany O);
+	
+create view  OrganizationFull as
+select O.organization as organization, O.type as type, O.reference as reference
+from OrganizationWithAttrs O
+consolidate on O.organization;
+
+	

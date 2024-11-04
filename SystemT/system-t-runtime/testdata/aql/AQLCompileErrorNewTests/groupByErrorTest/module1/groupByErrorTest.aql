@@ -1,0 +1,19 @@
+------------------------------------------------------------------------------------------------------------
+--
+-- Test case for defect #52619: Validation of Group By statement results in compiler error 
+-- with no token info and null message
+-- 
+-- Note that the select statement has two errors in group by clause: S.text and GetString(text)
+-- The original NPE only occurs with all the ingredients in this statement.
+-- After the fix the compiler stops after detecting the first error. 
+--
+------------------------------------------------------------------------------------------------------------
+
+module module1; 
+
+create view Dedup as
+select D.text, GetString(D.text) as text1
+from Document D
+group by S.text, GetString(text);
+
+output view Dedup; 

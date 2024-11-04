@@ -1,0 +1,836 @@
+module module1;
+
+-- INPUT
+-- expects input view NL_inputView with a attribute text
+-- text should be the name field in in twitter, or comparable
+-- fields in boardreader or author.
+
+-- Modular systemT
+-- added from the demographic_name driver
+
+create view NL_inputView as
+select D.text from
+Document D;
+
+
+-- OUTPUT
+-- Name_fullname
+--	Span match: span containing the name.
+--	String firstname: the first name found.
+--	String middle: the middle name or middle initials found, if any.
+--	String surname: the last name.
+--	String hispanic_surname: if the name was potentially a hispanic name
+--	       this field will contain the surname.   For example, for 
+--	       "Gabriel García Márquez", this field would be populated with 
+--	       "García Márquez."  The firstname, middle, and surname fields 
+--	       are populated as if this were an English name.  
+--	String prov:  Describes how the name was found.   
+--	       * nospace:  The had no spaces and it was either a firstname and 
+--	       		 lastname joined together camelcase or separated by an 
+--			 underscore.
+--	       * and: The names were two first names joined followed by a 
+--	       	       surname (eg "June and Ward Cleaver").
+--	       * dictionary:  A single name in separated by spaces 
+--	       	       where all components of the name were found in a 
+-- 		       name dictionary.
+--	       * format A single name seprated by spaces with appropriate case, 
+--	                (ie, "Kirsten Hildrum" but not "kirsten hildrum)) and
+--			none  of the components were found in a dictionary.
+--	       * mixed: A single name seprated by spaces where some components
+-- 	                were dictionary matches, and some were not.
+--
+--
+-- Name_surname (for cases when no full name was found, but we believe the 
+--   found name is a last name).
+--	Span match: span containing the name.
+--	String surname: the last name.
+--	String title: The title used to introduce the last name, if any.   
+--	(Mr. Rogers, Dr. Sears)  If this was is populated, the surname was 
+--	not found in the dictionary.  
+--	String firstinitials: The first initials, if any.  (For "e.e. cummings"	--	or "J. R. R. Tolkien")
+--	String prov.
+--		format: found via Title Lastname pattern.   Low-precision.
+--		dict: name was in dictionary
+--		dict_strict: name was in a surname-specific dictionary.  The 
+--		 surname specific dictionaries are small for some nationalities.
+--
+-- Name_othername (no prov field; these are always dictionary matches)
+--	Span match: span containing the name.
+--	String name: the  name
+
+-- EXTERNAL DICTIONARIES
+--
+-- Name_notnames.dict: A list of words that aren't part of names.  (eg, "the").
+-- Name_notperson.dict: An indicator that the entity named isn't a person (eg, "Association", "Club", "Organization", etc).
+-- Name Dictionaries: name_france.dict,name_israel.dict, name_spain.dict, 
+--   popularBabyName.dict, Name_FemaleFnames.dict, Name_MaleFnames.dict'
+--   Name_AndrogenousFnames.dict, name.dict, strictFirst_india.partial.dict,
+--    strictFirst_israel.dict,strictFirst_italy.dict,strictFirst_spain.dict,
+--    strictFirst.dict, strictFirst_german_bluePages.dict, strictNickName.dict, 
+--    strictLast_china.dict, strictLast_france.dict', 
+--    strictLast_german_bluePages.dict,strictLast_german.dict, 
+--    strictLast_india.partial.dict, strictLast_israel.dict, 
+--    strictLast_italy.dict,strictLast_spain.dict.
+--
+--
+-- OVERALL FLOW
+
+-- In the first step, we check if there are spaces found in the name
+-- field.  If there are no spaces found, we look to see if the field
+-- looks like FirstnameLastname or Firstname_Lastname.  If it does, and
+-- neither Firstname nor Lastname match against the Name_notnames
+-- dictionary, and at least one of Firstname or Lastname matches against
+-- the name dictionaries, then it will be output in the Name_Fullname
+-- view.  
+--
+-- For documents that do contain spaces, no attempt is made to
+-- break up by underscores or camelcase.  The next step is to exclude any
+-- name field that likely represents a collective entity, dropping
+-- everything in containing a word in Name_notperson.dict, unless the
+-- word in Name_notperson.dict comes after a comma.  (To allow "Firstname
+-- Lastname, Head of FooDeBarBar Association").  
+--
+-- The next step filters out any fields that begin with a number of words
+-- that indicate not to expect a name (eg, "my", "the").  At the next
+-- step, we look for potentialnames 
+--   * format (Cccccccc, Aaaaaa-Aaaaa, Pre-Fffffff) where Pre can be any of a small number of hard-coded prefixes (excluding based on Name_notnames dictionary).--   * Dictionary lookups 
+--   *  Multi-token names (eg O'Conner) are built by putting a
+--      multi-token prefix together with a formatted name.  
+--
+-- Next, potential initials are identified.  Finally, the name fragments are 
+-- put together to see if they form names.  Dictionary matches that don't 
+-- form full names are then output as partial names.
+
+
+-- Create a view for the space-free documents.
+-- these we handle differently.
+
+create view NL_spacefree as 
+select D.text
+from NL_inputView D 
+where Not(ContainsRegex(/\s/,D.text));
+
+create view NL_inputAnnotations as
+extract D.text as text,
+	regex /^/ 
+	on D.text as begin 
+from NL_inputView D;
+
+-- Now, find any commas and the begin marker.
+create view NL_inputComma as 
+extract D.text as text,
+	D.begin as begin,
+	regex /,/ on between 1 and 1 tokens in D.text as comma
+from NL_inputAnnotations D;
+
+-- For the documents containing commas...
+-- thus, "Firstname Lastname, head of Association" becomes
+-- just "Firstname Lastname".
+
+create view NL_trimmed1 as
+select A.begin as begin,
+	SpanBetween(A.begin,A.comma) as text 
+from NL_inputComma A
+consolidate on SpanBetween(A.begin, A.comma) using 'NotContainedWithin';
+
+--now, union the documents with commas to those without commas.
+
+create view NL_trimmed as 
+(select A.begin as begin,
+	A.text as text 
+from NL_inputAnnotations A 
+where Not(ContainsRegex(/,/,A.text)))
+union all
+(select A.begin as begin,
+	A.text as text
+from NL_trimmed1 A)
+;
+
+
+create view NL_filter1_nonperson as
+select D.begin as begin,
+D.text as text from
+NL_trimmed D where 
+-- Modular systemT - dictionary paths are relative to the module dir.
+Not(ContainsDict('dictionaries/Name_nonperson.dict',D.text));
+
+-- Modular systemT: we use this simple dictionary as a test of an external dictionary.
+--create external dictionary badBegin
+--allow_empty false;
+-- This used to be:
+create dictionary badBegin as ('my','el','The','no','not','we','what','your','a girl','a boy');
+
+create view NL_filter2_badBegin as
+select D.begin as begin,
+	D.text as text
+from NL_filter1_nonperson D
+where Not(MatchesDict('badBegin',RightContextTok(D.begin,1)));
+ 
+--- End filtering steps.
+
+create view NL_filtered as
+select * from NL_filter2_badBegin;
+
+-- for boardreader add the pattern "jsmith@gmail.com (John Smith)"
+create view Name_BR_EmailAndName as
+	extract D.text as text, regex /([a-zA-Z0-9\_\.]+\@[a-zA-Z]+\.[A-Za-z]{3})\s*\(([A-Za-z][A-Za-z\s]*)\)/ on D.text
+	return group 1 as email_address
+	and group 2 as name
+	from NL_filtered D;
+
+-- for cases where we extract name from next to email addresses, pass that as input for the 
+-- remaining processing
+
+create view separateJoined as 
+	extract D.text as fullspan,
+		regexes /(\p{Lu}\p{Ll}+)_(\p{Lu}\p{Ll}+)/
+		and /(\p{Lu}\p{Ll}+)(\p{Lu}\p{Ll}+)/
+		on between 1 and 1 token in D.text
+		return group 1 as firstname and 
+		 group 2 as lastname and
+		 group 0 as keyPhrase
+	from NL_spacefree D having
+        -- Modlar systemT - dictionary paths are relative to the module dir.
+	Not(MatchesDict('dictionaries/Name_notnames.dict',firstname)) and
+	Not(MatchesDict('dictionaries/Name_notnames.dict',lastname)) and
+	Or(MatchesDict('dictionaries/Name_AndrogenousFnames.dict',firstname),
+	MatchesDict('dictionaries/Name_FemaleFnames.dict',firstname),
+	MatchesDict('dictionaries/Name_MaleFnames.dict',firstname));
+
+create view separateJoined1a as 
+	extract D.text as fullspan,
+		regexes /(\p{Lu}\p{Ll}+)_(\p{Lu}\p{Ll}+)/
+		and /(\p{Lu}\p{Ll}+)(\p{Lu}\p{Ll}+)/
+		on between 1 and 1 token in D.text
+		return group 1 as firstname and 
+		 group 2 as lastname and
+		 group 0 as keyPhrase
+	from NL_spacefree D having
+        -- Modlar systemT - dictionary paths are relative to the module dir.
+	Not(MatchesDict('dictionaries/Name_notnames.dict',firstname)) and
+	Not(MatchesDict('dictionaries/Name_notnames.dict',lastname)) and
+	Or(
+	MatchesDict('dictionaries/Name_AndrogenousFnames.dict',firstname),
+	MatchesDict('dictionaries/Name_FemaleFnames.dict',firstname),
+	MatchesDict('dictionaries/Name_MaleFnames.dict',firstname)
+	)
+;
+
+
+-- Build names a little differently.  
+create dictionary namePrefix as 
+('v/d','van der','De\'','D\'','O\'','von', 'van', 'de la');
+
+-- Let's start by finding all things that look like they could be names.
+create view initialCap as 
+	extract 
+	regexes /\p{Lu}\p{Ll}+-?(\p{Lu}\p{Ll}+)?/ and
+	/((Mc)|(De)|(Le)|(La)|(Von))\p{Lu}\p{Ll}+/ 
+	on between 1 and 3 tokens in D.text
+	as potentialName
+	from NL_filtered D
+        -- Modlar systemT - dictionary paths are relative to the module dir.
+	having Not(MatchesDict('dictionaries/Name_notnames.dict',potentialName));
+
+create view namedict as 
+	extract
+	dictionaries
+--	'demographic/name/dictionaries/name_france.dict' and
+--	'demographic/name/dictionaries/name_israel.dict' and
+--	'demographic/name/dictionaries/name_spain.dict' and
+--	'demographic/name/dictionaries/popularBabyName.dict' and
+--	'demographic/name/dictionaries/Name_FemaleFnames.dict' and
+--	'demographic/name/dictionaries/Name_MaleFnames.dict' and 
+	-- Modlar systemT - paths are relative to module dir.
+	'dictionaries/name.dict'
+	on D.text as potentialName
+	from NL_filtered D;
+	
+create view firstname as 
+	extract 
+	dictionaries
+--	'dictionaries/strictFirst_india.partial.dict' and
+--	'dictionaries/strictFirst_israel.dict' and
+--	'dictionaries/strictFirst_italy.dict' and
+--	'dictionaries/strictFirst_spain.dict' and
+--	'dictionaries/strictFirst.dict' and
+--	'dictionaries/strictFirst_german_bluePages.dict'and 
+	-- Modlar systemT - paths are relative to module dir.
+	'dictionaries/strictNickName.dict' 
+	on D.text as potentialName
+	from NL_filtered D;
+	
+create view surname as
+	extract 
+	dictionaries
+--	'dictionaries/strictLast_china.dict' and
+--	'dictionaries/strictLast_france.dict' and
+--	'dictionaries/strictLast_german_bluePages.dict' and
+--	'dictionaries/strictLast_german.dict' and
+--	'dictionaries/strictLast_india.partial.dict' and 
+--	'dictionaries/strictLast_israel.dict' and
+--	'dictionaries/strictLast_italy.dict' and
+	-- Modlar systemT - paths are relative to module dir.
+	'dictionaries/strictLast_spain.dict'
+
+	on D.text as potentialName
+	from NL_filtered D;
+	
+	
+
+-- Now everything that looks like a middle initial.
+create view middleInitial as
+	extract regex /\p{Lu}\.?/ on
+		between 1 and 2 tokens in D.text as initial
+	from NL_filtered D;
+
+create view doubleInitial1 as 
+extract regex /\p{Lu}\p{Lu}/ on between 1 and 1 tokens in D.text
+as initial
+from NL_filtered D;
+
+create view doubleInitial2 as 
+extract regex /\p{Lu}.\s?\p{Lu}./ on between 4 and 4 tokens in D.text
+as initial
+from NL_filtered D;
+
+create view doubleInitial3 as 
+extract regex /\p{Lu} \p{Lu}/ on between 2 and 2 tokens in D.text
+as initial
+from NL_filtered D;
+
+-- Triple initials could be supported here.
+
+-- This view results in a Compiler error 
+create view allInitials1 as 
+(select * from middleInitial)
+union all
+(select * from doubleInitial1)
+union all
+(select * from doubleInitial2)
+union all
+(select * from doubleInitial3)
+;
+
+-- correct version of the view:
+--create view allInitials1 as 
+--(select R.initial from middleInitial R)
+--union all
+--(select R.initial from doubleInitial1 R)
+--union all
+--(select R.initial from doubleInitial2 R)
+--union all
+--(select R.initial from doubleInitial3 R)
+--;
+
+create view allInitials as 
+select * from allInitials1 I
+consolidate on I.initial using 'ContainedWithin';
+
+-- Compound names are tricky, because even well formed, they have
+-- punctuation and lower case and so forth, so we need this.  
+create view compoundName1 as 
+	extract dictionary 'namePrefix'
+	on D.text as match
+	from NL_filtered D;
+	
+create view compoundName as 
+	select 
+		CombineSpans(N.match,RightContextTok(N.match,1)) as potentialName
+	from compoundName1 N
+	where NotNull(RightContextTok(N.match,1)) 
+		-- Modlar systemT - paths are relative to module dir.
+		and Not(MatchesDict('dictionaries/Name_notnames.dict',RightContextTok(N.match,1)));
+
+create view potentialName_format as
+((select R.potentialName from initialCap R)
+union all
+(select R.potentialName from compoundName R))
+minus
+((select R.potentialName from namedict R)
+union all
+(select R.potentialName from firstname R)
+union all
+(select R.potentialName from surname R));
+
+-- This view used to result in a Compiler error with "null" text
+-- Now the error message is, "The column reference must be of the form
+-- '<viewname>.<colname>'."
+create view potentialName_dict1 as
+(select potentialName from namedict)
+union all
+(select potentialName from firstname)
+union all
+(select potentialName from surname);
+
+-- correct version of the view:
+--create view potentialName_dict1 as
+--(select R.potentialName from namedict R)
+--union all
+--(select R.potentialName from firstname R)
+--union all
+--(select R.potentialName from surname R);
+
+-- This view also results in a compiler error, since the view
+-- potentialName_dict1 does not compile.
+create view potentialName_dict as
+select D.* from potentialName_dict1 D
+consolidate on D.potentialName using 'ExactMatch';
+
+create view potentialName as
+(
+select GetString('dict') as type,
+	N.potentialName from potentialName_dict N
+)
+union all
+(
+select GetString('format') as type,
+	N.potentialName from potentialName_format N
+)
+;
+
+-- There's a number of cases to cover:
+-- Firstname Lastname
+-- Firstname M. Lastname
+-- Firstname M. M. Lastname 
+-- Firstname Middle Lastname
+-- Firstname Middle CompoundLast
+-- etc.
+-- We break this down into a 
+
+create view middleInitialLast as 
+extract 
+	M.initial as middle,
+	L.potentialName as surname,
+	L.type as lastType,
+pattern  <M.initial> <L.potentialName> as match
+from potentialName L, allInitials M;
+
+create view firstLast as 
+extract F.potentialName as firstname,
+	'' as middle,
+	L.potentialName as surname,
+	F.type as firstType,
+	L.type as lastType,
+pattern <F.potentialName> <L.potentialName> as name
+from potentialName F, potentialName L;
+
+-- Putting it together:
+-- Firstname I Lastname
+create view firstInitialLast as
+extract F.potentialName as firstname,
+	ML.middle as middle,
+	ML.surname as surname,
+	F.type as firstType,
+	ML.lastType as lastType,
+pattern <F.potentialName> <ML.match> as name 
+from middleInitialLast ML, potentialName F; 
+
+-- Firstname Middlename Lastname
+create view firstMiddleLast as 
+extract F.potentialName as firstname,
+	ML.firstname as middle,
+	ML.surname as surname,
+	F.type as firstType,
+	ML.lastType as lastType,
+pattern <F.potentialName> <ML.name> as name
+from firstLast ML, potentialName F;
+
+-- Firstname Middlename Lastname
+create view firstMiddleMiddleLast as 
+extract F.potentialName as firstname,
+	CombineSpans(FML.firstname,FML.middle) as middle,
+	FML.surname as surname,
+	F.type as firstType,
+	FML.lastType as lastType,
+pattern <F.potentialName> <FML.name>  as name
+from firstMiddleLast FML, potentialName F;
+
+create dictionary andwords_dict as ('y', 'and','&');
+create view NL_and as 
+extract dictionary 'andwords_dict' on D.text as match
+from NL_filtered D;
+
+create view NL_dualName as 
+extract 
+	N1.potentialName as first1,
+	N2.potentialName as first2,
+	N3.potentialName as surname,
+pattern <N1.potentialName> <A.match> <N2.potentialName> <N3.potentialName> as match
+from potentialName N1, potentialName N2, potentialName N3, NL_and A;
+
+create view wellFormattedName1 as 
+(select N.firstname, N.middle, N.surname, N.firstType, N.lastType, N.name from firstLast N)
+union all
+(select N.firstname, N.middle, N.surname, N.firstType, N.lastType, N.name from firstInitialLast N)
+union all 
+(select N.firstname, N.middle, N.surname, N.firstType, N.lastType, N.name from firstMiddleLast N)
+union all
+(select N.firstname, N.middle, N.surname, N.firstType, N.lastType, N.name from firstMiddleMiddleLast N)
+;
+
+create view wellFormattedName as 
+select * from wellFormattedName1 W
+consolidate on W.name using 'ContainedWithin';
+
+
+create view Name_TW_BR_InputText_NoEmail as
+	(
+	select D.text as text
+	from Document D
+	)
+	minus
+	(
+	select D.text as text
+    from Document D, Name_BR_EmailAndName B
+    where Overlaps(D.text, B.name)
+    );
+    	
+create view Name_TW_BR_InputText as 
+	(
+    select D.text as text
+    from  Name_TW_BR_InputText_NoEmail D
+    )
+    union all
+    (
+    select B.name as text
+    from Document D, Name_BR_EmailAndName B
+    where Overlaps(D.text, B.name)   
+    );
+
+-- trim By and profession
+create view Name_RemoveHeaders as
+	extract D.text as fullspan,
+	regex /(By)?\s+([A-Za-z ]+)\s*,?/ on
+	between 1 and 6 tokens in D.text
+	return group 2 as match
+from NL_inputView D;
+
+-- trim begin and end white spaces, if any
+create view Name_TW_BR_TrimmedName as 
+	(
+    select D.text as fullspan, Chomp(D.text) as match
+    from Name_TW_BR_InputText D
+    )
+    union all 
+    (select * from Name_RemoveHeaders)
+   ;
+   
+    
+    
+-- keep around the names that have "valid" formats   
+-- This might make for slow matching...
+create view Name_TW_BR_NameToFilter as
+    select T.match as match, T.fullspan as fullspan
+    from Name_TW_BR_TrimmedName T
+    where MatchesRegex(/((Mc)|(De)|(Le)|(La)|(Von))?[A-Z][a-z]+((\s)+(([A-Z]\.)|([A-Z][a-z]+)))*(\s)+((Mc)|(De)|(Le)|(La)|(Von))?[A-Z][a-z]+/,T.match);
+                            
+-- Exctract first middle and last.
+create view Name_TW_BR_NameComponents as 
+   extract T.fullspan as fullspan, regex /(([A-Za-z-]+)\s+(.+\s+)*([A-Za-z-]+))/ on T.match
+    return group 0 as fullname
+-- group 1 is also the full name
+        and group 2 as firstname
+        and group 3 as middlename
+        and group 4 as lastname
+    from Name_TW_BR_NameToFilter T; 
+    
+create view Name_TW_BR_RecsNoFullName as
+    (
+    select D.text as fullspan
+    from Name_TW_BR_InputText D
+    )
+    minus
+    (
+    select D.fullspan as fullspan
+    from Name_TW_BR_NameToFilter D
+    ) ;    
+        
+
+    
+-- FROM THE SET FILTERED OUT, HOW MANY HAVE RECOGNIZABLE NAMES
+create view Name_TW_BR_PartialName as
+extract D.fullspan as fullspan,
+    -- Modlar systemT - paths are relative to module dir.
+    dictionaries
+        'dictionaries/Name_AndrogenousFnames.dict' 
+        and 'dictionaries/Name_FemaleFnames.dict'
+        and 'dictionaries/Name_MaleFnames.dict'
+        -- multiword last names
+        and 'dictionaries/Name_LastNames.dict'
+        -- multiword first names
+        and 'dictionaries/Name_FirstNames.dict'
+        on D.fullspan  
+        as name
+from Name_TW_BR_RecsNoFullName D
+consolidate on name using 'ExactMatch';
+
+
+
+create view Name_TW_BR_NoName as 
+    (
+    select D.fullspan as fullspan
+    from Name_TW_BR_RecsNoFullName D
+    )
+    minus
+    (
+    select D.fullspan as fullspan
+    from Name_TW_BR_PartialName D
+    );
+    
+
+  
+
+create view Name_fullname_single1 as 
+-- The three well-formatted cases.
+    (
+    select 
+    N.name as match, 
+    	N.firstname as firstname, 
+    	N.middle as middle,
+    	N.surname as surname,
+    	GetString('dictionary') as prov
+    from wellFormattedName N
+    where Equals(N.firstType,'dict') and Equals(N.lastType,'dict')
+    )
+    union all
+    (
+    select 
+    	N.name as match, 
+    	N.firstname as firstname, 
+    	N.middle as middle,
+    	N.surname as surname,
+    	GetString('format') as prov
+    from wellFormattedName N
+    where Equals(N.firstType,'format') and Equals(N.lastType,'format')
+    )
+    union all
+    (
+    select 
+    	N.name as match, 
+    	N.firstname as firstname, 
+    	N.middle as middle,
+    	N.surname as surname,
+    	GetString('mixed') as prov
+    from wellFormattedName N
+    where Not(Equals(N.firstType,N.lastType))
+    )
+;
+create view Name_fullname_single as
+(select N.match, N.firstname, N.middle, N.surname, N.prov from Name_fullname_single1 N) 
+minus
+(select N.match, N.firstname, N.middle, N.surname, N.prov from Name_fullname_single1 N, NL_dualName D
+	where Contains(D.match,N.match)
+);
+
+create view Name_fullname1 as
+	(
+	select N.match, N.firstname, N.middle, N.surname, N.prov from Name_fullname_single N
+	)
+    union all
+ -- dual names
+ 	(
+ 	select 
+ 		N.match as match,
+ 		N.first1 as firstname,
+ 		'' as middle,
+ 		N.surname as surname,
+ 		GetString('and') as prov  -- fix this later.
+ 	from NL_dualName N
+ 	)
+ 	union all
+ 	(
+ 		select 
+ 	 	N.match as match,
+ 		N.first2 as firstname,
+ 		'' as middle,
+ 		N.surname as surname,
+ 		GetString('and') as prov  -- fix this later.
+ 	from NL_dualName N
+ 	)
+ 	-- Single words.
+ 	union all
+    (
+    select 
+    	N.keyPhrase as match, 
+    	N.firstname as firstname, 
+    	'' as middle,
+    	N.lastname as surname, 
+    	GetString('nospace') as prov -- fix this later.
+    from separateJoined N
+    ) 
+    ;
+
+-- hispanic names
+create view Name_fullname as 
+(
+	select N.match as match,
+	       GetString(N.match) as match_str,
+		GetString(N.firstname) as firstname,
+		GetString(N.middle) as middle,
+		GetString(N.surname) as surname,
+		GetString(CombineSpans(N.middle,N.surname)) as hispanic_surname,
+		N.prov as prov,
+		GetString(I.text) as fulltext
+	from Name_fullname1 N, NL_inputView I
+	where
+		ContainsRegex(/[ÁÉÍÓÚáéíóú]/,N.match) and
+		Not(Equals(GetString(N.middle),GetString('')))
+)
+union all
+(
+	select N.match as match,
+	        GetString(N.match) as match_str,
+		GetString(N.firstname) as firstname,
+		GetString(N.middle) as middle,
+		GetString(N.surname) as surname,
+		GetString('') as hispanic_surname,
+		N.prov as prov,
+		GetString(I.text) as fulltext
+	from Name_fullname1 N,NL_inputView I
+	where Or(Equals(GetString(N.middle),GetString('')),
+			Not(ContainsRegex(/[ÁÉÍÓÚáéíóú]/,N.match)))
+);
+
+
+-- Now, we look for just the surnames.
+
+-- Get dictionary, initial matches 
+
+create view middleInitialStrictLast as 
+extract 
+	M.initial as middle,
+	L.potentialName as surname,
+	GetString('dict_strict') as lastType,
+pattern  <M.initial> <L.potentialName> as match
+from surname L, allInitials M;
+
+-- initial last
+create view partialInitialLast as
+(
+	(select R.middle, R.surname, R.lastType, R.match from middleInitialLast R)
+	minus 
+	(select R.middle, R.surname, R.lastType, R.match from middleInitialStrictLast R)
+)
+union all
+(select R.middle, R.surname, R.lastType, R.match from middleInitialStrictLast R)
+;
+
+create view surname_noinit as 
+(select S.potentialName as surname from surname S)
+minus 
+(select S.surname from middleInitialStrictLast S);
+
+-- Now cover cases where the names aren't in dict.
+
+create view Name_titles as 
+-- Modlar systemT - paths are relative to module dir.
+extract dictionary 'dictionaries/Name_introducers.dict' on D.text as title
+from NL_filtered D;
+
+create view titleLast as 
+select CombineSpans(T.title, N.potentialName) as match,
+	GetString(N.potentialName) as surname,
+	GetString(T.title) as title,
+	GetString('') as initials,
+	GetString('format') as prov
+from potentialName_format N, Name_titles T
+where FollowsTok(T.title,N.potentialName,0,0);
+
+create view titleInitLast as 
+select CombineSpans(T.title, N.potentialName) as match,
+	GetString(N.potentialName) as surname,
+	GetString(T.title) as title,
+	GetString(M.initial) as initials,
+	GetString('format') as prov
+from potentialName_format N, Name_titles T, allInitials M
+where FollowsTok(T.title,M.initial,0,0) and
+	FollowsTok(M.initial,N.potentialName,0,0);
+	
+create view Name_surname1 as
+-- Mr. W. Cleaver, Cleaver not in dictionary
+(select R.match, R.surname, R.title, R.initials, R.prov from titleInitLast R)
+union all
+-- Mrs. Cleaver, Cleaver not in dictionary
+(select R.match, R.surname, R.title, R.initials, R.prov from titleLast R)
+union all 
+-- Smith, where Smith is in the dictionary
+(select N.surname as match,
+	GetString(N.surname) as surname,
+	GetString('') as title,
+	GetString('') as initials,
+	GetString('dict_strict') as prov
+from surname_noinit N)
+union all 
+--J. Smith, where Smith is in the dictionary
+(select CombineSpans(N.middle,N.surname) as match,
+	GetString(N.surname) as surname,
+	GetString('') as title,
+	GetString(N.middle) as initials,
+	GetString('dict_strict') as prov
+	from middleInitialStrictLast N)
+union all
+--J. Smith, where smith is a name, but not necessarily a surname.
+(select CombineSpans(N.middle, N.surname) as match,
+	GetString(N.surname) as surname,
+	GetString('') as title,
+	GetString(N.middle) as initials,
+	GetString('dict') as prov
+from partialInitialLast N);
+
+create view Name_surname1_covered as
+select N.* from Name_surname1 N, Name_fullname F
+where Overlaps(F.match,N.match);
+
+create view Name_surname2 as
+(select R.match, R.surname, R.title, R.initials, R.prov from Name_surname1 R)
+minus
+(select R.match, R.surname, R.title, R.initials, R.prov from Name_surname1_covered R);
+
+create view Name_surname3 as
+select N.match, N.surname, N.title, N.initials, N.prov from Name_surname2 N
+consolidate on N.match using 'ExactMatch';
+
+create view Name_surname as
+select N.match, N.surname, N.title, N.initials, N.prov, 
+	GetString(I.text) as fulltext
+from Name_surname3 N, NL_inputView I
+where Contains(I.text,N.match);
+
+
+create view Name_othername_covered1 as
+select N.potentialName as match 
+from potentialName_dict N, Name_surname M
+where Contains(M.match,N.potentialName);
+
+create view Name_othername_covered2 as
+select N.potentialName as match
+from potentialName_dict N, Name_fullname F
+where Contains(F.match, N.potentialName);
+
+create view Name_othername1 as 
+(select N.potentialName as match from potentialName_dict N) 
+minus 
+(
+	(select R.match from Name_othername_covered1 R)
+	union all
+	(select R.match from Name_othername_covered2 R)
+);
+
+create view Name_othername as
+select N.match as match,
+	GetString(N.match) as name,
+	GetString(I.text) as fulltext
+from Name_othername1 N, NL_inputView I
+where Contains(I.text,N.match);
+
+output view Name_fullname;
+output view Name_surname;
+output view Name_othername;
+
+
+-- Modlar systemT: export the views
+export view Name_fullname;
+export view Name_surname;
+export view Name_othername;
+ 

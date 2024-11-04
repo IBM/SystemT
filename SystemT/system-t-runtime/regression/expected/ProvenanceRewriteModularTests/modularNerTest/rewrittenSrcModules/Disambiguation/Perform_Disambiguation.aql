@@ -1,0 +1,409 @@
+module Disambiguation;
+
+
+create view NEDisDict as
+  (select  Op.match as match,
+            Op.type as type,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__444__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            Op.type as type,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__444__TempOp__1 Op)
+  union all
+  (select  Op.match as match,
+            Op.type as type,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__444__TempOp__2 Op);
+
+output view NEDisDict;
+
+create view POLEntities as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__445__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__445__TempOp__1 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__445__TempOp__2 Op);
+
+output view POLEntities;
+
+create view NEDisAlready as
+  select  P1.match as match,
+          P1.type as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P1.__auto__id as NEDisDict_____sep_____P1____id,
+          P2.__auto__id as POLEntities_____sep_____P2____id
+  from  NEDisDict P1,
+        POLEntities P2
+  where Overlaps(P1.match, P2.match);
+
+output view NEDisAlready;
+
+create view NEDisDictOnly as
+  select  Op.match as match,
+          Op.type as type,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__446__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__446__TempOp__1 Op,
+        __Minus__446__Temp __t
+  where Equals(Op.match, __t.match)
+     and Equals(Op.type, __t.type);
+
+output view NEDisDictOnly;
+
+create view SingleTokNEDisDictOnly as
+  select  P.match as match,
+          P.type as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as NEDisDictOnly_____sep_____P____id
+  from  NEDisDictOnly P
+  where Not(MatchesRegex(/(\p{Lu}\p{M}*|(,|in)).*\s+/, LeftContextTok(P.match, 1)))
+     and Not(MatchesRegex(/\s+(\p{Lu}\p{M}*.*|,)/, RightContextTok(P.match, 1)));
+
+output view SingleTokNEDisDictOnly;
+
+create view PersonMixedAll as
+  (select  Op.person as person,
+            Op.first as first,
+            Op.middle as middle,
+            Op.last as last,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__447__TempOp__0 Op)
+  union all
+  (select  Op.person as person,
+            Op.first as first,
+            Op.middle as middle,
+            Op.last as last,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__447__TempOp__1 Op);
+
+output view PersonMixedAll;
+
+create view Person_ as
+  select  __t2.name as name,
+          __t2.first as first,
+          __t2.middle as middle,
+          __t2.last as last,
+          __t2.reference as reference,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__448__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__448__Temp__1 __t1,
+        __Consolidate__448__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.name, __t2.first, __t2.middle, __t2.last, __t2.reference;
+
+output view Person_;
+
+create view OrgMixedAll as
+  (select  Op.organization as organization,
+            Op.type as type,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__449__TempOp__0 Op)
+  union all
+  (select  Op.organization as organization,
+            Op.type as type,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__449__TempOp__1 Op);
+
+output view OrgMixedAll;
+
+create view Organization_ as
+  select  __t2.organization as organization,
+          __t2.type as type,
+          __t2.reference as reference,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__450__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__450__Temp__1 __t1,
+        __Consolidate__450__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.organization, __t2.type, __t2.reference;
+
+output view Organization_;
+
+create view LocMixedAll as
+  (select  Op.loc as loc,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__451__TempOp__0 Op)
+  union all
+  (select  Op.loc as loc,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__451__TempOp__1 Op);
+
+output view LocMixedAll;
+
+create view Location_ as
+  select  __t2.loc as loc,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__452__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__452__Temp__1 __t1,
+        __Consolidate__452__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.loc;
+
+output view Location_;
+
+create view __Consolidate__448__Temp__1 as
+  select  P.person as name,
+          P.first as first,
+          P.middle as middle,
+          P.last as last,
+          P.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonMixedAll_____sep_____P____id,
+          P.person as __consolidate__target
+  from  PersonMixedAll P;
+
+output view __Consolidate__448__Temp__1;
+
+create view __Consolidate__448__Temp__2 as
+  select  __t1.name as name,
+          __t1.first as first,
+          __t1.middle as middle,
+          __t1.last as last,
+          __t1.reference as reference,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__448__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__448__Temp__2;
+
+create view __Consolidate__450__Temp__1 as
+  select  P.organization as organization,
+          P.type as type,
+          P.organization as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as OrgMixedAll_____sep_____P____id,
+          P.organization as __consolidate__target
+  from  OrgMixedAll P;
+
+output view __Consolidate__450__Temp__1;
+
+create view __Consolidate__450__Temp__2 as
+  select  __t1.organization as organization,
+          __t1.type as type,
+          __t1.reference as reference,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__450__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__450__Temp__2;
+
+create view __Consolidate__452__Temp__1 as
+  select  P.loc as loc,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as LocMixedAll_____sep_____P____id,
+          P.loc as __consolidate__target
+  from  LocMixedAll P;
+
+output view __Consolidate__452__Temp__1;
+
+create view __Consolidate__452__Temp__2 as
+  select  __t1.loc as loc,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__452__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__452__Temp__2;
+
+create view __Minus__446__Temp as
+  select  __t.match as match,
+          __t.type as type
+  from  
+    ((select  Op.match as match,
+              Op.type as type
+      from  __Minus__446__TempOp__1 Op)
+    minus
+    (select  Op.match as match,
+              Op.type as type
+      from  __Minus__446__TempOp__2 Op)
+    ) __t
+  group by __t.match, __t.type;
+
+output view __Minus__446__Temp;
+
+create view __Minus__446__TempOp__1 as
+  select  P.match as match,
+          P.type as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as NEDisDict_____sep_____P____id
+  from  NEDisDict P;
+
+output view __Minus__446__TempOp__1;
+
+create view __Minus__446__TempOp__2 as
+  select  P.match as match,
+          P.type as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as NEDisAlready_____sep_____P____id
+  from  NEDisAlready P;
+
+output view __Minus__446__TempOp__2;
+
+create view __Union__444__TempOp__0 as
+  select  P.name as match,
+          'person' as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonDisDict_____sep_____P____id
+  from  PersonDisDict P;
+
+output view __Union__444__TempOp__0;
+
+create view __Union__444__TempOp__1 as
+  select  O.organization as match,
+          'org' as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          O.__auto__id as OrgDisDict_____sep_____O____id
+  from  OrgDisDict O;
+
+output view __Union__444__TempOp__1;
+
+create view __Union__444__TempOp__2 as
+  select  L.loc as match,
+          'loc' as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as LocDisDict_____sep_____L____id
+  from  LocDisDict L;
+
+output view __Union__444__TempOp__2;
+
+create view __Union__445__TempOp__0 as
+  select  P.person as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonMixed_____sep_____P____id
+  from  PersonMixed P;
+
+output view __Union__445__TempOp__0;
+
+create view __Union__445__TempOp__1 as
+  select  O.organization as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          O.__auto__id as OrganizationMixed_____sep_____O____id
+  from  OrganizationMixed O;
+
+output view __Union__445__TempOp__1;
+
+create view __Union__445__TempOp__2 as
+  select  L.loc as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as LocationMixed_____sep_____L____id
+  from  LocationMixed L;
+
+output view __Union__445__TempOp__2;
+
+create view __Union__447__TempOp__0 as
+  select  P.person as person,
+          P.first as first,
+          P.middle as middle,
+          P.last as last,
+          P.reference as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonMixed_____sep_____P____id
+  from  PersonMixed P;
+
+output view __Union__447__TempOp__0;
+
+create view __Union__447__TempOp__1 as
+  select  P.match as person,
+          '' as first,
+          '' as middle,
+          '' as last,
+          P.match as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as SingleTokNEDisDictOnly_____sep_____P____id
+  from  SingleTokNEDisDictOnly P
+  where Equals(GetText(P.type), 'person');
+
+output view __Union__447__TempOp__1;
+
+create view __Union__449__TempOp__0 as
+  select  P.organization as organization,
+          P.type as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as OrganizationMixed_____sep_____P____id
+  from  OrganizationMixed P;
+
+output view __Union__449__TempOp__0;
+
+create view __Union__449__TempOp__1 as
+  select  P.match as organization,
+          '' as type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as SingleTokNEDisDictOnly_____sep_____P____id
+  from  SingleTokNEDisDictOnly P
+  where Equals(GetText(P.type), 'org');
+
+output view __Union__449__TempOp__1;
+
+create view __Union__451__TempOp__0 as
+  select  P.loc as loc,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as LocationMixed_____sep_____P____id
+  from  LocationMixed P;
+
+output view __Union__451__TempOp__0;
+
+create view __Union__451__TempOp__1 as
+  select  P.match as loc,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as SingleTokNEDisDictOnly_____sep_____P____id
+  from  SingleTokNEDisDictOnly P
+  where Equals(GetText(P.type), 'loc');
+
+output view __Union__451__TempOp__1;
+

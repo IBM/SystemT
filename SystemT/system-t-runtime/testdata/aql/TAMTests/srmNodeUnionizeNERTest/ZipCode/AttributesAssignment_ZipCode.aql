@@ -1,0 +1,22 @@
+module ZipCode;
+
+import view Country_ from module Country as Country_;
+import view Zipcode from module CommonFeatures as Zipcode;
+
+create view ZipCodeCountry as
+select Z.match as zip, C.country as country, Z.match as reference
+from Zipcode Z,
+	 Country_ C
+where FollowsTok(Z.match, C.country, 0, 1)
+  and MatchesRegex(/\s*[,]?\s*/, SpanBetween(Z.match, C.country))
+  and Not(ContainsRegex(/[\n\r]/, SpanBetween(Z.match, C.country)));
+
+create view ZipCodeAll as
+	(select Z.zip as zip, Z.country as country, Z.reference as reference from ZipCodeCountry Z)
+	union all
+	(select Z.match as zip, '' as country, Z.match as reference from Zipcode Z);
+
+create view ZipCode_ as
+select Z.zip as zip, Z.reference as reference
+from ZipCodeAll Z
+consolidate on Z.zip;

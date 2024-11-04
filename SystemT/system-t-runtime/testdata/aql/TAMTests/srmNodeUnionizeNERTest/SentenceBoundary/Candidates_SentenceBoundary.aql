@@ -1,0 +1,80 @@
+module SentenceBoundary;
+
+import view DivContent from module DocumentDetagger as DivContent;
+import view SpanContent from module DocumentDetagger as SpanContent;
+import view AnchorContent from module DocumentDetagger as AnchorContent;
+import view ParagraphContent from module DocumentDetagger as ParagraphContent;
+
+import dictionary PrepositionsInEnglish from module Dictionaries as PrepositionsInEnglish;
+import dictionary DeterminersInEnglish from module Dictionaries as DeterminersInEnglish;
+import dictionary TokensFoundInTitles from module Dictionaries as TokensFoundInTitles;
+
+-- Headline based sentence boundary
+
+-- Tokens with new line to the left
+create view FirstCapsToken as
+select T.match as match
+from CapsToken T
+where ContainsRegex(/[\n\r]/, LeftContextTok(T.match, 1));
+
+-- Tokens with new line to the right
+create view LastCapsToken as
+select T.match as match
+from CapsToken T
+where ContainsRegex(/[\n\r]/, RightContextTok(T.match, 1));
+
+-- Headlines with a single token (i.e., new line to the left and right)
+create view HeadlineCandSingleToken as
+select T.match as match
+from FirstCapsToken T
+where ContainsRegex(/[\n\r]/, RightContextTok(T.match, 1));
+
+-- Headlines with two or more tokens
+create view HeadlineCandMultiToken as
+select CombineSpans(F.match, L.match) as headline
+from FirstCapsToken F, LastCapsToken L
+where FollowsTok(F.match, L.match, 0, 30)
+and Not(ContainsRegex(/[\n\r]/, CombineSpans(F.match, L.match)));
+
+-- All headline candidates
+create view HeadlineCand as
+(select H.match as headline from HeadlineCandSingleToken H)
+union all
+(select H.headline as headline from HeadlineCandMultiToken H);
+
+
+-- Candidates containing disallowed tokens in lower case
+create view HeadlineInvalid as
+extract H.headline as headline,
+	regex /\p{Ll}\p{M}*.*/ on 1 token in H.headline as ltoken
+from HeadlineCand H
+having Not(MatchesDict('PrepositionsInEnglish', ltoken))
+   and Not(MatchesDict('DeterminersInEnglish', ltoken))
+   and Not(MatchesDict('TokensFoundInTitles', ltoken))
+consolidate on headline;                        
+
+-- All valid candidates
+create view HeadlineValid as
+(select H.headline as headline from HeadlineCand H)
+minus
+(select H.headline as headline from HeadlineInvalid H);
+
+-- Calculate the left and right boundaries
+create view HeadlineMixedCaps as
+select LeftContext(H.headline,1) as lb,
+       RightContext(H.headline,1) as rb,
+       H.headline as headline
+from HeadlineValid H;
+
+--------------------------------------------------------
+
+-- HTML tag based boundaries
+
+create view HTMLTagBoundary as
+(select LeftContext(T.match, 0) as lb, RightContext(T.match, 0) as rb from DivContent T)
+union all
+(select LeftContext(T.match, 0) as lb, RightContext(T.match, 0) as rb from SpanContent T)
+union all
+(select LeftContext(T.match, 0) as lb, RightContext(T.match, 0) as rb from AnchorContent T)
+union all
+(select LeftContext(T.match, 0) as lb, RightContext(T.match, 0) as rb from ParagraphContent T);

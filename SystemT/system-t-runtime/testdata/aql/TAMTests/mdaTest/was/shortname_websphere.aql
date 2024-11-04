@@ -1,0 +1,40 @@
+module was;
+
+-- *************************************
+-- Extracts the shortname that 
+-- (i) follows the thread ID (refer the thread ID extractor for more details)
+-- (ii) is made of characters mentioned in the regex below under the _base view
+-- (iii) surrounded by a single white space
+-- Eg:
+-- [1/5/12 16:41:31:266 PST] 0000000a ServiceLogger I com.ibm.ws.ffdc.IncidentStreamImpl resetIncidentStream FFDC0010I: FFDC closed incident stream file /apps/WebSphere/ProcServer-6.2/profiles/EISNAP01/logs/ffdc/WDPE-PROD.AppTarget.czzpwa01Node01.0_0000000a_12.01.05_16.41.31_1.txt
+-- Here 'ServiceLogger' is the shortname following the thread ID '0000000a'
+-- *************************************
+
+create view Shortname_base as 
+    extract regex /[\w]+/ on 1 token in D.text as match
+    from Document D;
+    	
+create view Shortname_interim as 
+    select C.match
+    from Shortname_base C
+    where MatchesRegex(/\s/, LeftContext(C.match, 1))
+    and MatchesRegex(/\s/, RightContext(C.match, 1));
+
+create view Shortname as
+select 
+	shortnameI.match as shortname
+from 
+	ThreadID threadIDF,
+	Shortname_interim shortnameI
+where 
+	FollowsTok(threadIDF.threadID, shortnameI.match, 0, 0);	
+
+create view ShortnameOutputInterim as
+select D.shortname as shortname_Span, GetText(D.shortname) as shortname_Text
+from Shortname D;
+
+create view ShortnameOutput as
+select D.shortname_Span as span, D.shortname_Text as text, GetString('ShortnameWS') as field_type
+from ShortnameOutputInterim D;
+
+export view ShortnameOutput;

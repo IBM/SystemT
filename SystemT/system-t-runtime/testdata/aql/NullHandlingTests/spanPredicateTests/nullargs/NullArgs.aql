@@ -1,0 +1,28 @@
+module nullargs;
+
+require document with columns text Text;
+
+create view _NullArgs as
+  extract regex 
+    /!(\d)?A(X)?B(Y)?C(Z)?(\d)?/
+  on D.text
+  return 
+    group 1 as firstInt
+    and group 2 as firstArg
+    and group 3 as secondArg
+    and group 4 as onlyArg
+    and group 5 as secondInt
+  from Document D;
+  
+output view _NullArgs;
+  
+export view _NullArgs;
+
+create view _OnlyArg as 
+  select N.onlyArg as onlyArg,
+  null as nullCol
+  from _NullArgs N
+  group by N.onlyArg;
+  
+output view _OnlyArg;
+export view _OnlyArg;

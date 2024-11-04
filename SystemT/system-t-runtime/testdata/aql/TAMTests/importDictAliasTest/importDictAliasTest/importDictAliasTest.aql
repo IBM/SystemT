@@ -1,0 +1,40 @@
+/*
+This test verifies importing of dictionaries using 'import dictionary ...' and 
+'import dictionary ... as alias ..' statement.
+*/
+
+module importDictAliasTest;
+
+-- import SalutationDict dictionary from exportDict module: this dictionary will be 
+-- referred thru fully qualified name
+import dictionary SalutationDict from module exportDict;
+
+-- import LastName dictionary from exportDict module: this dictionary is referred thru
+-- its alias 'LNDictAlias'
+import dictionary LastName from module exportDict as LNDictAlias;
+
+-- imported dictionary referred thru fully qualified name
+create view Salutation as
+extract dictionary exportDict.SalutationDict
+on D.text as salutation
+from Document D;
+
+output view Salutation;
+
+-- imported dictionary referred thru alias in 'extract dictionary ...' clause
+create view LastName as
+extract dictionary LNDictAlias
+on D.text as last
+from Document D
+having MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, last);
+
+output view LastName;
+
+-- imported dictionary referred thru alias in ContainsDict() function
+create view ContainsLastDict as
+select D.text, D.label from
+Document D
+where ContainsDict ('LNDictAlias', D.text);
+
+output view ContainsLastDict;
+

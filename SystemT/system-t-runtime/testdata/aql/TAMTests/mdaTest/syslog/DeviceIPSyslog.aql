@@ -1,0 +1,18 @@
+module syslog;
+
+import view IPAddressOutput from module common;
+import view logDatetime from module common;
+
+create view DeviceIP as
+    select Ip.span as span
+    from common.IPAddressOutput Ip, common.logDatetime logD
+    where FollowsTok(logD.span, Ip.span, 0, 0);
+    
+create view DeviceIPOutput as
+    select dIp.span as span,
+    GetText(dIp.span) as text,
+    GetString('DeviceIP') as field_type 
+    from DeviceIP dIp;    
+
+export view DeviceIPOutput;
+

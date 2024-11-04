@@ -1,0 +1,32 @@
+-------------------------------------------------------------------------------
+-- Test for defect #18944: SystemT Tools: Results missing from the Provenance Viewer
+-- Turned out that the rewrtite for extract regex did not copy the flags
+-------------------------------------------------------------------------------
+
+-- Identify different ways to express "Revenue"
+-- Example: fourth-quarter revenues, revenue
+create view Revenue as
+extract
+        regex /((.\s*)?(first|second|third|fourth)\s*-\s*quarter)?\s*(revenues?)/
+        	with flags 'CASE_INSENSITIVE'
+            on between 1 and 5 tokens in D.text
+            return
+                group 0 as match
+    from Document D;
+
+output view Revenue;
+
+
+-- Define a dictionary of financial amount units
+-- Example: million, billion
+create dictionary UnitDict
+from file 'unit.dict'
+with language as 'en';
+
+create view Unit as
+extract dictionary 'UnitDict'
+      with flags 'Exact' 
+	on D.text as match
+from Document D;
+
+output view Unit;

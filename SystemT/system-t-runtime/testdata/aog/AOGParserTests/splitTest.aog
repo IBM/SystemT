@@ -1,0 +1,44 @@
+##############################################################################
+# split.aog
+#
+# Tests of the Split opeator.
+##############################################################################
+
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+###############################################
+# Test 1: Split up phone numbers on delimiters.
+
+# First, identify phone numbers.
+$PhoneNum = 
+Project(
+	( "phone" => "phone" ),
+	Union(
+		Regex(/\+?\([1-9]\d{2}\)\d{3}-\d{4}/, (0 => "phone"), "text", $Document),
+		Regex(/[1-9]\d{2}-\d{3}-\d{4}/, (0 => "phone"), "text", $Document)
+	)
+);
+	
+# Then pull out delimiters, retaining the phone numbers for split context.
+$Delim = Regex(/[\+ \-]/, (0 => "delim"), "phone", $PhoneNum);
+
+# Finally, split the phone numbers along the delimiters, trying out all the 
+# different combinations of flags.
+
+# Just the chunks
+$JustNum = Split("phone", "delim", 0, "num", $Delim);
+
+# Retain the split point to the left of each chunk
+$WithLeft = Split("phone", "delim", 1, "num", $Delim);
+
+# Retain the split point to the right of each chunk
+$WithRight = Split("phone", "delim", 2, "num", $Delim);
+
+# Retain both adjacent split points
+$WithBoth = Split("phone", "delim", 3, "num", $Delim);
+	
+Output: $PhoneNum, $Delim, $JustNum, $WithLeft, $WithRight, $WithBoth;

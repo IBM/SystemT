@@ -1,0 +1,69 @@
+---------------------------------------
+--   Person Feature Extraction
+---------------------------------------
+
+<Initial> 		As	Dictionary('InitialDict.dict');
+ 
+<CapsPerson>	As	Regex(/\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}/);
+  
+<StrictLastName>	As	Dictionary('strictLast.dict','strictLast_german.dict',
+								   'strictLast_german_bluePages.dict', 'uniqMostCommonSurname.dict',
+								   'names/strictLast_italy.dict','names/strictLast_france.dict',
+								   'names/strictLast_spain.dict','names/strictLast_india.partial.dict',
+								   'names/strictLast_israel.dict');
+ 
+<RelaxedLastName1>	As	<StrictLastName>'-'<CapsPerson>;		
+<RelaxedLastName2>	As	<CapsPerson>'-'<StrictLastName>;	
+
+<LastName>		As		Union(<StrictLastName>,<RelaxedLastName1>,<RelaxedLastName2>);
+ 
+Consolidate <LastName>;	
+
+<StrictFirstName>	As	Dictionary('strictFirst.dict','strictFirst_german.dict',
+								   'strictNickName.dict','strictFirst_german_bluePages.dict', 
+								   'names/strictFirst_italy.dict','names/strictFirst_france.dict',
+								   'names/strictFirst_spain.dict','names/strictFirst_india.partial.dict',
+								   'names/strictFirst_israel.dict');
+ 
+<RelaxedFirstName1>	As	<StrictFirstName>'-'<CapsPerson>;		
+<RelaxedFirstName2>	As	<CapsPerson>'-'<StrictFirstName>;	
+
+<FirstName>		As		Union(<StrictFirstName>,<RelaxedFirstName1>,<RelaxedFirstName2>);
+ 
+Consolidate <FirstName>;	
+
+ 
+
+---------------------------------------
+--   Person Candidate Rules
+---------------------------------------
+  
+<PRule1a>	As	<Initial> <CapsPerson>;
+   
+<PRule4>	As	<FirstName> <LastName>;
+ 
+<PRule4a>	As	<LastName> ',' <FirstName>;
+  
+<PRule4r1>  As  <FirstName> <CapsPerson>;
+<PRule4r2>	As 	<CapsPerson> <LastName>;
+ 
+---------------------------------------
+--   Merge results and Consolidate
+---------------------------------------
+
+<Person>	As	Union(<PRule1a>, <PRule4>, <PRule4a>, <PRule4r1>,<PRule4r2>);
+ 
+Consolidate 	<Person>	Using	'LeftToRight';
+
+---------------------------------------
+--   Output
+---------------------------------------
+
+Output(<Person>);
+
+
+
+								    
+								 
+									 
+									 			   

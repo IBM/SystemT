@@ -1,0 +1,80 @@
+module common;
+
+
+create function getPackageCategory(
+  packageName String  ,className String)
+return Text
+external_name 'logAAqlUDFs.jar:com.ibm.logparse.aql.Util!getCategory'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create view PackageClassName as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /((?:[a-z])+)(\.)*((?:\w|-|_|\.|\$)*)\.([A-Z](?:\w|\$)*)/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as annot
+  from Document D;
+
+output view PackageClassName;
+
+
+
+create view PackageDetails as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    P.__auto__id as PackageClassName_____sep_____P____id,
+    regex /(((?:[a-z])+)(\.)*((?:\w|-|_|\.|\$)*))\.([A-Z](?:\w|\$)*)/
+    with flags 'DOTALL'
+    on P.annot
+    return group 0 as packageClassName
+       and group 1 as packageName
+       and group 5 as className
+  from PackageClassName P;
+
+output view PackageDetails;
+
+create view PackageDetailsInterim as
+  select  GetText(P.packageClassName) as packageClassName_Text,
+          P.packageClassName as packageClassName_Span,
+          GetText(P.packageName) as package_Text,
+          P.packageName as package_Span,
+          GetText(P.className) as className_Text,
+          P.className as className_Span,
+          getPackageCategory(GetString(P.packageName), GetString(P.className)) as category,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PackageDetails_____sep_____P____id
+  from  PackageDetails P;
+
+output view PackageDetailsInterim;
+
+create view PackageClassOutput as
+  select  P.packageClassName_Text as text,
+          P.packageClassName_Span as span,
+          P.package_Text as package_text,
+          P.package_Span as package_span,
+          P.className_Text as className_text,
+          P.className_Span as className_span,
+          getPackageCategory(GetString(P.package_Text), GetString(P.className_Text)) as category,
+          GetString('PackageClass') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PackageDetailsInterim_____sep_____P____id
+  from  PackageDetailsInterim P;
+
+output view PackageClassOutput;
+
+export view common.PackageClassOutput;
+
+
+
+
+
+

@@ -1,0 +1,21 @@
+module syslog;
+
+create view SeqIDNumeric as 
+select 
+	R.match as match
+from 
+	Regex(/\d{3,}/, Document.text) R;
+
+create view SequenceID as
+    select Id.match as span
+    from SeqIDNumeric Id, DeviceIP dIp
+    where FollowsTok(dIp.span, Id.match, 0, 0);
+    
+create view SequenceIDOutput as
+    select sid.span as span,
+    GetString(sid.span) as text,
+    GetString('SequenceID') as field_type 
+    from SequenceID sid;      
+
+export view SequenceIDOutput;
+

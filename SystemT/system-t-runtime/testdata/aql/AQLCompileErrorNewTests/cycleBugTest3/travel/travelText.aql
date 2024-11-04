@@ -1,0 +1,26 @@
+module travel;
+
+
+
+import table Loc_StateToAbbrv from module geographicExtractorText 
+    as ImportedTable;
+import view LocationFromText_Refined_Final_Output 
+    from module geographicExtractorText 
+    as ImportedView;
+
+-- Define a view in terms of a table and a precompiled view
+create view JoinOfImportedTableAndView as
+select T.state as text 
+from ImportedTable T, ImportedView V
+where Equals(T.state, V.state);
+
+
+-- Make a table reachable in the cycle to trigger the FatalInternalError
+-- symptom; keep the view name from the original example
+create view travel_ontrip_output_nointent as
+	(select A.text from travel_ontrip_output_nointent A)
+	minus 
+	(select C.text from JoinOfImportedTableAndView C);
+
+export view travel_ontrip_output_nointent;
+

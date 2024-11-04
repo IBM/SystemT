@@ -1,0 +1,354 @@
+---------------------------------------
+-- Document Preprocessing
+---------------------------------------
+include 'detag.aql';
+
+---------------------------------------
+-- UDFs Declarations
+---------------------------------------
+create function getAbbreviation(span Span)
+return String
+external_name 'NamedEntityUDFs.jar:com.ibm.avatar.udf.NamedEntityUDFs!getAbbreviation'
+language java
+deterministic
+return null on null input;
+
+create function toUpperCase(span Span)
+return String
+external_name 'NamedEntityUDFs.jar:com.ibm.avatar.udf.NamedEntityUDFs!toUpperCase'
+language java
+deterministic
+return null on null input;
+
+
+----------------------------------------
+-- Basic Named Entity Annotators
+----------------------------------------
+
+--------------------------------------------------------------------------------
+-- First, include the server side version of certain dictionaries
+
+--bogdan: probably no need for language customization here, add all available data
+--same
+include 'GenericNE/serverSideSpecific/AdditionalDictsForAddress.aql';
+--same
+include 'GenericNE/serverSideSpecific/AdditionalDictsForOrganization.aql';
+--same
+include 'GenericNE/serverSideSpecific/AdditionalDictsForPerson.aql';
+--------------------------------------------------------------------------------
+
+--done: from DictsForAddress.aql
+--/lg-spec
+include 'CountryCandidate-dict.aql';
+include 'GenericNE/DictsForAddress.aql';
+--/lg-spec
+include 'Cities-union.aql';
+
+--same 
+include 'GenericNE/Sentence.aql';
+
+--same
+include 'GenericNE/MacrosForTimeDates.aql';
+
+--done: from Date.aql
+--/lg-spec
+include 'Date-dict.aql';
+include 'GenericNE/Date.aql';
+--/lg-spec
+include 'Date-union.aql';
+include 'GenericNE/Date-consolidation.aql';
+
+--same
+include 'GenericNE/Time.aql';
+
+--same
+include 'GenericNE/PhoneNumber.aql';
+
+--same
+include 'GenericNE/Address.aql';
+
+--done: from CityStateCountry.aql 
+include 'GenericNE/CityStateCountry.aql';
+--/lg-spec
+include 'CityStateCountry-union.aql';
+include 'GenericNE/CityStateCountry-consolidation.aql';
+
+--same
+include 'GenericNE/County.aql';
+
+--same
+include 'GenericNE/Town.aql';
+
+--same
+include 'GenericNE/StockExchangeAndTicker.aql';
+
+--same
+include 'GenericNE/URL.aql';
+
+--same
+include 'GenericNE/EmailAddress.aql';
+
+--same
+include 'GenericNE/NotesEmailAddress.aql';
+
+--done: from Organization.aql
+--/lg-spec
+include 'Organization-dict.aql';
+include 'GenericNE/Organization.aql';
+--/lg-spec
+include 'Organization-union.aql';
+
+--same
+include 'GenericNE/Organization-FilterDoubleNewLineTab.aql';
+
+--same (modulo output view)
+include 'GenericNE/Organization-Sentence.aql';
+
+--done: from Person-BasicFeature.aql
+--/lg-spec
+include 'Person-BasicFeature-dict.aql';
+include 'GenericNE/Person-BasicFeature.aql';
+--/lg-spec
+include 'Person-BasicFeature-Names-union.aql';
+include 'GenericNE/Person-BasicFeature-consolidation.aql';
+
+--same:
+include 'GenericNE/formalContent/Person-Context-Based.aql';
+
+-- done: from Person.aql
+include 'GenericNE/Person.aql';
+--/lg-spec
+include 'Person-union.aql';
+
+--same
+include 'GenericNE/Person-FilterMultiNewLineTab.aql';
+
+--done: from Person-Filter.aql
+include 'GenericNE/Person-Filter.aql';
+
+-- same
+include 'GenericNE/formalContent/Location-Context-Based.aql';
+
+-- done: from Region.aql
+--/lg-spec
+include 'Region-dict.aql';
+include 'GenericNE/Region.aql';
+
+-- done: from Facility-CoNLL2003.aql
+--/lg-spec
+include 'Facility-CoNLL2003-dict.aql';
+include 'GenericNE/Facility-CoNLL2003.aql';
+
+-- same
+include 'GenericNE/StateStrongAbbrev.aql';
+
+-- done: from WaterBody.aql
+--/lg-spec
+include 'WaterBody-dict.aql';
+include 'GenericNE/WaterBody.aql';
+--/lg-spec
+include 'WaterBody-union.aql';
+
+-- same
+include 'GenericNE/Address-consolidation.aql';
+
+--same
+include 'GenericNE/OrgWithinNotesEmail.aql';
+
+-- same, modulo comments
+include 'GenericNE/Organization-FilterAddress.aql';
+
+-- same
+include 'GenericNE/Organization-SportsTeam-for-CoNLL2003.aql';
+
+-- same
+include 'GenericNE/Organization-FilterHeadline.aql';
+
+-- done: from Organization-consolidation.aql
+include 'GenericNE/Organization-consolidation.aql';
+--/lg-spec
+include 'Organization-consolidation-union.aql';
+include 'GenericNE/Organization-consolidation-cons.aql';
+
+-- todo
+include 'GenericNE/formalContent/Organization-Context-Based.aql';
+
+-- done: from Organization-Abbreviation.aql
+include 'GenericNE/Organization-Abbreviation.aql';
+
+-- same
+include 'GenericNE/OrganizationTypes.aql';
+
+-- done: from Person-consolidation.aql
+include 'GenericNE/Person-consolidation.aql';
+--/lg-spec
+include 'Person-consolidation-union.aql';
+include 'GenericNE/Person-consolidation-cons.aql';
+
+--same
+include 'GenericNE/DateTime-consolidation.aql';
+
+-- same, modulo output view
+include 'GenericNE/Location-consolidation.aql';
+
+----------------------------------------------
+-- Consolidation:
+-- For now, we just remove annotations that are completely
+-- contained within other annotations.
+----------------------------------------------
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Assign attributes for output section <<<<<<<<<<<<<<<<
+-- ===========================================================================
+
+--same
+include 'GenericNE/AttributesAssigner.aql';
+
+--same
+include 'GenericNE/AttributesAssigner-Person.aql';
+
+--same
+include 'GenericNE/AttributesAssigner-URL.aql';
+
+--done: from Location-ValueBasedJoin.aql
+--/lg-spec
+include 'Location-ValueBasedJoin-dict.aql';
+include 'GenericNE/Location-ValueBasedJoin.aql';
+
+--done: from AdditionalPerson.aql
+--/lg-spec
+include 'AdditionalPerson-dict.aql';
+include 'GenericNE/AdditionalPerson.aql';
+
+--done
+include 'GenericNE/Organization-ValueBasedJoin-for-CoNLL2003.aql';
+--/lg-spec
+include 'Organization-ValueBasedJoin-for-CoNLL2003-dict.aql';
+
+--done
+include 'GenericNE/Organization-Aggregate.aql';
+
+create view PersonMixed as
+	(select P.person as person from PersonBeforeFinalOrgFilter P)
+	minus
+	(select P.person as person from PersonBeforeFinalOrgFilter P, OrganizationMixed O where Contains(O.organization, P.person));
+	
+--	output view PersonMixed;
+--	output view OrganizationMixed;
+
+---------------------------------------------
+-- Financial Annotators 1
+---------------------------------------------
+/*
+include 'Financial/CompanyEvents/preprocesswithdetag.aql';
+include 'Financial/CompanyEvents/companyinfo.aql';
+include 'Financial/CompanyAnalystAnnouncement/CompanyAnalystAnnouncements.aql';
+include 'Financial/CompanyAnalystAnnouncement/AnalystAnnouncements.aql';
+include 'Financial/CompanyAnalystAnnouncement/CompanyAnnouncements.aql';
+include 'Financial/CompanyAnalystAnnouncement/AttributesAssigner.aql';
+
+---------------------------------------------
+-- Financial Annotators 2
+---------------------------------------------
+include 'Financial/CompanyEvents/merger.aql';
+include 'Financial/CompanyEvents/acquisition.aql';
+include 'Financial/CompanyEvents/jointventure.aql';
+include 'Financial/CompanyEvents/alliance.aql';
+include 'Financial/CompanyEvents/allevents.aql';
+*/
+
+
+--done
+include 'GenericNE/Location-aggregate.aql';
+
+-------------------------------------------------------------------------------
+-- include possible unambiguous single token matches. 
+-------------------------------------------------------------------------------
+
+--same, modulo output views/ some selected atts
+include 'GenericNE/Disambiguation.aql';
+
+create view Person as
+select *
+from Person_;
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Output section <<<<<<<<<<<<<<<<
+-- ===========================================================================		
+output view Location;
+
+--4.1 City 
+
+--output view City;
+
+--4.2 County: 
+--output view County;
+
+--4.3 ZipCode
+--output view ZipCode;
+
+--4.4 Address
+select *
+into Address
+from AddressFinal;
+
+--output view Address;
+
+--4.5 StateOrProvince
+--output view StateOrProvince;
+
+--4.6 Country
+--output view Country;
+
+--4.7 Continent: 
+--output view Continent;
+
+--4.8 MapLocation
+--output view MapLocation;
+
+--4.9 Email Address
+--output view EmailAddress;
+
+--4.10 NotesEmailAddress
+--output view NotesEmailAddress;
+
+--4.11 PhoneNumber
+--output view PhoneNumber;
+
+--4.12 Person
+output view Person;
+
+--4.13 Organization
+output view Organization;
+
+--4.14 DateTime
+--output view DateTime;
+
+--4.15 URL
+create view URL as
+select U.url as url, U.protocol as protocol, U.reference as reference
+from UrlWithAttrAll U; 
+
+/*
+-- 4.16 Merger
+output view Merger;
+
+-- 4.17 Acquisition
+output view Acquisition;
+
+--4.18 Alliance: 
+output view Alliance;
+
+--4.19 JointVenture:
+output view JointVenture;
+
+--4.20 CompanyEarningsAnnouncement
+output view CompanyEarningsAnnouncement;
+
+--4.21 AnalystEarningsEstimate
+output view AnalystEarningsEstimate;
+
+--4.22 CompanyEarningsGuidance
+output view CompanyEarningsGuidance;
+*/
+

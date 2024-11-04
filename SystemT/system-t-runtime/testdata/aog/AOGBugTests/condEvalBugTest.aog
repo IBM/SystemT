@@ -1,0 +1,82 @@
+# 
+# condEvalBugTest.aog
+#
+# Simplified AOG version of the plan generated for condEvalBug.aql.
+#
+# In particular, unnecessary operators have been stripped out to help with
+# problem identification.
+#
+
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+CreateDict(
+    "name" => "dictionaries/first.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+$FirstName =
+Project(
+  (
+    "match" => "name"
+  ),
+  Project(
+  	("match" => "match"),
+        Dictionary(
+          "dictionaries/first.dict" => "IgnoreCase",
+          "text",
+          $Document
+      )
+  )
+);
+
+$PhoneNumber =
+Project(
+  (
+    "match" => "phone"
+  ),
+    Regex(
+          /\+?[Xx]\.?\d{4,5}/, (0 => "match"), "DOTALL",
+          "text",
+            $Document
+    )
+);
+
+$PersonPhone1 =
+  Project(
+    ("annot" => "annot"),
+    ApplyFunc( CombineSpans(
+      GetCol("name"),
+      GetCol("phone")) => "annot",
+      SortMergeJoin(
+        Follows(
+          GetCol("name"),
+          GetCol("phone"),
+          IntConst(0),
+          IntConst(5)
+        ),
+        $FirstName,
+        Project(("phone" => "phone"), 
+          $PhoneNumber
+        )
+      )
+    )
+);
+
+# Change to pass-through.
+$PersonPhone2 =
+  Project( ("phone" => "annot"), $PhoneNumber);
+
+$PPOutput =
+Union(
+  $PersonPhone1,
+  $PersonPhone2
+);
+
+
+Output: $FirstName, $PhoneNumber, $PersonPhone1, $PPOutput;

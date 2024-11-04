@@ -1,0 +1,43 @@
+-- Test to assert, if the system default dictionary language set is NOT used for dictionaries declares with explicit
+-- language clause.
+
+module defaultDictLangNotApplied2;
+
+-- inline dictionary declared with explicit language matching clause
+create dictionary testDictInline 
+with language as 'en'
+as
+(
+	'firstEntry','secondEntry'
+);
+
+-- dictionary coming from file without explicit language matching clause
+create dictionary testDictFromFile
+from file 'the.dict';
+
+create table testTable(firstCol Text) as values
+	('firstEntry'),
+	('secondEntry');
+
+-- dictionary coming from table without explicit language matching clause
+create dictionary testDictFromTable
+from table testTable
+with entries from firstCol
+and language as 'en';
+
+-- this view declares dictionary implicitly
+create view testView as
+extract dictionary 'the.dict' 
+on D.text as match
+from Document D;
+
+output view testView;
+
+-- for this view, dictionaries are created implicitly by sequence pattern re-write
+create view testDictionariesWrittenBySeqPattern as
+extract pattern <'the'[ with language as 'en']> <Token> 'hello'
+as match
+from Document D;
+
+output view testDictionariesWrittenBySeqPattern;
+

@@ -1,0 +1,57 @@
+-- extractBug.aql
+-- Test case for a bug that occurred when printing the output of 
+-- a particular extract statement.  The bug was actually in the
+-- HTML output generation code.
+
+detag Document.text as Doc
+annotate 
+	element 'title' as AllTitle;
+
+output view AllTitle;
+output view Doc;
+
+select Remap(T.match) as title
+into TitleTag
+from AllTitle T;
+	
+	
+-- Select the first and second segments of the title delimited by |
+-- Also, strip 'IBM' from the beginning of the first segment
+create view TempTitleSegs as
+
+	extract
+		T.match as title,
+		regex /\A(IBM\s*)?([^\|]*)\|?([^\|]*)\|?(\.*)/
+		on T.match
+		return group 2 as seg1
+		and group 3 as seg2
+	from AllTitle T;
+
+--output view TempTitleSegs;
+
+
+create view dummy as
+		extract 
+			T1.seg2 as seg2,
+			split using T1.delim on T1.seg1 as seg1		
+		from 
+		(
+			extract
+				T.seg1 as seg1,
+				T.seg2 as seg2,
+				regex /\s*[Ii]ntranet\s*\Z/ on T.seg1 as delim			
+			from TempTitleSegs T
+		) T1;
+--where NotNull(T2.seg1);
+
+create view dummy2 as
+select T2.seg1 as seg1, T2.seg2 as seg2
+from dummy T2;
+
+create view dummy3 as
+select T2.seg2 as seg2, T2.seg1 as seg1
+from dummy T2;
+	
+output view dummy;
+output view dummy2;
+output view dummy3; 

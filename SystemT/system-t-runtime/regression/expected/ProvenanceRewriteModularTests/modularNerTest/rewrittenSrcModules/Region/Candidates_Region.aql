@@ -1,0 +1,364 @@
+module Region;
+
+
+import view StatesFromMajorCountries from module CommonFeatures as StatesFromMajorCountries
+;
+
+
+import view CityAll from module CommonFeatures as CityAll
+;
+
+
+import view CapsPlace from module Linguistics as CapsPlace
+;
+
+
+import view CountryCandidateConsolidated from module Country as CountryCandidateConsolidated
+;
+
+
+create view Direction as
+  select  __t2.match as match,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__360__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__360__Temp__1 __t1,
+        __Consolidate__360__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.match;
+
+output view Direction;
+
+create view InternationalRegionExtended as
+  select  CombineSpans(D.match, R.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as Direction_____sep_____D____id,
+          R.__auto__id as InternationalRegionCandidate_____sep_____R____id
+  from  Direction D,
+        InternationalRegionCandidate R
+  where FollowsTok(D.match, R.match, 0, 0);
+
+output view InternationalRegionExtended;
+
+create view InternationalRegionAll as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__361__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__361__TempOp__1 Op);
+
+output view InternationalRegionAll;
+
+create view InternationalRegion as
+  select  __t2.match as match,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__362__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__362__Temp__1 __t1,
+        __Consolidate__362__Temp__2 __t2
+  where Or(GreaterThan(GetBegin(__t1.__consolidate__target), GetBegin(__t2.__consolidate__target)), Equals(GetBegin(__t1.__consolidate__target), GetBegin(__t2.__consolidate__target)))
+     and Overlaps(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.match;
+
+output view InternationalRegion;
+
+create view DomesticRegion2 as
+  select  CombineSpans(D.match, C.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as Direction_____sep_____D____id,
+          C.__auto__id as CountryCandidateConsolidated_____sep_____C____id
+  from  Direction D,
+        CountryCandidateConsolidated C
+  where FollowsTok(D.match, C.match, 0, 0)
+     and Not(ContainsRegex(/[\n\r]/, SpanBetween(D.match, C.match)))
+     and Not(ContainsRegex(/[,]/, C.match));
+
+output view DomesticRegion2;
+
+create view DomesticRegion3 as
+  select  CombineSpans(D.match, S.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as Direction_____sep_____D____id,
+          S.__auto__id as StatesFromMajorCountries_____sep_____S____id
+  from  Direction D,
+        StatesFromMajorCountries S
+  where FollowsTok(D.match, S.match, 0, 0)
+     and Not(ContainsRegex(/[\n\r]/, SpanBetween(D.match, S.match)));
+
+output view DomesticRegion3;
+
+create view DomesticRegion4 as
+  select  CombineSpans(D.match, C.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as Direction_____sep_____D____id,
+          C.__auto__id as CityAll_____sep_____C____id
+  from  Direction D,
+        CityAll C
+  where FollowsTok(D.match, C.match, 0, 0)
+     and Not(ContainsRegex(/[\n\r]/, SpanBetween(D.match, C.match)));
+
+output view DomesticRegion4;
+
+create view DomesticRegionAll as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__363__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__363__TempOp__1 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__363__TempOp__2 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__363__TempOp__3 Op);
+
+output view DomesticRegionAll;
+
+create view DomesticRegion as
+  select  __t2.match as match,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__364__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__364__Temp__1 __t1,
+        __Consolidate__364__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.match;
+
+output view DomesticRegion;
+
+create view RegionWithClue as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CapsPlace_____sep_____C____id,
+          R.__auto__id as RegionClue_____sep_____R____id
+  from  CapsPlace C,
+        RegionClue R
+  where FollowsTok(C.match, R.match, 0, 0)
+     and Not(MatchesRegex(/\p{Lu}\p{M}*.*/, RightContextTok(C.match, 1)));
+
+output view RegionWithClue;
+
+create view RegionCandidateAll as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__365__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__365__TempOp__1 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__365__TempOp__2 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__365__TempOp__3 Op);
+
+output view RegionCandidateAll;
+
+create view RegionCandidate as
+  select  __t2.match as match,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__366__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__366__Temp__1 __t1,
+        __Consolidate__366__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.match;
+
+output view RegionCandidate;
+
+create view __Consolidate__360__Temp__1 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as DirectionCandidate_____sep_____D____id,
+          D.match as __consolidate__target
+  from  DirectionCandidate D;
+
+output view __Consolidate__360__Temp__1;
+
+create view __Consolidate__360__Temp__2 as
+  select  __t1.match as match,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__360__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__360__Temp__2;
+
+create view __Consolidate__362__Temp__1 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as InternationalRegionAll_____sep_____R____id,
+          R.match as __consolidate__target
+  from  InternationalRegionAll R;
+
+output view __Consolidate__362__Temp__1;
+
+create view __Consolidate__362__Temp__2 as
+  select  __t1.match as match,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__362__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'LeftToRight';
+
+output view __Consolidate__362__Temp__2;
+
+create view __Consolidate__364__Temp__1 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as DomesticRegionAll_____sep_____D____id,
+          D.match as __consolidate__target
+  from  DomesticRegionAll D;
+
+output view __Consolidate__364__Temp__1;
+
+create view __Consolidate__364__Temp__2 as
+  select  __t1.match as match,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__364__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__364__Temp__2;
+
+create view __Consolidate__366__Temp__1 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as RegionCandidateAll_____sep_____R____id,
+          R.match as __consolidate__target
+  from  RegionCandidateAll R;
+
+output view __Consolidate__366__Temp__1;
+
+create view __Consolidate__366__Temp__2 as
+  select  __t1.match as match,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__366__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__366__Temp__2;
+
+create view __Union__361__TempOp__0 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as InternationalRegionCandidate_____sep_____R____id
+  from  InternationalRegionCandidate R;
+
+output view __Union__361__TempOp__0;
+
+create view __Union__361__TempOp__1 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as InternationalRegionExtended_____sep_____R____id
+  from  InternationalRegionExtended R;
+
+output view __Union__361__TempOp__1;
+
+create view __Union__363__TempOp__0 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as DomesticRegion1_____sep_____D____id
+  from  DomesticRegion1 D;
+
+output view __Union__363__TempOp__0;
+
+create view __Union__363__TempOp__1 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as DomesticRegion2_____sep_____D____id
+  from  DomesticRegion2 D;
+
+output view __Union__363__TempOp__1;
+
+create view __Union__363__TempOp__2 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as DomesticRegion3_____sep_____D____id
+  from  DomesticRegion3 D;
+
+output view __Union__363__TempOp__2;
+
+create view __Union__363__TempOp__3 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as DomesticRegion4_____sep_____D____id
+  from  DomesticRegion4 D;
+
+output view __Union__363__TempOp__3;
+
+create view __Union__365__TempOp__0 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as InternationalRegion_____sep_____R____id
+  from  InternationalRegion R;
+
+output view __Union__365__TempOp__0;
+
+create view __Union__365__TempOp__1 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as DomesticRegion_____sep_____R____id
+  from  DomesticRegion R;
+
+output view __Union__365__TempOp__1;
+
+create view __Union__365__TempOp__2 as
+  select  L.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as Landmark_____sep_____L____id
+  from  Landmark L;
+
+output view __Union__365__TempOp__2;
+
+create view __Union__365__TempOp__3 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as RegionWithClue_____sep_____R____id
+  from  RegionWithClue R;
+
+output view __Union__365__TempOp__3;
+

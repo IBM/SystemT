@@ -1,0 +1,31 @@
+-- A Span with offset-range [x-y] must overlap across 
+-- Span with offset-range [x-x] and Span with offset-range [y-y]
+
+create view RoadTrip as 
+extract 
+	regex /Road[\s]?Trip/ 
+	with flags 'CASE_INSENSITIVE' 
+	on between 1 and 2 tokens 
+	in Document.text as match 
+from Document;
+
+create view RoadTripReferences as 
+select 
+	R.match as reference, 
+	LeftContext(R.match,0) as leftCtxt,
+	RightContext(R.match,0) as rightCtxt 
+from RoadTrip R;
+
+create view OverlapsInSelectTest as 
+select 
+	R.reference as reference, 
+	R.leftCtxt as leftCtxt, 
+	R.rightCtxt as rightCtxt,
+	Overlaps(R.leftCtxt, R.reference) as ovlf1,
+	Overlaps(R.reference, R.leftCtxt) as ovlf2,
+	Overlaps(R.rightCtxt, R.reference) as ovrt1,
+	Overlaps(R.reference, R.rightCtxt) as ovrt2
+from RoadTripReferences R;
+
+output view OverlapsInSelectTest;
+	

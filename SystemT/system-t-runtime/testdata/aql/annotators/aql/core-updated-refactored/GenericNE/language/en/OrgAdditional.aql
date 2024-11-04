@@ -1,0 +1,18 @@
+create view OrgAdditional9Single as
+select O.org as org
+from
+(
+	extract pattern  <C.match> ('--')? (<O.match> )
+		return group 0 as match
+		   and group 2 as org
+		with inline_match on Doc.text
+	from LeftClue9Single C, CapsWordOnetoFive O
+	having Not(ContainsRegex(/[\n\r]/, match))
+	consolidate on match
+) O
+--where Not(MatchesDict('country.dict', O.org))
+where Not(MatchesDict('loc_world_countries_en.dict', O.org))
+  --and Not(MatchesDict('nationality.dict', O.org))
+  and Not(MatchesDict('per_nationalities_en.dict', O.org))
+  --and Not(MatchesDict('NegativeClue9Dict', O.org));
+  and Not(MatchesDict('orgs/org_negClue_nine_en.dict', O.org));

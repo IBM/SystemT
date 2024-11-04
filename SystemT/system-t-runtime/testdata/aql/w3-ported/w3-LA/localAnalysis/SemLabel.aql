@@ -1,0 +1,140 @@
+
+-------------------------------------------------------------------------------
+-- Semlabel.aql
+--
+-- Identify semantic labels
+--
+-- This file produces the contents of the following local analysis outputs:
+--      a. Semlabel
+--
+-- Depends on HTML.aql, URL.aql, OrgChart.aql, orgChartServlet.aql, SiteServ.aql, 
+-- URLHome.aql, urlPatterns.aql
+--
+-- Based on Huiayu's original Java implementation.
+-------------------------------------------------------------------------------
+
+-- Orgchart semlabel from URLNamePatterns.jav
+create view SemlabelOrgChart as
+select 'contenttypes_orgchart' as label
+from OrgChart
+limit 1;
+
+-- orgchartservlet semlabel from OrgChartServlet.java
+/*
+create view SemlabelOrgChartServlet as
+select 'orgchartservlet' as label
+from OrgChartServlet
+limit 1;
+*/
+
+-- siteserv semlabel from SiteServ.java
+create view SemlabelSiteServ as
+select 'sites_siteserv' as label
+from SiteServ
+limit 1;
+
+-- login_code semlabel from URLHeadingAnnotator.java
+create view SemlabelLoginCode as
+select 'backend_login_code' as label
+from UrlLoginwssCode U
+limit 1;
+
+
+-- ***********************************************************************
+-- ***                      SEMLABEL - from TITLE                     ****
+-- ***********************************************************************
+
+-- Semlabels from first segment of the title
+create view SemlabelFirstSeg as
+select T.label as label
+from CheckFirstSegDict S, FirstSegMappingTable T
+where Equals(GetText(S.elem), GetText(T.str));
+
+-- Semlabels from last segment of the title
+create view SemlabelLastSegForward as
+select T.label as label
+from CheckLastSegDict S, LastSegMappingTable T
+where Equals(GetText(S.elem), GetText(T.str));
+
+create view SemlabelLastSegBackwards as
+select T.label as label
+from CheckLastSegDictTrue S, LastSegMappingTableBackwards T
+where Equals(GetText(S.elem), GetText(T.str));
+
+create view SemlabelLastSeg as
+(select * from SemlabelLastSegForward)
+union all
+(select * from SemlabelLastSegBackwards);
+
+
+
+-- ***********************************************************************
+-- ***                  SEMLABEL - priority rules                     ****
+-- *** Laura 10/7: removed as requested by Nicole                     ****
+-- ***********************************************************************
+
+/*
+-- Semlabel0 = SemlabelLastSeg > SemlabelFirstSeg
+create view Semlabel0_ as
+select R2.*
+from SemlabelFirstSeg R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from SemlabelLastSeg) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Semlabel0 as (select * from SemlabelLastSeg) union all (select * from Semlabel0_);
+
+
+-- Semlabel1 = SemlabelLastSeg > SemlabelFirstSeg > SemLabelURL
+create view Semlabel1_ as
+select R2.*
+from SemLabelURL R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Semlabel0) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Semlabel1 as (select * from Semlabel0) union all (select * from Semlabel1_);
+*/
+-- ***********************************************************************
+
+
+-- All semlabels
+create view SemlabelAll as
+  (select * from SemlabelOrgChart)
+--union all
+--(select * from SemlabelOrgChartServlet)
+  union all
+  (select * from SemlabelSiteServ)
+--  union all
+--  (select * from SemlabelLoginCode)
+  union all
+-- Semlabels from Title and URL 
+  (select * from SemlabelFirstSeg)
+  union all
+  (select * from SemlabelLastSeg)
+  union all
+  (select * from SemLabelURL);
+
+
+-- Deduplicate all labels
+create view SemlabelNormalized as
+select GetText(S.label) as label, 1 as id
+from SemlabelAll S
+group by GetText(S.label);
+
+
+-- Finally, join all semlabels in a single string separated by semicolumn 
+-- so that it can be processed downstream.
+create view Semlabel as
+select ListJoin(S.label, ';') as label
+from 
+(
+	select S.id, List(S.label) as label
+	from SemlabelNormalized S
+	group by S.id
+) S;
+

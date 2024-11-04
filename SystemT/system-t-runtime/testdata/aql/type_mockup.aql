@@ -1,0 +1,61 @@
+-------------------------------------------------------------------------------
+-- type_mockup.aql
+--
+-- Mockup of new CREATE TYPE syntax.
+-------------------------------------------------------------------------------
+
+-- Create an empty annotation type
+create type FirstName(span Span)
+extends Annotation;
+
+-- Populate the empty type.
+select D.match as span
+into FirstName
+from Dictionary('firstnames.dict', DocScan.text) D
+where ContainsRegex(/\A[A-Z][a-z]*\Z/, D.match);
+
+-- Create and populate a type in one statement
+create type LastName(span Span) 
+extends Annotation
+as
+	select D.match as span
+	from Dictionary('lastnames.dict', DocScan.text) D
+	where ContainsRegex(/\A[A-Z][a-z]*\Z/, D.match);
+
+-- Join two persisted types to create Person
+create type Person(span Span, fname FirstName, lname LastName)
+extends Annotation
+as
+	select CombineSpans(F.span, L.span) as span, F as fname, L as lname
+	from FirstName F, LastName L
+	where FollowsTok(F.span, L.span, 0, 0);
+
+
+-- Create phone numbers as a view; don't persist them directly
+create view PhoneNumber as
+( 
+    select R.match as phone
+    from Regex(/\+?\([1-9]\d{2}\)\d{3}-\d{4}/, DocScan.text) R
+)
+union all
+(
+    select R.match as phone
+    from Regex(/\+?[Xx]\.?\d{4,5}/, DocScan.text) R
+);
+
+-- Now join person and phone numbers and create objects with:
+-- * A ref back to the Person object
+-- * A first name span (stored at the top level)
+-- * A phone number span
+create type PersonPhone(
+	Person pers,
+	fname Span,
+	phone Span)
+-- Note that we do *not* extend Annotation!
+as
+	select 
+    	person as pers,
+    	person.fname.span as fname
+    	phone.phone as phone
+	from Person person, PhoneNumber phone
+	where Follows(person.span, phone.phone, 0, 30);

@@ -1,0 +1,77 @@
+require document with columns text Text;
+
+
+-- Declare a UDF that returns true if its input contains no E's.
+create view CapsWord as
+extract regex /[A-Z][a-z]+/ on 1 token in D.text as word
+from Document D;
+
+
+create dictionary CommonWordsDict as (
+--	'a', 'the', 'of', 'of a', 'of the'
+'everytime','condo', 'the'
+);
+
+create dictionary OtherWordsDict as (
+	'the','boom','condo'
+	);
+
+create view OtherWords as 
+	select D.match as match, GetText(D.match) as t_match
+	from Dictionary('OtherWordsDict', Document.text) D;
+
+	
+create view CommonWords as 
+	select D.match as match
+	from Dictionary('CommonWordsDict', Document.text) D;
+
+
+create view WordPairs_Unsorted as
+select D1.match as first, GetString(D2.match) as second--, GetText(D2.match) as t_second
+from CommonWords D1, CommonWords D2
+where FollowsTok(D1.match, D2.match, 0, 200);
+
+create view WordPairs_Grouped as
+select W.first as first, List(W.second) as l_match
+from WordPairs_Unsorted W
+group by W.first;
+-- ********************************************************  
+
+create function GenerateNames(str String, L ScalarList)
+return ScalarList like L
+external_name 'udfjars/listUDFs.jar:com.ibm.test.udfs.UDFTests!GenerateNames'
+language java
+deterministic
+return null on null input;
+
+
+create view TestOutputLists as
+select GenerateNames(GetText(C.word), W.l_match) as name
+from CapsWord C, WordPairs_Grouped W;
+
+create view TestOutputLists2 as
+select GenerateNames(GetText(C.word), W.l_match) as name
+from CapsWord C, WordPairs_Grouped W;
+
+create view TestOutputListsUnion as
+	(
+	select T.name
+	from TestOutputLists T
+	)
+	union all
+	(
+	select T.name
+	from TestOutputLists2 T
+	)	;
+	
+output view TestOutputListsUnion;
+
+
+output view TestOutputLists;
+--output view  WordPairs_Grouped;
+--output view WordPairs_Unsorted;
+
+
+
+
+

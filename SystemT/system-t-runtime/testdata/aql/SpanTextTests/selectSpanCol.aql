@@ -1,0 +1,24 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test case for selecting a Span column
+--
+-------------------------------------------------------------------------------
+require document with columns text Text;
+
+-- create a view with a Span column
+create view CapitalizedWord as
+  extract
+    regex /[A-Z][a-z]*/
+            with flags 'CANON_EQ'
+        on 1 token in D.text
+        as word
+from Document D;
+
+-- select a Span column
+create view View2 as
+select C.word as word
+from CapitalizedWord C
+where ContainsRegex(/Fir/, C.word);
+
+output view View2;
+

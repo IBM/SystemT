@@ -1,0 +1,84 @@
+module genericModule;
+
+
+create dictionary "firstDict"
+with case insensitive
+as (
+  'Aaron',
+  'Candra',
+  'Freeman',
+  'Mathew',
+  'Matthew',
+  'Zoraida'
+);
+
+
+create dictionary "LastNamesDict"
+with case insensitive
+as (
+  'Anthony',
+  'Lehman',
+  'Radcliff'
+);
+
+
+create view LastName as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'LastNamesDict'
+    on D.text as lastname
+  from Document D;
+
+output view LastName;
+
+create view fromList as
+  select  FN.firstname as firstname,
+          "Last Name".lastname as lastname,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          FN.__auto__id as __Subquery__1__Temp_____sep_____FN____id,
+          "Last Name".__auto__id as "LastName_____sep_____Last Name____id"
+  from  __Subquery__1__Temp FN,
+        LastName "Last Name"
+  where Follows(FN.firstname, "Last Name".lastname, 0, 1);
+
+output view fromList;
+
+create view fromListStar as
+  select  FN.firstname as firstname,
+          "Last Name".lastname as lastname,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          FN.__auto__id as __Subquery__2__Temp_____sep_____FN____id,
+          "Last Name".__auto__id as "LastName_____sep_____Last Name____id"
+  from  __Subquery__2__Temp FN,
+        LastName "Last Name"
+  where Follows(FN.firstname, "Last Name".lastname, 0, 1);
+
+output view fromListStar;
+
+
+
+
+
+create view __Subquery__1__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'firstDict'
+    on D.text as firstname
+  from Document D;
+
+output view __Subquery__1__Temp;
+
+create view __Subquery__2__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'firstDict'
+    on D.text as firstname
+  from Document D;
+
+output view __Subquery__2__Temp;
+

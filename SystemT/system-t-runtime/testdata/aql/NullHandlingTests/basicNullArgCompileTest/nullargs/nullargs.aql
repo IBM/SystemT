@@ -1,0 +1,36 @@
+module nullargs;
+
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- nullarg.aql
+--
+-- Compile tests of scalar functions with null arguments
+-------------------------------------------------------------------------------
+
+-- Find first names, using an exhaustive dictionary.
+create view FirstName as 
+select D.match as annot
+from Dictionary('dictionaries/first.dict', Document.text) D
+where ContainsRegex(/\A[A-Z][a-z]*\Z/, D.match);
+
+-- Find phone numbers, using a pair of regular expressions.
+create view PhoneNumber as
+( 
+	select R.match as annot
+	from Regex(/\+?\([1-9]\d{2}\)\d{3}-\d{4}/, Document.text) R
+)
+union all
+(
+	select R.match as annot
+	from Regex(/\+?[Xx]\.?\d{4,5}/, Document.text) R
+);
+
+-- Find instances of first name followed within 50 chars by phone number
+-- and return the span *between* them.
+select SpanBetween('IgnoreOrder', null, name.annot) as annot
+into SpanBetween
+from FirstName name, PhoneNumber phone
+where Follows(name.annot, phone.annot, 0, 50);
+
+

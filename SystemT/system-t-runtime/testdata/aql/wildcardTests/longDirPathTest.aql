@@ -1,0 +1,19 @@
+-----------------------------------------------------------------------------
+-- longDirPathTest.aql
+-- Test case for feature request [132771] Implement wildcards in 'include' statement and optional includes
+-- Test scenario: The "directory" part of the wildcard expression is more 
+-- than one level deep.
+-----------------------------------------------------------------------------
+
+require document with columns text Text;
+
+include 'IncludeFiles/subdir1/subdir1.2/file*.aql';
+
+-- Create a dummy view that references the outputs of the view in the two
+-- input files.
+create view DummyJoinView as
+select D2.data as match1,D3.data as match2
+from TextData2 D2,TextData3 D3;
+
+output view DummyJoinView;
+

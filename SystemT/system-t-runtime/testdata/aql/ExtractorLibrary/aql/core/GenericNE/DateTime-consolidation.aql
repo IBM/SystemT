@@ -1,0 +1,16 @@
+create view DateTime1 as
+select CombineSpans(D.match, T.match) as match
+from Dates D, Times T
+where FollowsTok(D.match, T.match, 0, 0);
+
+create view DateTimeAll as
+	(select DT.match as match from DateTime1 DT)
+	union all
+	(select D.match as match from Dates D)
+	union all
+	(select T.match as match from Times T);
+	
+create view DateTimes as
+select DT.match as match
+from DateTimeAll DT
+consolidate on DT.match;

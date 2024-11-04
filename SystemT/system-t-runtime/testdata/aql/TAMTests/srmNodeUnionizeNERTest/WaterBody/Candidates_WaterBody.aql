@@ -1,0 +1,55 @@
+module WaterBody;
+
+import view CapsPlace from module Linguistics as CapsPlace;
+import view CapsPlaceAndCountry from module Country as CapsPlaceAndCountry;
+
+-- Water Body
+
+
+-- Sudarshan regex : 10/12/2011 : Backreference on line 13
+create view WaterBodyClueBased1 as
+select CombineSpans(CP.match, C.match) as match
+from CapsPlaceAndCountry CP,
+     WaterBodyRightClue C
+where FollowsTok(CP.match, C.match, 0, 2)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(CP.match, C.match)))
+  and MatchesRegex(/\s*('s)?\s*/, SpanBetween(CP.match, C.match))
+  and MatchesRegex(/\p{Lu}\p{M}*.+/, C.match);
+
+create view WaterBodyClueBased2 as
+select CP.*
+from CapsPlace CP,
+     WaterBodyRightClue C
+where FollowsTok(CP.match, C.match, 0, 0)
+  and MatchesRegex(/\p{Ll}\p{M}*.+/, C.match);
+  
+create view WaterBodyClueBased3 as
+select CP.*
+from CapsPlace CP,
+     WaterBodyRightClue C
+where FollowsTok(C.match, CP.match, 1, 1)
+  and MatchesRegex(/\s*of\s*/, SpanBetween(C.match, CP.match))
+  and MatchesRegex(/\p{Ll}\p{M}*.+/, C.match);
+  
+  
+create view WaterBodyClueBased as
+	(select W.* from WaterBodyClueBased1 W)
+	union all
+	(select W.* from WaterBodyClueBased2 W)
+	union all
+	(select W.* from WaterBodyClueBased3 W);
+
+create view WaterBodyClueBasedExtended as
+select CP.*
+from CapsPlace CP,
+     WaterBodyClueBased W
+where FollowsTok(CP.match, W.match, 1, 1)
+  and MatchesRegex(/\s*and\s*/, SpanBetween(CP.match, W.match))
+  and MatchesRegex(/the\s*/, LeftContextTok(CP.match, 1));    
+
+create view WaterBody as
+	(select W.* from WaterBodyDictMatch W)
+	union all
+	(select W.* from WaterBodyClueBased W)
+	union all
+	(select W.* from WaterBodyClueBasedExtended W);

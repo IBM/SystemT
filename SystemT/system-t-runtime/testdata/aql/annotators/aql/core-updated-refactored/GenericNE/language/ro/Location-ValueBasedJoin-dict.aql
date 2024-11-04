@@ -1,0 +1,15 @@
+create view RightMergeableContext as
+select D.match as match
+--from   Dictionary('rightMergeableContext.dict', 'Exact', Doc.text) D;
+from (extract dictionary 'misc_posClue_ctxtRight_case_en.dict' with flags 'Exact' on D.text as match from Doc D) D;
+
+create view LeftMergeableContext as
+	extract
+		--dictionaries 'leftMergeableContext.dict'
+		dictionaries 'misc_posClue_ctxtLeft_case_en.dict'
+				--and  'direction.dict'
+				and 'loc_directn_case_en.dict'
+			with flags 'Exact'
+			on D.text   
+        	as clue
+			from Doc D;

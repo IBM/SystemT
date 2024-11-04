@@ -1,0 +1,171 @@
+module common;
+
+
+create function getNullText(
+  span Span)
+return Text
+external_name 'logAAqlUDFs.jar:com.ibm.logparse.aql.Util!getNullText'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create view logDatetime as
+  select  Op.span as span,
+          AutoID() as __auto__id
+  from  __Base__common__logDatetime__Temp Op;
+
+output view logDatetime;
+
+export view common.logDatetime;
+
+
+create view LogDatetimeOutput as
+  select  T.span as span,
+          GetString(T.span) as text,
+          getNullText(T.span) as normalized_text,
+          getNullText(T.span) as category,
+          getNullText(T.span) as datetime_in_milli_secs_text,
+          GetString('LogDateTime') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as logDatetime_____sep_____T____id
+  from  logDatetime T;
+
+output view LogDatetimeOutput;
+
+export view common.LogDatetimeOutput;
+
+
+create view logDate as
+  select  Op.span as span,
+          AutoID() as __auto__id
+  from  __Base__common__logDate__Temp Op;
+
+output view logDate;
+
+create view LogDateOutput as
+  select  T.span as span,
+          GetString(T.span) as text,
+          getNullText(T.span) as normalized_text,
+          getNullText(T.span) as category,
+          GetString('LogDate') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as logDate_____sep_____T____id
+  from  logDate T;
+
+output view LogDateOutput;
+
+export view common.LogDateOutput;
+
+
+create view logTime as
+  select  Op.span as span,
+          AutoID() as __auto__id
+  from  __Base__common__logTime__Temp Op;
+
+output view logTime;
+
+create view LogTimeOutput as
+  select  T.span as span,
+          GetString(T.span) as text,
+          getNullText(T.span) as normalized_text,
+          getNullText(T.span) as category,
+          GetString('LogTime') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as logTime_____sep_____T____id
+  from  logTime T;
+
+output view LogTimeOutput;
+
+export view common.LogTimeOutput;
+
+
+create view __Base__common__logDate__Temp as
+  select  D.span as span,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as DateOutput_____sep_____D____id
+  from  DateOutput D
+  consolidate on D.span using 'RetainFirst';
+
+output view __Base__common__logDate__Temp;
+
+create view __Base__common__logDatetime__Temp as
+  select  D.span as span,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as DateTimeOutput_____sep_____D____id
+  from  DateTimeOutput D
+  consolidate on D.span using 'RetainFirst';
+
+output view __Base__common__logDatetime__Temp;
+
+create view __Base__common__logTime__Temp as
+  select  D.span as span,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as TimeOutput_____sep_____D____id
+  from  TimeOutput D
+  consolidate on D.span using 'RetainFirst';
+
+output view __Base__common__logTime__Temp;
+
+create view __Consolidate__18__Temp__1 as
+  select  D.span as span,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as DateTimeOutput_____sep_____D____id,
+          D.span as __consolidate__target
+  from  DateTimeOutput D;
+
+output view __Consolidate__18__Temp__1;
+
+create view __Consolidate__18__Temp__2 as
+  select  __t1.span as span,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__18__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'RetainFirst';
+
+output view __Consolidate__18__Temp__2;
+
+create view __Consolidate__19__Temp__1 as
+  select  D.span as span,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as DateOutput_____sep_____D____id,
+          D.span as __consolidate__target
+  from  DateOutput D;
+
+output view __Consolidate__19__Temp__1;
+
+create view __Consolidate__19__Temp__2 as
+  select  __t1.span as span,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__19__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'RetainFirst';
+
+output view __Consolidate__19__Temp__2;
+
+create view __Consolidate__20__Temp__1 as
+  select  D.span as span,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as TimeOutput_____sep_____D____id,
+          D.span as __consolidate__target
+  from  TimeOutput D;
+
+output view __Consolidate__20__Temp__1;
+
+create view __Consolidate__20__Temp__2 as
+  select  __t1.span as span,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__20__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'RetainFirst';
+
+output view __Consolidate__20__Temp__2;
+

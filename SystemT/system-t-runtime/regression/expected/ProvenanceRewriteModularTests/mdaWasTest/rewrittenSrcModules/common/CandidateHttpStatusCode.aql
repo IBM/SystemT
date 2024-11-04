@@ -1,0 +1,203 @@
+module common;
+
+
+create function getCodeCategory(
+  code String  ,val String)
+return Text
+external_name 'logAAqlUDFs.jar:com.ibm.logparse.aql.Util!getCategory'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create view SupersetOfCodes as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /(1|2|3|4|5)\d\d/
+    with flags 'DOTALL'
+    on between 1 and 1 tokens in D.text
+    return group 0 as match
+  from Document D;
+
+output view SupersetOfCodes;
+
+create view SupersetOfCodesFiltered as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as SupersetOfCodes_____sep_____C____id
+  from  SupersetOfCodes C
+  where Not(MatchesRegex(/\./, LeftContext(C.match, 1)))
+     and Not(MatchesRegex(/\./, RightContext(C.match, 1)));
+
+output view SupersetOfCodesFiltered;
+
+create table CodesToValues
+  (code Text, val Text) as
+  values
+    ('100', 'Continue'),
+    ('102', 'Switching Protocols'),
+    ('103', 'Processing'),
+    ('104', 'Request-URI too long'),
+    ('200', 'OK'),
+    ('201', 'Created'),
+    ('202', 'Accepted'),
+    ('203', 'Partial Information'),
+    ('204', 'No Response'),
+    ('205', 'Reset Content'),
+    ('206', 'Partial Content'),
+    ('207', 'Multi-Status'),
+    ('208', 'IM Used'),
+    ('300', 'Multiple Choices'),
+    ('301', 'Moved Permanently'),
+    ('302', 'Found'),
+    ('303', 'See Other'),
+    ('304', 'Not Modified'),
+    ('305', 'Use Proxy'),
+    ('306', 'Switch Proxy'),
+    ('307', 'Temporary Redirect'),
+    ('400', 'Bad request'),
+    ('401', 'Unauthorized'),
+    ('402', 'Payment Required'),
+    ('403', 'Forbidden'),
+    ('404', 'Not found'),
+    ('405', 'Method Not Allowed'),
+    ('406', 'Not Acceptable'),
+    ('407', 'Proxy Authentication Required'),
+    ('408', 'Request Timeout'),
+    ('409', 'Conflict'),
+    ('410', 'Gone'),
+    ('411', 'Length Required'),
+    ('412', 'Precondition Failed'),
+    ('413', 'Request Entity Too Large'),
+    ('414', 'Request-URI Too Long'),
+    ('415', 'Unsupported Media Type'),
+    ('416', 'Requested Range Not Satisfiable'),
+    ('417', 'Expectation Failed'),
+    ('418', 'Im a teapot'),
+    ('422', 'Unprocessable Entity'),
+    ('423', 'Locked'),
+    ('424', 'Failed Dependency'),
+    ('425', 'Unordered Collection'),
+    ('426', 'Upgrade Required'),
+    ('444', 'No Response'),
+    ('449', 'Retry With'),
+    ('450', 'Blocked by Windows Parental Controls'),
+    ('499', 'Client Closed Request'),
+    ('500', 'Internal Server Error'),
+    ('501', 'Not Implemented'),
+    ('502', 'Bad Gateway'),
+    ('503', 'Service Unavailable'),
+    ('504', 'Gateway Timeout'),
+    ('505', 'HTTP Version Not Supported'),
+    ('506', 'Variant Also Negotiates'),
+    ('507', 'Insufficient Storage'),
+    ('509', 'Bandwidth Limit Exceeded'),
+    ('510', 'Not Extended');
+
+create table CodesToCodesPlusValues
+  (code Text, val Text) as
+  values
+    ('100', '100 [Continue]'),
+    ('102', '102 [Switching Protocols]'),
+    ('103', '103 [Processing]'),
+    ('104', '104 [Request-URI too long]'),
+    ('200', '200 [OK]'),
+    ('201', '201 [Created]'),
+    ('202', '202 [Accepted]'),
+    ('203', '203 [Partial Information]'),
+    ('204', '204 [No Response]'),
+    ('205', '205 [Reset Content]'),
+    ('206', '206 [Partial Content]'),
+    ('207', '207 [Multi-Status]'),
+    ('208', '208 [IM Used]'),
+    ('300', '300 [Multiple Choices]'),
+    ('301', '301 [Moved Permanently]'),
+    ('302', '302 [Found]'),
+    ('303', '303 [See Other]'),
+    ('304', '304 [Not Modified]'),
+    ('305', '305 [Use Proxy]'),
+    ('306', '306 [Switch Proxy]'),
+    ('307', '307 [Temporary Redirect]'),
+    ('400', '400 [Bad request]'),
+    ('401', '401 [Unauthorized]'),
+    ('402', '402 [Payment Required]'),
+    ('403', '403 [Forbidden]'),
+    ('404', '404 [Not found]'),
+    ('405', '405 [Method Not Allowed]'),
+    ('406', '406 [Not Acceptable]'),
+    ('407', '407 [Proxy Authentication Required]'),
+    ('408', '408 [Request Timeout]'),
+    ('409', '409 [Conflict]'),
+    ('410', '410 [Gone]'),
+    ('411', '411 [Length Required]'),
+    ('412', '412 [Precondition Failed]'),
+    ('413', '413 [Request Entity Too Large]'),
+    ('414', '414 [Request-URI Too Long]'),
+    ('415', '415 [Unsupported Media Type]'),
+    ('416', '416 [Requested Range Not Satisfiable]'),
+    ('417', '417 [Expectation Failed]'),
+    ('418', '418 [Im a teapot]'),
+    ('422', '422 [Unprocessable Entity]'),
+    ('423', '423 [Locked]'),
+    ('424', '424 [Failed Dependency]'),
+    ('425', '425 [Unordered Collection]'),
+    ('426', '426 [Upgrade Required]'),
+    ('444', '444 [No Response]'),
+    ('449', '449 [Retry With]'),
+    ('450', '450 [Blocked by Windows Parental Controls]'),
+    ('499', '499 [Client Closed Request]'),
+    ('500', '500 [Internal Server Error]'),
+    ('501', '501 [Not Implemented]'),
+    ('502', '502 [Bad Gateway]'),
+    ('503', '503 [Service Unavailable]'),
+    ('504', '504 [Gateway Timeout]'),
+    ('505', '505 [HTTP Version Not Supported]'),
+    ('506', '506 [Variant Also Negotiates]'),
+    ('507', '507 [Insufficient Storage]'),
+    ('509', '509 [Bandwidth Limit Exceeded]'),
+    ('510', '510 [Not Extended');
+
+export table common.CodesToCodesPlusValues;
+
+
+
+
+
+
+create view CodesAndValuesInterim as
+  select  C.match as span,
+          CV.code as code,
+          CV.val as code_value,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as SupersetOfCodesFiltered_____sep_____C____id,
+          -1 as CodesToCodesPlusValues_____sep_____CV____id,
+          -1 as CodesToValues_____sep_____V____id
+  from  SupersetOfCodesFiltered C,
+        CodesToCodesPlusValues CV,
+        CodesToValues V
+  where Equals(GetText(C.match), GetText(V.code))
+     and Equals(GetText(C.match), GetText(CV.code));
+
+output view CodesAndValuesInterim;
+
+create view CodesAndValuesOutput as
+  select  CV.span as span,
+          CV.code_value as text,
+          CV.code as code,
+          CV.code_value as code_value,
+          GetString('CodesAndValues') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CV.__auto__id as CodesAndValuesInterim_____sep_____CV____id
+  from  CodesAndValuesInterim CV;
+
+output view CodesAndValuesOutput;
+
+export view common.CodesAndValuesOutput;
+
+

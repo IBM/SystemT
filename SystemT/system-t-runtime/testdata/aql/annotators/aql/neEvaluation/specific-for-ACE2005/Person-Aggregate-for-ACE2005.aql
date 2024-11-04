@@ -1,0 +1,116 @@
+	
+create view PersonMerged1 as
+select CombineSpans(P1.person, P2.person) as person
+from PersonCandidatesValid P1,
+	 PersonCandidatesValid P2
+where FollowsTok(P1.person, P2.person, 0, 0)
+--  and ContainsRegex(/\s+/, P1.person)
+  and Not(ContainsRegex(/\s[\r\n]+/, LeftContext(P1.person, 4)))
+  and Not(ContainsRegex(/[\r\n]{2}/, SpanBetween(P1.person, P2.person)));
+  
+create view PersonMerged2 as
+select CombineSpans(P1.person, P2.person) as person
+from PersonCandidatesValid P1,
+	 PersonCandidatesValid P2
+where FollowsTok(P1.person, P2.person, 3, 20)
+  and MatchesRegex(/[ ]*"[^"]+"[ ]*/, SpanBetween(P1.person, P2.person));
+
+create view PersonMerged3 as
+select CombineSpans(P1.person, P2.person) as person
+from PersonCandidatesValid P1,
+	 PersonCandidatesValid P2
+where FollowsTok(P1.person, P2.person, 3, 20)
+  and MatchesRegex(/[ ]*\([^)]+\)[ ]*/, SpanBetween(P1.person, P2.person));
+	 
+output view PersonMerged2;
+
+create view PersonCandidatesValidExtended as
+	(select P.person as person from PersonCandidatesValid P)
+	union all
+	(select P.person as person from PersonMerged1 P)
+	union all
+	(select P.person as person from PersonMerged2 P)
+	union all
+	(select P.person as person from PersonMerged3 P)
+	union all
+	(select P.person as person from GroupCandidate P)
+	union all
+	(select P.person as person from Speaker P)
+	union all
+	(select U.unit as person from MilitaryUnitAsPerson U);
+	
+create dictionary WrongPersonRightClueDict as (
+	'group', 'religious', 'Muslim','nation', 'population', 'bits'
+);
+
+create view WrongPersonRightClue as
+extract
+	dictionaries 'WrongPersonRightClueDict'
+	on D.text
+	as clue
+from Doc D;
+
+create view WrongPersonRC1 as
+extract pattern
+	(<P.person>)<C.clue>
+	return group 1 as person
+from PersonCandidatesValidExtended P,
+     WrongPersonRightClue C;
+
+output view WrongPersonRC1;	
+
+create dictionary WrongPersonLeftClueDict as (
+	 'name is'
+);
+
+create view WrongPersonLeftClue as
+extract
+	dictionaries 'WrongPersonLeftClueDict'
+	on D.text
+	as clue
+from Doc D;
+
+create view WrongPersonRC2 as
+extract pattern
+	<C.clue>(<P.person>)/(from|and|[,.])/
+	return group 1 as person
+from PersonCandidatesValidExtended P,
+     WrongPersonLeftClue C
+having Not(ContainsRegex(/\s/, person));
+
+output view WrongPersonRC2;	
+
+
+create view WrongPersonRC3 as
+extract pattern
+	('a'|'an')(<P.person>)/[,.;]/
+	return group 2 as person
+from PersonCandidatesValidExtended P;
+
+output view WrongPersonRC3;	
+
+create view PersonCandidatesValidExtendedValid as
+	(select P.* from PersonCandidatesValidExtended P)
+	minus
+	(
+	(select P.* from WrongPersonRC1 P)
+	union all
+	(select P.* from WrongPersonRC2 P)
+	union all
+	(select P.* from WrongPersonRC3 P)
+	);	
+
+output view PersonCandidatesValidExtended;
+output view PersonCandidatesValidExtendedValid;
+
+create view PersonConsolidated as
+select P.* 
+from PersonCandidatesValidExtendedValid P
+consolidate on P.person;
+
+create view Person as
+select P.person as name
+--, P.first as first, P.middle as middle, P.last as last, P.reference as reference
+--from PersonWithAttrAllValid P
+from PersonConsolidated P
+order by P.person;

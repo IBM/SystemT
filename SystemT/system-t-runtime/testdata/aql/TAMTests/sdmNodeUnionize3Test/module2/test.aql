@@ -1,0 +1,34 @@
+module module2;
+
+import module module1;
+
+/** Identify mentions of percentage amounts as a sequence of Number mention 
+-- followed by the token 'percent'
+-- Example: 49 percent, 46.1 percent
+
+create view AmountPercent as
+extract pattern <N.match> 'percent' 
+return group 0 as match
+from module1.Number N;
+
+output view AmountPercent;
+*/
+
+/** Negative clues that signal a relative amount
+-- Example: increased, decreased, down, up
+*/
+create dictionary AmountNegativeClueDict
+from file 'dictionaries/amount_negativeClue.dict'
+with language as 'en';
+
+create view AmountNegativeClueDictMatch as
+extract dictionary 'AmountNegativeClueDict' with flags 'IgnoreCase' on D.text as match
+from Document D;
+
+output view AmountNegativeClueDictMatch;
+
+create view UnitMatch as
+extract dictionary 'module1.UnitDict' on D.text as match
+from Document D;
+
+output view UnitMatch;

@@ -1,0 +1,33 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- bufferBug.aql
+--
+-- Test case for yet another bug in the tuple buffer code.
+------------------------------------------------------------------------------
+
+create view Zipcode as
+select R.match as match
+from Regex(/\b[0-9]{5}(\-[0-9]{4})?\b/, Document.text) R;
+
+	
+create view StreetAddressWithCity as
+(select R.match as match from Zipcode R) 
+union all (select R.match as match from Zipcode R);
+
+
+create view StreetAddressWithCityOptionalStateZipcode as
+select z.match as match
+from StreetAddressWithCity Sawcos, Zipcode z
+where FollowsTok(Sawcos.match,z.match, 0, 1);
+
+
+create view PlaceAll as
+(select R.match as loc from StreetAddressWithCityOptionalStateZipcode R)
+    union all 
+(select R.match as loc from StreetAddressWithCity R);
+
+select P.loc as loc
+into Place
+from PlaceAll P;
+ 

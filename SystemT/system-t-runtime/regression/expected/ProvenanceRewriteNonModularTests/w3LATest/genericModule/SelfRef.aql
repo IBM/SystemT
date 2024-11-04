@@ -1,0 +1,595 @@
+module genericModule;
+
+
+create function CreateLinkUrl(
+  link_url_str String)
+return Text like link_url_str
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!CreateLinkUrl'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create function GenerateURIAll(
+  linkurl String  ,scheme String  ,host String  ,port String)
+return Text
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.UrlUDF!GenerateURIAll'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create view LinkUrl as
+  select  D.label as pageurl,
+          A2.match as anchortext,
+          CreateLinkUrl(GetText(A2.target)) as linkurl,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          -1 as ATag_____sep_____A2____id,
+          -1 as Document_____sep_____D____id
+  from  ATag A2,
+        Document D
+  where NotNull(A2.target);
+
+output view LinkUrl;
+
+create view GetScheme as
+  select  GetURL(GetText(L.linkurl), 1) as linkscheme,
+          GetURL(GetText(L.linkurl), 2) as linkhost,
+          GetPort(GetText(L.linkurl)) as linkport,
+          GetURL(GetText(L.pageurl), 1) as pagescheme,
+          GetURL(GetText(L.pageurl), 2) as pagehost,
+          GetPort(GetText(L.pageurl)) as pageport,
+          L.linkurl as linkurl,
+          L.pageurl as pageurl,
+          L.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as LinkUrl_____sep_____L____id
+  from  LinkUrl L
+  where NotNull(L.linkurl);
+
+output view GetScheme;
+
+create dictionary "HttpsScheme"
+with case insensitive
+as (
+  'https'
+);
+
+
+create view NonHttpsResolveUrl as
+  select  resolveUrl(GetText(L.pageurl), GetText(L.linkurl)) as resolvurl,
+          L.linkscheme as linkscheme,
+          L.linkhost as linkhost,
+          L.linkport as linkport,
+          L.pagescheme as pagescheme,
+          L.pagehost as pagehost,
+          L.pageport as pageport,
+          L.linkurl as linkurl,
+          L.pageurl as pageurl,
+          L.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as GetScheme_____sep_____L____id
+  from  GetScheme L
+  where Not(MatchesDict('HttpsScheme', L.linkscheme));
+
+output view NonHttpsResolveUrl;
+
+create view HttpsLinkUrlResolveManually as
+  select  L.linkscheme as linkscheme,
+          L.linkhost as linkhost,
+          L.linkport as linkport,
+          L.pagescheme as pagescheme,
+          L.pagehost as pagehost,
+          L.pageport as pageport,
+          L.pageurl as pageurl,
+          L.linkurl as linkurl,
+          L.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as GetScheme_____sep_____L____id
+  from  GetScheme L
+  where MatchesDict('HttpsScheme', L.linkscheme);
+
+output view HttpsLinkUrlResolveManually;
+
+create view HostNull as
+  select  L.linkscheme as linkscheme,
+          L.linkhost as linkhost,
+          L.pagehost as newlinkhost,
+          L.linkport as linkport,
+          L.pagescheme as pagescheme,
+          L.pagehost as pagehost,
+          L.pageport as pageport,
+          L.linkurl as linkurl,
+          L.pageurl as pageurl,
+          L.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as HttpsLinkUrlResolveManually_____sep_____L____id
+  from  HttpsLinkUrlResolveManually L
+  where Not(NotNull(L.linkhost));
+
+output view HostNull;
+
+create view NotHostNull as
+  select  Op.linkscheme as linkscheme,
+          Op.linkhost as linkhost,
+          Op.linkport as linkport,
+          Op.pagescheme as pagescheme,
+          Op.pagehost as pagehost,
+          Op.pageport as pageport,
+          Op.linkurl as linkurl,
+          Op.pageurl as pageurl,
+          Op.anchortext as anchortext,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__382__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__382__TempOp__1 Op,
+        __Minus__382__Temp __t
+  where Equals(Op.linkscheme, __t.linkscheme)
+     and Equals(Op.linkhost, __t.linkhost)
+     and Equals(Op.linkport, __t.linkport)
+     and Equals(Op.pagescheme, __t.pagescheme)
+     and Equals(Op.pagehost, __t.pagehost)
+     and Equals(Op.pageport, __t.pageport)
+     and Equals(Op.linkurl, __t.linkurl)
+     and Equals(Op.pageurl, __t.pageurl)
+     and Equals(Op.anchortext, __t.anchortext);
+
+output view NotHostNull;
+
+create view HostFinal as
+  (select  Op.linkscheme as linkscheme,
+            Op.linkhost as linkhost,
+            Op.linkport as linkport,
+            Op.pagescheme as pagescheme,
+            Op.pagehost as pagehost,
+            Op.pageport as pageport,
+            Op.linkurl as linkurl,
+            Op.pageurl as pageurl,
+            Op.anchortext as anchortext,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__383__TempOp__0 Op)
+  union all
+  (select  Op.linkscheme as linkscheme,
+            Op.linkhost as linkhost,
+            Op.linkport as linkport,
+            Op.pagescheme as pagescheme,
+            Op.pagehost as pagehost,
+            Op.pageport as pageport,
+            Op.linkurl as linkurl,
+            Op.pageurl as pageurl,
+            Op.anchortext as anchortext,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__383__TempOp__1 Op);
+
+output view HostFinal;
+
+create view PortNull as
+  select  L.linkscheme as linkscheme,
+          L.linkhost as linkhost,
+          L.linkport as linkport,
+          L.pageport as newlinkport,
+          L.pagescheme as pagescheme,
+          L.pagehost as pagehost,
+          L.pageport as pageport,
+          L.linkurl as linkurl,
+          L.pageurl as pageurl,
+          L.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as HostFinal_____sep_____L____id
+  from  HostFinal L
+  where Equals(GetText(L.linkport), '-1');
+
+output view PortNull;
+
+create view NotPortNull as
+  select  Op.linkscheme as linkscheme,
+          Op.linkhost as linkhost,
+          Op.linkport as linkport,
+          Op.pagescheme as pagescheme,
+          Op.pagehost as pagehost,
+          Op.pageport as pageport,
+          Op.linkurl as linkurl,
+          Op.pageurl as pageurl,
+          Op.anchortext as anchortext,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__384__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__384__TempOp__1 Op,
+        __Minus__384__Temp __t
+  where Equals(Op.linkscheme, __t.linkscheme)
+     and Equals(Op.linkhost, __t.linkhost)
+     and Equals(Op.linkport, __t.linkport)
+     and Equals(Op.pagescheme, __t.pagescheme)
+     and Equals(Op.pagehost, __t.pagehost)
+     and Equals(Op.pageport, __t.pageport)
+     and Equals(Op.linkurl, __t.linkurl)
+     and Equals(Op.pageurl, __t.pageurl)
+     and Equals(Op.anchortext, __t.anchortext);
+
+output view NotPortNull;
+
+create view PortFinalCombined as
+  (select  Op.linkscheme as linkscheme,
+            Op.linkhost as linkhost,
+            Op.linkport as linkport,
+            Op.pagescheme as pagescheme,
+            Op.pagehost as pagehost,
+            Op.pageport as pageport,
+            Op.linkurl as linkurl,
+            Op.pageurl as pageurl,
+            Op.anchortext as anchortext,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__385__TempOp__0 Op)
+  union all
+  (select  Op.linkscheme as linkscheme,
+            Op.linkhost as linkhost,
+            Op.linkport as linkport,
+            Op.pagescheme as pagescheme,
+            Op.pagehost as pagehost,
+            Op.pageport as pageport,
+            Op.linkurl as linkurl,
+            Op.pageurl as pageurl,
+            Op.anchortext as anchortext,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__385__TempOp__1 Op);
+
+output view PortFinalCombined;
+
+create view ToResolveUrl as
+  (select  Op.linkscheme as linkscheme,
+            Op.linkhost as linkhost,
+            Op.linkport as linkport,
+            Op.linkurl as linkurl,
+            Op.pageurl as pageurl,
+            Op.anchortext as anchortext,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__386__TempOp__0 Op)
+  union all
+  (select  Op.linkscheme as linkscheme,
+            Op.linkhost as linkhost,
+            Op.linkport as linkport,
+            Op.linkurl as linkurl,
+            Op.pageurl as pageurl,
+            Op.anchortext as anchortext,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__386__TempOp__1 Op);
+
+output view ToResolveUrl;
+
+create view HttpsResolveUrl1 as
+  select  L.linkscheme as linkscheme,
+          L.linkhost as linkhost,
+          L.linkport as linkport,
+          resolveUrl(GetText(L.pageurl), GetText(L.linkurl)) as resolvurl,
+          L.pageurl as pageurl,
+          L.linkurl as linkurl,
+          L.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as ToResolveUrl_____sep_____L____id
+  from  ToResolveUrl L;
+
+output view HttpsResolveUrl1;
+
+create view HttpsResolveUrl as
+  select  GenerateURIAll(GetText(L.resolvurl), GetText(L.linkscheme), GetText(L.linkhost), GetText(L.linkport)) as resolvurl,
+          L.pageurl as pageurl,
+          L.linkurl as linkurl,
+          L.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as HttpsResolveUrl1_____sep_____L____id
+  from  HttpsResolveUrl1 L
+  where NotNull(L.resolvurl);
+
+output view HttpsResolveUrl;
+
+create view ResolveRelativeURL as
+  (select  Op.anchorurl as anchorurl,
+            Op.pageurl as pageurl,
+            Op.resolvurl as resolvurl,
+            Op.anchortext as anchortext,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__387__TempOp__0 Op)
+  union all
+  (select  Op.anchorurl as anchorurl,
+            Op.pageurl as pageurl,
+            Op.resolvurl as resolvurl,
+            Op.anchortext as anchortext,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__387__TempOp__1 Op);
+
+output view ResolveRelativeURL;
+
+create view __Minus__382__Temp as
+  select  __t.linkscheme as linkscheme,
+          __t.linkhost as linkhost,
+          __t.linkport as linkport,
+          __t.pagescheme as pagescheme,
+          __t.pagehost as pagehost,
+          __t.pageport as pageport,
+          __t.linkurl as linkurl,
+          __t.pageurl as pageurl,
+          __t.anchortext as anchortext
+  from  
+    ((select  Op.linkscheme as linkscheme,
+              Op.linkhost as linkhost,
+              Op.linkport as linkport,
+              Op.pagescheme as pagescheme,
+              Op.pagehost as pagehost,
+              Op.pageport as pageport,
+              Op.linkurl as linkurl,
+              Op.pageurl as pageurl,
+              Op.anchortext as anchortext
+      from  __Minus__382__TempOp__1 Op)
+    minus
+    (select  Op.linkscheme as linkscheme,
+              Op.linkhost as linkhost,
+              Op.linkport as linkport,
+              Op.pagescheme as pagescheme,
+              Op.pagehost as pagehost,
+              Op.pageport as pageport,
+              Op.linkurl as linkurl,
+              Op.pageurl as pageurl,
+              Op.anchortext as anchortext
+      from  __Minus__382__TempOp__2 Op)
+    ) __t
+  group by __t.linkscheme, __t.linkhost, __t.linkport, __t.pagescheme, __t.pagehost, __t.pageport, __t.linkurl, __t.pageurl, __t.anchortext;
+
+output view __Minus__382__Temp;
+
+create view __Minus__382__TempOp__1 as
+  select  L.linkscheme as linkscheme,
+          L.linkhost as linkhost,
+          L.linkport as linkport,
+          L.pagescheme as pagescheme,
+          L.pagehost as pagehost,
+          L.pageport as pageport,
+          L.linkurl as linkurl,
+          L.pageurl as pageurl,
+          L.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as HttpsLinkUrlResolveManually_____sep_____L____id
+  from  HttpsLinkUrlResolveManually L;
+
+output view __Minus__382__TempOp__1;
+
+create view __Minus__382__TempOp__2 as
+  select  L.linkscheme as linkscheme,
+          L.linkhost as linkhost,
+          L.linkport as linkport,
+          L.pagescheme as pagescheme,
+          L.pagehost as pagehost,
+          L.pageport as pageport,
+          L.linkurl as linkurl,
+          L.pageurl as pageurl,
+          L.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as HostNull_____sep_____L____id
+  from  HostNull L;
+
+output view __Minus__382__TempOp__2;
+
+create view __Minus__384__Temp as
+  select  __t.linkscheme as linkscheme,
+          __t.linkhost as linkhost,
+          __t.linkport as linkport,
+          __t.pagescheme as pagescheme,
+          __t.pagehost as pagehost,
+          __t.pageport as pageport,
+          __t.linkurl as linkurl,
+          __t.pageurl as pageurl,
+          __t.anchortext as anchortext
+  from  
+    ((select  Op.linkscheme as linkscheme,
+              Op.linkhost as linkhost,
+              Op.linkport as linkport,
+              Op.pagescheme as pagescheme,
+              Op.pagehost as pagehost,
+              Op.pageport as pageport,
+              Op.linkurl as linkurl,
+              Op.pageurl as pageurl,
+              Op.anchortext as anchortext
+      from  __Minus__384__TempOp__1 Op)
+    minus
+    (select  Op.linkscheme as linkscheme,
+              Op.linkhost as linkhost,
+              Op.linkport as linkport,
+              Op.pagescheme as pagescheme,
+              Op.pagehost as pagehost,
+              Op.pageport as pageport,
+              Op.linkurl as linkurl,
+              Op.pageurl as pageurl,
+              Op.anchortext as anchortext
+      from  __Minus__384__TempOp__2 Op)
+    ) __t
+  group by __t.linkscheme, __t.linkhost, __t.linkport, __t.pagescheme, __t.pagehost, __t.pageport, __t.linkurl, __t.pageurl, __t.anchortext;
+
+output view __Minus__384__Temp;
+
+create view __Minus__384__TempOp__1 as
+  select  L.linkscheme as linkscheme,
+          L.linkhost as linkhost,
+          L.linkport as linkport,
+          L.pagescheme as pagescheme,
+          L.pagehost as pagehost,
+          L.pageport as pageport,
+          L.linkurl as linkurl,
+          L.pageurl as pageurl,
+          L.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as HostFinal_____sep_____L____id
+  from  HostFinal L;
+
+output view __Minus__384__TempOp__1;
+
+create view __Minus__384__TempOp__2 as
+  select  L.linkscheme as linkscheme,
+          L.linkhost as linkhost,
+          L.linkport as linkport,
+          L.pagescheme as pagescheme,
+          L.pagehost as pagehost,
+          L.pageport as pageport,
+          L.linkurl as linkurl,
+          L.pageurl as pageurl,
+          L.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as PortNull_____sep_____L____id
+  from  PortNull L;
+
+output view __Minus__384__TempOp__2;
+
+create view __Union__383__TempOp__0 as
+  select  L.linkscheme as linkscheme,
+          L.newlinkhost as linkhost,
+          L.linkport as linkport,
+          L.pagescheme as pagescheme,
+          L.pagehost as pagehost,
+          L.pageport as pageport,
+          L.linkurl as linkurl,
+          L.pageurl as pageurl,
+          L.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as HostNull_____sep_____L____id
+  from  HostNull L;
+
+output view __Union__383__TempOp__0;
+
+create view __Union__383__TempOp__1 as
+  select  L.linkscheme as linkscheme,
+          L.linkhost as linkhost,
+          L.linkport as linkport,
+          L.pagescheme as pagescheme,
+          L.pagehost as pagehost,
+          L.pageport as pageport,
+          L.linkurl as linkurl,
+          L.pageurl as pageurl,
+          L.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as NotHostNull_____sep_____L____id
+  from  NotHostNull L;
+
+output view __Union__383__TempOp__1;
+
+create view __Union__385__TempOp__0 as
+  select  L.linkscheme as linkscheme,
+          L.linkhost as linkhost,
+          L.newlinkport as linkport,
+          L.pagescheme as pagescheme,
+          L.pagehost as pagehost,
+          L.pageport as pageport,
+          L.linkurl as linkurl,
+          L.pageurl as pageurl,
+          L.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as PortNull_____sep_____L____id
+  from  PortNull L;
+
+output view __Union__385__TempOp__0;
+
+create view __Union__385__TempOp__1 as
+  select  L.linkscheme as linkscheme,
+          L.linkhost as linkhost,
+          L.linkport as linkport,
+          L.pagescheme as pagescheme,
+          L.pagehost as pagehost,
+          L.pageport as pageport,
+          L.linkurl as linkurl,
+          L.pageurl as pageurl,
+          L.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as NotPortNull_____sep_____L____id
+  from  NotPortNull L;
+
+output view __Union__385__TempOp__1;
+
+create view __Union__386__TempOp__0 as
+  select  L.linkscheme as linkscheme,
+          L.linkhost as linkhost,
+          L.linkport as linkport,
+          GenerateURIAll(GetText(L.linkurl), GetText(L.linkscheme), GetText(L.linkhost), GetText(L.linkport)) as linkurl,
+          L.pageurl as pageurl,
+          L.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as PortFinalCombined_____sep_____L____id
+  from  PortFinalCombined L
+  where Not(NotNull(L.linkhost));
+
+output view __Union__386__TempOp__0;
+
+create view __Union__386__TempOp__1 as
+  select  L.linkscheme as linkscheme,
+          L.linkhost as linkhost,
+          L.linkport as linkport,
+          L.linkurl as linkurl,
+          L.pageurl as pageurl,
+          L.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as PortFinalCombined_____sep_____L____id
+  from  PortFinalCombined L
+  where NotNull(L.linkhost);
+
+output view __Union__386__TempOp__1;
+
+create view __Union__387__TempOp__0 as
+  select  L.linkurl as anchorurl,
+          L.pageurl as pageurl,
+          L.resolvurl as resolvurl,
+          L.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as HttpsResolveUrl_____sep_____L____id
+  from  HttpsResolveUrl L
+  where NotNull(L.resolvurl);
+
+output view __Union__387__TempOp__0;
+
+create view __Union__387__TempOp__1 as
+  select  L.linkurl as anchorurl,
+          L.pageurl as pageurl,
+          L.resolvurl as resolvurl,
+          L.anchortext as anchortext,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          L.__auto__id as NonHttpsResolveUrl_____sep_____L____id
+  from  NonHttpsResolveUrl L
+  where NotNull(L.resolvurl);
+
+output view __Union__387__TempOp__1;
+

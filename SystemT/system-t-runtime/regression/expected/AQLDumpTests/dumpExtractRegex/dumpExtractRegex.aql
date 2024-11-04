@@ -1,0 +1,26 @@
+require document with columns
+  text Text and
+  label Text;
+
+create view PhoneNum as
+  extract regexes /(\d{3})-(\d{3})-(\d{4})/
+    and /[Xx]\d{3,5}/
+    with flags 'DOTALL'
+    on between 1 and 5 tokens in D.text
+    return group 0 as num
+  from Document D;
+
+output view PhoneNum;
+
+create view QuotedNumber as
+  extract regex /(\"\d\")(b)/
+    with flags 'CANON_EQ'
+    on D.text
+    return group 0 as match
+       and group 1 as first
+       and group 2 as second
+  from Document D
+  having Equals(num, 0);
+
+output view QuotedNumber;
+

@@ -1,0 +1,71 @@
+
+-- load dict with negation triggers.
+ create dictionary NegationTriggersDict
+   from
+      file 'dictionaries/SentimentNegationTriggersDictionary.dict'
+      with language as 'en';
+ -- view containing all occurences of negation triggers in doctext
+ create view NegationTriggers as
+   extract dictionary 'NegationTriggersDict' on D.text as match
+  from Doc D;
+ --output view NegationTriggers;
+
+-- load dict with sentiment intensifiers
+ create dictionary SentimentIntensifierDict
+    from
+       file 'dictionaries/SentimentIntensifierDictionary.dict'
+       with language as 'en';
+  -- view containing all occurences of intensifiers in doctext
+  create view SentimentIntensifier as
+    extract dictionary 'SentimentIntensifierDict' on D.text as match
+   from Doc D;
+  --output view SentimentIntensifier;
+
+-------------------------------------
+-- load dict with always POSITIVE terms.
+ create dictionary AlwaysPositives
+   from
+      file 'dictionaries/AlwaysPositives.dict'
+      with language as 'en';
+      --and lemma_match;
+ -- view containing all occurences of always positive terms
+ create view AlwaysPositiveTerms as
+   extract dictionary 'AlwaysPositives' on D.text as match
+  from Doc D;
+  --output view AlwaysPositiveTerms;
+-- add corresponding polarity
+ create view AlwaysPositiveTermsPlusPolarity as
+   select 'positive' as polarity, APT.match as word, A.pos, A.detailedPos
+   from AlwaysPositiveTerms APT, AllPosTerms A
+   where Equals(APT.match, A.span);
+ --output view AlwaysPositiveTermsPlusPolarity;  
+---------------------------------------
+-- load dict with always NEGATIVE terms.
+create dictionary AlwaysNegatives
+  from
+     file 'dictionaries/AlwaysNegatives.dict'
+     with language as 'en';
+     --and lemma_match;
+-- view containing all occurences of always negative terms
+create view AlwaysNegativeTerms as
+  extract dictionary 'AlwaysNegatives' on D.text as match
+ from Doc D;
+-- output view AlwaysNegativeTerms;
+-- add corresponding polarity
+create view AlwaysNegativeTermsPlusPolarity as
+  select 'negative' as polarity, ANT.match as word, A.pos, A.detailedPos
+  from AlwaysNegativeTerms ANT, AllPosTerms A
+  where Equals(ANT.match, A.span);
+--output view AlwaysNegativeTermsPlusPolarity;
+-------------
+
+---------------  find all the dictionary entries within the document
+create dictionary AllTaggerDependentFormsInDocument
+from
+   file 'dictionaries/TaggerDependentDictionary.dict' -- rename > TaggerDependentDict.dict
+   with language as 'en';
+   --and lemma_match;
+---------------  all of them are supposed to bear a polarity
+create view AllTaggerDependentSentTermsInDoc as
+  extract dictionary 'AllTaggerDependentFormsInDocument' on D.text as match
+from Doc D;

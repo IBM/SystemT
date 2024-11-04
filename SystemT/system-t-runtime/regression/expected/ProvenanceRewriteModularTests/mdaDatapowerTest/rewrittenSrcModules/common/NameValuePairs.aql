@@ -1,0 +1,340 @@
+module common;
+
+
+create view NameValueCandsUnfiltered as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /[A-Za-z][A-Za-z\d\-\_\.]*\s?(=)\s?(\(|\[|<)?[A-Za-z0-9][A-Za-z0-9\-\_@\.\:]*\%?(\)|\]|>)?/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as match
+  from Document D;
+
+output view NameValueCandsUnfiltered;
+
+create view NameValueCands as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__24__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__24__TempOp__1 Op);
+
+output view NameValueCands;
+
+create view NameValuePairsNested as
+  select  D2.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D1.__auto__id as NameValueCands_____sep_____D1____id,
+          D2.__auto__id as NameValueCands_____sep_____D2____id
+  from  NameValueCands D1,
+        NameValueCands D2
+  where Overlaps(D1.match, D2.match)
+     and GreaterThan(GetEnd(D2.match), GetEnd(D1.match));
+
+output view NameValuePairsNested;
+
+create view NameValuePairsToFilter as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__25__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__25__TempOp__1 Op);
+
+output view NameValuePairsToFilter;
+
+create view NameValuePairsBlock as
+  select  Op.match as match,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__26__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__26__TempOp__1 Op,
+        __Minus__26__Temp __t
+  where Equals(Op.match, __t.match);
+
+output view NameValuePairsBlock;
+
+create view NameValuePairs as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    D.__auto__id as NameValuePairsBlock_____sep_____D____id,
+    regex /(.*)\s?(=)\s?(.*)/
+    with flags 'DOTALL'
+    on D.match
+    return group 1 as name
+       and group 3 as value
+       and group 0 as full
+  from NameValuePairsBlock D;
+
+output view NameValuePairs;
+
+create view ExtendedValueCands as
+  (select  Op.extent as extent,
+            Op.name as name,
+            Op.value as value,
+            Op.full as full,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__27__TempOp__0 Op)
+  union all
+  (select  Op.extent as extent,
+            Op.name as name,
+            Op.value as value,
+            Op.full as full,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__27__TempOp__1 Op);
+
+output view ExtendedValueCands;
+
+create view ExtendedValue as
+  select  E.extent as extent,
+          E.name as name,
+          E.value as value,
+          E.full as full,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          E.__auto__id as ExtendedValueCands_____sep_____E____id
+  from  ExtendedValueCands E
+  where GreaterThan(GetEnd(E.extent), GetEnd(E.value));
+
+output view ExtendedValue;
+
+create view NameValuePairsNotExtended as
+  select  Op.name as name,
+          Op.value as value,
+          Op.full as full,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__28__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__28__TempOp__1 Op,
+        __Minus__28__Temp __t
+  where Equals(Op.name, __t.name)
+     and Equals(Op.value, __t.value)
+     and Equals(Op.full, __t.full);
+
+output view NameValuePairsNotExtended;
+
+create view NameValuePairsExtended as
+  (select  Op.name as name,
+            Op.value as value,
+            Op.full as full,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__29__TempOp__0 Op)
+  union all
+  (select  Op.name as name,
+            Op.value as value,
+            Op.full as full,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__29__TempOp__1 Op);
+
+output view NameValuePairsExtended;
+
+create view NameValuePairsInterim as
+  select  N.full as Pair_Span,
+          GetText(N.name) as Name_Text,
+          GetText(N.value) as Name_Value,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          N.__auto__id as NameValuePairsExtended_____sep_____N____id
+  from  NameValuePairsExtended N;
+
+output view NameValuePairsInterim;
+
+create view NameValuePairOutput as
+  select  D.Pair_Span as span,
+          D.Name_Value as text,
+          D.Name_Text as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as NameValuePairsInterim_____sep_____D____id
+  from  NameValuePairsInterim D;
+
+output view NameValuePairOutput;
+
+export view common.NameValuePairOutput;
+
+
+create view __Minus__26__Temp as
+  select  __t.match as match
+  from  
+    ((select  Op.match as match
+      from  __Minus__26__TempOp__1 Op)
+    minus
+    (select  Op.match as match
+      from  __Minus__26__TempOp__2 Op)
+    ) __t
+  group by __t.match;
+
+output view __Minus__26__Temp;
+
+create view __Minus__26__TempOp__1 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as NameValueCands_____sep_____D____id
+  from  NameValueCands D;
+
+output view __Minus__26__TempOp__1;
+
+create view __Minus__26__TempOp__2 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as NameValuePairsToFilter_____sep_____D____id
+  from  NameValuePairsToFilter D;
+
+output view __Minus__26__TempOp__2;
+
+create view __Minus__28__Temp as
+  select  __t.name as name,
+          __t.value as value,
+          __t.full as full
+  from  
+    ((select  Op.name as name,
+              Op.value as value,
+              Op.full as full
+      from  __Minus__28__TempOp__1 Op)
+    minus
+    (select  Op.name as name,
+              Op.value as value,
+              Op.full as full
+      from  __Minus__28__TempOp__2 Op)
+    ) __t
+  group by __t.name, __t.value, __t.full;
+
+output view __Minus__28__Temp;
+
+create view __Minus__28__TempOp__1 as
+  select  N.name as name,
+          N.value as value,
+          N.full as full,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          N.__auto__id as NameValuePairs_____sep_____N____id
+  from  NameValuePairs N;
+
+output view __Minus__28__TempOp__1;
+
+create view __Minus__28__TempOp__2 as
+  select  N.name as name,
+          N.value as value,
+          N.full as full,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          N.__auto__id as ExtendedValue_____sep_____N____id
+  from  ExtendedValue N;
+
+output view __Minus__28__TempOp__2;
+
+create view __Union__24__TempOp__0 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as NameValueCandsUnfiltered_____sep_____D____id
+  from  NameValueCandsUnfiltered D
+  where Not(ContainsRegex(/[\(\)\]\[><]/, D.match));
+
+output view __Union__24__TempOp__0;
+
+create view __Union__24__TempOp__1 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as NameValueCandsUnfiltered_____sep_____D____id
+  from  NameValueCandsUnfiltered D
+  where ContainsRegex(/[\(\)\]\[><]/, D.match)
+     and MatchesRegex(/.*(=)((\([^\(\)\]\[><]*\))|(\[[^\(\)\]\[><]*\])|(<[^\(\)\]\[><]*>))/, D.match);
+
+output view __Union__24__TempOp__1;
+
+create view __Union__25__TempOp__0 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as NameValueCands_____sep_____D____id
+  from  NameValueCands D
+  where ContainsRegex(/java\:/, D.match);
+
+output view __Union__25__TempOp__0;
+
+create view __Union__25__TempOp__1 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as NameValuePairsNested_____sep_____D____id
+  from  NameValuePairsNested D;
+
+output view __Union__25__TempOp__1;
+
+create view __Union__27__TempOp__0 as
+  select  I.ipAddress_Span as extent,
+          N.name as name,
+          N.value as value,
+          N.full as full,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          I.__auto__id as IPAddressInterim_____sep_____I____id,
+          N.__auto__id as NameValuePairs_____sep_____N____id
+  from  IPAddressInterim I,
+        NameValuePairs N
+  where Overlaps(I.ipAddress_Span, N.value);
+
+output view __Union__27__TempOp__0;
+
+create view __Union__27__TempOp__1 as
+  select  I.Id_Span as extent,
+          N.name as name,
+          N.value as value,
+          N.full as full,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          I.__auto__id as IDInterim_____sep_____I____id,
+          N.__auto__id as NameValuePairs_____sep_____N____id
+  from  IDInterim I,
+        NameValuePairs N
+  where Overlaps(I.Id_Span, N.value);
+
+output view __Union__27__TempOp__1;
+
+create view __Union__29__TempOp__0 as
+  select  N.name as name,
+          N.value as value,
+          N.full as full,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          N.__auto__id as NameValuePairsNotExtended_____sep_____N____id
+  from  NameValuePairsNotExtended N;
+
+output view __Union__29__TempOp__0;
+
+create view __Union__29__TempOp__1 as
+  select  E.name as name,
+          CombineSpans(E.extent, E.value) as value,
+          CombineSpans(E.name, E.extent) as full,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          E.__auto__id as ExtendedValue_____sep_____E____id
+  from  ExtendedValue E;
+
+output view __Union__29__TempOp__1;
+

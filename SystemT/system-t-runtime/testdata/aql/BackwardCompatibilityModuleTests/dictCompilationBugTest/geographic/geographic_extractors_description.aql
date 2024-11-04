@@ -1,0 +1,47 @@
+include 'geographic/dictionaries/Loc_DictsAndTables.aql';
+
+-- Input view for location from description annotator
+-- Input text should be the user description field from twitter 
+create view LocationDescr_Input as
+    extract regex /.*/ 
+    on D.text as text
+    from Document D;
+
+include 'geographic/LocationFromDescription.aql';
+
+
+-- Input view for the Permanent Location Annotator
+create view Loc_InputText as
+--    select D.ref as text
+    extract regex /.*/ on D.ref as text
+    from LocDescr_Reference D;
+--output view Loc_InputText;
+include 'geographic/Loc_Main.aql';
+
+
+create view LocationFromDescrFinal_Output as
+    select E.loc_prov, D.prov, D.city, D.state, D.country, D.fullspan, D.fulltext, D.hasCityState 
+    from LocDescr_Reference E, Loc_MappedAddressOutput D
+    where Equals(GetString(E.ref), GetString(D.fulltext));
+
+
+-- This view extracts possible locations from description fields
+--   loc_prov = one of "livingin (current loc), livedin (previous loc), business_area (businesses serving area), univ (universities)"
+--   key = indicator of possible location
+--   ref = possible location
+--   loc_match = quic match found in dictionary for location
+--   text = modified input text
+--   orig_text = original input text
+--output view LocDescr_Reference;
+
+-- This view is a union of the above output view with the result of the permanent location annotator
+-- Fields: 
+--  loc_prov = one of "livingin (current loc), livedin (previous loc), business_area (businesses serving area), univ (universities)"
+--  prov = one of "cityonly, citystate, stateonly, countryonly, foreigncity, foreigncountrynocity"
+--  city = name of city
+--  state = state abbreviation (US only)
+--  country = normalized country name
+--  fullspan = span
+--  fulltext = original text
+--  hasCityState = boolean
+output view LocationFromDescrFinal_Output;

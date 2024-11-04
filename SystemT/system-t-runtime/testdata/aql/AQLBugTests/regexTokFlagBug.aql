@@ -1,0 +1,16 @@
+------------------------------------------------------------------------------
+-- regexTokFlagBug.aql
+--
+-- Test to ensure that a bug in RegexTok flag support doesn't reappear.
+------------------------------------------------------------------------------
+require document with columns text Text;
+
+-- Regex with \b -- will use Java engine
+select R.match as num
+into JavaResults
+from RegexTok(/ext\s*[\.\-\:]?\s*\d{3,5}\b/, 'CASE_INSENSITIVE', 3, Document.text) R;
+
+-- This regex will use the SimpleRegex engine.
+select R.match as num
+into SimpleResults
+from RegexTok(/ext\s*[\.\-\:]?\s*\d{3,5}/, 'CASE_INSENSITIVE', 3, Document.text) R;

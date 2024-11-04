@@ -1,0 +1,23 @@
+create view Meeting1 as
+select R.match as annot
+from Regex(/reserved.{0,15}conference\s+room/, 'CASE_INSENSITIVE', Document.text) R;
+
+create view Meeting2 as
+select R.match as annot
+from Regex(/let.{0,15}meet\s+at/, 'CASE_INSENSITIVE', Document.text) R;
+
+create view Meeting3 as
+select R.match as annot
+from Regex(/schedule\s+to\s+meet.{0,15}at/, 'CASE_INSENSITIVE', Document.text) R;
+
+create view MeetingAll as 
+     (select R.annot as annot from Meeting1 R)
+     union all
+     (select R.annot as annot from Meeting2 R)
+     union all
+     (select R.annot as annot from Meeting3 R);
+     
+select R.annot as annot
+into Meeting
+from MeetingAll R
+consolidate on R.annot;     

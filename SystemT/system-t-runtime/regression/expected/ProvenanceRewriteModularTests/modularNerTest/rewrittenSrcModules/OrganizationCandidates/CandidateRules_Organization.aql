@@ -1,0 +1,874 @@
+module OrganizationCandidates;
+
+
+create view OrgFullExtended as
+  select  Op.match as match,
+          AutoID() as __auto__id
+  from  __Base__OrganizationCandidates__OrgFullExtended__Temp Op;
+
+output view OrgFullExtended;
+
+create view Coonetotwo as
+  select  B.block as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          B.__auto__id as __Subquery__197__Temp_____sep_____B____id
+  from  __Subquery__197__Temp B;
+
+output view Coonetotwo;
+
+create view Coonetothree as
+  select  B.block as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          B.__auto__id as __Subquery__199__Temp_____sep_____B____id
+  from  __Subquery__199__Temp B;
+
+output view Coonetothree;
+
+create view CoOcscOpCo as
+  select  CombineSpans(coco1.match, coco2.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          coco1.__auto__id as Coonetotwo_____sep_____coco1____id,
+          ocsc.__auto__id as OrgClueStCaps_____sep_____ocsc____id,
+          op.__auto__id as OrgPrep_____sep_____op____id,
+          coco2.__auto__id as Coonetotwo_____sep_____coco2____id
+  from  Coonetotwo coco1,
+        OrgClueStCaps ocsc,
+        OrgPrep op,
+        Coonetotwo coco2
+  where FollowsTok(coco1.match, ocsc.match, 0, 0)
+     and FollowsTok(ocsc.match, op.match, 0, 0)
+     and FollowsTok(op.match, coco2.match, 0, 0);
+
+output view CoOcscOpCo;
+
+create view CoOcsic1 as
+  select  CombineSpans(coco.match, ocsic.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          coco.__auto__id as Coonetothree_____sep_____coco____id,
+          ocsic.__auto__id as OrgClueStIndCaps_____sep_____ocsic____id
+  from  Coonetothree coco,
+        OrgClueStIndCaps ocsic
+  where FollowsTok(coco.match, ocsic.match, 0, 0);
+
+output view CoOcsic1;
+
+create view CoOcsic2 as
+  select  CombineSpans(coco.match, ocsic.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          coco.__auto__id as Coonetothree_____sep_____coco____id,
+          ocsic.__auto__id as OrgClueStSuffixCaps_____sep_____ocsic____id
+  from  Coonetothree coco,
+        OrgClueStSuffixCaps ocsic
+  where FollowsTok(coco.match, ocsic.match, 0, 0)
+     and MatchesRegex(/\s+/, SpanBetween(coco.match, ocsic.match));
+
+output view CoOcsic2;
+
+create view CoOcsicAll as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__200__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__200__TempOp__1 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__200__TempOp__2 Op);
+
+output view CoOcsicAll;
+
+create view CoOcsic as
+  select  Op.match as match,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__201__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__201__TempOp__1 Op,
+        __Minus__201__Temp __t
+  where Equals(Op.match, __t.match);
+
+output view CoOcsic;
+
+create view CoOcsicEx as
+  select  CombineSpans(C.match, S.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CoOcsic1_____sep_____C____id,
+          S.__auto__id as OrgClueStSuffixCaps_____sep_____S____id,
+          O.__auto__id as CapsOrg_____sep_____O____id
+  from  CoOcsic1 C,
+        OrgClueStSuffixCaps S,
+        CapsOrg O
+  where FollowsTok(C.match, O.match, 0, 0)
+     and FollowsTok(O.match, S.match, 0, 0);
+
+output view CoOcsicEx;
+
+create view CoOcsscAll as
+  select  CombineSpans(coco.match, ocssc.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          coco.__auto__id as Coonetothree_____sep_____coco____id,
+          ocssc.__auto__id as OrgClueStSuffixCaps_____sep_____ocssc____id
+  from  Coonetothree coco,
+        OrgClueStSuffixCaps ocssc
+  where FollowsTok(coco.match, ocssc.match, 0, 1)
+     and MatchesRegex(/\s*[,\s]\s*/, SpanBetween(coco.match, ocssc.match));
+
+output view CoOcsscAll;
+
+create view CoOcssc as
+  select  Op.match as match,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__202__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__202__TempOp__1 Op,
+        __Minus__202__Temp __t
+  where Equals(Op.match, __t.match);
+
+output view CoOcssc;
+
+create view OcscOpCoOcCoAll as
+  select  CombineSpans(ocsc.match, coco2.match) as match,
+          coco2.match as suffix,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          ocsc.__auto__id as OrgClueStIndPrefixCaps_____sep_____ocsc____id,
+          op.__auto__id as OrgPrep_____sep_____op____id,
+          coco1.__auto__id as Coonetotwo_____sep_____coco1____id,
+          oc.__auto__id as OrgConj_____sep_____oc____id,
+          coco2.__auto__id as Coonetothree_____sep_____coco2____id
+  from  OrgClueStIndPrefixCaps ocsc,
+        OrgPrep op,
+        Coonetotwo coco1,
+        OrgConj oc,
+        Coonetothree coco2
+  where FollowsTok(ocsc.match, op.match, 0, 0)
+     and FollowsTok(op.match, coco1.match, 0, 0)
+     and FollowsTok(coco1.match, oc.match, 0, 0)
+     and FollowsTok(oc.match, coco2.match, 0, 0);
+
+output view OcscOpCoOcCoAll;
+
+create view OcscOpCoOcCoInvalid as
+  select  o.match as match,
+          c.match as suffix,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          o.__auto__id as OcscOpCoOcCoAll_____sep_____o____id,
+          c.__auto__id as CoOcsic1_____sep_____c____id
+  from  OcscOpCoOcCoAll o,
+        CoOcsic1 c
+  where Overlaps(o.suffix, c.match)
+     and Not(ContainsRegex(/&/, o.match));
+
+output view OcscOpCoOcCoInvalid;
+
+create view OcscOpCoOcCo as
+  select  Op.match as match,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__203__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__203__TempOp__1 Op,
+        __Minus__203__Temp __t
+  where Equals(Op.match, __t.match);
+
+output view OcscOpCoOcCo;
+
+create view CoOcscOpCoOcCo as
+  select  CombineSpans(coco.match, R1.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          coco.__auto__id as Coonetothree_____sep_____coco____id,
+          R1.__auto__id as OcscOpCoOcCo_____sep_____R1____id
+  from  Coonetothree coco,
+        OcscOpCoOcCo R1
+  where FollowsTok(coco.match, R1.match, 0, 0);
+
+output view CoOcscOpCoOcCo;
+
+create view CoOcscOpCoOcCoAll as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__204__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__204__TempOp__1 Op);
+
+output view CoOcscOpCoOcCoAll;
+
+create view CoOcscOpCoOcCoConsolidated as
+  select  o.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          o.__auto__id as CoOcscOpCoOcCoAll_____sep_____o____id
+  from  CoOcscOpCoOcCoAll o;
+
+output view CoOcscOpCoOcCoConsolidated;
+
+create view OfCo as
+  select  CombineSpans(of.match, coco.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          of.__auto__id as OrgFull_____sep_____of____id,
+          coco.__auto__id as Coonetotwo_____sep_____coco____id
+  from  OrgFull of,
+        Coonetotwo coco
+  where FollowsTok(of.match, coco.match, 0, 0);
+
+output view OfCo;
+
+create view OfCozerototwo as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__205__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__205__TempOp__1 Op);
+
+output view OfCozerototwo;
+
+create view OfCoOcsc as
+  select  CombineSpans(of.match, ocsc.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          of.__auto__id as OfCozerototwo_____sep_____of____id,
+          ocsc.__auto__id as OrgClueStCaps_____sep_____ocsc____id
+  from  OfCozerototwo of,
+        OrgClueStCaps ocsc
+  where FollowsTok(of.match, ocsc.match, 0, 0);
+
+output view OfCoOcsc;
+
+create view CoOc as
+  select  CombineSpans(co.match, oc.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          co.__auto__id as Coonetotwo_____sep_____co____id,
+          oc.__auto__id as OrgConj_____sep_____oc____id
+  from  Coonetotwo co,
+        OrgConj oc
+  where FollowsTok(co.match, oc.match, 0, 0);
+
+output view CoOc;
+
+create view CoOcCo as
+  select  CombineSpans(cooc.match, co.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          cooc.__auto__id as CoOc_____sep_____cooc____id,
+          co.__auto__id as Coonetotwo_____sep_____co____id
+  from  CoOc cooc,
+        Coonetotwo co
+  where FollowsTok(cooc.match, co.match, 0, 0);
+
+output view CoOcCo;
+
+create view CoOcCozerototwo as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__206__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__206__TempOp__1 Op);
+
+output view CoOcCozerototwo;
+
+create view CoOcCozerototwoOcscOpCo as
+  select  CombineSpans(coocco.match, co.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          coocco.__auto__id as CoOcCozerototwo_____sep_____coocco____id,
+          ocsc.__auto__id as OrgClueStCaps_____sep_____ocsc____id,
+          op.__auto__id as OrgPrep_____sep_____op____id,
+          co.__auto__id as Coonetotwo_____sep_____co____id
+  from  CoOcCozerototwo coocco,
+        OrgClueStCaps ocsc,
+        OrgPrep op,
+        Coonetotwo co
+  where FollowsTok(coocco.match, ocsc.match, 0, 0)
+     and FollowsTok(ocsc.match, op.match, 0, 0)
+     and FollowsTok(op.match, co.match, 0, 0);
+
+output view CoOcCozerototwoOcscOpCo;
+
+create view AllCapsOrgStClue as
+  select  CombineSpans(O.match, C.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as OrgClueStCaps_____sep_____C____id,
+          O.__auto__id as AllCapsOrg_____sep_____O____id
+  from  OrgClueStCaps C,
+        AllCapsOrg O
+  where FollowsTok(O.match, C.match, 0, 0);
+
+output view AllCapsOrgStClue;
+
+create view OrganizationR11_no_quantifiertemp as
+  select  OP.match as match,
+          CO.match as block,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CO.__auto__id as Coonetothree_____sep_____CO____id,
+          P.__auto__id as OrgPrep_____sep_____P____id,
+          OP.__auto__id as OrgClueStIndPrefixCaps_____sep_____OP____id
+  from  Coonetothree CO,
+        OrgPrep P,
+        OrgClueStIndPrefixCaps OP
+  where FollowsTok(OP.match, P.match, 0, 0)
+     and FollowsTok(P.match, CO.match, 0, 0);
+
+output view OrganizationR11_no_quantifiertemp;
+
+create view OrganizationR11_no_quantifier as
+  select  CombineSpans(O.match, O.block) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          O.__auto__id as OrganizationR11_no_quantifiertemp_____sep_____O____id
+  from  OrganizationR11_no_quantifiertemp O
+  where Not(ContainsDict('PrefixesForGroupsOfOrganizations', O.block))
+     and Not(ContainsDict('PrefixesForEducationalOrganizations', O.block))
+     and Not(ContainsDict('PrefixesForGovernmentOrganizations', O.block))
+     and Not(ContainsDict('PrefixesForMedicalOrganizations', O.block))
+     and Not(ContainsDict('PrefixesForOtherOrganizations', O.block));
+
+output view OrganizationR11_no_quantifier;
+
+create view OrganizationR11_with_quantifier as
+  select  CombineSpans(CO.match, O.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CO.__auto__id as Coonetothree_____sep_____CO____id,
+          O.__auto__id as OrganizationR11_no_quantifier_____sep_____O____id
+  from  Coonetothree CO,
+        OrganizationR11_no_quantifier O
+  where FollowsTok(CO.match, O.match, 0, 0);
+
+output view OrganizationR11_with_quantifier;
+
+create view OrganizationR11_no_the as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__207__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__207__TempOp__1 Op);
+
+output view OrganizationR11_no_the;
+
+create view Org5791011 as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__208__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__208__TempOp__1 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__208__TempOp__2 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__208__TempOp__3 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__208__TempOp__4 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__208__TempOp__5 Op);
+
+output view Org5791011;
+
+create view ExpandedOrg5791011R1 as
+  select  CombineSpans(ab.match, org5791011.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          ab.__auto__id as AllCapsOrg_____sep_____ab____id,
+          org5791011.__auto__id as Org5791011_____sep_____org5791011____id
+  from  AllCapsOrg ab,
+        Org5791011 org5791011
+  where FollowsTok(ab.match, org5791011.match, 0, 0);
+
+output view ExpandedOrg5791011R1;
+
+create view ExpandedOrg5791011R2 as
+  select  CombineSpans(ab.word, org5791011.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          ab.__auto__id as InitialWord_____sep_____ab____id,
+          org5791011.__auto__id as Org5791011_____sep_____org5791011____id
+  from  InitialWord ab,
+        Org5791011 org5791011
+  where FollowsTok(ab.word, org5791011.match, 0, 0);
+
+output view ExpandedOrg5791011R2;
+
+create view ExpandedOrg5791011 as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__209__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__209__TempOp__1 Op);
+
+output view ExpandedOrg5791011;
+
+create view TheOrg5791011 as
+  select  CombineSpans(C.match, org5791011.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          the.__auto__id as The_____sep_____the____id,
+          C.__auto__id as CoOc_____sep_____C____id,
+          org5791011.__auto__id as Org5791011_____sep_____org5791011____id
+  from  The the,
+        CoOc C,
+        Org5791011 org5791011
+  where FollowsTok(the.match, C.match, 0, 0)
+     and FollowsTok(C.match, org5791011.match, 0, 0);
+
+output view TheOrg5791011;
+
+create view ExpandedOrg5791011WithAnd1 as
+  select  CombineSpans(C.match, O.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as Coonetothree_____sep_____C____id,
+          O.__auto__id as Org5791011_____sep_____O____id
+  from  Coonetothree C,
+        Org5791011 O
+  where FollowsTok(C.match, O.match, 0, 1)
+     and MatchesRegex(/\s+[&]\s+/, SpanBetween(C.match, O.match));
+
+output view ExpandedOrg5791011WithAnd1;
+
+create view ExpandedOrg5791011WithAnd2 as
+  select  CombineSpans(C.match, O.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as AllCapsOrg_____sep_____C____id,
+          O.__auto__id as ExpandedOrg5791011WithAnd1_____sep_____O____id
+  from  AllCapsOrg C,
+        ExpandedOrg5791011WithAnd1 O
+  where FollowsTok(C.match, O.match, 0, 0);
+
+output view ExpandedOrg5791011WithAnd2;
+
+create view ExpandedOrg5791011WithAnd3 as
+  select  CombineSpans(I.word, O.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          I.__auto__id as InitialWord_____sep_____I____id,
+          O.__auto__id as ExpandedOrg5791011WithAnd1_____sep_____O____id
+  from  InitialWord I,
+        ExpandedOrg5791011WithAnd1 O
+  where FollowsTok(I.word, O.match, 0, 0);
+
+output view ExpandedOrg5791011WithAnd3;
+
+create view ExpandedOrg5791011WithAnd as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__210__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__210__TempOp__1 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__210__TempOp__2 Op);
+
+output view ExpandedOrg5791011WithAnd;
+
+create view __Base__196__Temp as
+  extract blocks
+    with count between 1 and 2
+    and separation between 0 and 0 tokens
+    on CapsOrg.match as block
+  from CapsOrg CapsOrg;
+
+output view __Base__196__Temp;
+
+create view __Base__198__Temp as
+  extract blocks
+    with count between 1 and 3
+    and separation between 0 and 0 tokens
+    on CapsOrg.match as block
+  from CapsOrg CapsOrg;
+
+output view __Base__198__Temp;
+
+create view __Base__OrganizationCandidates__OrgFullExtended__Temp as
+  extract pattern <O.match> (<SA.match>|<SIW.match>|<SI.match>)
+  return group 0 as match
+  from  OrgFull O,
+        OrgClueStSuffixAuxCaps SA,
+        OrgClueStIndSuffixWeakCaps SIW,
+        OrgClueStIndCaps SI;
+
+output view __Base__OrganizationCandidates__OrgFullExtended__Temp;
+
+create view __Minus__201__Temp as
+  select  __t.match as match
+  from  
+    ((select  Op.match as match
+      from  __Minus__201__TempOp__1 Op)
+    minus
+    (select  Op.match as match
+      from  __Minus__201__TempOp__2 Op)
+    ) __t
+  group by __t.match;
+
+output view __Minus__201__Temp;
+
+create view __Minus__201__TempOp__1 as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CoOcsicAll_____sep_____C____id
+  from  CoOcsicAll C;
+
+output view __Minus__201__TempOp__1;
+
+create view __Minus__201__TempOp__2 as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as NonOrgs_____sep_____C____id
+  from  NonOrgs C;
+
+output view __Minus__201__TempOp__2;
+
+create view __Minus__202__Temp as
+  select  __t.match as match
+  from  
+    ((select  Op.match as match
+      from  __Minus__202__TempOp__1 Op)
+    minus
+    (select  Op.match as match
+      from  __Minus__202__TempOp__2 Op)
+    ) __t
+  group by __t.match;
+
+output view __Minus__202__Temp;
+
+create view __Minus__202__TempOp__1 as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CoOcsscAll_____sep_____C____id
+  from  CoOcsscAll C;
+
+output view __Minus__202__TempOp__1;
+
+create view __Minus__202__TempOp__2 as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as NonOrgs_____sep_____C____id
+  from  NonOrgs C;
+
+output view __Minus__202__TempOp__2;
+
+create view __Minus__203__Temp as
+  select  __t.match as match
+  from  
+    ((select  Op.match as match
+      from  __Minus__203__TempOp__1 Op)
+    minus
+    (select  Op.match as match
+      from  __Minus__203__TempOp__2 Op)
+    ) __t
+  group by __t.match;
+
+output view __Minus__203__Temp;
+
+create view __Minus__203__TempOp__1 as
+  select  o.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          o.__auto__id as OcscOpCoOcCoAll_____sep_____o____id
+  from  OcscOpCoOcCoAll o;
+
+output view __Minus__203__TempOp__1;
+
+create view __Minus__203__TempOp__2 as
+  select  o.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          o.__auto__id as OcscOpCoOcCoInvalid_____sep_____o____id
+  from  OcscOpCoOcCoInvalid o;
+
+output view __Minus__203__TempOp__2;
+
+create view __Subquery__197__Temp as
+  select  Op.block as block,
+          AutoID() as __auto__id
+  from  __Base__196__Temp Op;
+
+output view __Subquery__197__Temp;
+
+create view __Subquery__199__Temp as
+  select  Op.block as block,
+          AutoID() as __auto__id
+  from  __Base__198__Temp Op;
+
+output view __Subquery__199__Temp;
+
+create view __Union__200__TempOp__0 as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CoOcsic1_____sep_____C____id
+  from  CoOcsic1 C;
+
+output view __Union__200__TempOp__0;
+
+create view __Union__200__TempOp__1 as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CoOcsic2_____sep_____C____id
+  from  CoOcsic2 C;
+
+output view __Union__200__TempOp__1;
+
+create view __Union__200__TempOp__2 as
+  select  C.companyname as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CompanyInfoStrong_____sep_____C____id
+  from  CompanyInfoStrong C;
+
+output view __Union__200__TempOp__2;
+
+create view __Union__204__TempOp__0 as
+  select  o.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          o.__auto__id as OcscOpCoOcCo_____sep_____o____id
+  from  OcscOpCoOcCo o;
+
+output view __Union__204__TempOp__0;
+
+create view __Union__204__TempOp__1 as
+  select  o.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          o.__auto__id as CoOcscOpCoOcCo_____sep_____o____id
+  from  CoOcscOpCoOcCo o;
+
+output view __Union__204__TempOp__1;
+
+create view __Union__205__TempOp__0 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as OrgFull_____sep_____R____id
+  from  OrgFull R;
+
+output view __Union__205__TempOp__0;
+
+create view __Union__205__TempOp__1 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as OfCo_____sep_____R____id
+  from  OfCo R;
+
+output view __Union__205__TempOp__1;
+
+create view __Union__206__TempOp__0 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as CoOc_____sep_____R____id
+  from  CoOc R;
+
+output view __Union__206__TempOp__0;
+
+create view __Union__206__TempOp__1 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as CoOcCo_____sep_____R____id
+  from  CoOcCo R;
+
+output view __Union__206__TempOp__1;
+
+create view __Union__207__TempOp__0 as
+  select  O.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          O.__auto__id as OrganizationR11_no_quantifier_____sep_____O____id
+  from  OrganizationR11_no_quantifier O;
+
+output view __Union__207__TempOp__0;
+
+create view __Union__207__TempOp__1 as
+  select  O.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          O.__auto__id as OrganizationR11_with_quantifier_____sep_____O____id
+  from  OrganizationR11_with_quantifier O;
+
+output view __Union__207__TempOp__1;
+
+create view __Union__208__TempOp__0 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as CoOcscOpCoOcCoConsolidated_____sep_____R____id
+  from  CoOcscOpCoOcCoConsolidated R;
+
+output view __Union__208__TempOp__0;
+
+create view __Union__208__TempOp__1 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as CoOcsic_____sep_____R____id
+  from  CoOcsic R;
+
+output view __Union__208__TempOp__1;
+
+create view __Union__208__TempOp__2 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as CoOcssc_____sep_____R____id
+  from  CoOcssc R;
+
+output view __Union__208__TempOp__2;
+
+create view __Union__208__TempOp__3 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as CoOcscOpCo_____sep_____R____id
+  from  CoOcscOpCo R;
+
+output view __Union__208__TempOp__3;
+
+create view __Union__208__TempOp__4 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as OrganizationR11_no_the_____sep_____R____id
+  from  OrganizationR11_no_the R;
+
+output view __Union__208__TempOp__4;
+
+create view __Union__208__TempOp__5 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as CoOcsicEx_____sep_____R____id
+  from  CoOcsicEx R;
+
+output view __Union__208__TempOp__5;
+
+create view __Union__209__TempOp__0 as
+  select  O.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          O.__auto__id as ExpandedOrg5791011R1_____sep_____O____id
+  from  ExpandedOrg5791011R1 O;
+
+output view __Union__209__TempOp__0;
+
+create view __Union__209__TempOp__1 as
+  select  O.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          O.__auto__id as ExpandedOrg5791011R2_____sep_____O____id
+  from  ExpandedOrg5791011R2 O;
+
+output view __Union__209__TempOp__1;
+
+create view __Union__210__TempOp__0 as
+  select  O.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          O.__auto__id as ExpandedOrg5791011WithAnd1_____sep_____O____id
+  from  ExpandedOrg5791011WithAnd1 O;
+
+output view __Union__210__TempOp__0;
+
+create view __Union__210__TempOp__1 as
+  select  O.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          O.__auto__id as ExpandedOrg5791011WithAnd2_____sep_____O____id
+  from  ExpandedOrg5791011WithAnd2 O;
+
+output view __Union__210__TempOp__1;
+
+create view __Union__210__TempOp__2 as
+  select  O.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          O.__auto__id as ExpandedOrg5791011WithAnd3_____sep_____O____id
+  from  ExpandedOrg5791011WithAnd3 O;
+
+output view __Union__210__TempOp__2;
+

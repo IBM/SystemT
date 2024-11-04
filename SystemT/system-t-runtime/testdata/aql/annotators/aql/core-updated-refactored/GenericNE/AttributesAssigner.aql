@@ -1,0 +1,232 @@
+-----------------------------------------------------------------
+-- This file create and assign attributes for all output NE types 
+-- except Person, URL, and the Financial annotators
+-----------------------------------------------------------------
+
+----------------------------------------------------------------
+-- Continent
+----------------------------------------------------------------
+create view Continent_ as
+select C.match as continent, C.match as reference
+from Continents C;
+
+----------------------------------------------------------------
+-- Country
+----------------------------------------------------------------
+create view CountryContinent as
+select C.match as country, CT.continent as continent, CombineSpans(C.match, CT.continent) as reference
+from CountryCandidate C,
+	 Continent_ CT
+where FollowsTok(C.match, CT.continent, 0, 1)
+  and MatchesRegex(/\s*[,]?\s*/, SpanBetween(C.match, CT.continent))
+  and Not(ContainsRegex(/[\n\r]/, SpanBetween(C.match, CT.continent)))
+  -- avoid matching "U.S., Australia"
+  and Not(Equals(GetText(CT.continent), 'Australia'));
+
+create view CountryAll as
+	(select C.country as country, C.continent as continent, C.reference as reference from CountryContinent C)
+	union all
+	(select C.match as country, '' as continent, C.match as reference from CountryCandidateValid C);
+	
+create view Country_ as
+select C.country as country, C.continent as continent, C.reference as reference
+from CountryAll C
+consolidate on C.reference
+using 'LeftToRight';
+
+----------------------------------------------------------------
+-- State
+----------------------------------------------------------------
+
+create view StateCountry as
+select S.match as state, C.country as country, C.continent as continent, CombineSpans(S.match, C.reference) as reference
+from StateStrongAll S,
+	 Country_ C
+where FollowsTok(S.match, C.country, 0, 1)
+  and MatchesRegex(/\s*[,]?\s*/, SpanBetween(S.match, C.country))
+  and Not(ContainsRegex(/[\n\r]/, SpanBetween(S.match, C.country)));
+  
+create view StateAll as
+	(select S.state as stateorprovince, S.country as country, S.continent as continent, S.reference as reference from StateCountry S)
+	union all
+	(select S.match as stateorprovince, '' as country, '' as continent, S.match as reference from StateCandidateValid S);
+
+create view StateOrProvince_ as
+select S.stateorprovince as stateorprovince, S.country as country, S.continent as continent, S.reference as reference
+from StateAll S
+consolidate on S.stateorprovince;
+
+----------------------------------------------------------------
+--                  County 
+----------------------------------------------------------------
+create view CountyState as
+select C.match as county, S.stateorprovince as state, S.country as country, S.continent as continent, CombineSpans(C.match, S.reference) as reference
+from StateOrProvince_ S,
+	 CountyValid C
+where FollowsTok(C.match, S.stateorprovince, 0, 1)
+  and MatchesRegex(/\s*[,]?\s*/, SpanBetween(C.match, S.stateorprovince))
+  and Not(ContainsRegex(/[\n\r]/, SpanBetween(C.match, S.stateorprovince)));
+
+create view CountyAll as
+	(select C.county as county, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CountyState C)
+	union all
+	(select C.match as county, '' as state, '' as country, '' as continent, C.match as reference from CountyValid C);
+
+
+create view County_ as
+select C.county as county, C.state as stateorprovince, C.country as country, C.continent as continent, C.reference as reference
+from CountyAll C
+consolidate on C.county;
+
+----------------------------------------------------------------
+--                  City 
+----------------------------------------------------------------
+create view CityCounty as
+select CC.match as city, C.county as county, C.stateorprovince as stateorprovince, C.country as country, C.continent as continent, CombineSpans(CC.match, C.reference) as reference
+from CityConsolidatedValid CC,
+	 County_ C
+where FollowsTok(CC.match, C.county, 0, 1)
+  and MatchesRegex(/\s*[,]?\s*/, SpanBetween(CC.match, C.county))
+  and Not(ContainsRegex(/[\n\r]/, SpanBetween(CC.match, C.county)));
+ 
+-- NOTE: right now to ensure quality, we only output City where strong clues exist (i.e. from "StrongCity" or from "Address")
+create view CityCandidates as
+	(select C.city as city, '' as county, C.state as stateorprovince, C.country as country, C.continent as continent, C.reference as reference
+	 from CityStateCountryValid C
+	 where Equals(GetText(C.subtype), 'city'))
+	 union all
+	 (select A.city as city, '' as county, A.stateorprovince as stateorprovince, '' as country, '' as continent, A.city as reference
+	 from AddressFinal A)
+	 union all
+	 (select C.city as city, C.county as county, C.stateorprovince as stateorprovince, C.country as country, C.continent as continent, C.reference as reference
+	 from CityCounty C);
+	 
+create view City_ as
+select C.city as city, C.stateorprovince as stateorprovince, C.country as country, C.continent as continent, C.reference as reference
+from CityCandidates C
+consolidate on C.reference;
+
+
+----------------------------------------------------------------
+--                  ZipCode 
+----------------------------------------------------------------
+create view ZipCodeCountry as
+select Z.match as zip, C.country as country, Z.match as reference
+from Zipcode Z,
+	 Country_ C
+where FollowsTok(Z.match, C.country, 0, 1)
+  and MatchesRegex(/\s*[,]?\s*/, SpanBetween(Z.match, C.country))
+  and Not(ContainsRegex(/[\n\r]/, SpanBetween(Z.match, C.country)));
+
+create view ZipCodeAll as
+	(select Z.zip as zip, Z.country as country, Z.reference as reference from ZipCodeCountry Z)
+	union all
+	(select Z.match as zip, '' as country, Z.match as reference from Zipcode Z);
+
+create view ZipCode_ as
+select Z.zip as zip, Z.reference as reference
+from ZipCodeAll Z
+consolidate on Z.zip;
+
+
+----------------------------------------------------------------
+--                  MapLocation 
+----------------------------------------------------------------
+create view MapLocationAll as
+	(select A.address as address, A.city as city, '' as county, A.stateorprovince as stateorprovince, A.zip as zip, '' as country, '' as continent, A.reference as reference
+	from AddressFinal A)
+	union all
+	(select '' as address, C.city as city, '' as county, C.stateorprovince as stateorprovince, '' as zip, C.country as country, C.continent as continent, C.reference as reference
+	 from City_ C)
+	union all
+	(select '' as address, '' as city, C.county as county, C.stateorprovince as stateorprovince, '' as zip, C.country as country, C.continent as continent, C.reference as reference
+	 from County_ C)
+	 union all
+	(select '' as address, '' as city, '' as county, C.stateorprovince as stateorprovince, '' as zip, C.country as country, C.continent as continent, C.reference as reference
+	 from StateOrProvince_ C)
+	union all
+	(select '' as address, '' as city, '' as county, '' as stateorprovince, '' as zip, C.country as country, C.continent as continent, C.reference as reference
+	 from Country_ C)
+	 union all
+	(select '' as address, '' as city, '' as county, '' as stateorprovince, '' as zip, '' as country, C.continent as continent, C.reference as reference
+	 from Continent_ C)
+	 union all
+	(select '' as address, '' as city, '' as county, '' as stateorprovince, C.zip as zip, '' as country, '' as continent, C.reference as reference
+	 from ZipCode_ C);
+	 
+create view MapLocation_ as
+select C.address as address, C.city as city, C.county as county, C.stateorprovince as stateorprovince, C.zip as zip, C.country as country, C.continent as continent, C.reference as reference
+from MapLocationAll C
+consolidate on C.reference
+using 'LeftToRight';
+
+----------------------------------------------------------------
+--                  EmailAddress 
+----------------------------------------------------------------
+
+create view EmailAddressWithAttr as
+  extract 
+  	-- Sudarshan regex : 10/12/2011 - backreference on lines 170 and 194
+        regex /^([^@]+)@([^@]+)$/ on E.email
+       return group 0 as reference and group 1 as local and group 2 as domain
+  from InternetEmailFinal E;
+
+create view EmailAddressWithoutAttr as
+(select E.email as email from InternetEmailFinal E)
+minus
+(select E.reference as email from EmailAddressWithAttr E);
+
+create view EmailAddressWithAttrAll as
+(select E.reference as email, E.local as local, E.domain as domain, E.reference as reference from EmailAddressWithAttr E)
+union all
+(select E.email as email, '' as local, '' as domain, E.email as reference from EmailAddressWithoutAttr E);
+
+create view EmailAddress_ as 
+select E.email as email, E.local as local, E.domain as domain, E.reference as reference
+from EmailAddressWithAttrAll E;
+
+----------------------------------------------------------------
+--                  NotesEmailAddress 
+----------------------------------------------------------------
+
+create view NotesEmailAddressWithAttr as
+  extract 
+        regex /^([^\/]+)\/(.+)$/ on E.annot
+       return group 0 as reference and group 1 as name and group 2 as domain
+  from NotesEmailConsolidated E;
+
+create view NotesEmailAddressWithoutAttr as
+(select E.annot as email from NotesEmailConsolidated E)
+minus
+(select E.reference as email from NotesEmailAddressWithAttr E);
+
+create view NotesEmailAddressWithAttrAll as
+(select E.reference as email, E.name as name, E.domain as domain, E.reference as reference from NotesEmailAddressWithAttr E)
+union all
+(select E.email as email, '' as name, '' as domain, E.email as reference from NotesEmailAddressWithoutAttr E);
+
+create view NotesEmailAddress_ as
+select E.email as email, E.name as name, E.domain as domain, E.reference as reference
+from NotesEmailAddressWithAttrAll E;
+
+----------------------------------------------------------------
+-- 				PhoneNumber
+----------------------------------------------------------------
+-- NOTE: more detailed assignment of phone numbers will be provided in the future
+create view PhoneNumber_ as
+	(select P.num as phone, '' as type, P.num as reference from PhoneNumOnly P
+	-- disallow multiple new line
+	where Not(ContainsRegex(/[\n\r]{2,}/, P.num)))
+	union all
+	(select P.num as phone, 'fax' as type, P.num as reference from NonPhoneNum P
+	where Not(ContainsRegex(/[\n\r]{2,}/, P.num)));
+
+
+----------------------------------------------------------------
+--                  DateTime 
+----------------------------------------------------------------
+create view DateTime_ as
+select DT.match as datetime, '' as day, '' as month, '' as year, '' as hours, '' as minutes, '' as seconds, '' as timezone, '' as format, DT.match as reference
+--select DT.match as datetime, DT.match as reference
+from DateTimes DT;
+

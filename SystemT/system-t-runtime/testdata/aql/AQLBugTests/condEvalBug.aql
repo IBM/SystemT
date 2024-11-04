@@ -1,0 +1,42 @@
+-------------------------------------------------------------------------------
+-- condEvalBug.aql
+--
+-- Test case for a bug in conditional eval code.
+-------------------------------------------------------------------------------
+
+-- Find first names
+--create view FirstName as 
+select D.match as annot
+into FirstName
+from Dictionary('dictionaries/first.dict', DocScan.text) D;
+
+-- Find phone numbers
+--create view PhoneNumber as
+select R.match as annot
+into PhoneNumber
+from Regex(/\+?[Xx]\.?\d{4,5}/, DocScan.text) R;
+	
+-- Find instances of first name followed within 5 chars by phone number
+--create view PersonPhone1 as
+select CombineSpans(name.annot, phone.annot) as annot
+into PersonPhone1
+from FirstName name, PhoneNumber phone
+where Follows(name.annot, phone.annot, 0, 5);
+
+-- Reverse the arguments in PersonPhone1 and change params
+create view PersonPhone2 as
+select CombineSpans(name.annot, phone.annot) as annot
+from PhoneNumber phone, FirstName name
+where Follows(name.annot, phone.annot, 0, 5);
+
+
+-- Union everything together to generate regression test output.
+create view AllPersonPhone as 
+	(select P.annot as annot from PersonPhone1 P)
+union all
+	(select P.annot as annot from PersonPhone2 P);
+	
+select A.annot as annot
+into PPOutput
+from AllPersonPhone A;
+

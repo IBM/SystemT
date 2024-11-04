@@ -1,0 +1,153 @@
+------------------------------------------------------------------------------
+-- SkipDocument.aql
+--
+-- Implements the following SkipDocument rules applied to HTML 
+-- content after detagging:
+--
+-- 3) MISSING CONTENT:
+-- 		document contains less than “100” visible words, implemented as: 
+-- 		A) Number of words within <body> tag after detagging is < 100  (or)
+-- 		B) Number of characters within <body> tag before detagging is < 450 
+--		   including white space
+--
+-- 4) NO TITLE:
+--		document does not have a title specified via <title> tag
+--
+-- 5) NO OUTBOUND LINK:
+--		document does not have even a single outgoing link (in other words, 
+--      every link extracted from the document either directly points to itself 
+--      or to an anchor within that page)
+--
+-- 6) OLD/INVALID TEMPLATE: {*****NOT IMPLEMENTED YET*****}
+--		document fails to satisfy even a single one of the following con-ditions
+-- 		A) The value of the “source” meta tag is v8 Template Generator or w3v8 
+--		   Basic Domino Template or v6 Template Generator (case-insensitive 
+--         both in the name of the meta tag and in the value) 
+-- 		B) There is a mast head div element, i.e., a div element whose “id” 
+--         is “masthead” <div id="masthead">
+--
+-- Initial SkipDocument rules that apply to document content before detagging 
+-- are in SkipDocumentbeforeDetag.aql. 
+--
+-- Generates the following LA output:
+-- 	a. SkipDocument
+--
+-- Depends on SkipDocumentBeforeDetag.aql, HTML.aql
+--
+-------------------------------------------------------------------------------
+
+-- ***********************************************************************
+-- 3) MISSING CONTENT: document contains less than “100” visible words, implemented as: 
+-- A) Number of words within <body> tag after detagging is < 100 
+-- **********************************************************************
+
+-- Counting words/tokens in body text
+/*
+create view SplitBodyAll as
+extract
+	split using B.boundary
+		on B.match
+		as words
+	from (
+		extract
+		BT.match as match,
+		regex /\s+/ on BT.match as boundary
+		from BodyTag BT
+	)B;
+
+create view SplitBody as
+select B.words as words 
+from SplitBodyAll B
+where GreaterThan(GetLength(B.words), 0);
+
+create view SkipDocumentMissingContentAfterDetag as
+select 'Missing Content : After Detagging' as reason,
+		B.match as content
+from BodyTag B, (select Count(*) as cnt from SplitBody) SB
+where GreaterThan(100, SB.cnt);
+*/
+
+create view SkipDocumentMissingContentAfterDetag as
+select 'Missing Content : After Detagging' as reason,
+		B.match as content
+from BodyTag B
+where GreaterThan(100, GetLengthTok(B.match));
+
+
+-- ***********************************************************************
+-- 3) MISSING CONTENT: document contains less than “100” visible words, 
+--    implemented as: 
+--    B) Number of characters within <body> tag before detagging is < 450 
+--    including white space
+-- **********************************************************************
+
+create view SkipDocumentMissingContentBeforeDetag as
+select 'Missing Content : Before Detagging' as reason, D.content as content
+from 
+(
+	-- Documents containing <body> tag
+	(select Remap(B.match) as content from BodyTag B where GreaterThan(450, GetLength(Remap(B.match))) )
+	union all
+	-- Documents without a <body> tag
+	(select '' as content from ( select Count(*) as cnt from BodyTag) B where Equals(B.cnt, 0) )
+) D;
+
+
+-- ***********************************************************************
+-- 4) NO TITLE: document does not have a title specified via <title> tag
+-- ***********************************************************************
+
+create view SkipDocumentNoTitle as
+select 'HashTitlePath: no Title' as reason,
+	   'no title' as content
+from Document D,
+	 (select Count(*) as cnt from Title) C
+where Equals(C.cnt, 0);
+
+
+-- ***********************************************************************
+-- 5) NO OUTBOUND LINK: document does not have even a single outgoing link 
+-- **********************************************************************
+
+-- Find the outbound links in the document (all anchor tags minus self references)
+create view OutboundLinks as
+(select A.match as detaggedAnchorTextSpan from ATag A where NotNull(A.target))
+minus
+(select S.detaggedAnchorTextSpan from SelfRefAllWithFragments S);
+
+create view SkipDocumentNoOutboundLinks as
+select 'No outbound link' as reason,
+	   '' as content
+from DocumentAfterSkip D,
+	 (select Count(*) as cnt from OutboundLinks) C
+where Not(Equals(GetText(D.text), '')) and Equals(C.cnt, 0);
+
+
+-- ***********************************************************************
+-- 6) OLD/INVALID TEMPLATE: {*****NOT IMPLEMENTED YET*****} 
+-- **********************************************************************
+
+-- ***********************************************************************
+-- FINAL OUTPUT: 
+-- 
+-- Note: if needed, comment out individual lines to disable the
+--       corresponding rules
+-- **********************************************************************
+
+create view SkipDocument as
+
+-- Rules (1) SHORT DOCUMENT and (2) BAD HEADER(NON-HTML/XML)
+(select * from SkipDocumentBeforeDetagging)
+
+-- Rule (3-A) MISSING CONTENT AFTER DETAGGING
+union all (select * from SkipDocumentMissingContentAfterDetag)
+
+-- Rule (3-B) MISSING CONTENT BEFORE DETAGGING
+union all (select * from SkipDocumentMissingContentBeforeDetag)
+
+-- Rule (4) NO TITLE
+union all (select * from SkipDocumentNoTitle)
+
+-- Rule (5) NO OUTBOUND LINKS
+union all (select * from SkipDocumentNoOutboundLinks)
+;

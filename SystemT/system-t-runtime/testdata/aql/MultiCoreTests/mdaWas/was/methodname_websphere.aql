@@ -1,0 +1,36 @@
+-- *******************************************
+-- Extracts method name that
+-- (i) follows classname (refer classname extractor for more details)
+-- (ii) has one or more of character in the regex below mentioned in the view Methodname_base
+-- (iii) surrounded by a single white space
+-- Eg:
+-- 	[1/5/12 16:41:31:266 PST] 0000000a ServiceLogger I com.ibm.ws.ffdc.IncidentStreamImpl resetIncidentStream FFDC0010I: FFDC closed incident stream file /apps/WebSphere/ProcServer-6.2/profiles/EISNAP01/logs/ffdc/WDPE-PROD.AppTarget.czzpwa01Node01.0_0000000a_12.01.05_16.41.31_1.txt
+-- Here 'resetIncidentStream' is the method name following the class name 'com.ibm.ws.ffdc.IncidentStreamImpl'
+-- *******************************************
+
+create view Methodname_base as 
+    extract regex /[\w-_\$]+/ on 1 token in D.text as match
+    from Doc D;
+    	
+create view Methodname_interim as 
+    select C.match
+    from Methodname_base C
+    where MatchesRegex(/\s/, LeftContext(C.match, 1))
+    and MatchesRegex(/\s/, RightContext(C.match, 1));
+
+create view Methodname_ws as
+select 
+	methodnameI.match as methodname_ws
+from 
+	Classname_ws classname_wsF,
+	Methodname_interim methodnameI
+where 
+	FollowsTok(classname_wsF.classname_ws, methodnameI.match, 0, 0);	
+
+create view Methodname_wsOutputInterim as
+select D.methodname_ws as methodname_ws_Span, GetText(D.methodname_ws) as methodname_ws_Text
+from Methodname_ws D;
+
+create view MethodnameWSOutput as
+select D.methodname_ws_Span as span, D.methodname_ws_Text as text, GetString('MethodnameWS') as field_type
+from Methodname_wsOutputInterim D;

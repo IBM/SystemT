@@ -1,0 +1,784 @@
+module common;
+
+
+create view FourDigits as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /((20)|(19)|(18)|(17)|(16))[\d][\d]/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as match
+  from Document D;
+
+output view FourDigits;
+
+create view DateNum as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /\d[\d\p{Alpha}\-\,]*(\d[\d\p{Alpha}]*)?/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as match
+  from Document D;
+
+output view DateNum;
+
+create view Month as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__8__Temp_____sep_____D____id
+  from  __Subquery__8__Temp D;
+
+output view Month;
+
+create view DateInterval1 as
+  select  CombineSpans(tdi.match, m.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          tdi.__auto__id as TwoDigitsInterval_____sep_____tdi____id,
+          m.__auto__id as Month_____sep_____m____id
+  from  TwoDigitsInterval tdi,
+        Month m
+  where FollowsTok(tdi.match, m.match, 0, 0);
+
+output view DateInterval1;
+
+create view DateInterval2 as
+  select  CombineSpans(m.match, tdi.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          m.__auto__id as Month_____sep_____m____id,
+          tdi.__auto__id as TwoDigitsInterval_____sep_____tdi____id
+  from  Month m,
+        TwoDigitsInterval tdi
+  where FollowsTok(m.match, tdi.match, 0, 0);
+
+output view DateInterval2;
+
+create view DateIntervalWithoutYear as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__9__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__9__TempOp__1 Op);
+
+output view DateIntervalWithoutYear;
+
+create view DateIntervalWithYear as
+  select  CombineSpans(d.match, y.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as DateIntervalWithoutYear_____sep_____d____id,
+          y.__auto__id as FourDigits_____sep_____y____id
+  from  DateIntervalWithoutYear d,
+        FourDigits y
+  where FollowsTok(d.match, y.match, 0, 1)
+     and MatchesRegex(/\s*[,]?\s*/, SpanBetween(d.match, y.match));
+
+output view DateIntervalWithYear;
+
+create view DateIntervalWithOptionalYear as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__10__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__10__TempOp__1 Op);
+
+output view DateIntervalWithOptionalYear;
+
+create view Date1to3 as
+  select  __t2.match as match,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__11__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__11__Temp__1 __t1,
+        __Consolidate__11__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.match;
+
+output view Date1to3;
+
+create view Date11 as
+  select  CombineSpans(dn.match, m.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          m.__auto__id as Month_____sep_____m____id,
+          dn.__auto__id as DateNum_____sep_____dn____id
+  from  Month m,
+        DateNum dn
+  where FollowsTok(dn.match, m.match, 0, 1)
+     and MatchesRegex(/( )*[,]?( )*(of)?( )*/, SpanBetween(dn.match, m.match));
+
+output view Date11;
+
+create view Date11a as
+  select  CombineSpans(dn.match, m.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          m.__auto__id as Month_____sep_____m____id,
+          dn.__auto__id as DateNum_____sep_____dn____id
+  from  Month m,
+        DateNum dn
+  where Follows(dn.match, m.match, 0, 1)
+     and MatchesRegex(/\//, SpanBetween(dn.match, m.match));
+
+output view Date11a;
+
+create view Date12 as
+  select  CombineSpans(m.match, dn.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          m.__auto__id as Month_____sep_____m____id,
+          dn.__auto__id as DateNum_____sep_____dn____id
+  from  Month m,
+        DateNum dn
+  where FollowsTok(m.match, dn.match, 0, 1)
+     and MatchesRegex(/( )*[,]?( )*/, SpanBetween(m.match, dn.match));
+
+output view Date12;
+
+create view Date6 as
+  select  CombineSpans(d.match, fd.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as Date12_____sep_____d____id,
+          fd.__auto__id as FourDigits_____sep_____fd____id
+  from  Date12 d,
+        FourDigits fd
+  where FollowsTok(d.match, fd.match, 0, 1)
+     and MatchesRegex(/( )*[,]?( )*/, SpanBetween(d.match, fd.match));
+
+output view Date6;
+
+create view Date7 as
+  select  CombineSpans(d.match, fd.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as Date11_____sep_____d____id,
+          fd.__auto__id as FourDigits_____sep_____fd____id
+  from  Date11 d,
+        FourDigits fd
+  where FollowsTok(d.match, fd.match, 0, 1)
+     and MatchesRegex(/\s*[,]?\s*/, SpanBetween(d.match, fd.match));
+
+output view Date7;
+
+create view Date7a as
+  select  CombineSpans(d.match, fd.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as Date11a_____sep_____d____id,
+          fd.__auto__id as FourDigits_____sep_____fd____id
+  from  Date11a d,
+        FourDigits fd
+  where Follows(d.match, fd.match, 0, 1)
+     and MatchesRegex(/\//, SpanBetween(d.match, fd.match));
+
+output view Date7a;
+
+create view Date4to5 as
+  select  CombineSpans(wkd.match, d.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          wkd.__auto__id as WKDay_____sep_____wkd____id,
+          d.__auto__id as Date7_____sep_____d____id
+  from  WKDay wkd,
+        Date7 d
+  where FollowsTok(wkd.match, d.match, 0, 2)
+     and MatchesRegex(/( )*[,]?( )*(the)?( )*/, SpanBetween(wkd.match, d.match));
+
+output view Date4to5;
+
+create view Date8 as
+  select  CombineSpans(m.match, fd.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          m.__auto__id as Month_____sep_____m____id,
+          fd.__auto__id as FourDigits_____sep_____fd____id
+  from  Month m,
+        FourDigits fd
+  where FollowsTok(m.match, fd.match, 0, 1)
+     and MatchesRegex(/( )*[,]?( )*/, SpanBetween(m.match, fd.match));
+
+output view Date8;
+
+create view Date9 as
+  select  CombineSpans(wkd.match, d.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          wkd.__auto__id as WKDay_____sep_____wkd____id,
+          d.__auto__id as Date11_____sep_____d____id
+  from  WKDay wkd,
+        Date11 d
+  where FollowsTok(wkd.match, d.match, 0, 2)
+     and MatchesRegex(/[\ ]*[,]?[\ ]*(the)?[\ ]*/, SpanBetween(wkd.match, d.match));
+
+output view Date9;
+
+create view Date10_a as
+  select  CombineSpans(wkd.match, d.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          wkd.__auto__id as WKDay_____sep_____wkd____id,
+          d.__auto__id as Date12_____sep_____d____id
+  from  WKDay wkd,
+        Date12 d
+  where FollowsTok(wkd.match, d.match, 0, 2)
+     and MatchesRegex(/[\ ]*[,]?[\ ]*(the)?[\ ]*/, SpanBetween(wkd.match, d.match));
+
+output view Date10_a;
+
+create view Date10_b as
+  select  CombineSpans(d.match, fd.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as Date10_a_____sep_____d____id,
+          fd.__auto__id as FourDigits_____sep_____fd____id
+  from  Date10_a d,
+        FourDigits fd
+  where FollowsTok(d.match, fd.match, 0, 1)
+     and MatchesRegex(/( )*[,]?( )*/, SpanBetween(d.match, fd.match));
+
+output view Date10_b;
+
+create view Date10Temp as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__12__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__12__TempOp__1 Op);
+
+output view Date10Temp;
+
+create view Date10 as
+  select  __t2.match as match,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__13__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__13__Temp__1 __t1,
+        __Consolidate__13__Temp__2 __t2
+  where Or(GreaterThan(GetBegin(__t1.__consolidate__target), GetBegin(__t2.__consolidate__target)), Equals(GetBegin(__t1.__consolidate__target), GetBegin(__t2.__consolidate__target)))
+     and Overlaps(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.match;
+
+output view Date10;
+
+create view Date13 as
+  select  CombineSpans(y1.match, y2.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          y1.__auto__id as FourDigits_____sep_____y1____id,
+          y2.__auto__id as FourDigits_____sep_____y2____id
+  from  FourDigits y1,
+        FourDigits y2
+  where FollowsTok(y1.match, y2.match, 1, 1)
+     and MatchesRegex(/\s*-\s*/, SpanBetween(y1.match, y2.match));
+
+output view Date13;
+
+create view Date14 as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /(\d{1,2}|\d{4})[\-\/]\d{1,2}[\-\/]\d{2,4}/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as match
+  from Document D;
+
+output view Date14;
+
+create view Date15Day as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'dicts/wkday.dict'
+    on D.text as match
+  from Document D;
+
+output view Date15Day;
+
+create view Date15Mon as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'dicts/month.dict'
+    on D.text as match
+  from Document D;
+
+output view Date15Mon;
+
+create view Date15Dateyear as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /(((\d){2,2}) ((\d){4,4}))/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as match
+  from Document D;
+
+output view Date15Dateyear;
+
+create view Date15 as
+  select  Op.match as match,
+          AutoID() as __auto__id
+  from  __Base__common__Date15__Temp Op;
+
+output view Date15;
+
+create view DateOptMsTz as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /(-?(?:[1-9][0-9]*)?[0-9]{4})[-\.](1[0-2]|0[1-9])[-\.](3[0-1]|0[1-9]|[1-2][0-9])(Z|[+-](?:2[0-3]|[0-1][0-9]):[0-5][0-9])?/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as match
+  from Document D;
+
+output view DateOptMsTz;
+
+create view DateISO as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /([0-9]{4})(?:[-\.](1[0-2]|0[1-9])[-\.])(3[0-1]|0[1-9]|[1-2][0-9])/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as match
+  from Document D;
+
+output view DateISO;
+
+create view DateISOExtended as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /([0-9]{4})(?:[-\.](1[0-2]|0[1-9])[-\.])(3[0-1]|0[1-9]|[1-2][0-9])-?/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as match
+  from Document D;
+
+output view DateISOExtended;
+
+create view DateAll as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__14__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__14__TempOp__1 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__14__TempOp__2 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__14__TempOp__3 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__14__TempOp__4 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__14__TempOp__5 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__14__TempOp__6 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__14__TempOp__7 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__14__TempOp__8 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__14__TempOp__9 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__14__TempOp__10 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__14__TempOp__11 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__14__TempOp__12 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__14__TempOp__13 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__14__TempOp__14 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__14__TempOp__15 Op);
+
+output view DateAll;
+
+create view DatesBuildingBlock as
+  select  __t2.match as match,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__15__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__15__Temp__1 __t1,
+        __Consolidate__15__Temp__2 __t2
+  where Or(GreaterThan(GetBegin(__t1.__consolidate__target), GetBegin(__t2.__consolidate__target)), Equals(GetBegin(__t1.__consolidate__target), GetBegin(__t2.__consolidate__target)))
+     and Overlaps(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.match;
+
+output view DatesBuildingBlock;
+
+create view DateOutput as
+  select  D.match as span,
+          GetText(D.match) as text,
+          GetString('Date') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as DatesBuildingBlock_____sep_____D____id
+  from  DatesBuildingBlock D;
+
+output view DateOutput;
+
+export view common.DateOutput;
+
+
+create view __Base__common__Date15__Temp as
+  extract pattern <day.match> <Token>{0,0} <mon.match> <Token>{0,0} <dy.match>
+  return group 0 as match
+  from  Date15Day day,
+        Date15Mon mon,
+        Date15Dateyear dy;
+
+output view __Base__common__Date15__Temp;
+
+create view __Consolidate__11__Temp__1 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as DateIntervalWithOptionalYear_____sep_____R____id,
+          R.match as __consolidate__target
+  from  DateIntervalWithOptionalYear R;
+
+output view __Consolidate__11__Temp__1;
+
+create view __Consolidate__11__Temp__2 as
+  select  __t1.match as match,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__11__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__11__Temp__2;
+
+create view __Consolidate__13__Temp__1 as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as Date10Temp_____sep_____D____id,
+          D.match as __consolidate__target
+  from  Date10Temp D;
+
+output view __Consolidate__13__Temp__1;
+
+create view __Consolidate__13__Temp__2 as
+  select  __t1.match as match,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__13__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'LeftToRight';
+
+output view __Consolidate__13__Temp__2;
+
+create view __Consolidate__15__Temp__1 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as DateAll_____sep_____R____id,
+          R.match as __consolidate__target
+  from  DateAll R;
+
+output view __Consolidate__15__Temp__1;
+
+create view __Consolidate__15__Temp__2 as
+  select  __t1.match as match,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__15__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'LeftToRight';
+
+output view __Consolidate__15__Temp__2;
+
+create view __Subquery__8__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____Document____id,
+    dictionary 'dicts/month.dict'
+    with flags 'IgnoreCase'
+    on Document.text as match
+  from Document Document;
+
+output view __Subquery__8__Temp;
+
+create view __Union__10__TempOp__0 as
+  select  d.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as DateIntervalWithoutYear_____sep_____d____id
+  from  DateIntervalWithoutYear d;
+
+output view __Union__10__TempOp__0;
+
+create view __Union__10__TempOp__1 as
+  select  d.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as DateIntervalWithYear_____sep_____d____id
+  from  DateIntervalWithYear d;
+
+output view __Union__10__TempOp__1;
+
+create view __Union__12__TempOp__0 as
+  select  d.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as Date10_a_____sep_____d____id
+  from  Date10_a d;
+
+output view __Union__12__TempOp__0;
+
+create view __Union__12__TempOp__1 as
+  select  d.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as Date10_b_____sep_____d____id
+  from  Date10_b d;
+
+output view __Union__12__TempOp__1;
+
+create view __Union__14__TempOp__0 as
+  select  d.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as Date1to3_____sep_____d____id
+  from  Date1to3 d;
+
+output view __Union__14__TempOp__0;
+
+create view __Union__14__TempOp__1 as
+  select  d.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as Date4to5_____sep_____d____id
+  from  Date4to5 d;
+
+output view __Union__14__TempOp__1;
+
+create view __Union__14__TempOp__10 as
+  select  d.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as Date13_____sep_____d____id
+  from  Date13 d;
+
+output view __Union__14__TempOp__10;
+
+create view __Union__14__TempOp__11 as
+  select  d.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as Date14_____sep_____d____id
+  from  Date14 d;
+
+output view __Union__14__TempOp__11;
+
+create view __Union__14__TempOp__12 as
+  select  d.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as DateOptMsTz_____sep_____d____id
+  from  DateOptMsTz d;
+
+output view __Union__14__TempOp__12;
+
+create view __Union__14__TempOp__13 as
+  select  d.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as DateISO_____sep_____d____id
+  from  DateISO d;
+
+output view __Union__14__TempOp__13;
+
+create view __Union__14__TempOp__14 as
+  select  d.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as DateISOExtended_____sep_____d____id
+  from  DateISOExtended d;
+
+output view __Union__14__TempOp__14;
+
+create view __Union__14__TempOp__15 as
+  select  d.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as Date15_____sep_____d____id
+  from  Date15 d;
+
+output view __Union__14__TempOp__15;
+
+create view __Union__14__TempOp__2 as
+  select  d.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as Date6_____sep_____d____id
+  from  Date6 d;
+
+output view __Union__14__TempOp__2;
+
+create view __Union__14__TempOp__3 as
+  select  d.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as Date7_____sep_____d____id
+  from  Date7 d;
+
+output view __Union__14__TempOp__3;
+
+create view __Union__14__TempOp__4 as
+  select  d.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as Date7a_____sep_____d____id
+  from  Date7a d;
+
+output view __Union__14__TempOp__4;
+
+create view __Union__14__TempOp__5 as
+  select  d.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as Date8_____sep_____d____id
+  from  Date8 d;
+
+output view __Union__14__TempOp__5;
+
+create view __Union__14__TempOp__6 as
+  select  d.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as Date9_____sep_____d____id
+  from  Date9 d;
+
+output view __Union__14__TempOp__6;
+
+create view __Union__14__TempOp__7 as
+  select  d.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as Date10_____sep_____d____id
+  from  Date10 d;
+
+output view __Union__14__TempOp__7;
+
+create view __Union__14__TempOp__8 as
+  select  d.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as Date11_____sep_____d____id
+  from  Date11 d;
+
+output view __Union__14__TempOp__8;
+
+create view __Union__14__TempOp__9 as
+  select  d.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as Date12_____sep_____d____id
+  from  Date12 d;
+
+output view __Union__14__TempOp__9;
+
+create view __Union__9__TempOp__0 as
+  select  d.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as DateInterval1_____sep_____d____id
+  from  DateInterval1 d;
+
+output view __Union__9__TempOp__0;
+
+create view __Union__9__TempOp__1 as
+  select  d.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          d.__auto__id as DateInterval2_____sep_____d____id
+  from  DateInterval2 d;
+
+output view __Union__9__TempOp__1;
+

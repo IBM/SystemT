@@ -1,0 +1,62 @@
+module was;
+
+
+create view Shortname_base as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /[\w]+/
+    with flags 'DOTALL'
+    on between 1 and 1 tokens in D.text
+    return group 0 as match
+  from Document D;
+
+output view Shortname_base;
+
+create view Shortname_interim as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as Shortname_base_____sep_____C____id
+  from  Shortname_base C
+  where MatchesRegex(/\s/, LeftContext(C.match, 1))
+     and MatchesRegex(/\s/, RightContext(C.match, 1));
+
+output view Shortname_interim;
+
+create view Shortname as
+  select  shortnameI.match as shortname,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          threadIDF.__auto__id as ThreadID_____sep_____threadIDF____id,
+          shortnameI.__auto__id as Shortname_interim_____sep_____shortnameI____id
+  from  ThreadID threadIDF,
+        Shortname_interim shortnameI
+  where FollowsTok(threadIDF.threadID, shortnameI.match, 0, 0);
+
+output view Shortname;
+
+create view ShortnameOutputInterim as
+  select  D.shortname as shortname_Span,
+          GetText(D.shortname) as shortname_Text,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as Shortname_____sep_____D____id
+  from  Shortname D;
+
+output view ShortnameOutputInterim;
+
+create view ShortnameOutput as
+  select  D.shortname_Span as span,
+          D.shortname_Text as text,
+          GetString('ShortnameWS') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as ShortnameOutputInterim_____sep_____D____id
+  from  ShortnameOutputInterim D;
+
+output view ShortnameOutput;
+
+export view was.ShortnameOutput;
+
+

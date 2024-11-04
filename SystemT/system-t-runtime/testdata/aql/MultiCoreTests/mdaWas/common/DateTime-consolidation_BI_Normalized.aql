@@ -1,0 +1,146 @@
+create function CombineText(date String, time String)
+	return String
+	external_name '../lib/logAAqlUDFs.jar:com.ibm.logparse.aql.DateTimeNormalized!CombineText'
+	language java
+	deterministic
+	called on null input;
+	
+create function CombineDateTimeCategory(dateCategory Span, timeCategory Span)
+	return String
+	external_name '../lib/logAAqlUDFs.jar:com.ibm.logparse.aql.DateTimeNormalized!CombineDateTimeCategory'
+	language java
+	deterministic
+	called on null input;
+	
+create function GetDateTimeInMilliSecs(dateTime String)
+	return String
+	external_name '../lib/logAAqlUDFs.jar:com.ibm.logparse.aql.DateTimeNormalized!getDateTimeInMilliSecs'
+	language java
+	deterministic
+	called on null input;			
+	
+create view DateTime1_Normalized as
+select 
+	CombineSpans(D.OrginalDateSpan, T.nonnormative_time) as datetime_nonnormative,
+	CombineText(GetString(D.dateNormalized), GetString(T.normalized_time)) as datetime_normalized,
+	CombineDateTimeCategory(D.category,T.category) as category 
+from DateNormalizedDetail D, TimesNormalizedDetail T
+where FollowsTok(D.OrginalDateSpan, T.nonnormative_time, 0, 0);
+
+----------- Changes for essbase ----------------------------
+create view essbase_date_time_Normalized as
+select 
+	CombineSpans(D.OrginalDateSpan, T.nonnormative_time) as datetime_nonnormative,
+	CombineText(GetString(D.dateNormalized), GetString(T.normalized_time)) as datetime_normalized,
+	CombineDateTimeCategory(D.category,T.category) as category 
+from DateNormalizedDetail D, TimesNormalizedDetail T
+where Overlaps(D.OrginalDateSpan, T.nonnormative_time, 0, 0);
+------------------------------------------------------------------------------
+
+create view DateTime2_Normalized as
+select 
+	CombineSpans(D.OrginalDateSpan, T.nonnormative_time) as datetime_nonnormative,
+	CombineText(GetString(D.dateNormalized), GetString(T.normalized_time)) as datetime_normalized,
+	CombineDateTimeCategory(D.category, T.category) as category 
+from DateISOExtendedNormalizedDetail D, TimesNormalizedDetail T
+where FollowsTok(D.OrginalDateSpan, T.nonnormative_time, 0, 0);
+
+create view DateTimeOptMsTz_Normalized as
+select 
+	CombineSpans(D.OrginalDateSpan, T.nonnormative_time) as datetime_nonnormative,
+	CombineText(GetString(D.dateNormalized), GetString(T.normalized_time)) as datetime_normalized,
+	CombineDateTimeCategory(D.category, T.category) as category 
+from DateOptMsTzNormalizedDetail D, TimeOptMsTzNormalized T
+where Follows(D.OrginalDateSpan, T.nonnormative_time, 1, 1);
+
+create view DateTime3_Normalized as
+select 
+	CombineSpans(D.OrginalDateSpan, T.nonnormative_time) as datetime_nonnormative,
+	CombineText(GetString(D.dateNormalized), GetString(T.normalized_time)) as datetime_normalized,
+	CombineDateTimeCategory(D.category, T.category) as category 
+from DateNormalizedDetail D, TimeOptMsTz_aNormalized T
+where FollowsTok(D.OrginalDateSpan, T.nonnormative_time, 0, 2);
+
+create view DateTime4_Normalized as
+select 
+	CombineSpans(D.OrginalDateSpan, T.nonnormative_time) as datetime_nonnormative,
+	CombineText(GetString(D.dateNormalized), GetString(T.normalized_time)) as datetime_normalized,
+	CombineDateTimeCategory(D.category, T.category) as category 
+from DateNormalizedDetail D, TimeOptMsTz_bNormalized T
+where FollowsTok(D.OrginalDateSpan, T.nonnormative_time, 0, 1);
+	
+create view DateTimesAll_Normalized as
+	(select * from DateTime1_Normalized)
+	union all
+	(select * from DateTime2_Normalized)
+	union all
+	(select * from DateTimeOptMsTz_Normalized)
+	union all
+	(select * from DateTime3_Normalized)
+	union all
+	(select * from DateTime4_Normalized)
+	union all
+	(select * from essbase_date_time_Normalized);
+	
+create view DateTimesNormalizedBuildingBlock as
+select 
+	R.datetime_nonnormative as datetime_nonnormative, 
+	R.datetime_normalized as datetime_normalized,
+	R.category as category
+from DateTimesAll_Normalized R
+consolidate on R.datetime_nonnormative
+using 'LeftToRight';
+
+create view TimesNormalizedBuildingBlock as
+select 	
+	t.normalized_time as normalized_time,
+	t.nonnormative_time as nonnormative_time,
+	t.category as category
+from DateTimesNormalizedBuildingBlock dt, TimesNormalizedDetail t
+where Overlaps(dt.datetime_nonnormative, t.nonnormative_time);
+
+create view TimesNormalizedDetailInterim as
+select 
+	t.nonnormative_time as time_nonnormative,
+	GetText(t.nonnormative_time) as time_nonnormative_text,
+	t.normalized_time as time_normalized,
+	t.category as category 
+from TimesNormalizedBuildingBlock t;
+	
+create view DateTimesNormalized4RecSplit as 
+select 
+	D.datetime_normalized as datetime_normalized
+from DateTimesNormalizedBuildingBlock D;
+
+create view DateTimesNormalizedDetailInterim as 
+select 
+	D.datetime_nonnormative as datetime_nonnormative,
+	GetText(D.datetime_nonnormative) as datetime_nonnormative_text,
+	D.datetime_normalized as datetime_normalized,
+	D.category as category 
+from DateTimesNormalizedBuildingBlock D;
+
+--Moving the DateTime normalization totally to JAQL. Also the normalization is going to be performed only to the LogDateTime.
+--Hence the output for DateTime is going to be NOT normalized. Refer 22752
+--create view DateTimeOutput as 
+--select 
+--	D.datetime_nonnormative as span,
+--	D.datetime_nonnormative_text as text,
+--	D.datetime_normalized as normalized_text,
+	--A specific change for accomodating cisco workflow. Refer 16227 for more details.
+	----per 20413, the normalization and filling of the missing date/time components are going to happen in 
+	----the JAQL using the ingestion metadata. Since the datetime at this point is may miss some components, we could
+	----not get the milli secs. Hence this always returns 000 as ms
+--	GetDateTimeInMilliSecs(GetString(D.datetime_normalized)) as datetime_in_milli_secs_text,
+--	GetString('DateTime') as field_type,
+--	D.category as category 
+--from DateTimesNormalizedDetailInterim D;
+
+--create view TimeOutput as 
+--select 
+--	D.time_nonnormative as span,
+--	D.time_nonnormative_text as text,
+--	D.time_normalized as normalized_text,
+--	GetString('Time') as field_type,
+--	D.category as category 
+--from TimesNormalizedDetailInterim D;

@@ -1,0 +1,41 @@
+---------------------  GET LINES-------------------------------------
+/*
+create view NewLines_TL as 
+    extract 
+      regex /(((\n)|(\r))+)|($)|(^)/ on D.text as newline
+    --  regex /(\n)|($)|(^)/ on D.text as newline
+      from Doc D;
+  
+  
+create view ALLDelims_TL as
+    select N.newline as delim, RightContext(N.newline, 1000) as l_context
+    from NewLines_TL N;
+    
+    
+create view FastDeslims_TL as 
+    extract A.delim as delim, A.l_context as l_context,
+       -- regex /(((\n)|(\r))+)|(^)|($)/ on A.l_context as second_newline
+       regex /(\n)/ on A.l_context as second_newline
+      from ALLDelims_TL A;
+
+create view FastDelimsSpan_TL as 
+    select A.delim, A.l_context, A.second_newline, SpanBetween(A.delim, A.second_newline) as oneline
+    from FastDeslims_TL A
+    where Not(Overlaps(A.delim, A.second_newline));    
+   
+create view LinesInterim_TL as 
+    select  L.oneline as text
+    from FastDelimsSpan_TL L
+    consolidate on L.oneline
+    using 'NotContainedWithin';*/
+
+create view NewLines_TL as 
+    extract 
+     regex /[^\r\n]+/on D.text as oneline
+    from Doc D;
+      
+      
+create view LinesInterim_TL as 
+    select D.oneline as line_span, GetString(D.oneline) as line_text
+    from NewLines_TL D;
+-----------------------------------------------------

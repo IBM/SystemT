@@ -1,0 +1,36 @@
+module SentenceBoundary;
+
+import dictionary MiscellaneousAbbreviations from module Dictionaries as MiscellaneousAbbreviations;
+
+--*********************************************************
+-- Combine sentence boundaries with headline boundaries 
+-- and HTML tag boundaries
+--*********************************************************
+create view SentenceBoundary as
+select S.boundary as boundary
+from
+(
+	(
+		select R.match as boundary
+		from (extract regex /(([\.\?!]+\s)|(\n\s*\n))/ on D.text as match from DocumentText D) R
+		where
+			-- Filter the candidate boundaries.
+			Not(ContainsDict('MiscellaneousAbbreviations', 
+				CombineSpans(LeftContextTok(R.match, 1), R.match)))
+	)
+	union all
+	( select H.lb as boundary from HeadlineMixedCaps H )
+	union all
+	( select H.rb as boundary from HeadlineMixedCaps H )
+	union all
+	( select H.lb as boundary from HTMLTagBoundary H )
+	union all
+	( select H.rb as boundary from HTMLTagBoundary H )
+) S
+consolidate on S.boundary;
+
+-- Export candidate view
+export view HeadlineMixedCaps;
+
+-- Export final view
+export view SentenceBoundary;

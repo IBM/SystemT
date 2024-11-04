@@ -1,0 +1,43 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test cases for extension to sequence patterns to pass through attributes
+-- Verifies that the HAVING clause is validated wrt SELECT list and RETURN clause
+--
+-------------------------------------------------------------------------------
+
+create view CapsWord as
+extract 'CapsWord' as type,
+	regex /[A-Z].*/ on 1 token in D.text as match
+from Document D;
+
+create view LowWord as
+extract 'LowWord' as type,
+	regex /[a-z]*/ on 1 token in D.text as match
+from Document D;
+
+-- Wrong column name in having clause - will generate an exception "Invalid attribute name 'match1' in HAVING clause"
+create view ColRefAtom7 as
+extract GetText(C.type) as ctype,
+	    pattern <C.match> as match
+from CapsWord C
+having GreaterThan(GetLength(match1), 0);
+
+output view ColRefAtom7;
+
+-- HAVING clause with attribute from SELECT list. This should not generate any exception
+create view ColRefAtom8 as
+extract GetText(C.type) as ctype,
+	    pattern <C.match> as match
+from CapsWord C
+having GreaterThan(GetLength(ctype), 0);
+
+output view ColRefAtom8;
+
+-- HAVING clause with attribute from PATTERN. This should not generate any exception
+create view ColRefAtom9 as
+extract GetText(C.type) as ctype,
+	    pattern <C.match> as match
+from CapsWord C
+having GreaterThan(GetLength(match), 0);
+
+output view ColRefAtom9;

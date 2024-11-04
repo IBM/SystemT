@@ -1,0 +1,35 @@
+module syslog;
+
+
+import view IPAddressOutput from module common;
+
+
+import view logDatetime from module common;
+
+
+create view DeviceIP as
+  select  Ip.span as span,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          Ip.__auto__id as "common.IPAddressOutput_____sep_____Ip____id",
+          logD.__auto__id as "common.logDatetime_____sep_____logD____id"
+  from  "common.IPAddressOutput" Ip,
+        "common.logDatetime" logD
+  where FollowsTok(logD.span, Ip.span, 0, 0);
+
+output view DeviceIP;
+
+create view DeviceIPOutput as
+  select  dIp.span as span,
+          GetText(dIp.span) as text,
+          GetString('DeviceIP') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          dIp.__auto__id as DeviceIP_____sep_____dIp____id
+  from  DeviceIP dIp;
+
+output view DeviceIPOutput;
+
+export view syslog.DeviceIPOutput;
+
+

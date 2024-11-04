@@ -1,0 +1,422 @@
+ 
+-- ===========================================================================
+--   Person, Organization, Places begin here 
+-- ===========================================================================
+
+create dictionary FilterPersonDict as
+(
+	"Travel", "Fellow", "Sir", "IBMer", "Researcher", "All",
+	"Friends", "Friend", "Colleague", "Colleagues", "Managers",
+	"Customer", "Users", "User", "Valued", "Executive", "Chairs",
+	"New", "Owner", "Conference", "Please", "Outlook", "Lotus", "Notes",
+	"This", "That", "There", "Here", "Subscribers", "What", "When", "Where",
+	"With", "While", "Thanks", "Thanksgiving","Senator", "Platinum", "Perspective",
+	"Manager", "Ambassador", "Professor", "Dear", "Contact", "Cheers", "Athelet",
+	"And", "Act", "But", "Hello", "Call", "From", "Center", "The", "Take", "Junior",
+	"Both", "Communities", "Company", "Greetings", "Hope", "Restaurants", "Properties",
+	"Let", "Corp", "Memorial"
+);
+ 
+create view sentence as
+extract 
+    split using B.boundary 
+        retain right split point
+        on B.text
+        as sentence
+from (
+    extract 
+        D.text as text,
+        regex /(?:(?:[\;\.\?!]+\s)|(\n\s*\n))/ on D.text as boundary 
+        from Document D
+    having Not(ContainsDict('dictionaries/abbreviations.dict', 
+    CombineSpans(LeftContextTok(boundary, 1), boundary)))
+) B;
+
+--  Place rules begin here
+
+ create view CapsPlace as
+	select
+		R.match as match
+	from
+		Regex(/\b\p{Upper}[\p{Lower}\&]{1,20}\b/, DocScan.text) R;
+	 
+
+ create view CapsPlaceTwo as
+	select
+ 		CombineSpans(cp1.match, cp2.match) as match
+	from
+		CapsPlace cp1,
+		CapsPlace cp2
+ 	where
+		FollowsTok(cp1.match, cp2.match, 0, 0);	
+		
+  create view CapsPlaceOnetoTwo
+	as 
+	 (select R.match as match from CapsPlace R)
+	union all 
+	 (select R.match as match from CapsPlaceTwo R);
+ 
+ create view CityNoCase as
+	select
+		D.match as match
+	from
+		Dictionary("dictionaries/sekar/GENERALCITY.dict", DocScan.text) D;
+	
+ create view City as 
+ 	select C.match as match 
+ 	from CityNoCase C
+	where 
+		MatchesRegex(/^\p{Upper}[\p{Lower}\&]{1,20}/, C.match);
+--		MatchesRegex(/^\p{Upper}[\p{Lower}\&]{1,20}( \p{Upper}[\p{Lower}\&]{1,20})*$/, C.match);	
+		
+ create view USCityNoCase as
+	select
+		D.match as match
+	from
+		Dictionary("dictionaries/sekar/CITY.dict", DocScan.text) D;
+	
+ create view USCity as 
+ 	select C.match as match 
+ 	from USCityNoCase C
+	where 
+		MatchesRegex(/^\p{Upper}[\p{Lower}\&]{1,20}/, C.match);			
+  
+  
+  create view CountryNoCase as
+	select
+		D.match as match
+	from
+		Dictionary("dictionaries/sekar/COUNTRY.dict", DocScan.text) D;
+	
+ create view Country as 
+ 	select C.match as match 
+ 	from CountryNoCase C
+	where 
+		MatchesRegex(/^\p{Upper}[\p{Lower}\&]{1,20}/, C.match);		
+		
+ create view State  as
+	select
+		D.match as match
+	from
+		Dictionary("dictionaries/sekar/Statelist.dict",  DocScan.text) D;
+		
+ create view StateAbbrev  as
+	select
+		D.match as match
+	from
+		Dictionary("dictionaries/sekar/Statelist.abbrev.dict",  DocScan.text) D;
+		
+  create view StateAll
+	as
+	(select S.match as match from State S)
+	union all 
+	 (select S.match as match from StateAbbrev S);		
+	
+  create view StreetSuffixNoCase  as
+	select
+		D.match as match
+	from
+		Dictionary("dictionaries/sekar/streetSuffixes.dict",  DocScan.text) D;
+	
+  create view StreetSuffix as 
+ 	select S.match as match 
+ 	from StreetSuffixNoCase S
+	where 
+		MatchesRegex(/^\p{Upper}[\p{Lower}\&]{1,20}/, S.match);		
+	
+  create view StreetSuffixWeakNoCase  as
+	select
+		D.match as match
+	from
+		Dictionary("dictionaries/sekar/streetSuffixesWeak.dict",   DocScan.text) D;
+		
+	create view StreetSuffixWeak as 
+ 	select S.match as match 
+ 	from StreetSuffixWeakNoCase S
+	where 
+		MatchesRegex(/^\p{Upper}[\p{Lower}\&]{1,20}/, S.match);		
+	
+   create view StreetSuffixAll
+	as
+	(select S.match as match from StreetSuffix S)
+	union all 
+	 (select S.match as match from StreetSuffixWeak S)	;
+	
+	
+  create view SecondaryUnitNoCase  as
+	select
+		D.match as match
+	from
+		Dictionary("dictionaries/sekar/secondaryUnit.dict", DocScan.text) D;   
+		
+  create view SecondaryUnit as 
+ 	select S.match as match 
+ 	from SecondaryUnitNoCase S
+	where 
+		MatchesRegex(/(\#)|(\p{Upper}[\p{Lower}\&]{1,20})/, S.match);		
+		
+  create view ClueOf  as
+	select
+		D.match as match
+	from
+		Dictionary("dictionaries/sekar/PLACE_CLUES_OF.dict", "Exact", DocScan.text) D; 
+	
+	
+	create view CluePNoCase  as
+	select
+		D.match as match
+	from
+		Dictionary("dictionaries/sekar/PLACE_CLUES_P.dict", DocScan.text) D; 
+	
+	create view ClueP as 
+ 	select C.match as match 
+ 	from CluePNoCase C
+	where 
+		MatchesRegex(/^\p{Upper}[\p{Lower}\&]{1,20}/, C.match);		
+	
+	
+	create view CluePStrong  as
+	select
+		D.match as match
+	from
+		Dictionary("dictionaries/sekar/PLACE_CLUES_P_STRONG.dict", "Exact", DocScan.text) D; 
+	
+	create view Zipcode as
+	select
+		R.match as match
+	from
+		Regex(/\b[0-9]{5}(\-[0-9]{4})?\b/, DocScan.text) R;
+	 
+--	create view ClueSNoCase  as
+--	select
+--		D.match as match
+--	from
+--		Dictionary("dictionaries/sekar/PLACE_CLUES_S.dict", DocScan.text) D; 
+		
+--	create view ClueS as 
+-- 	select C.match as match 
+-- 	from ClueSNoCase C
+--	where 
+--		MatchesRegex(/^\p{Upper}[\p{Lower}\&]{1,20}/, C.match);		
+		
+-- Rule 1
+
+	create view CityState as
+	select
+ 		CombineSpans(C.match, S.match) as match
+	from
+		USCity C,
+		StateAll S
+ 	where
+		FollowsTok(C.match,S.match, 0, 1) and
+		ContainsRegex(/^\s*,\s*$/, SpanBetween(C.match,S.match));	
+		
+-- Rule 3
+
+	create view PlaceOf as
+	select
+ 		CombineSpans(Co.match, CP.match) as match
+	from
+		ClueOf Co,
+		CapsPlaceOnetoTwo CP
+ 	where
+		FollowsTok(Co.match,CP.match, 0, 1) and
+		ContainsRegex(/^\s*of\s*$/, SpanBetween(Co.match,CP.match));	
+		
+-- Rule 6
+
+	create view PStrongTwo as
+	select
+ 		CombineSpans(cp1.match, cp2.match) as match
+	from
+		CluePStrong cp1,
+		CluePStrong cp2
+ 	where
+		FollowsTok(cp1.match, cp2.match, 0, 0);	
+		
+  create view PStrongOnetoTwo
+	as 
+	 (select R.match as match from CluePStrong R)
+	union all 
+	 (select R.match as match from PStrongTwo R);
+
+    create view PStrongTwoCp as
+	select
+ 		CombineSpans(Ps.match, CP.match) as match
+	from
+		PStrongOnetoTwo Ps,
+		CapsPlace CP
+ 	where
+		FollowsTok(Ps.match,CP.match, 0, 0)  ;	
+		
+-- Rule 6a
+
+	create view PCity as
+	select
+ 		CombineSpans(Ps.match, C.match) as match
+	from
+		ClueP Ps,
+		City C
+ 	where
+		FollowsTok(Ps.match,C.match, 0, 0)  ;	
+	
+		
+-- Rule 4
+
+--streetaddress
+    create view NumCP as
+	select
+		R.match as match
+	from
+		Regex(/\b([\d\p{Alpha}\-\,]*\d[\d\p{Alpha}\-\,]*)\s+\p{Upper}[\p{Lower}\&]{1,20}\b/, DocScan.text) R;
+	
+	create view StreetAddressStrong as
+	select
+ 		CombineSpans(nc.match, ss.match) as match
+	from
+		NumCP nc,
+		StreetSuffix ss
+ 	where
+		FollowsTok(nc.match,ss.match, 0, 2)  and
+		MatchesRegex(/\s*(\p{Upper}[\p{Lower}\&]+\s*){0,3}/, SpanBetween(nc.match,ss.match));
+		
+	create view StreetAddressAll as
+	select
+ 		CombineSpans(nc.match, ssw.match) as match
+	from
+		NumCP nc,
+		StreetSuffixAll ssw
+ 	where
+		FollowsTok(nc.match,ssw.match, 0, 2)  and
+		MatchesRegex(/\s*(\p{Upper}[\p{Lower}\&]+\s*){0,3}/, SpanBetween(nc.match,ssw.match));
+		
+-- unit
+     	
+     		
+	create view StreetAddressUnit  as
+	select
+ 		CombineSpans(S.match, Su.match) as match
+	from
+		StreetAddressAll S,
+		SecondaryUnit Su
+  	where
+		FollowsTok(S.match,Su.match, 0, 2) and
+		MatchesRegex(/\s*\d*\s*,?\s*$/, SpanBetween(S.match,Su.match));
+			
+	create view StreetAddressOptionalUnit
+	as
+	(select S.match as match from StreetAddressAll S)
+	union all 
+	 (select S.match as match from StreetAddressUnit S)	;
+	
+	create view StreetAddressWithCity as
+	select
+ 		CombineSpans(S.match, cp.match) as match
+	from
+		StreetAddressOptionalUnit S,
+		CapsPlaceOnetoTwo cp
+ 	where
+		FollowsTok(S.match,cp.match, 0, 3) 
+--		and
+--		MatchesRegex(/\s*,?\s*[\d\p{Alpha}]{1,20}([\.\ \-\,\d\p{Alpha}]{0,10}\s*){0,2},?\s*/, SpanBetween(S.match,cp.match))
+		;
+
+
+--  addresswithstate
+
+    create view StreetAddressWithCityState as
+	select
+ 		CombineSpans(Sawc.match, Sa.match) as match
+	from
+		StreetAddressWithCity Sawc,
+		StateAll Sa
+ 	where
+		FollowsTok(Sawc.match,Sa.match, 0, 1)  and
+		MatchesRegex(/\s*,?\s*/, SpanBetween(Sawc.match,Sa.match));
+		
+		
+	create view StreetAddressWithCityOptionalState
+	as
+	(select S.match as match from StreetAddressWithCity S)
+	union all 
+	 (select S.match as match from StreetAddressWithCityState S);
+	 
+	create view StreetAddressWithCityOptionalStateZipcode as
+	select
+ 		CombineSpans(Sawcos.match, z.match) as match
+	from
+		StreetAddressWithCityOptionalState Sawcos,
+		Zipcode z
+ 	where
+		FollowsTok(Sawcos.match,z.match, 0, 1)  and
+		ContainsRegex(/^\s*,?\s*$/, SpanBetween(Sawcos.match,z.match));
+	
+	
+	-- ===========================================================================
+-- >>>>>>>>>>>>>>> Aggregation/Consolidation section <<<<<<<<<<<<<<<<
+-- ===========================================================================
+
+-- Merge all the different rules.
+create view PlaceAll
+as
+	(
+	select R.match as loc from StreetAddressWithCityOptionalStateZipcode R
+	)
+
+ union all 
+	 (select R.match as loc from StreetAddressWithCityState R)
+-- union all 
+--	 (select R.match as loc from StreetAddressStrong R)
+--  weaker rules begin here	 
+-- union all 
+-- this rule returns false matches like 09YPO World Terrorism Summit Features Broad Range
+--	 (select R.match as loc from  PStrongTwoCp R)
+-- union all 
+--	 (select R.match as loc from PCity R)
+-- union all 
+--	 (select R.match as loc from CityState R)
+-- union all 
+--	 (select R.match as loc from PlaceOf R)
+-- union all 
+--	 (select R.match as loc from StateAll R)
+-- union all 
+--	 (select R.match as loc from Country R)
+-- union all 
+--	 (select R.match as loc from City R)
+   ;
+ 
+ 
+create view PlaceSentence as
+	select PA.loc	as loc	 
+	from
+		sentence S, PlaceAll PA
+	where
+		Contains(S.sentence, PA.loc) and
+		Not(ContainsDict("FilterPersonDict", PA.loc));				 			 
+
+create view PlaceConsolidated as
+select C.loc as loc
+from Consolidate(PlaceSentence.loc) C;
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Output section <<<<<<<<<<<<<<<<
+-- ===========================================================================		
+-- Output
+select P.loc as loc
+into Place
+from PlaceConsolidated P;
+
+select S.match as loc
+into AllStates
+from StateAll S;
+
+select S.match as loc
+into Zipcodes
+from Zipcode S;
+
+select S.match as loc
+into AllUSCities
+from USCity S;
+
+	
+		

@@ -1,0 +1,23 @@
+/* the Internet e-mail addresses are provided to filter out
+    the names, organizations and locations within them. Those
+    one were decided not to be valuable annotations for Named Entity
+    Extraction */
+
+-- Identifies the common Internet e-mail addresses
+create view InternetEmailAll as
+    select R.match as match
+    from RegexTok(/([-a-zA-Z0-9!#$%*+'=?\^_`{|}~.&]+)@([a-zA-Z0-9._-]+[a-zA-Z]{2,4})/, 56, Document.text) R;
+
+/* annotations, where Internet e-mail address and Lotus Notes
+    e-mail addresses coincide */   
+create view InternetEmailWrong as
+    select IE.match as match, LN.annot as lotus
+    from InternetEmailAll IE,
+        Email2 LN
+    where Contains(LN.annot, IE.match);
+
+-- leave only the Internet e-mails addresses    
+create view InternetEmail as
+    (select R.match as match from InternetEmailAll R)
+    minus
+    (select R.match as match from InternetEmailWrong R);         

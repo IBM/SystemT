@@ -1,0 +1,218 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module PhoneNumber;
+
+-- This file contains all candidate instances used in eventually extracting a PhoneNumber entity instance from input text.
+
+create view StrongPhone as
+select CombineSpans(SPV.match,PNI.match) as num
+from StrongPhoneVariant SPV, CorrectPhoneNumberInstance PNI
+where FollowsTok(SPV.match,PNI.match,0,4)
+  and MatchesRegex(/(([Nn](umber|o|um)|#)\s*(is\s*)?)?\W*/, SpanBetween(SPV.match, PNI.match))
+  and Not(ContainsRegex(/[\n\r]/, SpanBetween(SPV.match, PNI.match)));
+
+create view StrongPhoneNumber as
+select R.match as num
+from (extract regex /[\p{Nd}(].+/
+		on between 1 and 10 tokens in Sp.num
+		as match from StrongPhone Sp) R;
+
+--===========================================================================
+-- Translation for individual rules in telnumber.xml
+--===========================================================================
+--- Rule 1a ---
+-----------------------------------
+-- Purpose:
+--        Matching International phone numbers (most European phone numbers)
+-- Example:
+--        +12 123 123 12
+--        +49 (0) 123-123-1234
+-----------------------------------
+/**----------------------------------------------------------
+    NOTE: Updated the original rule so that all the strong clues in the dictionary 
+    are considered, instead of only considering '+'. The catch is that the 
+    strong clues including '+' will not appear in the annotations 
+   ----------------------------------------------------------**/
+
+create view PhoneNumber_R1a as
+select R.match as num
+from (extract regex /\(?\p{Nd}{2,4}[\.\-]?\)?(\s*\(0\)\s*)?(\s*[\-\.]\s*)?(\s*[\s\.\-]\(?\p{Nd}{1,2}(\s*\p{Nd}{2}\s*){1,2}\)?)?(\s*[\s\.\-]?\p{Nd}{2,4})(\s*[\s\.-]?\p{Nd}{1,4}){1,3}/
+		on between 1 and 10 tokens in D.text
+		as match from DocumentText D) R,
+       PhoneVariant Var
+where FollowsTok(Var.annot, R.match, 0, 2)
+  and MatchesRegex(/\s*\.{0,10}\s*/, SpanBetween(Var.annot, R.match));
+  
+--------------
+-- Rule 1b and 2
+--
+-- Purpose: 
+--       Match US phone number
+--
+-- Example:
+--       +(734) 1231245
+--       (890)124.4568
+--------------		
+
+create view PhoneNumber_R1b_2 as
+select R.match as num
+from (extract regex /(\+\s*)?\(\s*[1-9]\p{Nd}{2}\s*\)\s*[\-\.]?\p{Nd}{3}[\-\.\s*]?\p{Nd}{4}/
+		on between 1 and 10 tokens in D.text
+		as match from DocumentText D) R;
+
+/**
+
+Rule 1c
+
+Match phone numbers with trailing white-spaces
+[Ref : RTC Defect 41070 / 22189]
+
+Example:
+
++861082451468
+
+
+
+920
+
+where "861082451468" is the phone number to be extracted
+	
+*/
+
+create view PhoneNumber_R1c as
+select R.match as num
+from (extract regex /(\p{Nd}+)[\n\r]+/ on P.num 
+		return group 1 as match from PhoneNumber_R1a P) R,
+		PhoneVariant Var
+where FollowsTok(Var.annot, R.match, 0, 2);
+
+--------------
+-- Rule 2a
+--
+-- Purpose: 
+--       Match US phone number
+--
+-- Example:
+--       +(734) 123-1245
+--       (124)465 7890
+--------------
+
+create view PhoneNumber_R2a as
+select R.match as num
+from (extract regex /(\+\s*)?[1-9]\p{Nd}{2}\s*[\s\-\.]\p{Nd}{3}[\-\.\s]\s*\p{Nd}{4}/
+		on between 1 and 10 tokens in D.text
+		as match from DocumentText D) R;
+
+---------------------
+-- Rule 3
+-- Purpose: 
+--    Find US numbers begin with country code 1
+--
+-- Example
+--    1-234-456-8908
+---------------------
+
+create view PhoneNumber_R3 as
+select R.match as num
+from (extract regex /\+?(1[\-\.\s]\s*)?(\(\s*)?[1-9]\p{Nd}{2}(\s*\))?[\-\. ]\p{Nd}{3}[\-\. ]\p{Nd}{4}/
+		on between 1 and 10 tokens in D.text
+		as match from DocumentText D) R;		
+		
+---------------------
+-- Rule 3a
+-- Purpose: 
+--    Find 1-800 numbers with alphabet
+--
+-- Example
+--    1-800-COMCAST
+---------------------
+
+create view PhoneNumber_R3a as
+select R.match as num
+from (extract regex /(\+?1[\-\.\s]\s*)?8\p{Nd}{2}\s*[\s\-\.][(?:\p{Lu}\p{M}*)\p{Nd}]{3}[\.\-]?\p{Lu}\p{M}*{4}/
+		on between 1 and 10 tokens in D.text
+		as match from DocumentText D) R;	
+
+----------------
+-- Rule 4
+--
+-- Purpose:
+--       Find extension numbers
+--
+-- Example:
+--       x12456
+--------------------
+
+create view PhoneNumber_R4 as
+select R.match as num
+from (extract regex /[Xx][\.\-]?\p{Nd}{4,5}/
+		on between 1 and 3 tokens in D.text
+		as match from DocumentText D) R;
+
+----------------
+-- Rule 5
+--
+-- Purpose:
+--       Find extension numbers
+--
+-- Example:
+--       Ext: 1245
+--------------------
+
+create view PhoneNumber_R5 as
+select R.match as num
+from (extract regex /[Ee]xt\s*[\.\-\:]?\s*\p{Nd}{3,5}/
+		with flags 'CASE_INSENSITIVE' 
+		on between 1 and 3 tokens in D.text
+		as match from DocumentText D) R;
+
+---------------------------------
+-- Rules 7a, 7b, 7c
+--
+-- Purpose:
+--     Identify Indian phone numbers
+--
+-- Example: 
+--     12 34 5678
+--     123 456 7890 
+---------------------------------
+  
+create view PhoneNumber_R7a_7b_7c as
+select R.match as num
+  from (extract regex /([1-9]\p{Nd}{1,2}\s*[\(\s\-\.]((\p{Nd}{2}\s*[\)\s\-\.]\p{Nd}{8})|(\p{Nd}{5}\s*[\)\s\-\.]\p{Nd}{5})|(\p{Nd}{2}\s*[\)\s\-\.]\p{Nd}{4}\s*[\s\-\.]\p{Nd}{4})))/
+		on between 1 and 10 tokens in D.text
+		as match from DocumentText D) R,
+  PhoneVariant Var
+where FollowsTok(Var.annot, R.match, 0, 2)
+  and MatchesRegex(/\s*\.{0,10}\s*/, SpanBetween(Var.annot, R.match));
+
+
+-------------------------------------
+-- Rule 8ILPhone
+-- 
+-- Purpose: 
+--     Identify Isael Phone numbers
+--
+-- Example:
+--     972-89-1234567
+--------------------------------------
+ 
+create view PhoneNumber_R8ILPhone as
+select R.match as num
+from (extract regex /(972[\-\.]\p{Nd}{1,2}[\-\.]\p{Nd}{7})/
+		on between 1 and 5 tokens in D.text
+		as match from DocumentText D) R;

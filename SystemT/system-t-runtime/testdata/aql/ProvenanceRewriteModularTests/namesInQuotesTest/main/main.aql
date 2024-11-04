@@ -1,0 +1,61 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+--*****************************************************************************
+-- BigInsights TextAnalytics sample Indicator extractor
+-- 
+-- File name: main.aql
+-- Description: Main AQL file - we shall consume all exports in here to process.
+--*****************************************************************************
+
+
+module main;
+
+import module metricsIndicator_externalTypes;
+
+-------------------------------------------------------------------------------
+-- The output of the extractor 
+-------------------------------------------------------------------------------
+
+-- A view belonging to a module other than the one housing this AQL script needs
+-- to be imported into the current module's namespace before being manipulated as
+-- follows.
+
+import view Indicator from module metricsIndicator_features as Indicator;
+
+import function udfToUpperCase from module metricsIndicator_udfs as udfToUpperCase;
+
+
+output view Indicator;
+
+------------------------------------------------------------------------------------------
+
+-- Use the UDF function to normalize the metric of an Indicator mention
+
+create view IndicatorUDF as
+select R.*, udfToUpperCase(R.metric) as metric_normalized
+from Indicator R;
+
+output view IndicatorUDF;
+
+--------------------------------------------------------------------------------------------
+
+output view metricsIndicator_externalTypes.EmailMetadata;
+
+
+create view output_table as select metricsIndicator_externalTypes.Input.lang as match from metricsIndicator_externalTypes.Input;
+
+output view output_table;

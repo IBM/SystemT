@@ -1,0 +1,134 @@
+create view Salutation__1 as 
+select D.match as match
+from Dictionary('InitialDict.dict', DocScan.text) D 
+;
+
+create view CapsPerson__1 as 
+select R.match as match
+from Regex(/\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}/, DocScan.text) R 
+;
+
+create view StrictLastName__1 as 
+(select D.match as match
+from Dictionary('strictLast.dict', DocScan.text) D )
+union all 
+(select D.match as match
+from Dictionary('strictLast_german.dict', DocScan.text) D )
+union all 
+(select D.match as match
+from Dictionary('uniqMostCommonSurname.dict', DocScan.text) D )
+;
+
+create view HyphenatedLastNamePattern1__1 as 
+select CombineSpans(R0.match,R1.match) as match
+from StrictLastName__1 R0 ,CapsPerson__1 R1 
+where FollowsTok(R0.match,R1.match,0,1) and MatchesRegex(/-/, SpanBetween(R0.match,R1.match));
+
+create view HyphenatedLastNamePattern2__1 as 
+select CombineSpans(R0.match,R1.match) as match
+from CapsPerson__1 R0 ,StrictLastName__1 R1 
+where FollowsTok(R0.match,R1.match,0,1) and MatchesRegex(/-/, SpanBetween(R0.match,R1.match));
+
+create view LastName__1 as 
+(select R.match as match
+from StrictLastName__1 R )
+union all 
+(select R.match as match
+from HyphenatedLastNamePattern1__1 R )
+union all 
+(select R.match as match
+from HyphenatedLastNamePattern2__1 R )
+;
+
+create view LastName__2 as 
+select C.match as match
+from LastName__1 C 
+consolidate on C.match using 'ContainedWithin';
+
+create view StrictFirstName__1 as 
+(select D.match as match
+from Dictionary('strictFirst.dict', DocScan.text) D )
+union all 
+(select D.match as match
+from Dictionary('strictFirst_german.dict', DocScan.text) D )
+union all 
+(select D.match as match
+from Dictionary('strictNickName.dict', DocScan.text) D )
+;
+
+create view HyphenatedFirstNamePattern1__1 as 
+select CombineSpans(R0.match,R1.match) as match
+from StrictFirstName__1 R0 ,CapsPerson__1 R1 
+where FollowsTok(R0.match,R1.match,0,1) and MatchesRegex(/-/, SpanBetween(R0.match,R1.match));
+
+create view HyphenatedFirstNamePattern2__1 as 
+select CombineSpans(R0.match,R1.match) as match
+from CapsPerson__1 R0 ,StrictFirstName__1 R1 
+where FollowsTok(R0.match,R1.match,0,1) and MatchesRegex(/-/, SpanBetween(R0.match,R1.match));
+
+create view FirstName__1 as 
+(select R.match as match
+from StrictFirstName__1 R )
+union all 
+(select R.match as match
+from HyphenatedFirstNamePattern1__1 R )
+union all 
+(select R.match as match
+from HyphenatedFirstNamePattern2__1 R )
+;
+
+create view FirstName__2 as 
+select C.match as match
+from FirstName__1 C 
+consolidate on C.match using 'ContainedWithin';
+
+create view SalutationCaps__1 as 
+select CombineSpans(R0.match,R1.match) as match
+from Salutation__1 R0 ,CapsPerson__1 R1 
+where FollowsTok(R0.match,R1.match,0,0);
+
+create view FirstLast__1 as 
+select CombineSpans(R0.match,R1.match) as match
+from FirstName__2 R0 ,LastName__2 R1 
+where FollowsTok(R0.match,R1.match,0,0);
+
+create view LastCommaFirst__1 as 
+select CombineSpans(R0.match,R1.match) as match
+from LastName__2 R0 ,FirstName__2 R1 
+where FollowsTok(R0.match,R1.match,0,1) and MatchesRegex(/,/, SpanBetween(R0.match,R1.match));
+
+create view FirstCaps__1 as 
+select CombineSpans(R0.match,R1.match) as match
+from FirstName__2 R0 ,CapsPerson__1 R1 
+where FollowsTok(R0.match,R1.match,0,0);
+
+create view CapsLast__1 as 
+select CombineSpans(R0.match,R1.match) as match
+from CapsPerson__1 R0 ,LastName__2 R1 
+where FollowsTok(R0.match,R1.match,0,0);
+
+create view Person__1 as 
+(select R.match as match
+from SalutationCaps__1 R )
+union all 
+(select R.match as match
+from FirstLast__1 R )
+union all 
+(select R.match as match
+from LastCommaFirst__1 R )
+union all 
+(select R.match as match
+from FirstCaps__1 R )
+union all 
+(select R.match as match
+from CapsLast__1 R )
+;
+
+create view Person__2 as 
+select C.match as match
+from Person__1 C 
+consolidate on C.match using 'LeftToRight';
+
+select R.match as match
+into Person 
+from Person__2 R; 

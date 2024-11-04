@@ -1,0 +1,92 @@
+require document with columns text Text;
+
+create view Doc as
+select D.text as text from Document D;
+
+-- ================ Detect short headlines =====================
+-- extract the title of the html page
+create view AllTitle as
+extract regex /^(\p{Lu}[^\n]{20,150})\n/ 
+	-- with flags 'MULTILINE'
+	on D.text
+	return 
+		group 1 as title
+from Document D;
+
+
+-- Remove information about the source website from the title
+-- For now we remove anything before the '-' character
+create view Title as
+(
+	select Chomp(T.match) as match
+	from 
+		(	
+		extract regex /[^-]*-(.+)/ 
+			on T.title
+			return 
+				group 1 as match
+		from AllTitle T
+		) T
+)
+union all
+(
+	select T.title as match
+	from AllTitle T
+	where Not(ContainsRegex(/-/, T.title))
+);
+
+--HACK - identify lists of short events from StreetInsider.com
+create view ShortAnnouncementListItem as
+extract regex /^-\s([^\n]*)\n/ 
+	with flags 'MULTILINE'
+	on D.text
+	return 
+		group 1 as match
+from Document D;
+
+-- work with titles and short events separately from the body of the news articles
+create view ShortText as
+( select T.match as match from Title T )
+union all
+( select E.match as match from ShortAnnouncementListItem E );
+
+
+
+-- ================ Detect body of text =====================
+
+create view Sentences as
+extract 
+    split using B.boundary 
+        retain right split point
+        on B.text
+        as sentence
+from (
+    extract 
+        D.text as text,
+        regex /(([\.\?!-]+\s)|(\n\s*\n))/ on D.text as boundary
+        from Document D
+		-- Filter the candidate boundaries.
+		having Not(ContainsDict('financial/abbreviations.dict', 
+            CombineSpans(LeftContextTok(boundary, 1), boundary)))
+) B;
+
+-- start by identifying sentences ending with the dot sign
+create view LongText as 
+select S.sentence as match
+from  Sentences S
+where ContainsRegex(/\.\s*\Z/,S.sentence);
+
+
+create view Paragraph as
+select R.block as match
+from BlockTok(0,1,20,LongText.match) R
+consolidate on R.block;
+
+
+output view AllTitle;
+output view Title;
+output view ShortAnnouncementListItem;
+output view ShortText;
+output view Sentences;
+output view LongText;
+output view Paragraph;

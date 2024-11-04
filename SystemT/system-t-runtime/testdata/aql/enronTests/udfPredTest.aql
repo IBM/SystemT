@@ -1,0 +1,43 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- udfPredTest.aql
+--
+-- Tests of user-defined predicates.
+
+-- Find capitalized words to use as input to other views in this file.
+create view CapsWord as
+extract regex /[A-Z][a-z]+/ on 1 token in D.text as word
+from Document D;
+
+-- Declare a UDF that returns true if its input contains no E's.
+create function NoE(str String)
+return Boolean
+external_name 'udfjars/udfs.jar:com.ibm.test.udfs.BoolUDFs!containsNoE'
+language java
+deterministic
+return null on null input;
+
+-- Test the 'NoE' UDF in a where clause.
+create view WordWithoutE as
+select * from CapsWord C
+where NoE(GetText(C.word));
+
+output view WordWithoutE;
+
+-- Declare a binary UDF that tests whether two spans are exactly 10 chars apart.
+create function TenCharsApart(p1 Span, p2 Span)
+return Boolean
+external_name 'udfjars/udfs.jar:com.ibm.test.udfs.BoolUDFs!tenCharsApart'
+language java
+deterministic
+return null on null input;
+
+-- Test our binary UDF; the compiler should generate a nested-loops join.
+create view TenCharPairs as
+select C1.word as first, C2.word as second, 
+	CombineSpans(C1.word, C2.word) as annot
+from CapsWord C1, CapsWord C2
+where TenCharsApart(C1.word, C2.word);
+
+output view TenCharPairs;

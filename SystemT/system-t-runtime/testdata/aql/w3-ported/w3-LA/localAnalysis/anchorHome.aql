@@ -1,0 +1,49 @@
+-- AnchorHome.aql from Java Revision No 521 for ResolveRelativeURL.java
+create view AnchorHomeRegex1 as
+extract
+	S.normalizedURL as norm_url,
+	S.urlid as urlid,
+	S.url as url,
+	regex 
+	/\A(?:.*>)?\s*([^<>']+)'s? (?:(?:Home|Info)\s*Page|Intranet (?:Site|Page)|\bHome\b)\s*(?:<.*)?\Z/
+	with flags 'CASE_INSENSITIVE'
+	on S.anchortext
+	return group 1 as name
+	from AnchorNormURLAfterSkip S;
+
+create view AnchorHomeRegex2 as
+extract
+	S.normalizedURL as norm_url,
+	S.urlid as urlid,
+	S.url as url,
+	regex 
+	/\A(?:.*>)?\s*([^<>']+) (?:(?:Home|Info)\s*Page|Intranet (?:Site|Page)|\bHome\b)\s*(?:<.*)?\Z/ --'
+	with flags 'CASE_INSENSITIVE'
+	on S.anchortext
+	return group 1 as name
+	from AnchorNormURLAfterSkip S;
+	
+create view AnchorHomeRegex3 as
+extract
+	S.normalizedURL as norm_url,
+	S.urlid as urlid,
+	S.url as url,
+	regex /\A(?:.*>)?\s*(?:(?:Home|Info)\s*Page|Intranet (?:Site|Page)|\bHome\b)\s+of ([^<>']+)\s*(?:<.*)?\Z/ --'
+	with flags 'CASE_INSENSITIVE'
+	on S.anchortext
+	return group 1 as name
+	from AnchorNormURLAfterSkip S;
+	
+create view AnchorHome as
+(select GetText(S.name) as name,S.norm_url as norm_url,S.url as url from 
+ AnchorHomeRegex1 S)
+union all
+(select GetText(S.name) as name,S.norm_url as norm_url,S.url as url from 
+ AnchorHomeRegex2 S)
+ union all
+(select GetText(S.name) as name,S.norm_url as norm_url,S.url as url from 
+ AnchorHomeRegex3 S)
+;
+
+
+

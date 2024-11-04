@@ -1,0 +1,487 @@
+-- Patterns to identify Sports teams
+
+-- based on pattern "Player (country) team 1:54.754"
+create view OrgSportsTeam1 as
+extract 
+	regex /\)[ ]+(\p{Lu}\p{M}*(\p{L}\p{M}*)+(\s+\p{Lu}\p{M}*(\p{L}\p{M}*)+)?)\s+(((\d:)?\d{2}\.\d{3})|same[ ]time|(one|\d{1,2}\s+(lap(s)?|minute))|\d{1,2}[ ][\n\r]+)/
+		on D.text 
+		return group 1 as org
+from Doc D;
+
+
+-- based on pattern "Ferrari F40 167"
+create view OrgSportsTeam2 as
+extract 
+	regex /(\p{Lu}\p{M}*(\p{L}\p{M}*)+(\s+\p{Lu}\p{M}*(\p{L}\p{M}*)+)?)\s+((F(I|1)\s+GTR)|(F|LM\d{1,2}|911))[ ]+\d{3}.*/
+	   on D.text 
+    	return group 1 as org
+from Doc D;
+
+
+-- based on pattern: 
+-- Constructors \' championship :
+-- 1. Williams 149 points 
+-- 2. Benetton 55 
+
+create dictionary ConstructorChampionship as(
+	'Constructors \' championship', 'Constructors\' championship'
+);
+
+
+create view OrgSportsTeam3 as
+extract
+	regex /[\r\n]\d{1,2}\.\s*(\p{Lu}\p{M}*(\p{L}\p{M}*)+(\s+\p{Lu}\p{M}*(\p{L}\p{M}*)+)?)\s+\d{1,3}\s/
+	   on D.text 
+    	return group 1 as org
+from Doc D
+having ContainsDict('ConstructorChampionship', LeftContextTok(org,120));
+
+
+
+-- Based on pattern: Crewe v Watford 
+-- TODO: relax to allow new lines in team names
+create view OrgSportsTeam67 as
+extract
+	regex /[-,:\n]\s+(\p{Lu}\p{M}*(\p{L}\p{M}*)+([ ]('s)|\/)?(([ ]+\p{Lu}\p{M}*(\p{L}\p{M}*)+){1,2})?)\s++v\.?\s+(\p{Lu}\p{M}*(\p{L}\p{M}*)+([ ]('s)|\/)?(([ ]+\p{Lu}\p{M}*(\p{L}\p{M}*)+){1,2})?)/
+	   	on D.text 
+    	return group 1 as org1
+    	   and group 8 as org2 
+from Doc D;
+--having ContainsRegex(/,/, LeftContext(org1, 2))
+ --  and ContainsRegex(/,/, RightContext(org2, 2));
+   
+   
+ 
+  
+-- Based on football results patterns: 
+-- Petra Drnovice 3 1 1 1 7 5 4
+-- Oldham 21 8 1 12 439 656 17 
+-- St. Gallen 9 4 4 1 6 5 16 
+-- Vasco da Gama 4 2 0 2 6 7 6 
+-- Admira / Wacker 6 0 3 3 5 10 3 
+create view OrgSportsTeam89 as
+extract
+	regex /[\r\n]((\p{Lu}\p{M}*\.){2}[ ])?((St\.[ ])?\p{Lu}\p{M}*(\p{L}\p{M}*)+([ ]?(('s)|(da)|-|\/))?(([ ]+\p{Lu}\p{M}*(\p{L}\p{M}*)+){1,2})?)[ ]+(\d{1,4}[ ]+){6}/ --'
+	   on D.text 
+    	return group 3 as org 
+from Doc D;
+
+
+-- Extended Pattern 89 to handle:
+-- 1. Ujpest TE 3 3 - - 10 2 9 
+-- 2. MTK 3 3 - - 7 1 9 
+--15. Stadler FC 3 - 1 2 2 6 1 
+create view OrgSportsTeam89_a as
+select Chomp( O.org) as org
+from
+(
+	extract
+		regex /[\r\n]\d{1,2}\.[ ](\p{Lu}\p{M}*[\p{L}\p{M}*\.\'-']+[ ]*([\p{L}\p{M}*\.\'-']+[ ]*){1,2})((\d{1,2}|-)[ ]){6}/ --'
+		   on D.text 
+	    	return group 1 as org 
+	from Doc D
+) O;
+
+
+
+-- Based on patterns: S. Korea soccer
+-- Samsung 47 5 55 .463 15
+-- Lotte 44 6 53 .456 15 1/2
+create view OrgSportsTeam10 as
+extract
+	regex /[\r\n](\p{Lu}\p{M}*(\p{L}\p{M}*)+([ ]('s)|-|\/)?(([ ]+\p{Lu}\p{M}*(\p{L}\p{M}*)+){1,2})?)\s*\d{2}\s+\d\s+\d{2}\s+\.\d{3}\s+(-|\d{1,2})(\s+\d[\/]\d)?/ --'
+	   on D.text 
+    	return group 1 as org
+from Doc D;
+
+-- Based on patterns: (Baseball)
+--NEW YORK 72 54 .571 - 
+--BALTIMORE 67 59 .532 5 
+--TORONTO 59 69 .461 14 
+--DETROIT 45 82 .354 27 1/2 
+create view OrgSportsTeam11 as
+extract
+	regex /[\r\n](\p{Lu}\p{M}*(\p{L}\p{M}*)+([ ]('s)|-|\/)?(([ ]+\p{Lu}\p{M}*(\p{L}\p{M}*)+){1,2})?)\s*\d{2}\s+\d{2}\s+\.\d{3}\s+(-|\d{1,2})?(\s+\d[\/]\d)?/ --'
+	   on D.text 
+    	return group 1 as org
+from Doc D;
+
+
+-- Based on patterns (Cricket):
+/*
+At Weston-super-Mare : Durham 326 ( D. Cox 95 not out , 
+S. Campbell 69 ; G. Rose 7-73 ) . 
+Somerset 298-6 ( M. Lathwell 85 , 
+R. Harden 65 ) . 
+Second day 
+At Colchester : Gloucestershire 280 ( J. Russell 63 , A. Symonds 
+52 ; A. Cowan 5-68 ) . 
+Essex 194-0 ( G. Gooch 105 not out , D. Robinson 
+72 not out ) . 
+At Cardiff : Kent 255-3 ( D. Fulton 64 , M. Walker 59 , C. Hooper 
+52 not out ) v Glamorgan . 
+At Leicester : Leicestershire 343-8 ( P. Simmons 108 , P. Nixon 
+67 not out ) v Hampshire . 
+At Northampton : Sussex 389 ( N. Lenham 145 , V. Drakes 59 , 
+A. Wells 51 ; A. Penberthy 4-36 ) . 
+Northamptonshire 160-4 ( K. Curran 
+79 not out ) . 
+At Trent Bridge : Nottinghamshire 392-6 ( G. Archer 143 not 
+out , M. Dowman 107 ) v Surrey . 
+At Worcester : Warwickshire 310 ( A. Giles 83 , T. Munton 54 not 
+out , W. Khan 52 ; R. Illingworth 4-54 , S. Lampitt 4-90 ) . 
+Worcestershire 10-0 . 
+At Headingley : Yorkshire 529-8 declared ( C. White 181 , 
+*/
+
+create dictionary CricketCountry as (
+	'India', 'England', 'Pakistan'
+);
+
+
+-- Worcestershire 10-0 .
+-- At Worcester : [Warwickshire] 310 ( 
+-- At Headingley : [Yorkshire] 529-8 declared (
+create view OrgSportsTeam12_a as
+extract
+	regex /((\:[ ])|(\.[\r\n]))(\p{Lu}\p{M}*(\p{L}\p{M}*)+)[ ]+\d{2,3}(-\d)?[ ]+(\.|\(|(declared)|v)/ --'
+	   on D.text 
+    	return group 4 as org
+from Doc D
+having Not(MatchesDict('CricketCountry', org));
+
+
+-- ) v [Glamorgan] .
+-- , [Northamptonshire] 123-4 (  
+create view OrgSportsTeam12_b as
+extract
+	regex /\)[ ][,v][ ](\p{Lu}\p{M}*(\p{L}\p{M}*)+)[ ]+(\.|[\n\r]|(\d{2,3}(-\d)?[ ]))/ --'
+	   on D.text 
+    	return group 1 as org
+from Doc D
+having Not(MatchesDict('CricketCountry', org));
+
+
+-- Based on patterns:
+-- [Nice] 1 ( Debbah 39th ) [Bastia] 1 ( Drobnjak 82nd )  
+-- [Marseille] 1 ( Gravelaine 24th ) [Metz] 2 ( Traore 65th , Bombarda 69th ) 
+-- [Strasbourg] 1 ( Zitelli 80th ) [Le Havre] 0 
+
+create view Goal as
+extract pattern 
+	/\d{1,2}((st)|(nd)|(rd)|(th))/ ('pen'|'-pen'|'penalty')? ('minute'|'min')? (','|'and')?
+	return group 0 as match
+	with inline_match on Doc.text
+from Document D
+consolidate on match;
+
+create view Scorer as
+extract pattern 
+	/(\p{L}\p{M}*)+/{1,3} <G.match>{1,3}
+	return group 0 as match
+	with inline_match on Doc.text
+from Goal G
+consolidate on match;
+
+
+create view ScorerGroup as
+extract blocks
+    with count between 1 and 5
+    and separation between 0 and 1 tokens
+    on S.match as match
+from Scorer S
+consolidate on match;
+
+-- TODO: to consolidate this with other regexes using the same pattern for performance
+create view TeamCand as
+extract regex /\p{Lu}\p{M}*(\p{L}\p{M}*)+([ ]('s)|-|\/)?(([ ]+\p{Lu}\p{M}*(\p{L}\p{M}*)+){1,2})?/ --'
+	on D.text as match
+from Doc D;
+--having Not(ContainsRegex(/[\n\r]/, match));
+
+
+create view OrgSportsTeam13 as
+extract 
+	pattern (<T1.match>) /\d/ (/\(/ <S1.match> /\)/)? (<T2.match>) /\d/ (/\(/ <S2.match> /\)/)?
+	return group 1 as org1
+	   and group 3 as org2
+	with inline_match on Doc.text
+from TeamCand T1, TeamCand T2, ScorerGroup S1, ScorerGroup S2;
+
+/*
+output view Goal;
+output view Scorer;
+output view ScorerGroup;
+output view TeamCand;
+*/
+
+
+
+--Based on patterns: Baseball
+--[CALIFORNIA] AT [BALTIMORE]
+--[OAKLAND] AT [NEW YORK]
+--[CINCINNATI] AT [FLORIDA] ( doubleheader ) 
+
+create view AllCapsToken as 
+extract regex /(\p{Lu}\p{M}*)+/ on 1 token in D.text as match from Doc D
+having Not(MatchesRegex(/AT/, match));
+
+create view AllCapsTokenOneToTwo as
+extract blocks
+    with count between 1 and 2
+    and separation 0 tokens
+    on S.match as match
+from AllCapsToken S
+having Not(ContainsRegex(/[\n\r]/, match))
+consolidate on match;
+
+create view OrgSportsTeam14 as
+extract pattern (<T1.match>) <'AT'[with case exact]> (<T2.match>)
+	return group 0 as match
+	   and group 1 as org1
+	   and group 2 as org2
+	with inline_match on Doc.text
+from AllCapsTokenOneToTwo T1, AllCapsTokenOneToTwo T2
+having Not(ContainsRegex(/[\n\r]/, match))
+   and MatchesRegex(/\s[\n\r\(]/, RightContext(match, 2));
+
+
+-- Based on patterns:
+-- Portsmouth 1 Queens Park Rangers 2 
+-- Tranmere 3 Grimsby 2
+-- COLORADO 10 St Louis 5 
+create view OrgSportsTeam15 as
+extract
+	regex /[\r\n](\p{Lu}\p{M}*(\p{L}\p{M}*)+([ ]?('s)|-|\/)?(([ ]?\p{Lu}\p{M}*(\p{L}\p{M}*)+){1,2})?)[ ]+\d{1,2}[ ]+(\p{Lu}\p{M}*(\p{L}\p{M}*)+([ ]?('s)|-|\/)?(([ ]?\p{Lu}\p{M}*(\p{L}\p{M}*)+){1,2})?)[ ]+\d{1,2}/
+	   on D.text 
+    	return group 1 as org1
+    	   and group 8 as org2 
+from Doc D
+having Not(MatchesDict('month.dict', org1))
+   and Not(MatchesDict('month.dict', org2));
+   
+   
+-- Based on patterns (soccer):
+-- Flamurtari Vlore ( Albania ) 0 Chemlon Humenne ( Slovakia ) 2
+-- AEK Larnaca ( Cyprus ) 5 Kotaik Abovyan ( Armenia ) 0 ( 2-0 ) 
+--
+
+create dictionary CountryAdditionalDict as(
+	'Moldova', 'Latvia', 'Azerbaijan', 'Scotland', 'Yugoslavia', 
+	'Czech Republic', 'Northern Ireland', 'Faroe Islands', 'Israel'
+);
+
+create view CountryAdditional as
+(extract dictionary 'CountryAdditionalDict' on D.text as match from Doc D)
+union all
+(select C.match as match from CountryCandidate C);
+
+
+create view OrgSportsTeam16 as
+extract pattern (<T1.match>) /\(/ <C1.match> /\)/ /\d/ (<T2.match>) /\(/ <C2.match> /\)/ /\d/ 
+	return group 1 as org1
+	   and group 2 as org2
+	with inline_match on Doc.text
+from TeamCand T1, CountryAdditional C1, TeamCand T2, CountryAdditional C2;
+   
+
+
+create view OrgSportsTeamCand as
+(select O.org as org from OrgSportsTeam1 O)
+union all
+(select O.org as org from OrgSportsTeam2 O)
+union all
+(select O.org as org from OrgSportsTeam3 O)
+union all
+(select O.org1 as org from OrgSportsTeam67 O)
+union all
+(select O.org2 as org from OrgSportsTeam67 O)
+union all
+(select O.org as org from OrgSportsTeam89 O)
+union all
+(select O.org as org from OrgSportsTeam89_a O)
+union all
+(select O.org as org from OrgSportsTeam10 O)
+union all
+(select O.org as org from OrgSportsTeam11 O)
+union all
+(select O.org as org from OrgSportsTeam12_a O)
+union all
+(select O.org as org from OrgSportsTeam12_b O)
+union all
+(select O.org1 as org from OrgSportsTeam13 O)
+union all
+(select O.org2 as org from OrgSportsTeam13 O)
+union all
+(select O.org1 as org from OrgSportsTeam14 O)
+union all
+(select O.org2 as org from OrgSportsTeam14 O)
+union all
+(select O.org1 as org from OrgSportsTeam15 O)
+union all
+(select O.org2 as org from OrgSportsTeam15 O)
+union all
+(select O.org1 as org from OrgSportsTeam16 O)
+union all
+(select O.org2 as org from OrgSportsTeam16 O);
+
+
+
+create dictionary WorldSportsCompetitionDict as(
+	'NATIONS CUP', 'WORLD CUP'
+);
+
+
+
+-- Filter out country names only if mentioned in the context of a world competition
+-- Otherwise we have false negatives: Monaco (soccer), Jordan (Formula 1)
+create view OrgSportsTeamInvalid1 as
+select O.org as org
+from OrgSportsTeamCand O, CountryAdditional C, Doc D
+where Equals(O.org, C.match)
+  and ContainsDict('WorldSportsCompetitionDict',D.text);
+
+create view OrgSportsTeamInvalid as
+select * from OrgSportsTeamInvalid1;
+
+create view OrgSportsTeamValid as
+(select * from OrgSportsTeamCand)
+minus
+(select * from OrgSportsTeamInvalid);
+
+
+
+----------------------------------------------------------
+-- DICTIONARY MATCHING 
+----------------------------------------------------------
+/*
+american_football_clubs_with_location.txt
+american_football_clubs_without_location.txt
+baseball_clubs_with_location.txt
+baseball_clubs_without_location.txt
+basketball_clubs_with_location.txt
+basketball_clubs_without_location.txt
+*/
+
+create view SoccerDoc as
+select D.text as text
+from Doc D
+where MatchesRegex(/\s*SOCCER.+/, D.text);
+
+create view SoccerTeam as
+extract 
+	    dictionary 'orgs/conll2003/sports/uefa_football_club_list_shortnames.dict'
+               and 'orgs/conll2003/sports/uefa_football_club_list_fullnames.dict'
+               and 'orgs/conll2003/sports/conll2003_football_clubs_correct.dict'
+        on D.text as org
+from SoccerDoc D
+consolidate on org;
+
+
+create view CricketDoc as
+select D.text as text
+from Doc D
+where MatchesRegex(/\s*CRICKET.+/, D.text);
+
+create view CricketTeam as
+extract 
+	    dictionary 'orgs/conll2003/sports/cricket_england.dict'
+        on D.text as org
+from CricketDoc D
+consolidate on org;
+
+
+create view RugbyDoc as
+select D.text as text
+from Doc D
+where MatchesRegex(/\s*RUGBY.+/, D.text);
+
+create view RugbyTeam as
+extract 
+	    dictionary 'orgs/conll2003/sports/rugby_international.dict'
+        on D.text as org
+from RugbyDoc D
+consolidate on org;
+
+
+
+create view BaseballDoc as
+select D.text as text
+from Doc D
+where MatchesRegex(/\s*BASEBALL.+/, D.text);
+
+create view BaseballTeam as
+extract 
+	    dictionary 'orgs/conll2003/sports/baseball_clubs_without_location.dict'
+               and 'orgs/conll2003/sports/baseball_clubs_with_location.dict'
+        on D.text as org
+from BaseballDoc D
+consolidate on org;
+
+
+create view BasketballDoc as
+select D.text as text
+from Doc D
+where MatchesRegex(/\s*BASKETBALL.+/, D.text);
+
+create view BasketballTeam as
+extract 
+	    dictionary 'orgs/conll2003/sports/basketball_clubs_without_location.dict'
+               and 'orgs/conll2003/sports/basketball_clubs_with_location.dict'
+               and 'orgs/conll2003/sports/basketball_european.dict'
+        on D.text as org
+from BasketballDoc D
+consolidate on org;
+
+
+create view OrgSportsTeam as
+select O.org as org
+from
+(
+	(select * from OrgSportsTeamValid O)
+	union all
+	(select O.org from SoccerTeam O)
+	union all
+	(select O.org from CricketTeam O)
+	union all
+	(select O.org from RugbyTeam O)
+	union all
+	(select O.org from BaseballTeam O)
+	union all
+	(select O.org from BasketballTeam O)
+) O
+consolidate on O.org;
+
+
+create view OrgSoccerTeam as
+select O.org as org 
+from OrgSportsTeam O, SoccerDoc D 
+where Contains(D.text, O.org);
+
+
+output view OrgSoccerTeam;
+
+
+/*
+output view OrgSportsTeam1;
+output view OrgSportsTeam2;
+output view OrgSportsTeam3;
+output view OrgSportsTeam67;
+output view OrgSportsTeam89;
+output view OrgSportsTeam89_a;
+output view OrgSportsTeam10;
+output view OrgSportsTeam11;
+output view OrgSportsTeam12_a;
+output view OrgSportsTeam12_b;
+output view OrgSportsTeam13;
+output view OrgSportsTeam14;
+output view OrgSportsTeam15;
+output view OrgSportsTeam16;
+
+output view OrgSportsTeamInvalid;
+
+output view SoccerTeam;
+output view OrgSportsTeam;
+*/
+
+

@@ -1,0 +1,35 @@
+-------------------------------------------------------------------------------
+-- unterminatedTest.aql
+--
+-- A test of how the detagger handles improperly terminated elements
+-------------------------------------------------------------------------------
+
+-- Detag
+-- Strip out tags, retaining information about the <a> tags.
+detag Document.text as DetaggedDoc
+annotate 
+    element 'a' as Anchor
+		with attribute 'href' as target,
+	element 'img' as Img
+		with attribute 'src' as source,
+	element 'area' as Area
+		with attribute 'href' as target,
+	element 'link' as Link
+		with attribute 'href' as target,
+	element 'script' as Script
+		with attribute 'src' as target;
+		
+output view Link;
+output view Area;
+
+-- Remap all spans and text back to the original HTML
+create view LinkTag as
+select L.target as target, Remap(L.match) as match
+from Link L;
+
+create view AreaTag as
+select A.target as target, Remap(A.match) as match
+from Area A;
+
+output view LinkTag;
+output view AreaTag;

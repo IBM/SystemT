@@ -1,0 +1,73 @@
+module common;
+
+create function getNullText(span Span)
+	return String
+	external_name 'logAAqlUDFs.jar:com.ibm.logparse.aql.Util!getNullText'
+	language java
+	deterministic
+	return null on null input;
+
+create view logDatetime as
+    -- Fix for Defect 24294: Use consolidate instead of Min()
+    --select Min(D.span) as span
+    select D.span as span
+    from DateTimeOutput D
+    consolidate on D.span using 'RetainFirst';   
+    -- END fix for Defect 24294
+
+-- View used by device IP rules in syslog extractor
+export view logDatetime;
+
+create view LogDatetimeOutput as
+    select T.span, 
+    GetString(T.span) as text,
+    getNullText(T.span) as normalized_text,
+    getNullText(T.span) as category,
+    getNullText(T.span) as datetime_in_milli_secs_text,
+    GetString('LogDateTime') as field_type  
+    from logDatetime T; --, DateTimeOutput D where Equals(T.span, D.span); 
+
+export view LogDatetimeOutput;
+
+create view logDate as
+	-- Fix for Defect 24294: Use consolidate instead of Min()
+    -- select Min(D.span) as span
+    select D.span as span
+    from DateOutput D
+    consolidate on D.span using 'RetainFirst';   
+    -- END fix for Defect 24294
+
+
+create view LogDateOutput as
+    select T.span, 
+    GetString(T.span) as text,
+    getNullText(T.span) as normalized_text,
+    getNullText(T.span) as category, 
+    GetString('LogDate') as field_type
+    from logDate T  --, DateOutput D where Equals(T.span, D.span)
+    -- This consolidation was redundant, given that the input to this view
+    -- is guaranteed to have only one tuple.
+    --consolidate on T.span
+    ;  
+
+export view LogDateOutput;
+    
+create view logTime as
+	-- Fix for Defect 24294: Use consolidate instead of Min()
+    -- select Min(D.span) as span
+    select D.span as span
+    from TimeOutput D
+    consolidate on D.span using 'RetainFirst';   
+    -- END fix for Defect 24294   
+
+create view LogTimeOutput as
+    select T.span, 
+    GetString(T.span) as text,
+    getNullText(T.span) as normalized_text,
+    getNullText(T.span) as category, 
+    GetString('LogTime') as field_type 
+    from logTime T; --, TimeOutput D where Equals(T.span, D.span); 
+        
+export view LogTimeOutput;
+
+

@@ -1,0 +1,327 @@
+-------------------------------------------------------------------------------
+-- GeoSite.aql
+--
+-- Collect geography annotations from the features extracted from HTML files
+--
+-- Depends on HTML.aql, URL.aql, GeoPreprocessing.aql
+--
+-- This file produces the contents of the following local analysis result
+-- tables:
+--		c. Sites
+--
+-- Based on Huaiyu's original Java implementation.
+-- Author: Laura Chiticariu <chiti@us.ibm.com>
+-------------------------------------------------------------------------------
+
+
+
+
+-- ****************************************************************************
+-- ***               Phase 2: Filter based on geo dictionaries             ****
+-- ****************************************************************************
+-------------------------------------------------------------------------------
+-- This phase is based on the following flow from 
+-- w3resources\configs\local\subannotators.txt
+
+-- geo_SCRr: Title/_content_ # FirstMainHead/_content_ # MetaDescription/content # URLHost/text # URLPath/text # Seg1/matched # Seg2/matched
+-- geo_CRr: H1/_content_ # H2/_content_ # MetaKeywords/content
+-- geo_c: URLPath/text_3seg # URLHost/content_2lett # MetaLanguage/content_2lett # MetaCountry/content_2lett
+
+-- Seg1/matched : geo_SCRr 
+-- Seg2/matched: geo_SCRr 
+-- FirstMainHead/_content_: geo_SCRr  
+-- Title/_content_: geo_SCRr 
+-- H1/_content_ : geo_CRr: 
+-- H2/_content_ : geo_CRr: 
+-- MetaCountry/content_2lett: geo_c
+-- MetaLanguage/content_2lett : geo_c
+-- URLPath/text_3seg: geo_c
+-- URLPath/text : geo_SCRr 
+-- MetaKeywords/content: geo_CRr: 
+-- MetaDescription/content: geo_SCRr  
+-- URLHost/text : geo_SCRr 
+-- URLHost/content_2lett : geo_c
+
+
+
+-- ***********************************************************************
+-- ***                          SITE                                ****
+-- ***********************************************************************
+
+
+-- Seg1/matched : geo_S
+-- Seg2/matched: geo_S
+-- FirstMainHead/_content_: geo_S  
+-- Title/_content_: geo_S 
+-- URLPath/text : geo_S 
+-- MetaDescription/content: geo_S 
+-- URLHost/text : geo_S
+
+
+create view Site_Seg1_All as
+select GetText(T.match) as match, ConstructEvidence(GetString('Seg1'), GetString(T.match)) as evidence
+from (extract dictionaries 'GeoSiteNameDict' and 'GeoSiteCodeDict' on T.seg as match from Seg1 T having Not(MatchesDict('geo/siteNegative.dict', match)) consolidate on match) T;
+
+-- Restrict to maximum 6 items
+create view Site_Seg1 as
+select R.* 
+from Site_Seg1_All R, (select Count(*) as cnt from Site_Seg1_All) C
+where Not(GreaterThan(C.cnt,6));
+
+
+create view Site_Seg2_FirstMain_All as
+(
+	select GetText(T.match) as match, ConstructEvidence(GetString('Seg2'), GetString(T.match)) as evidence
+	from (extract dictionaries 'GeoSiteNameDict' and 'GeoSiteCodeDict' on T.seg as match from Seg2 T having Not(MatchesDict('geo/siteNegative.dict', match)) consolidate on match) T
+)
+union all
+(
+	select GetText(FM.match) as match, ConstructEvidence(GetString('FirstMainHead'), GetString(FM.match)) as evidence
+	from (extract dictionaries 'GeoSiteNameDict' and 'GeoSiteCodeDict' on FM.content as match from FirstMainFinal FM having Not(MatchesDict('geo/siteNegative.dict', match)) consolidate on match) FM
+);
+
+-- Restrict to maximum 6 items
+create view Site_Seg2_FirstMain as
+select R.* 
+from Site_Seg2_FirstMain_All R, (select Count(*) as cnt from Site_Seg2_FirstMain_All) C
+where Not(GreaterThan(C.cnt,6));
+
+
+create view Site_Title_All as
+	select GetText(T.match) as match, ConstructEvidence(GetString('Title'), GetString(T.match)) as evidence
+	from (extract dictionaries 'GeoSiteNameDict' and 'GeoSiteCodeDict' on T.content as match from TitleFinal T having Not(MatchesDict('geo/siteNegative.dict', match)) consolidate on match) T;
+
+-- Restrict to maximum 6 items
+create view Site_Title as
+select R.* 
+from Site_Title_All R, (select Count(*) as cnt from Site_Title_All) C
+where Not(GreaterThan(C.cnt,6));
+
+
+create view Site_URLPath_All as
+	select GetText(U.match) as match, ConstructEvidence(GetString('URLPath'), GetString(U.match)) as evidence
+	from ( extract dictionaries 'GeoSiteNameDict' and 'GeoSiteCodeDict' on U.actualPath as match from PageURL U having Not(MatchesDict('geo/siteNegative.dict', match)) consolidate on match) U;
+
+-- Restrict to maximum 6 items
+create view Site_URLPath as
+select R.* 
+from Site_URLPath_All R, (select Count(*) as cnt from Site_URLPath_All) C
+where Not(GreaterThan(C.cnt,6));
+
+
+create view Site_MetaDescription_All as
+	select GetText(D.match) as match, ConstructEvidence(GetString('MetaDescription'), GetString(D.match)) as evidence
+	from (extract dictionaries 'GeoSiteNameDict' and 'GeoSiteCodeDict' on D.content as match from MetaDescription D having Not(MatchesDict('geo/siteNegative.dict', match)) consolidate on match) D;
+
+-- Restrict to maximum 6 items
+create view Site_MetaDescription as
+select R.* 
+from Site_MetaDescription_All R, (select Count(*) as cnt from Site_MetaDescription_All) C
+where Not(GreaterThan(C.cnt,6));
+
+
+create view Site_URLHost_All as
+	select GetText(U.match) as match, ConstructEvidence(GetString('URLHost'), GetString(U.match)) as evidence
+	from (extract dictionaries 'GeoSiteNameDict' and 'GeoSiteCodeDict' on U.host as match from PageURL U having Not(MatchesDict('geo/siteNegative.dict', match)) consolidate on match) U;
+
+-- Restrict to maximum 6 items
+create view Site_URLHost as
+select R.* 
+from Site_URLHost_All R, (select Count(*) as cnt from Site_URLHost_All) C
+where Not(GreaterThan(C.cnt,6));
+
+
+
+-- ***********************************************************************
+-- ***               SITE - priority rules                            ****
+-- ***********************************************************************
+
+-- Site0 = Seg1 > Seg2_FirstMain > Title > URLPath > MetaDescription > URLHost
+create view Site0_ as
+select R2.*
+from Site_Seg2_FirstMain R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Site_Seg1) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Site0 as (select * from Site_Seg1) union all (select * from Site0_);
+
+
+-- Site1 =Seg1 > Seg2_FirstMain > Title
+create view Site1_ as
+select R2.*
+from Site_Title R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Site0) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Site1 as (select * from Site0) union all (select * from Site1_);
+
+-- Site2 = Seg1 > Seg2_FirstMain > Title > URLPath
+create view Site2_ as
+select R2.*
+from Site_URLPath R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Site1) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Site2 as (select * from Site1) union all (select * from Site2_);
+
+
+-- Site3 = Seg1 > Seg2_FirstMain > Title > URLPath > MetaDescription
+create view Site3_ as
+select R2.*
+from Site_MetaDescription R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Site2) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Site3 as (select * from Site2) union all (select * from Site3_); 
+
+
+-- Site4 = Seg1 > Seg2_FirstMain > Title > URLPath > MetaDescription > URLHost
+create view Site4_ as
+select R2.*
+from Site_URLHost R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Site3) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Site4 as (select * from Site3) union all (select * from Site4_);
+
+
+-- Deduplicate site annotations and their evidence
+create view SiteFinal as
+select GetText(C.match) as match, GetText(C.evidence) as evidence
+from
+(
+	select toUpperCase(C.match) as match, C.evidence as evidence
+	from Site4 C
+) C
+group by GetText(C.match), GetText(C.evidence);
+
+-- Normalize site annotations
+create view SiteWithCode as
+select C.match as match, M.code as code
+from SiteFinal C, SiteMapping M
+where Equals(GetText(C.match), GetText(M.name));
+
+-- Some site annotations might not have a corresponding code
+create view SiteNoCode as
+(select C.match as match from SiteFinal C)
+minus
+(select C.match as match from SiteWithCode C);
+
+-- all site annotations with code or without code
+create view SiteNormalized as
+(select C.code as match from SiteWithCode C)
+union all
+(select C.match as match from SiteNoCode C);
+
+-- ***********************************************************************
+-- ***             SITE - final output                             ****
+-- ***********************************************************************
+
+-- All the evidence for Site
+create view SiteEvidenceAll as
+select C.id as id, GetText(C.evidence) as evidence
+from
+(
+	(select 1 as id, C.evidence as evidence from Site_Seg1 C)
+	union all
+	(select 1 as id, C.evidence as evidence from Site_Seg2_FirstMain C)
+	union all
+	(select 1 as id, C.evidence as evidence from Site_Title C)
+	union all
+	(select 1 as id, C.evidence as evidence from Site_URLPath C)
+	union all
+	(select 1 as id, C.evidence as evidence from Site_MetaDescription C)
+	union all
+	(select 1 as id, C.evidence as evidence from Site_URLHost C)
+) C
+--remove duplicates and sort evidence
+group by C.id, GetText(C.evidence)
+order by GetText(C.evidence);
+
+-- Aggregate all the evidence
+create view SiteEvidence as
+select ListJoin(C.evidence, ';') as evidence
+from
+(
+	select C.id, List(C.evidence) as evidence 
+	from SiteEvidenceAll C
+	group by C.id
+) C;
+
+
+-- Aggregate all site annotations
+create view SiteAgg as 
+select ListJoin(C.match, ';') as site
+from
+(
+	select C.id, List(C.match) as match 
+	from (select 1 as id, GetText(C.match) as match from Site4 C group by GetText(C.match)) C
+	group by C.id
+) C;
+
+-- Attach the evidence 
+create view SiteWithEvidence as 
+select C.site, E.evidence
+from SiteAgg C, SiteEvidence E;
+
+-- Normalize site annotations
+create view SiteWithEvidenceAndCode as
+select C.site as site, M.code as code, C.evidence as evidence
+from SiteWithEvidence C, SiteMapping M
+where Equals(GetText(C.site), GetText(M.name));
+
+-- Some site annotations might not have a corresponding code
+create view SiteWithEvidenceNoCode as
+(select C.site as site, C.evidence as evidence from SiteWithEvidence C)
+minus
+(select C.site as site, C.evidence as evidence from SiteWithEvidenceAndCode C);
+
+-- all site annotations with code or without code, deduplicated
+create view SiteWithEvidenceNormalized as
+(select C.code as site, C.evidence as evidence from SiteWithEvidenceAndCode C)
+union all
+(select C.site as site, C.evidence as evidence from SiteWithEvidenceNoCode C);
+	
+-- Create some dumb values for pages with no site annotations
+create view SiteMissing as
+select 'N/A' as site, '' as evidence
+from 
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from SiteWithEvidenceNormalized) S
+	) R1
+where Equals(R1.xsists, 0);
+
+-- Final output contains site annotations with evidence, 
+-- or empty strings when no site annots have been discovered
+
+create view GeoSite as 
+(select * from SiteWithEvidenceNormalized)
+union all
+(select * from SiteMissing);
+
+
+
+
+
+
+
+
+
+
+

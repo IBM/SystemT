@@ -1,0 +1,110 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- subquery.aql
+--
+-- Test of noncorrelated subquery support in AQL.  Should produce the same
+-- result as personphone.aql.
+-------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
+-- Test 1: Nested subqueries in SELECT clause
+-- Do the entire personphone.aql annotator in one statement.
+
+create view PersonPhone as
+select Subquery.personphone as personphone
+from 
+(
+	select CombineSpans(Person.name, Phone.num) as personphone,
+    	Person.name as name,
+     	Phone.num as num   
+	from
+	(
+		select D.match as name
+		from Dictionary('dictionaries/first.dict', Document.text) D
+		where MatchesRegex(/\A[A-Z][a-z]*\Z/, D.match)
+	) Person, 
+	(
+		(
+    		select R.match as num
+    		from Regex(/\+?\([1-9]\d{2}\)\d{3}-\d{4}/, Document.text) R
+		)
+		union all
+		(
+   			select R.match as num
+    		from Regex(/\+?[Xx]\.?\d{4,5}/, Document.text) R
+		)
+	) Phone
+	where Follows(Person.name, Phone.num, 0, 50)
+) Subquery
+consolidate on Subquery.personphone;
+
+output view PersonPhone;
+
+-------------------------------------------------------------------------------
+-- Test 2: An EXTRACT nested subquery within the FROM clause of a SELECT statement
+-- Should return the same result as the TollFree view from extract.aql
+
+create view TollFree as
+select P.fullNumber as num
+from (
+	extract regex /(\d{3})-(\d{3}-\d{4})/ 
+		-- Token ranges are inclusive
+    	on between 4 and 5 tokens in D.text 
+    	return 
+        	group 1 as areaCode 
+        	and group 2 as restOfNumber
+        	and group 0 as fullNumber
+	from Document D) P
+where Equals(GetText(P.areaCode), '800');
+
+output view TollFree;
+
+-------------------------------------------------------------------------------
+-- Test 3: Nested Extract subquery within Extract statement
+-- Find sentences, using a regex for sentence boundaries.
+-- The same view is used in extract.aql
+
+create view Sentences as
+extract 
+    split using B.boundary 
+        retain right split point
+        on B.text
+        as sentence
+from (
+    extract 
+        D.text as text,
+        regex /(([\.\?!]+\s)|(\n\s*\n))/ on D.text as boundary
+        from Document D
+		-- Filter the candidate boundaries.
+		having Not(ContainsDict('dictionaries/abbreviations.dict', 
+            CombineSpans(LeftContextTok(boundary, 1), boundary)))
+) B;
+
+output view Sentences;
+
+
+-------------------------------------------------------------------------------
+-- Test 4: Nested subqueries and union
+-- Should return the same result as PhoneNumOld view in extract.aql
+
+create view PhoneNumOld as
+(
+    select P1.num as num
+    from
+    (
+    	select R.match as num
+    	from Regex(/(\d{3})-(\d{3}-\d{4})/, Document.text) R
+    ) P1
+)
+union all
+(
+	select P2.num as num
+    from
+    (
+   		select R.match as num
+    	from Regex(/\w[Xx]\d{3,5}\w/, Document.text) R 
+    ) P2
+);
+
+output view PhoneNumOld;

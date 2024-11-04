@@ -1,0 +1,148 @@
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+#dictionary of first names
+CreateDict(
+    "name" => "dictionaries/first.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+$PersonPhone =
+Project(
+  (
+    "Subquery.personphone" => "personphone"
+  ),
+  Consolidate(
+    "ContainedWithin",
+    GetCol(
+      "Subquery.personphone"
+    ),
+    Project(
+      (
+        "personphone" => "Subquery.personphone"
+      ),
+      $PersonPhone_SQ1
+    )
+  )
+);
+
+$PersonPhone_SQ1_SQ1_SQ1 =
+Project(
+  (
+    "match" => "match"
+  ),
+  Dictionary("dictionaries/first.dict" => "IgnoreCase" , "text", "match",
+    $Document
+  )
+);
+
+$PersonPhone_SQ1_SQ1 =
+Project(
+  (
+    "D.match" => "name"
+  ),
+  Select(
+    MatchesRegex(
+      RegexConst(
+        /\A[A-Z][a-z]*\Z/, "JavaRegex"
+      ),
+      GetCol(
+        "D.match"
+      )
+    ),
+    Project(
+      (
+        "match" => "D.match"
+      ),
+      $PersonPhone_SQ1_SQ1_SQ1
+    )
+  )
+);
+
+$PersonPhone_SQ1_SQ2 =
+Union(
+  Project(
+    (
+      "R.match" => "num"
+    ),
+    Project(
+      (
+        "match" => "R.match"
+      ),
+      FastRegex(
+        /\+?\([1-9]\d{2}\)\d{3}-\d{4}/, (0 => "match"), "DOTALL",
+        "text",
+        $Document
+      )
+    )
+  ),
+  Project(
+    (
+      "R.match" => "num"
+    ),
+    Project(
+      (
+        "match" => "R.match"
+      ),
+      FastRegex(
+        /\+?[Xx]\.?\d{4,5}/, (0 => "match"), "DOTALL",
+        "text",
+        $Document
+      )
+    )
+  )
+);
+
+$PersonPhone_SQ1 =
+Project(
+  (
+    "FunctionCall13" => "personphone",
+    "Person.name" => "name",
+    "Phone.num" => "num"
+  ),
+  ApplyFunc(
+    CombineSpans(
+      GetCol(
+        "Person.name"
+      ),
+      GetCol(
+        "Phone.num"
+      )
+    ) => "FunctionCall13",
+    SortMergeJoin(
+      Follows(
+        GetCol(
+          "Person.name"
+        ),
+        GetCol(
+          "Phone.num"
+        ),
+        IntConst(
+          0
+        ),
+        IntConst(
+          50
+        )
+      ),
+      Project(
+        (
+          "name" => "Person.name"
+        ),
+        $PersonPhone_SQ1_SQ1
+      ),
+      Project(
+        (
+          "num" => "Phone.num"
+        ),
+        $PersonPhone_SQ1_SQ2
+      )
+    )
+  )
+);
+
+Output: $PersonPhone;

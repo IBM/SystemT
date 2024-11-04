@@ -1,0 +1,337 @@
+-- the algorithm within this AQL file precedes in the following way.
+-- 1. detag document if necessary
+-- 2. detect sentence boundaries
+-- 3. create a view for each elementary Part-Of-Speech tag
+--    3.1. 'subtypes' / variants of POS tags are treated separately, e.g. VBZ, VBG ...
+--    3.2. "aggregate" them to form more general category classes like "Noun", "Verb", and so on...
+-- 4. load dictionaries containing the words that we are interested in
+--    4.1. there exist three distinct dictionaries
+--      ALWAYSpositive     |     TAGGER_DEPENDENT_DICT    |   ALWAYSnegative    ("dependent" with respect to polarity assignment)
+-- 5. match all the found tokens with POS against those contained in the dictionary for TAGGER_DEPENDENT
+--    5.1 a view "SentimentX" (where X is the category information) returns only those "interesting" tokens that
+--        can be found in the dictionaries.
+-- 6. a "WordToPolarityTable" is a map-view that assigns a particular polarity to each individual token.
+--    6.1 for each POS we keep a different "WordToPolarityTable" (disambiguation part for TAGGER_DEPENDENT_DICT)
+--   NOUNS:      line 300 - 650
+--   ADJECTIVES: line 650 - 1850
+--   VERBS:      line 1850 - 2100
+--   ADVERBS:    line 2100 - 2950
+--   -> taggerINDEPENDENTdicts get their polarity assigned automatically.
+-- 7. RULES
+--    7.1 they determine the sentiment of a phrase / tonality of context.
+
+
+
+
+include 'aql/DetectSentence.aql';    ---------------------------  <--------------------------------------
+
+
+--- declare user definded functions here
+create function flipPolarity(aPolarity Text)
+return String like aPolarity
+external_name 'udfjars/udf.jar:com.ibm.udf.example.PolarityChanger!flipPolarity'
+language java 
+deterministic
+return null on null input;
+
+create function addNegation(aPolarity Span)
+return String like aPolarity
+external_name 'udfjars/udfNegationAdder.jar:com.ibm.udf.example.NegationAdder!addNegation'
+language java 
+deterministic
+return null on null input;
+
+
+
+include 'aql/PosTaggingGeneral.aql';  
+include 'aql/LoadSentimentDictionaries.aql';
+include 'aql/POSTaggingSentiment.aql'; 
+include 'aql/SentimentTables.aql';
+
+
+-- FINAL VIEW !
+-- unite all of them !
+create view SentimentTerms as
+  -- always negatives +
+ (select N.word as span, N.polarity as polarity, N.detailedPos as detailedPos, N.pos as pos
+  from AlwaysNegativeTermsPlusPolarity N)
+  union all
+  -- always positives +
+ (select P.word as span, P.polarity as polarity, P.detailedPos as detailedPos, P.pos as pos
+  from AlwaysPositiveTermsPlusPolarity P)
+  union all
+  -- all the rest
+ (select N.word as span, N.polarity as polarity, N.detailedPos as detailedPos, N.partOfSpeech as pos
+  from NounsPlusPolarity N)
+  union all
+ (select ADJ.word as span, ADJ.polarity as polarity, ADJ.detailedPos as detailedPos, ADJ.partOfSpeech as pos
+  from AdjectivesPlusPolarity ADJ)
+  union all
+ (select V.word as span, V.polarity as polarity, V.detailedPos as detailedPos, V.partOfSpeech as pos
+  from VerbsPlusPolarity V)
+  union all
+ (select ADV.word as span, ADV.polarity as polarity, ADV.detailedPos as detailedPos, ADV.partOfSpeech as pos
+  from AdverbsPlusPolarity ADV);
+--output view SentimentTerms;
+
+  
+  
+------------------------------------------------- !!!  TAKMI-converted RULES !!! ---------------------------------------------------
+
+-- 'not the best'
+create view Rule0_notShort as -- erkennt 'not a problem', 'not my fault', 'without the benefit'
+  select flipPolarity(ST.polarity) as polarity, CombineSpans(NEG.match, ST.span) as sentimentMatch, addNegation(ST.span) as sentTerm
+  from NegationTriggers NEG, POSTagDTlike DT, SentimentTerms ST
+  where FollowsTok(NEG.match, DT.span, 0, 0) and FollowsTok(DT.span, ST.span, 0, 0) and  Not(Equals(GetText(ST.detailedPos), 'JJR'));
+output view Rule0_notShort;
+
+
+-- 'a fine story' | compound or modified noun.
+create view Rule1_D_A_N as -- erkennt 'the best alternatives', 'your stupid fault'
+  select ST.polarity as polarity, CombineSpans(DT.span, NN.span) as sentimentMatch, ST.span as sentTerm
+  from SentimentTerms ST, POSTagDTlike DT, AllNouns NN 
+  where FollowsTok(DT.span, ST.span, 0, 0) and FollowsTok(ST.span, NN.span, 0, 0) 
+  and Or(Equals(GetText(ST.pos), 'Adjective'), Equals(GetText(ST.pos), 'Adverb'), Equals(GetText(ST.pos), 'Noun'));
+--output view Rule1_D_A_N;
+-- 'a fine story teller'
+create view Rule1a_D_A_N_N as -- erkennt 'your favourite web content'
+  select ST.polarity as polarity, CombineSpans(DT.span, NN2.span) as sentimentMatch, ST.span as sentTerm
+   from SentimentTerms ST, POSTagDTlike DT, AllNouns NN1, AllNouns NN2
+   where FollowsTok(DT.span, ST.span, 0, 0) and FollowsTok(ST.span, NN1.span, 0, 0) and FollowsTok(NN1.span, NN2.span, 0, 0)
+   and Or(Equals(GetText(ST.pos), 'Adjective'), Equals(GetText(ST.pos), 'Adverb'), Equals(GetText(ST.pos), 'Noun'));
+  --consolidate on sentimentMatch;
+--output view Rule1a_D_A_N_N;
+-- 'a nice clean hotel'
+create view Rule1b_D_A_A_N as -- erkennt 'the best free gifts'
+  select ST1.polarity as polarity, CombineSpans(DT.span, NN.span) as sentimentMatch, ST1.span as sentTerm
+  from SentimentTerms ST1, SentimentTerms ST2, POSTagDTlike DT, AllNouns NN
+  where FollowsTok(DT.span, ST1.span, 0, 0) and FollowsTok(ST1.span, ST2.span, 0,0) and FollowsTok(ST2.span, NN.span, 0, 0) 
+  and Or(Equals(GetText(ST1.pos), 'Noun'), Equals(GetText(ST1.pos), 'Adjective'), Equals(GetText(ST1.pos), 'Adverb'),
+         Equals(GetText(ST2.pos), 'Noun'), Equals(GetText(ST2.pos), 'Adjective'), Equals(GetText(ST2.pos), 'Adverb'));
+--output view Rule1b_D_A_A_N;
+-- 'a nice clean hotel room'
+create view Rule1c_D_A_A_N_N as -- erkennt 'a huge professional baseball fan', 'a little annoying texas deadhead'
+   select ST1.polarity as polarity, CombineSpans(DT.span, NN2.span) as sentimentMatch, ST1.span as sentTerm
+   from SentimentTerms ST1, SentimentTerms ST2, POSTagDTlike DT, AllNouns NN1, AllNouns NN2
+   where FollowsTok(DT.span, ST1.span, 0, 0) and FollowsTok(ST1.span, ST2.span, 0,0) and FollowsTok(ST2.span, NN1.span, 0, 0) and FollowsTok(NN1.span, NN2.span, 0, 0)
+   and Or(Equals(GetText(ST1.pos), 'Noun'), Equals(GetText(ST1.pos), 'Adjective'), Equals(GetText(ST1.pos), 'Adverb'),
+   Equals(GetText(ST2.pos), 'Noun'), Equals(GetText(ST2.pos), 'Adjective'), Equals(GetText(ST2.pos), 'Adverb'));
+--output view Rule1c_D_A_A_N_N;
+-- 'not a nice hotel'
+create view Rule2_not_D_A_N as -- erkennt 'not a bad deal'
+  select flipPolarity(ST.polarity) as polarity, CombineSpans(NEG.match, NN.nn) as sentimentMatch, addNegation(ST.span) as sentTerm
+  from SentimentTerms ST, NegationTriggers NEG, POSTagDTlike DT, POSTagNN NN
+  where FollowsTok(NEG.match, DT.span, 0, 0) and FollowsTok(DT.span, ST.span, 0, 0) and FollowsTok(ST.span, NN.nn, 0, 0) 
+  and Or(Equals(GetText(ST.pos), 'Adjective'), Equals(GetText(ST.pos), 'Adverb'), Equals(GetText(ST.pos), 'Noun'));
+--output view Rule2_not_D_A_N;
+-- 'not a tiny little hotel'   -- erkennt 'not a huge professional basebal' [fan]
+create view Rule2a_not_D_A_A_N as
+  select flipPolarity(ST1.polarity) as polarity, CombineSpans(NEG.match, NN.span) as sentimentMatch, addNegation(ST1.span) as sentTerm
+  from SentimentTerms ST1, SentimentTerms ST2, NegationTriggers NEG, POSTagDTlike DT, AllNouns NN
+  where FollowsTok(NEG.match, DT.span, 0, 0) and FollowsTok(DT.span, ST1.span, 0, 0) and FollowsTok(ST1.span, ST2.span, 0, 0) and FollowsTok(ST2.span, NN.span, 0, 0) 
+  and Or(Equals(GetText(ST1.pos), 'Noun'), Equals(GetText(ST1.pos), 'Adjective'), Equals(GetText(ST1.pos), 'Adverb')) and
+      Or(Equals(GetText(ST2.pos), 'Noun'), Equals(GetText(ST2.pos), 'Adjective'), Equals(GetText(ST2.pos), 'Adverb'));
+--output view Rule2a_not_D_A_A_N;
+-- 'not a nice hotel room'
+create view Rule2b_not_D_A_N_N as -- erkennt 'not an elegible swap candidate'
+   select flipPolarity(ST.polarity) as polarity, CombineSpans(NEG.match, NN2.span) as sentimentMatch, addNegation(ST.span) as sentTerm
+   from SentimentTerms ST, NegationTriggers NEG, POSTagDTlike DT, AllNouns NN1, AllNouns NN2
+   where FollowsTok(NEG.match, DT.span, 0, 0) and FollowsTok(DT.span, ST.span, 0, 0) and FollowsTok(ST.span, NN1.span, 0, 0)  and FollowsTok(NN1.span, NN2.span, 0, 0) 
+   and Or(Equals(GetText(ST.pos), 'Adjective'), Equals(GetText(ST.pos), 'Adverb'), Equals(GetText(ST.pos), 'Noun'));
+ --output view Rule2b_not_D_A_N_N;
+-- 'not a nice clean hotel room'
+create view Rule2c_not_D_A_A_N_N as -- erkennt 'not a huge professional baseball fan'
+   select flipPolarity(ST1.polarity) as polarity, CombineSpans(NEG.match, NN2.span) as sentimentMatch, addNegation(ST1.span) as sentTerm
+   from NegationTriggers NEG, SentimentTerms ST1, SentimentTerms ST2, POSTagDTlike DT, AllNouns NN1, AllNouns NN2
+   where FollowsTok(NEG.match, DT.span, 0, 0) and FollowsTok(DT.span, ST1.span, 0, 0) and FollowsTok(ST1.span, ST2.span, 0,0) and FollowsTok(ST2.span, NN1.span, 0, 0) and FollowsTok(NN1.span, NN2.span, 0, 0)
+   and Or(Equals(GetText(ST1.pos), 'Noun'), Equals(GetText(ST1.pos), 'Adjective'), Equals(GetText(ST1.pos), 'Adverb'),
+          Equals(GetText(ST2.pos), 'Noun'), Equals(GetText(ST2.pos), 'Adjective'), Equals(GetText(ST2.pos), 'Adverb'));
+--output view Rule2c_not_D_A_A_N_N;
+-- 'a never nice hotel'
+create view Rule3_D_not_A_N as
+  select flipPolarity(ST.polarity) as polarity, CombineSpans(DT.span, NN.span) as sentimentMatch, addNegation(ST.span) as sentTerm
+  from POSTagDTlike DT, NegationTriggers NEG, SentimentTerms ST, AllNouns NN
+  where FollowsTok(DT.span, NEG.match, 0, 0) and FollowsTok(NEG.match, ST.span, 0, 0) and FollowsTok(ST.span, NN.span, 0, 0)
+  and Or(Equals(GetText(ST.pos), 'Noun'), Equals(GetText(ST.pos), 'Adjective'), Equals(GetText(ST.pos), 'Adverb'));
+--output view Rule3_D_not_A_N;
+-- 'a never really nice hotel'
+create view Rule3a_D_not_int_A_N as
+  select flipPolarity(ST.polarity) as polarity, CombineSpans(DT.span, NN.span) as sentimentMatch, addNegation(ST.span) as sentTerm
+  from POSTagDTlike DT, NegationTriggers NEG, SentimentIntensifier SI, SentimentTerms ST, AllNouns NN
+  where FollowsTok(DT.span, NEG.match, 0, 0) and FollowsTok(NEG.match, SI.match, 0, 0) and FollowsTok(SI.match, ST.span, 0, 0) and FollowsTok(ST.span, NN.span, 0, 0);
+--output view Rule3a_D_not_int_A_N;
+-- 'a really nice hotel'
+create view Rule3b_D_int_A_N as
+   select ST.polarity as polarity, CombineSpans(DT.span, NN.span) as sentimentMatch, ST.span as sentTerm
+   from POSTagDTlike DT, SentimentIntensifier SI, SentimentTerms ST, AllNouns NN
+   where FollowsTok(DT.span, SI.match, 0, 0) and FollowsTok(SI.match, ST.span, 0, 0) and FollowsTok(ST.span, NN.span, 0, 0);
+--output view Rule3b_D_int_A_N;
+
+-- 'no high fine'
+create view Rule_no_A_N as
+  select flipPolarity(ST.polarity) as polarity, CombineSpans(NEG.match, NN.span) as sentimentMatch, addNegation(ST.span) as sentTerm
+   from SentimentTerms ST, NegationTriggers NEG, AllNouns NN
+   where FollowsTok(NEG.match, ST.span, 0, 0) and FollowsTok(ST.span, NN.span, 0, 0)
+   and Or(Equals(GetText(ST.pos), 'Noun'), Equals(GetText(ST.pos), 'Adjective'), Equals(GetText(ST.pos), 'Adverb'))
+   and Not(Equals(GetText(NEG.match), 'not')); --
+-- weitere Bedingung: kein DO davor "do not really X", kein IS davor... "is not really X". - schliesse "not" generell aus
+ output view Rule_no_A_N;
+
+
+-- 'a nice room and bathroom'
+create view Rule4_D_A_N_CC_N as
+ select ST.polarity as polarity, CombineSpans(DT.span, NN2.span) as sentimentMatch, ST.span as sentTerm
+ from SentimentTerms ST, POSTagDTlike DT, AllNouns NN1, AllNouns NN2, POSTagCC CC
+ where FollowsTok(DT.span, ST.span, 0, 0) and FollowsTok(ST.span, NN1.span, 0, 0) and FollowsTok(NN1.span, CC.cc, 0, 0) and FollowsTok(CC.cc, NN2.span, 0, 0) 
+       and Or(Equals(GetText(ST.pos), 'Noun'), Equals(GetText(ST.pos), 'Adjective'), Equals(GetText(ST.pos), 'Adverb'));
+--output view Rule4_D_A_N_CC_N;
+-- 'both functional areas and business units'
+create view Rule4a_D_A_N_CC_N_N as
+  select R.polarity as polarity, CombineSpans(R.sentimentMatch, NN2.span) as sentimentMatch, R.sentTerm as sentTerm
+  from Rule4_D_A_N_CC_N R, AllNouns NN2
+  where FollowsTok(R.sentimentMatch, NN2.span, 0, 0);
+--output view Rule4a_D_A_N_CC_N_N;
+-- 'not a nice room and bathroom'
+create view Rule4b_not_D_A_N_CC_N as
+  select flipPolarity(R.polarity) as polarity, CombineSpans(NEG.match, R.sentimentMatch) as sentimentMatch, addNegation(R.sentTerm) as sentTerm
+  from Rule4_D_A_N_CC_N R, NegationTriggers NEG
+  where FollowsTok(NEG.match, R.sentimentMatch, 0, 0);
+--output view Rule4b_not_D_A_N_CC_N;
+-- 'not a nice room and bathroom service'
+create view Rule4c_not_D_A_N_CC_N_N as
+  select flipPolarity(R.polarity) as polarity, CombineSpans(NEG.match, R.sentimentMatch) as sentimentMatch, addNegation(R.sentTerm) as sentTerm
+  from Rule4a_D_A_N_CC_N_N R, NegationTriggers NEG
+  where FollowsTok(NEG.match, R.sentimentMatch, 0, 0);
+--output view Rule4c_not_D_A_N_CC_N_N;
+
+
+-- 'would not call it good', 'would not call it bad'
+create view Rule5_V_not_V_N_A as
+  select flipPolarity(ST.polarity) as polarity, CombineSpans(MD.md, ST.span) as sentimentMatch, addNegation(ST.span) as sentTerm
+  from POSTagMD MD, NegationTriggers NEG, AllVerbs VV, AllNouns NN, POSTagPP PP, SentimentTerms ST
+  where FollowsTok(MD.md, NEG.match,0,0) and FollowsTok(NEG.match, VV.span,0,0) and Or(FollowsTok(VV.span, NN.span, 0, 0), FollowsTok(VV.span, PP.pp, 0, 0))
+  and Or(FollowsTok(PP.pp, ST.span, 0, 0), FollowsTok(NN.span, ST.span, 0, 0));
+output view Rule5_V_not_V_N_A;
+
+
+-- 'can not recommend a hotel more'
+create view Rule7_V_not_V_D_N_more as
+  select flipPolarity(ST.polarity) as polarity,  CombineSpans(MD.md, RB.span) as sentimentMatch, addNegation(ST.span) as sentTerm
+  from POSTagMD MD, NegationTriggers NEG, POSTagDTlike DT, SentimentTerms ST, AllNouns NN, AllAdverbs RB
+  where FollowsTok(MD.md, NEG.match,0,0) and FollowsTok(NEG.match, ST.span,0,0) and FollowsTok(ST.span, DT.span, 0, 0) and FollowsTok(DT.span, NN.span, 0, 0) and FollowsTok(NN.span, RB.span, 0, 0);
+output view Rule7_V_not_V_D_N_more;
+
+-- 'bar and toilet look terrible' 
+create view Rule10_N_CC_N_look_A as -- erkennt 'suggestions and feedback are welcome'
+  select ST.polarity as polarity, CombineSpans(NN1.span, ST.span) as sentimentMatch, ST.span as sentTerm
+  from AllNouns NN1, POSTagCC CC, AllNouns NN2, AllVerbs VV, SentimentTerms ST
+  where FollowsTok(NN1.span, CC.cc, 0, 0) and FollowsTok(CC.cc, NN2.span, 0, 0) and FollowsTok(NN2.span, VV.span, 0, 0) and FollowsTok(VV.span, ST.span, 0, 0);-- and Equals(GetText(ST.pos), 'Adverb');
+output view Rule10_N_CC_N_look_A;
+
+-- 'service is not hard to get' -- tut
+create view Rule11_N_V_not_A_to_V as
+  select flipPolarity(ST.polarity) as polarity, CombineSpans(NN.span, VV.span) as sentimentMatch, addNegation(ST.span) as sentTerm
+  from AllNouns NN, POSTagVBZ VBZ, NegationTriggers NEG, POSTagTO TO, AllVerbs VV, SentimentTerms ST
+  where FollowsTok(NN.span, VBZ.vb, 0, 0) and FollowsTok(VBZ.vb, NEG.match, 0, 0) and FollowsTok(NEG.match, ST.span, 0, 0) and FollowsTok(ST.span, TO.to, 0, 0) and FollowsTok(TO.to, VV.span, 0, 0);
+output view Rule11_N_V_not_A_to_V;
+
+-- 'it / service is hard to beat'
+create view Rule11a_N_V_A_to_V as
+  select flipPolarity(ST.polarity) as polarity, CombineSpans(NN.span, VV.span) as sentimentMatch, addNegation(ST.span) as sentTerm --!
+  from AllNouns NN, POSTagPP PP, POSTagVBZ VBZ, POSTagTO TO, AllVerbs VV, SentimentTerms ST
+  where Or(FollowsTok(PP.pp, VBZ.vb, 0, 0), FollowsTok(NN.span, VBZ.vb, 0, 0)) and FollowsTok(VBZ.vb, ST.span, 0, 0) and FollowsTok(ST.span, TO.to, 0, 0) and FollowsTok(TO.to, VV.span, 0, 0) and Or(Equals(GetText(VV.span), 'beat'), Equals(GetText(VV.span), 'get'));
+output view Rule11a_N_V_A_to_V;
+
+-- 'lovely spot'
+
+
+
+
+
+-- 'room was new' OHNE sentiment
+create view Rule53_N_V_A as 
+  select CombineSpans(NN.span, JJ.span) as sentimentMatch
+  from AllAdjectives JJ, AllNouns NN, POSTagVBZ VBZ
+  where FollowsTok(NN.span, VBZ.vb, 0, 0) and FollowsTok(VBZ.vb, JJ.span, 0, 0)
+  and Not(Equals(GetText(JJ.detailedPos), 'JJR')); -- diese Bedingung sagt mir, dass "new" nicht comparative sein darf
+output view Rule53_N_V_A;
+
+-- 'meeting is next week' MIT SENTIMENT EINFÜGEN !!!
+create view Rule53a_N_V_A_N as 
+   select CombineSpans(NN1.span, NN2.span) as sentimentMatch
+   from AllAdjectives JJ, AllNouns NN1, AllNouns NN2, POSTagVBZ VBZ
+   where FollowsTok(NN1.span, VBZ.vb, 0, 0) and FollowsTok(VBZ.vb, JJ.span, 0, 0)and FollowsTok(JJ.span, NN2.span, 0,0);
+  -- and Not(Equals(GetText(JJ.detailedPos), 'JJR'));
+ output view Rule53a_N_V_A_N;
+
+-- 'lack of XP'
+create view Rule60_N_of_N as
+  select 'negative' as polarity, CombineSpans(NN1.span, NN2.span) as sentimentMatch, 'n.a.' as sentTerm
+   from AllPosTerms NN1, AllPosTerms NN2, POSTagIN IN
+   where FollowsTok(NN1.span, IN.prep, 0, 0) and FollowsTok(IN.prep, NN2.span, 0, 0)and Equals(GetText(IN.prep), 'of') and Equals(GetText(NN1.span), 'lack');
+output view Rule60_N_of_N;
+-- 'lack of JJ NP'
+create view Rule60a_N_of_A_N as -- erkennt 'lack of technical support'
+  select 'negative' as polarity, CombineSpans(NN1.span, NN2.span) as sentimentMatch, 'n.a.' as sentTerm
+    from AllPosTerms NN1, AllPosTerms NN2, POSTagIN IN, AllAdjectives JJ
+    where FollowsTok(NN1.span, IN.prep, 0, 0) and FollowsTok(IN.prep, JJ.span, 0, 0) and FollowsTok(JJ.span, NN2.span, 0, 0) and Equals(GetText(IN.prep), 'of') and Equals(GetText(NN1.span), 'lack');
+output view Rule60a_N_of_A_N;
+
+
+ 
+  
+-- unite all of the rules from above
+create view SetOfRulesThatMatchToSentimentSpans as
+  (select * from Rule_no_A_N M)
+  union all
+  (select * from Rule0_notShort M)
+  union all
+  (select * from Rule1_D_A_N M)
+  union all
+  (select * from Rule1a_D_A_N_N M)
+  union all
+  (select * from Rule1b_D_A_A_N M)
+  union all
+  (select * from Rule1c_D_A_A_N_N M)
+  union all
+  (select * from Rule2_not_D_A_N M)
+  union all
+  (select * from Rule2a_not_D_A_A_N M)
+  union all
+  (select * from Rule2b_not_D_A_N_N M)
+  union all
+  (select * from Rule2c_not_D_A_A_N_N M)
+  union all
+  (select * from Rule3_D_not_A_N M)
+  union all
+  (select * from Rule3a_D_not_int_A_N M)
+  union all
+  (select * from Rule3b_D_int_A_N M)
+  union all
+  (select * from Rule4_D_A_N_CC_N M)
+  union all
+  (select * from Rule4a_D_A_N_CC_N_N M)
+  union all
+  (select * from Rule4b_not_D_A_N_CC_N M)
+  union all
+  (select * from Rule4c_not_D_A_N_CC_N_N M)
+  union all
+  (select * from Rule5_V_not_V_N_A M)
+  union all
+  (select * from Rule7_V_not_V_D_N_more M)
+  union all
+  (select * from Rule10_N_CC_N_look_A)
+  union all
+  (select * from Rule60_N_of_N A)
+  union all
+  (select * from Rule60a_N_of_A_N A);
+output view SetOfRulesThatMatchToSentimentSpans;
+
+
+
+create view SentimentExpression as
+  select S.polarity, S.sentimentMatch, S.sentTerm as sentimentTerm
+  from SetOfRulesThatMatchToSentimentSpans S
+  consolidate on S.sentimentMatch using 'ContainedWithin';
+output view SentimentExpression;
+

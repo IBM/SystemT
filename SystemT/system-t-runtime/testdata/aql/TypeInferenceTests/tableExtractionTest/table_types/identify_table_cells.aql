@@ -1,0 +1,161 @@
+/**
+	This file identifies all cells from all the rows of the financial tables. 
+	Column span is also assigned to each cell, 
+	so that it marks the span across which the cell is spawned.
+	Colspan attribute is used to identify ill-strucured tables.
+	final views give all rows and cells associated with a financial table.
+	Assumption- 
+	1.	Tables which have rowspan attribute of some row to be greater than 1
+		will be treated as invalid tables & will be filtered out from the flow. 
+*/
+
+module table_types;
+
+import function GetColspanSum from module java_udf as GetColspanSum;
+
+-------------------------------------------------------------------------------
+--	Output all cells of all tables
+--	Semantics: each record in FinancialTables_All_Cells is a cell, with additional attributes
+--		regarding row and table containing the cell
+-------------------------------------------------------------------------------
+
+-- 	get all TD cells
+create view FinancialTables_TD_Cells as
+select S.label, S.type, S.tablespan, S.leftmatch, S.titlekey, S.tablestart, S.row,
+	   Chomp(T.match) as cellvalue, T.COLSPAN_Val as COLSPAN_Val
+from FinancialTables_All_Rows_temp_2 S, TD T
+where Contains(S.row, T.match);
+
+-- 	get all TH cells
+create view FinancialTables_TH_Cells as
+select S.label, S.type, S.tablespan, S.leftmatch, S.titlekey, S.tablestart, S.row, 
+	   Chomp(T.match) as cellvalue, T.COLSPAN_Val as COLSPAN_Val
+from FinancialTables_All_Rows_temp_2 S, TH T
+where Contains(S.row, T.match);
+
+-- 	take union of TD and TH cells
+create view FinancialTables_All_Cells_temp_3 as
+(select * from FinancialTables_TD_Cells F1)
+	union all
+(select * from FinancialTables_TH_Cells F2);
+
+
+-------------------------------------------------------------------------------
+--	Assign a valid COLSPAN value to every cell in column_header 
+--		1) header cells with valid COLSPAN value (that is not null) ==> already have colspan
+--		2) header cells with NULL value for COLSPAN ==> assign '1' as colspan
+-------------------------------------------------------------------------------
+
+-- 	find cells with non-null colspan
+create view FinancialTables_All_Cells_nonnull_colspan as
+select 	S.label, S.type, S.tablespan, S.leftmatch, S.titlekey, S.tablestart, S.row, 
+		S.cellvalue, S.COLSPAN_Val
+from FinancialTables_All_Cells_temp_3 S
+where NotNull(S.COLSPAN_Val);
+
+--	find cells with null colspan values
+create view FinancialTables_All_Cells_null_colspan as
+(select S.label, S.type, S.tablespan, S.leftmatch, S.titlekey, S.tablestart, S.row, S.cellvalue, S.COLSPAN_Val from FinancialTables_All_Cells_temp_3 S)
+	minus
+(select S.label, S.type, S.tablespan, S.leftmatch, S.titlekey, S.tablestart, S.row, S.cellvalue, S.COLSPAN_Val from FinancialTables_All_Cells_nonnull_colspan S);
+
+-------------------------------------------------------------------------------
+--	Output final view with colspan values assigned to each cell and each cell 
+--	has start and end colspan value assigned
+--		1) Add '1' as the colspan value for such cells and take its union with 
+--		the cells having valid colspan value
+--		2) for sorted cell list for each row, identify list of cell values and colspans 
+--		3) calculate sum of colspan values for all cells in each header row
+--	Semantics:  final view has record for each cell, along with information about cellspan for 
+-------------------------------------------------------------------------------
+
+--	assign colspan value to every cell
+--	Semantics:  each record is a CELL in table
+create view FinancialTables_All_Cells_temp_4 as
+(select S.label, S.type, S.tablespan, S.leftmatch, S.titlekey, S.tablestart, S.row, S.cellvalue, S.COLSPAN_Val from FinancialTables_All_Cells_nonnull_colspan S)
+	union all
+(select S.label, S.type, S.tablespan, S.leftmatch, S.titlekey, S.tablestart, S.row, S.cellvalue, '1' as COLSPAN_Val from FinancialTables_All_Cells_null_colspan S);
+
+-------------------------------------------------------------------------------
+--	perform consolidation to sort cell list
+--	Semantics: each record is a CELL in table
+-------------------------------------------------------------------------------
+create view FinancialTables_All_Cells_temp_5 as
+select C.*
+from FinancialTables_All_Cells_temp_4 C
+consolidate on C.cellvalue;
+
+-------------------------------------------------------------------------------
+--	Identify list of cell values and colspans 
+--	Semantics:  each record corresponds to a ROW of table
+-------------------------------------------------------------------------------
+create view FinancialTables_All_Cells_temp_6 as
+select 	S.row, List(S.cellvalue) as row_cellvalue_list, 
+		List(GetText(S.COLSPAN_Val)) as row_COLSPAN_list
+from FinancialTables_All_Cells_temp_5 S
+group by S.row;
+
+-------------------------------------------------------------------------------
+--	Calculate sum of colspan values for all cells in each header row
+--	join with column header rows to obtain table fields for row
+--	Semantics:  each record corresponds to a CELL of table
+-------------------------------------------------------------------------------
+create view FinancialTables_All_Cells_temp_7 as
+select 	C2.row_cellvalue_list, C2.row_COLSPAN_list, GetColspanSum(C2.row_COLSPAN_list) as colspan_sum,
+		C.label, C.type, C.tablespan, C.leftmatch, C.titlekey, C.tablestart, C.row, C.cellvalue, C.COLSPAN_Val
+from FinancialTables_All_Cells_temp_6 C2, FinancialTables_All_Cells_temp_4 C
+where Equals(C2.row, C.row);
+
+--	Calculate <start, end> colspan for each cell in table
+--	Semantics:  each record corresponds to a CELL of table
+create view FinancialTables_All_Cells_temp_8 as
+select C.*, GetStEndColumnNumber(C.row_cellvalue_list, C.row_COLSPAN_list, C.cellvalue, L.intList) as col_start_end
+from FinancialTables_All_Cells_temp_7 C, DummyScalarListOfInteger L
+consolidate on C.cellvalue;
+
+--	Semantics: each record in view is a table row with additional colspan information
+create view FinancialTables_All_Rows_temp_3 as
+select R.row, R.tablespan, C.row_cellvalue_list, C.row_COLSPAN_list, C.colspan_sum
+from FinancialTables_All_Rows_temp_2 R, FinancialTables_All_Cells_temp_8 C
+where Contains(R.row, C.cellvalue)
+consolidate on R.row;
+
+-------------------------------------------------------------------------------
+--	Take a self join of the all cells view to find the out those tables which have inconsistent 
+--	colspan sum (sum of colspan values of all cells) across TRs in column header)
+--
+--	Semantics:  Each record corresponds to row such that there exists at least 1 
+--	row with different colspan sum in same table.  Thus, these are ROWS in invalid tables.		
+--------------------------------------------------------------------------------
+create view INVALID__FinancialTables_All_Rows_InvalidTables as
+select  R1.tablespan, R1.row, R2.row as row2,
+		R1.row_cellvalue_list, R1.row_COLSPAN_list, R2.row_COLSPAN_list as list2, 
+		R1.colspan_sum, R2.colspan_sum as sum2
+from FinancialTables_All_Rows_temp_3 R1, FinancialTables_All_Rows_temp_3 R2
+where Equals(R1.tablespan, R2.tablespan)
+	and Not(Equals(R1.colspan_sum, R2.colspan_sum))
+	and Not(Equals(R1.row, R2.row))
+consolidate on R1.row;
+
+--	remove rows from invalid tables 
+--	Semantics: each record in view is row in valid table
+create view FinancialTables_All_Rows_temp_4 as
+(select R.row from FinancialTables_All_Rows_temp_3 R)
+ 	minus
+(select R.row from INVALID__FinancialTables_All_Rows_InvalidTables R);
+
+
+-------------------------------------------------------------------------------
+-- 	Output final views for all valid table rows and all valid table cells
+--	Semantics: 	FinancialTables_All_Rows has record for each row in a valid table
+--				FinancialTables_All_Cells has record for each cell in a valid table
+-------------------------------------------------------------------------------
+create view FinancialTables_All_Rows as
+select R1.*
+from FinancialTables_All_Rows_temp_2 R1, FinancialTables_All_Rows_temp_4 R2
+where Equals(R1.row, R2.row);
+
+create view FinancialTables_All_Cells as
+select C.*
+from FinancialTables_All_Rows R, FinancialTables_All_Cells_temp_8 C
+where Contains(R.row, C.cellvalue);

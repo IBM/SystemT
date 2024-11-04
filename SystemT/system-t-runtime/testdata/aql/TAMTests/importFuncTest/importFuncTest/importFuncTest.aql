@@ -1,0 +1,26 @@
+/*
+Test to verify, that the UDFs are importable thru the 'import module ..' statement.
+*/
+module importFuncTest;
+
+--import the whole module in on shot
+import module exportFunc;
+
+-- Caps tokens
+create view CapsToken as
+extract regex /[A-Z].*/ on 1 token in D.text as match
+from Document D;
+
+-- Low case tokens
+create view LowToken as
+extract regex /[a-z].*/ on 1 token in D.text as match
+from Document D;
+
+-- Find caps tokens and low tokens that are equal case insensitive
+create view testImportedFunc as
+select exportFunc.combineSpans (C.match, L.match) as concatSpan, exportFunc.toUpperCase(GetText(C.match)) as caps, exportFunc.toUpperCase(GetText(L.match)) as low
+from CapsToken C, LowToken L
+where FollowsTok(C.match, L.match, 0, 0);
+
+output view testImportedFunc;
+

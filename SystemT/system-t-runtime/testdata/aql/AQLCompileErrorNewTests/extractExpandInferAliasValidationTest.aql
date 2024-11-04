@@ -1,0 +1,147 @@
+-------------------------------------------------------------------------------
+--
+-- Test case for validating that wildcard expansion and alias inference work for 
+-- ExtractNode (extract statements other than EXTRACT PATTERN).
+--
+-------------------------------------------------------------------------------
+
+create view CapsWord as
+extract 'CapsWord' as type, 
+		1 as typeInt,
+	regex /[A-Z].*/ on 1 token in D.text as match
+from Document D;
+
+create view LowWord as
+extract 'LowWord' as type,
+		2 as typeIntL,
+	regex /[a-z]*/ on 1 token in D.text as match
+from Document D;
+
+-- Extract with <viewname>.* 
+-- Will throw an exception because the output schema contains duplicate attribute "match"
+create view Extract1 as
+extract C.*,
+	regex /someregex/ on C.match as match
+from CapsWord C;
+
+output view Extract1;
+
+-- Subquery with extract 
+-- Will throw an exception because the subquery schema contains duplicate attribute "match"
+create view Extract2 as
+extract regex /someregex/ on C.match as match
+from 
+( 
+	extract C.*,
+		regex /someregex/ on C.match as match
+	from CapsWord C
+) C;
+
+output view Extract2;
+
+-- Top level extraction on attribute from wildcard expansion from the subquery, and having predicate on inferred alias
+-- Should pass validation
+create view Extract3 as
+extract regex /someregex/ on C.match as match
+from 
+( 
+	extract C.*,
+		regex /someregex/ on C.match as match1
+	from CapsWord C
+	having Equals(match, 'AAA')
+) C;
+
+-- Top level extraction on attribute with inferred alias from the subquery 
+-- Should pass validation
+create view Extract4 as
+extract regex /someregex/ on C.match as match
+from 
+( 
+	extract C.match,
+		regex /someregex/ on C.match as match1
+	from CapsWord C
+) C;
+
+output view Extract4;
+
+-- Top level extract with a select * subquery 
+-- Will throw an exception because the subquery schema contains duplicate attributes
+create view Extract5 as
+extract regex /someregex/ on C.match as match
+from 
+( 
+	select * 
+	from CapsWord, LowWord
+) C;
+
+output view Extract5;
+
+-- Union statement with extract operands with wildcards and identical schemas. 
+-- Should pass validation 
+create view Extract6 as
+(extract C.*, regex /someregex/ on C.match as match1 from CapsWord C)
+union all
+(extract C.*, regex /someregex/ on C.match as match1 from CapsWord C);
+
+output view Extract6;
+
+-- Union statement with extract operands with wildcards and different schemas 
+-- Will throw an exception
+create view Extract7 as
+(extract C.*, regex /someregex/ on C.match as match1 from CapsWord C)
+union all
+(extract L.*, regex /someregex/ on L.match as match1 from LowWord L);
+
+output view Extract7;
+
+-- Top level extract with a select subquery with group by
+-- Will throw an exception: Column L.match in SELECT clause is not valid with respect to the GROUP BY clause.
+create view Extract8 as
+extract regex /someregex/ on C.match as match
+from 
+( 
+	select L.match
+	from CapsWord C, LowWord L
+	group by L.type
+) C;
+
+output view Extract8;
+
+-- Top level extract with a select subquery with a wrong consolidate target to verify that consolidate is validated at compile time
+-- Throws an exception: L (LowWord) has no output column called 'match1' (columns are [type, typeIntL, match])
+create view Extract9 as
+extract regex /someregex/ on C.match as match
+from 
+( 
+	select C.*
+	from CapsWord C, LowWord L
+	consolidate on L.match1
+) C;
+
+output view Extract9;
+
+-- Top level extract with a select subquery with a wrong consolidate target, to verify that order by is validated at compile time
+-- Throws an exception: L (LowWord) has no output column called 'match1' (columns are [type, typeIntL, match])
+create view Extract10 as
+extract regex /someregex/ on C.match as match
+from 
+( 
+	select C.*
+	from CapsWord C, LowWord L
+	order by L.match1
+) C;
+
+output view Extract10;
+
+-- Top level extract with a select * subquery with a wrong group by col, to verify that group by is validated at compile time
+-- Throws an exception: L (LowWord) has no output column called 'match1' (columns are [type, typeIntL, match])
+create view Extract11 as
+extract regex /someregex/ on C.match as match
+from 
+( 
+	select L.*
+	from CapsWord C, LowWord L
+	group by L.match
+) C;
+
+output view Extract11;

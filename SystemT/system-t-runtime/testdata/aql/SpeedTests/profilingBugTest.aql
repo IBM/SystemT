@@ -1,0 +1,73 @@
+require document with columns text Text;
+-- 
+
+
+create dictionary IndustryTypesPrefix as (
+	'Banc', 'Bank', 'College', 'Hospital', 'Institute', 
+	'School', 'University','Center'
+);
+
+create dictionary OrganizationSuffixes as (
+    'L.L.C.', 'P.L.L.C.', 'Ltd. Co.', 'L.P.', 'LTD', 'L.C.', 'Co-op', 'LLLP',
+    'L.L.L.P.', '& Co.', '& Company', ', Inc.', 'A/S', 'AG', 'aktiebolag',
+    'Aktiengessellschaft', 'Aktieselskab', 'anonim sirket', 'Anonimos Eteria',
+    'Anpartsselskab', 'anstalt', 'ApS', 'BV', 'BVBA', 'Center', 'Club', 'Co.',
+    'Co-op', 'Company', 'Corp', 'Corp.', 'Corporation', 'cpt', 'CVBA',
+    'De Besloten Vennootschap met Beperkte Aansprakelijheid',
+    'De Naamloze Vennootschap', 'EBVA', 'EEIG', 'EESV',
+    'Enterprise Unipersonnelle a Responsabilite Limite',
+    'Eteria Periorismenis Efthinis', 'EURL', 'FSS', 'GEIE',
+    'Gessellschaft mit bescrankter Hauftung', 'GmbH', 'Gmbh',
+    'groupement d\'interet economique', 'Inc', 'Inc.', 'Incorporated',
+    'LC', 'L.C.', 'Lda', 'Limitada', 'Limited', 'Limited Company',
+    'Limited Liability Company', 'Limited Partnership', 'limited sirket',
+    'LLC', 'L.L.C.', 'LLLP', 'L.L.L.P.', 'LLP', 'L.P.', 'Ltd', 'Ltd.',
+    'Ltd. Co.', 'Pvt. Ltd.', 'Private Limited', 'Public Limited',
+    'NV', 'Osakeyhtio', 'Oy', 'PLC', 'plc', 'PLLC', 'P.L.L.C.',
+    'Professional Service Corporation', 'PSC',
+    'Registered Limited Liability Partnership',
+    's.r.o', 'SA', 'S.A.', 'Sarl', 'SAS', 'SCRL', 'SNC',
+    'sociedades anonoimas', 'sociedades por quotas',
+    'societa a responsibilita limitata', 'societa per azioni',
+    'Societe a Responsabilite Limitee', 'Societe Anonyme',
+    'Societe par Actions Simplifee',
+    'Society', 'SpA', 'spoll', 'SPRL', 'SPRLU', 'SrL', 'stiftung', 'Teo',
+    'treuhandschaft', 'VSO'
+);
+ 
+create view CapsOrg as
+select R.match as match
+from
+    Regex(/\b\p{Lu}\p{M}*[[\p{Ll}\p{Lo}]\p{M}*\&\.'\-\,]+\b/, Document.text) R
+    -- '
+where Not(ContainsDict('IndustryTypesPrefix', R.match))
+order by GetEnd(R.match);
+	 
+		
+ --create view OrgClueStSuffix as
+create view OrgClueStSuffixCaps as
+select D.match as match
+from Dictionary('OrganizationSuffixes', 'Exact', Document.text) D;
+
+
+create view Coonetothree as
+select B.block as match
+from BlockTok(0, 1, 1, CapsOrg.match) B;
+
+
+select CombineSpans(coco.match, ocssc.match) as match
+into after
+from Coonetothree coco, OrgClueStSuffixCaps ocssc 
+where FollowsTok(coco.match, ocssc.match, 0, 0);
+
+
+select CombineSpans(coco.match, ocssc.match) as match
+into before
+from CapsOrg coco, OrgClueStSuffixCaps ocssc 
+where FollowsTok(coco.match, ocssc.match, 0, 0);
+
+
+--------------------------------------------------------------------------------
+
+
+

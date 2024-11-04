@@ -1,0 +1,71 @@
+
+create function equalsIgnoreCase(string1 String,string2 String) 
+return Boolean
+external_name 'smarc_4aql.jar:com.ibm.midas.utils.StringManipulation!equalsIgnoreCase'
+language java
+deterministic
+return null on null input;  
+
+
+create dictionary H_Baseball_Unique_Dict as 
+('Baltimore Orioles' ,'Boston Red Sox','Yankees','Tampa Bay Rays','Toronto Blue Jays',
+'Chicago White Sox','Cleveland Indians','Detroit Tigers','Kansas City Royals','Minnesota Twins','Los Angeles Angels','Oakland Athletics','Seattle Mariners','Texas Rangers','Atlanta Braves','Florida Marlins','Mets','Philadelphia Phillies','Washington Nationals','Chicago Cubs','Cincinnati Reds','Houston Astros',
+'Milwaukee Brewers','Pittsburgh Pirates','Louis Cardinals','Arizona Diamondbacks','Colorado Rockies','Dodgers',
+'San Diego Padres','Giants');
+
+create table AliasToBaseball(alias Text, norm Text) as values
+('#orioles','Baltimore Orioles'),
+('#yankees','Yankees'),
+('#tampabayrays','Tampa Bay Rays'),
+('#bluejays','Toronto Blue Jays'),
+('#clevelandindians','Cleveland Indians'),
+('#cleveland#indians','Cleveland Indians'),
+('#dbacks','Arizona Diamondbacks'),
+('#giants','Giants'),
+('#sfgiants','Giants'),
+('#seattlemariners','Seattle Mariners'),
+('#cardinals','Louis Cardinals'),
+('#dodgers','Dodgers');
+
+create dictionary H_Baseball_Hashes_Dict as
+('#orioles','#yankees','#tampabayrays','#bluejays','#clevelandindians','#cleveland#indians','#dbacks',
+'#giants','#sfgiants','#seattlemariners','#cardinals','#dodgers');
+
+
+
+
+
+
+
+---------------ALL SPORTS
+	
+create view H_Baseball_Unique_X as
+	extract 'baseball_unique' as prov, D.text as fullspan, dictionary 'H_Baseball_Unique_Dict' on D.text as match
+	from Document D;
+	
+create view H_Baseball_Hashes_X as
+	extract 'nfl_hash' as prov, D.text as fullspan, dictionary 'H_Baseball_Hashes_Dict' on D.text as match
+	from Document D;
+
+
+
+create view H_Baseball_UniqueAndHashes as 
+	(
+	select D.prov as prov, D.fullspan as fullspan, GetString(D.match) as match, D.match as matchspan
+	from H_Baseball_Unique_X D
+	)
+	union all
+	(
+	select D.prov as prov, D.fullspan as fullspan, GetString(A.norm) as match, D.match as matchspan
+	from H_Baseball_Hashes_X D, AliasToBaseball A
+	where equalsIgnoreCase(GetString(A.alias), GetString(D.match))
+	);
+
+
+output view H_Baseball_UniqueAndHashes;	
+	
+	
+
+
+
+

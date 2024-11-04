@@ -1,0 +1,95 @@
+ module miscCaseTest;
+
+require document with columns text Text;
+
+ create view AAA as
+  extract
+    regex /aaa/ on d.text as match
+  from Document d
+;
+
+create view BBB as
+  extract
+    regex /bbb/ on d.text as match
+  from Document d
+;
+
+
+-- Test 1 - Case statement with no else clause
+create view NoElseTest as
+  select a.match as match1,
+    -- Span a occurs after span b
+    case when GreaterThan(GetBegin(a.match), GetBegin(b.match))
+      then CombineSpans(b.match, a.match) as match, b.match as match2
+    -- Since no else is present, return a null 
+    -- span if span a occurs before span b
+  from
+    AAA a,
+    BBB b
+;
+
+-- Test 2 - Case statement with string as return type when expression is evaluated
+create view StringTest as
+	select a.match1 as match1, a.match2 as match2,
+      case
+         when Not(NotNull(a.match)) 
+           then 'Unknown'
+         else 
+           GetString(a.match) as flag, a.match
+from NoElseTest a;
+
+-- Test 3 - Case statement with even number of conditions including else clause
+create view EvenTest as
+  select a.match as match1, b.match as match2,
+    -- Span a occurs after span b
+    case when GreaterThan(GetBegin(a.match), GetBegin(b.match))
+      then CombineSpans(b.match, a.match)
+      -- Start offsets of Span a and span b overlap
+      -- (This condition will never be met, we just want this condition so that it gets evaluated and 
+      -- skipped correctly to go to the else clause for example inputs)
+      when Equals(GetBegin(a.match), GetBegin(b.match))
+      then a.match
+      -- End offsets of Spans a and b overlap
+      -- (This condition will never be met, we just want this condition so that it gets evaluated and 
+      -- skipped correctly to go to the else clause for example inputs)
+      when Equals(GetBegin(a.match), GetBegin(b.match))
+      then b.match
+      -- Span b occurs after span a
+      else CombineSpans(a.match, b.match)
+      as match
+  from
+    AAA a,
+    BBB b
+;
+
+-- Test 4 - Case statement with odd number of conditions including else clause
+create view OddTest as
+  select a.match as match1, b.match as match2,
+    -- Span a occurs after span b
+    case when GreaterThan(GetBegin(a.match), GetBegin(b.match))
+      then CombineSpans(b.match, a.match)
+      -- Start offsets of Span a and span b overlap
+      -- (This condition will never be met, we just want this condition so that it gets evaluated and 
+      -- skipped correctly to go to the else clause for example inputs)
+      when Equals(GetBegin(a.match), GetBegin(b.match))
+      then a.match
+      -- Span b occurs after span a
+      else CombineSpans(a.match, b.match)
+      as match
+  from
+    AAA a,
+    BBB b
+;
+
+
+-- Output views
+output view NoElseTest;  
+output view StringTest;
+output view EvenTest;
+output view OddTest;
+
+-- Export views
+export view NoElseTest;  
+export view StringTest;
+export view EvenTest;
+export view OddTest;

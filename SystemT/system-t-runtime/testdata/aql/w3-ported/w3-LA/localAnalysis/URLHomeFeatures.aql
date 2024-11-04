@@ -1,0 +1,471 @@
+-------------------------------------------------------------------------------
+-- URLHomeFeatures.aql  
+--
+--
+-- Depends on URL.aql
+--
+-- Based on Huiayu's original Java implementation.
+-------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
+
+-- ***********************************************************************
+-- ***                        UDF declarations                        ****
+-- ***********************************************************************
+
+-- UDF for computing the name
+create function getNormalName(url Text, host Text, path Text, L ScalarList)
+return ScalarList like L
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.URLHomeUDF!getNormalName'
+language java
+deterministic
+return null on null input;
+
+
+-- ***********************************************************************
+
+
+-- news_pattern1
+-- reasonable result on docid 
+create view UrlNewsPattern1 as
+select
+	tmp.date as date,
+	tmp.name as name,
+	'news' as label
+from( 
+	extract U.actualPath as path,
+		regex /\/(w3.{0,3}_news).nsf\/.*\/(?:(\d{1,8})_)?([\w\d\.-]+)\./ on U.url
+		return group 0 as match
+		   and group 2 as date
+		   and group 3 as name
+	from PageURL U
+	-- Laura: enforce that the match is contained in the URL path, as in URLNamePatterns.java
+	-- cannot run the regex directly on path, as we want the offsets to be wrt URL, not URLPath
+	having containsText(path, match)
+	) tmp;
+
+
+-- news_pattern1a
+-- no result yet
+create view UrlNewsPattern1a as
+select
+	tmp.date as date,
+	tmp.name as name,
+	'news' as label
+from( 
+	extract U.actualPath as path,
+		regex /\/(news)\/(\d{1,8})_(\w+)\./ on U.url
+		return group 0 as match
+		   and group 2 as date
+		   and group 3 as name
+	from PageURL U
+	-- Laura: enforce that the match is contained in the URL path, as in URLNamePatterns.java
+	-- cannot run the regex directly on path, as we want the offsets to be wrt URL, not URLPath
+	having containsText(path, match)
+	) tmp;
+
+
+
+--news_pattern1b
+create view UrlNewsPattern1b as
+select StringConcat2(GetText(T.date1),GetText(T.date2)) as date,T.name as name,'news' as label
+from(
+	extract U.actualPath as path,
+		regex /\/(news)\/(\d{4})\/(\d{4})-(\w+)\./ on U.url
+		return group 0 as match
+		   and group 2 as date1
+		   and group 3 as date2
+		   and group 4 as name
+	from PageURL U
+	-- Laura: enforce that the match is contained in the URL path, as in URLNamePatterns.java
+	-- cannot run the regex directly on path, as we want the offsets to be wrt URL, not URLPath
+	having containsText(path, match)
+	)T;
+
+	
+--news_pattern1c
+create view UrlNewsPattern1c as
+select T.date as date,T.name as name,'news' as label
+from(
+	extract U.actualPath as path,
+		regex /\/([^\/]+)\/(news)\/.*\/(\d{8})(?:_\d+)?\./ on U.url
+		return group 0 as match
+		   and group 3 as date
+		   and group 1 as name
+	from PageURL U
+	-- Laura: enforce that the match is contained in the URL path, as in URLNamePatterns.java
+	-- cannot run the regex directly on path, as we want the offsets to be wrt URL, not URLPath
+	having containsText(path, match)	
+	)T;
+
+	
+
+
+
+--news_pattern2
+create view UrlNewsPattern2 as
+select StringConcat3(GetText(T.date1),GetText(T.date2),GetText(T.date4)) as date,T.name as name,'news' as label
+from(
+	extract U.actualPath as path,
+		regex /\/(news)\/.+\/(\d{4})\/(\d{2})\/(\w+\D)_(\d{2})_(\d{2})_/ on U.url
+		return group 0 as match
+		   and group 2 as date1
+		   and group 3 as date2
+		   and group 5 as date3
+		   and group 6 as date4
+		   and group 4 as name
+	from PageURL U
+	-- Laura: enforce that the match is contained in the URL path, as in URLNamePatterns.java
+	-- cannot run the regex directly on path, as we want the offsets to be wrt URL, not URLPath
+	having containsText(path, match)
+	)T;
+
+	
+--news_pattern3
+create view UrlNewsPattern3 as
+select StringConcat3(GetText(T.date1),GetText(T.date2),GetText(T.zero)) as date,T.name as name,'news' as label
+from(
+	extract 
+		U.actualPath as path,
+		'00' as zero,
+		regex /\/(news)\/.+\/(\d{4})\/(\d{2})\/(\w+\D)\./ on U.url
+		return group 0 as match
+		   and group 2 as date1
+		   and group 3 as date2
+		   and group 4 as name
+	from PageURL U
+	-- Laura: enforce that the match is contained in the URL path, as in URLNamePatterns.java
+	-- cannot run the regex directly on path, as we want the offsets to be wrt URL, not URLPath
+	having containsText(path, match)
+	)T;
+
+	
+--news_pattern4
+create view UrlNewsPattern4 as
+select StringConcat3(GetText(T.date1),GetText(T.date2),GetText(T.date3)) as date,T.name as name,'news' as label
+from(
+	extract 
+		U.actualPath as path,
+		regex /\/(stories)\/(\d{4})\/(\d{2})_(\d{2})[_\d]*_([\w\d\.-]+)\./ on U.url
+		return group 0 as match
+		   and group 2 as date1
+		   and group 3 as date2
+		   and group 4 as date3
+		   and group 5 as name
+	from PageURL U
+	-- Laura: enforce that the match is contained in the URL path, as in URLNamePatterns.java
+	-- cannot run the regex directly on path, as we want the offsets to be wrt URL, not URLPath
+	having containsText(path, match)
+	)T;
+
+	
+--news_pattern4a
+create view UrlNewsPattern4a as
+select StringConcat3(GetText(T.ty),GetText(T.date1),GetText(T.date2)) as date,T.name as name,'news' as label
+from(
+	extract 
+		U.actualPath as path,
+		'20' as ty,
+		regex /\/(stories)\/(\d{2})\/(\d{4})_([\w\d\.-]+)\./ on U.url
+		return group 0 as match
+		   and group 2 as date1
+		   and group 3 as date2
+		   and group 4 as name
+	from PageURL U
+	-- Laura: enforce that the match is contained in the URL path, as in URLNamePatterns.java
+	-- cannot run the regex directly on path, as we want the offsets to be wrt URL, not URLPath
+	having containsText(path, match)
+	)T;
+
+	
+--news_pattern4b
+create view UrlNewsPattern4b as
+select StringConcat3(GetText(T.date1),GetText(T.date2),GetText(T.zero)) as date,T.name as name,'news' as label
+from(
+	extract 
+		U.actualPath as path,
+		'00' as zero,
+		regex /\/(top_stories)\/(\d{4})\/(\d{2})\/([\w\d\.-]+)\./ on U.url
+		return group 0 as match
+		   and group 2 as date1
+		   and group 3 as date2
+		   and group 4 as name
+	from PageURL U
+	-- Laura: enforce that the match is contained in the URL path, as in URLNamePatterns.java
+	-- cannot run the regex directly on path, as we want the offsets to be wrt URL, not URLPath
+	having containsText(path, match)
+	)T;
+
+	
+--news_pattern_catchall
+create view UrlNewsPatternCatchAll as
+select
+	T.name as name,
+	'news' as label
+from(
+	extract 
+		U.actualPath as path,
+		regex /\/([^\/]+)\/(news)\// on U.url
+		return group 0 as match
+		   and group 1 as name
+	from PageURL U
+	-- Laura: enforce that the match is contained in the URL path, as in URLNamePatterns.java
+	-- cannot run the regex directly on path, as we want the offsets to be wrt URL, not URLPath
+	having containsText(path, match)
+	)T;
+
+
+
+--pr_pattern1
+create view UrlPrPattern1 as
+select T.name as name,'pr' as label
+from(
+	extract U.actualPath as path,
+			regex /\/pr(?:_.\w+)?\.nsf\/pages\/(.*)\.html/ 
+				on U.url
+			return group 1 as name
+	from PageURL U
+	-- Laura: enforce that the match is contained in the URL path, as in URLNamePatterns.java
+	-- cannot run the regex directly on path, as we want the offsets to be wrt URL, not URLPath
+	having containsText(path, name)
+)T;
+	
+	
+--pr_pattern2
+create view UrlPrPattern2 as
+select '' as name,'pr' as label
+from(
+	extract
+			U.actualPath as path,
+			regex /\/press\/..\/..\/(?:pressrelease|presskit)\/(.*)\.wss/ 
+				on U.url as match
+	from PageURL U
+	-- Laura: enforce that the match is contained in the URL path, as in URLNamePatterns.java
+	-- cannot run the regex directly on path, as we want the offsets to be wrt URL, not URLPath
+	having containsText(path, match)
+	)T;
+
+
+--w3ki_pattern
+create view Urlw3kiPattern as
+select T.name as name,'w3ki;HQ' as label
+from(
+	extract
+			U.actualPath as path,
+			U.host as host,
+			regex /\A\/w3ki\/display\/(\w+)\/\z/ on U.url
+			return group 1 as name
+			from PageURL U
+			having Equals('w3.webahead.ibm.com',GetText(host))
+			-- Laura: enforce that the match is contained in the URL path, as in URLNamePatterns.java
+			-- cannot run the regex directly on path, as we want the offsets to be wrt URL, not URLPath
+			   and containsText(path, name)
+	)T;
+
+	
+--bluepedia_host_pattern
+create view UrlBluepediaHostPattern as
+select T.match
+from(
+	extract
+			regex /w3.\.ibm\.com\/bluepedia/ on U.host as match
+			from PageURL U
+	)T;
+	
+--bluepedia_links_pattern
+create view UrlBluepediaLinksPattern as
+select T.name as name,'bp_special;links' as label
+from(
+	extract
+			U.actualPath as path,
+			U.host as host,
+			regex /Special:Whatlinkshere\/(\w+)|Spezial:Verweisliste(\w+)/ on U.url
+			return group 1 as name
+			from PageURL U
+			having MatchesRegex(/w3.\.ibm\.com\/bluepedia/,host)
+			-- Laura: enforce that the match is contained in the URL path, as in URLNamePatterns.java
+			-- cannot run the regex directly on path, as we want the offsets to be wrt URL, not URLPath
+			   and containsText(path, name)
+	)T;
+
+--bluepedia_category_pattern
+create view UrlBluepediaCategoryPattern as
+select T.name as name,'bp_special;category' as label
+from(
+	extract
+			U.actualPath as path,
+			U.host as host,
+			regex /Category:(\w+)/ on U.url
+			return group 1 as name
+			from PageURL U
+			having MatchesRegex(/w3.\.ibm\.com\/bluepedia/,host)
+			-- Laura: enforce that the match is contained in the URL path, as in URLNamePatterns.java
+			-- cannot run the regex directly on path, as we want the offsets to be wrt URL, not URLPath
+			   and containsText(path, name)
+	)T;
+
+create view UrlBluepediaLinksandCategory as
+(select T.name as name,'bp_special;links' as label
+from UrlBluepediaLinksPattern T)
+union all
+(select T.name as name,'bp_special;category' as label
+from UrlBluepediaCategoryPattern T);
+
+
+--orgchart_host
+create view UrlOrgchartHostPattern as
+extract
+		regex /meatwad.rchland.ibm.com/ on U.host as match
+		from PageURL U;
+			
+--orgchart_path
+create view UrlOrgchartPathPattern as
+extract
+		regex /\/security\/orgchart/ on U.url as match
+		from PageURL U ;
+
+--orgchart_query
+create view UrlOrgchartQueryPattern as
+select UnescapeHTML(GetText(T.name)) as name,'contenttypes_orgchart' as label
+from(
+	extract
+			U.host as host,
+			U.actualPath as path,
+			regex /(?:.*&)?name=([^&]+)&/ on U.query
+			return group 1 as name
+			from PageURL U
+			having MatchesRegex(/meatwad.rchland.ibm.com/,host)
+			and MatchesRegex(/\/security\/orgchart/,path)
+	)T;
+
+	
+
+
+create view UrlPathEndsWithWSS as
+select U.*
+from PageURL U
+where ContainsRegex(/login.wss\z/, U.query);
+
+--login_wss_code
+create view UrlLoginwssCode as
+select
+	T.name as name,
+	'backend_login_code' as label
+from (
+	extract
+			U.query as query,
+			regex /code=([^&]+)$/ on U.url
+			return group 1 as name
+			from UrlPathEndsWithWSS U
+			having NotNull(query) and Not(Equals('', GetText(query)))
+			-- Laura: enforce that the match is contained in the URL query, as in URLNamePatterns.java
+			-- cannot run the regex directly on path, as we want the offsets to be wrt URL, not URLPath
+			   and containsText(query, name)
+	) T;
+
+------------------------------------------------------------------------
+-- Added by Huaiyu
+
+--host name (TODO: negative look back www and w3)
+create view UrlHostName as
+select
+	T.name as name,
+	'host;HQ' as label
+from (
+	extract
+		U.host as host,
+		regex /^\w+[:\/\.]+([^\/]+)[\.\/]/
+		on U.url
+		return group 1 as name
+		from PageURL U
+		-- Laura: enforce that the match is contained in the URL host, as in URLNamePatterns.java
+		-- cannot run the regex directly on host, as we want the offsets to be wrt URL, not URLPath
+		having NotNull(host) and Not(Equals('', GetText(host)))
+		   and containsText(host, name)
+	) T;
+
+
+--_segment_homelike
+create view UrlSegmenthomelikeBeforeSplitDot as
+	extract
+		U.host as host,
+		U.actualPath as path,
+		regex /\/([^\/]+)\/(?:|(?:index|home|homepage|logon|login|main|mainpage|top|toppage|welcome|portal)(?:_default)?(?:\.\w+)?)$/
+		on U.url
+		return group 1 as name
+		from PageURL U;
+
+		
+create view UrlSegmenthomelikeFromPath as
+select
+	T.name as name,
+	'segment_homelike' as label
+from
+(
+	extract 
+		U.path as path,
+		regex /\A([^\.]+)\.?/ on U.name
+			return group 1 as name
+	from UrlSegmenthomelikeBeforeSplitDot U
+	having containsText(path, name)
+) T;
+
+
+create view UrlSegmenthomelikeFromHostCand as
+select U.*
+from UrlSegmenthomelikeBeforeSplitDot U, 
+	(select Count(*) as cnt from UrlSegmenthomelikeFromPath) C
+where Equals(C.cnt, 0);
+
+
+-- Host that does not start with www or w3 
+create view UrlSegmenthomelikeFromHost1 as
+select U.name as name,
+       'segment_homelike' as label
+from UrlSegmenthomelikeFromHostCand U
+where Not(MatchesRegex(/(www|w3).*/, U.name));
+
+-- Host that starts with www or w3 
+create view UrlSegmenthomelikeFromHost2 as
+select U.name as name,
+       'segment_homelike' as label
+from 
+(
+	extract 
+		regex /\A(www|w3)\.([^\.]+)\./ on U.name
+			return group 2 as name
+	from UrlSegmenthomelikeFromHostCand U
+) U;
+	
+create view UrlSegmenthomelike as
+(select * from UrlSegmenthomelikeFromPath)
+union all
+(select * from UrlSegmenthomelikeFromHost1)
+union all
+(select * from UrlSegmenthomelikeFromHost2);
+
+	
+--_imbedded_homelike
+create view UrlImbeddedhomelike as
+select
+	T.name as name,
+	'imbedded_homelike' as label
+from(
+	extract
+			regex /\/(\w+)(?:_(?:index|home|homepage|logon|login|main|mainpage|top|toppage|welcome|portal)(?:\.\w+)?|\.(?:wss|nsf))$/ on U.url
+			return group 1 as name
+			from PageURL U
+	)T;
+	
+	
+--_imbedded_userlike
+create view UrlImbeddeduserlike as
+select
+	T.name as name,
+	'imbedded_userlike;HQ' as label
+from(
+	extract
+			regex /\/~(\w+)\/?$/ on U.url
+			return group 1 as name
+			from PageURL U
+	)T;

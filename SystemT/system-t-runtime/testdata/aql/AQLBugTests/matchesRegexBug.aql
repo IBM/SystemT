@@ -1,0 +1,54 @@
+-----------------------------------------------------------------------------
+-- matchesRegexBug.aql
+--
+-- Test case for a crash inside MatchesRegex.
+-----------------------------------------------------------------------------
+require document with columns text Text;
+
+
+-- Strong patterns indicating the existence of a fax number
+create dictionary FilterPhoneNum as (
+	'fax',
+	'efax',
+	'pager',
+	--Yunyao: added new strong clues for fax numbers
+	'Telefax',
+	'Facsimile',
+	'Telefacsimile',
+	'F',
+	'fx',
+	-- German
+	'Telefax Geschaeftsstelle', 
+	'Telefax Geschäftsstelle',
+	'Telefax Zweigstelle',
+	'Telefax Hauptsitz',
+	'Telefax Geschaeftssitz',
+	'Telefax Geschäftssitz'
+);
+ 
+
+
+create view PhoneFilter as
+select D.match as annot
+from Dictionary('FilterPhoneNum', Document.text) D;
+
+
+create view PhoneNumber_R2a as
+select R.match as num
+--from Regex(/\b(\+\s*)?[1-9]\d{2}\s*[\-\.]?\d{3}[\-\.\s]\s*\d{4}\b/, Document.text) R;
+--from Regex(/\b(\+\s*)?[1-9]\d{2}\s*[\s\-\.]\d{3}[\-\.\s]\s*\d{4}\b/, Document.text) R;
+from RegexTok(/(\+\s*)?[1-9]\d{2}\s*[\s\-\.]\d{3}[\-\.\s]\s*\d{4}\b/, 10, Document.text) R;
+
+-- -------------------------------------------------------
+-- Identify fax/pager numbers
+-- -------------------------------------------------------
+
+select P.num as num
+into NonPhoneNum
+from   PhoneNumber_R2a P,
+	   PhoneFilter F
+where  FollowsTok(F.annot, P.num, 0, 4)
+      and  
+      MatchesRegex(/\s*\:*\s*.{0,10}\s*\+*\s*/, 
+      		SpanBetween(F.annot, P.num));
+      

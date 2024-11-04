@@ -1,0 +1,29 @@
+create view AmbiguousNames_ro as
+--extract dictionaries 'person/ambiguousNames-ro.dict' and 'person/ambiguousNames-ro-NoD.dict'
+extract dictionaries 'person/per_name_first_romania_ro.dict' and 'person/per_name_first_romania_ambiguous_noDiac_ro.dict'
+on D.text as name
+from Doc D
+-- Sudarshan regex : 10/13/2011 - backreference on line 6
+having MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, name);
+
+
+
+create view NamesAll as
+(select P.name as name from NameDict P)
+	union all
+	(select P.name as name from NameDict1 P)
+	union all
+	(select P.name as name from NameDict2 P)
+	union all
+	(select P.name as name from NameDict3 P)
+	union all
+	(select P.name as name from NameDict4 P)
+	union all
+	(select P.firstname as name from FirstName P)
+	union all
+	(select P.lastname as name from LastName P)
+	union all
+	(select P.name as name from NameDict5 P)
+	union all
+	(select P.name as name from AmbiguousNames_ro P);	
+	

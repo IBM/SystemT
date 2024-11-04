@@ -1,0 +1,465 @@
+$Document = DocScan(
+  (
+    "text" => "Text",
+    "label" => "Text"
+  )
+);
+CreateDict(
+    "name" => "NameDict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false",
+    "lemma_match" => "false"
+);
+
+$_{"___Base__CapsWord__Temp_TmpView_/[A-Z][a-z]+/__1"} =
+Project(
+  (
+    "group_0" => "group_0"
+  ),
+  FastRegexTok(/[A-Z][a-z]+/, (0 => "group_0"), "DOTALL", 1, 1,"D.text",
+    Project(
+      (
+        "text" => "D.text"
+      ),
+      $Document
+    )
+  )
+);
+
+$FirstName =
+Project(
+  (
+    "@@genericModule@@FirstName@@type" => "type",
+    "@@genericModule@@FirstName@@__auto__id" => "__auto__id",
+    "@@genericModule@@FirstName@@__stmt__type" => "__stmt__type",
+    "@@genericModule@@FirstName@@Document_____sep_____D____id" => "Document_____sep_____D____id",
+    "match" => "match"
+  ),
+  ApplyFunc(
+    IntConst(
+      -1
+    ) => "@@genericModule@@FirstName@@Document_____sep_____D____id",
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_EXTRACT_DICT"
+      ) => "@@genericModule@@FirstName@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@FirstName@@__auto__id",
+        ApplyFunc(
+          StringConst(
+            "First"
+          ) => "@@genericModule@@FirstName@@type",
+          Dictionary("NameDict" => "Default" , "D.text", "match",
+            Project(
+              (
+                "text" => "D.text"
+              ),
+              $Document
+            )
+          )
+        )
+      )
+    )
+  )
+);
+
+$__Base__CapsWord__Temp =
+Project(
+  (
+    "@@genericModule@@__Base__CapsWord__Temp@@type" => "type",
+    "V.group_0" => "match"
+  ),
+  ApplyFunc(
+    StringConst(
+      "CapsWord"
+    ) => "@@genericModule@@__Base__CapsWord__Temp@@type",
+    Project(
+      (
+        "group_0" => "V.group_0"
+      ),
+      $_{"___Base__CapsWord__Temp_TmpView_/[A-Z][a-z]+/__1"}
+    )
+  )
+);
+
+$__Union__1__TempOp__0 =
+Project(
+  (
+    "FirstName.type" => "type",
+    "FirstName.match" => "match",
+    "@@genericModule@@__Union__1__TempOp__0@@__auto__id" => "__auto__id",
+    "@@genericModule@@__Union__1__TempOp__0@@__stmt__type" => "__stmt__type",
+    "FirstName.__auto__id" => "FirstName_____sep_____FirstName____id"
+  ),
+  ApplyFunc(
+    StringConst(
+      "STMT_TYPE_SELECT"
+    ) => "@@genericModule@@__Union__1__TempOp__0@@__stmt__type",
+    ApplyFunc(
+      AutoID()
+ => "@@genericModule@@__Union__1__TempOp__0@@__auto__id",
+      Project(
+        (
+          "__auto__id" => "FirstName.__auto__id",
+          "match" => "FirstName.match",
+          "type" => "FirstName.type"
+        ),
+        $FirstName
+      )
+    )
+  )
+);
+
+$CapsWord =
+Project(
+  (
+    "Op.type" => "type",
+    "Op.match" => "match",
+    "@@genericModule@@CapsWord@@__auto__id" => "__auto__id"
+  ),
+  ApplyFunc(
+    AutoID()
+ => "@@genericModule@@CapsWord@@__auto__id",
+    Project(
+      (
+        "match" => "Op.match",
+        "type" => "Op.type"
+      ),
+      $__Base__CapsWord__Temp
+    )
+  )
+);
+
+$PersonSelect =
+Project(
+  (
+    "@@genericModule@@PersonSelect@@type" => "type",
+    "@@genericModule@@PersonSelect@@match" => "match",
+    "@@genericModule@@PersonSelect@@__auto__id" => "__auto__id",
+    "@@genericModule@@PersonSelect@@__stmt__type" => "__stmt__type",
+    "F.__auto__id" => "FirstName_____sep_____F____id",
+    "C.__auto__id" => "CapsWord_____sep_____C____id"
+  ),
+  ApplyFunc(
+    StringConst(
+      "STMT_TYPE_SELECT"
+    ) => "@@genericModule@@PersonSelect@@__stmt__type",
+    ApplyFunc(
+      AutoID()
+ => "@@genericModule@@PersonSelect@@__auto__id",
+      ApplyFunc(
+        CombineSpans(
+          GetCol(
+            "F.match"
+          ),
+          GetCol(
+            "C.match"
+          )
+        ) => "@@genericModule@@PersonSelect@@match",
+        ApplyFunc(
+          StringConst(
+            "Full"
+          ) => "@@genericModule@@PersonSelect@@type",
+          AdjacentJoin(
+            FollowedByTok(
+              GetCol(
+                "C.match"
+              ),
+              GetCol(
+                "F.match"
+              ),
+              IntConst(
+                0
+              ),
+              IntConst(
+                0
+              )
+            ),
+            Project(
+              (
+                "__auto__id" => "C.__auto__id",
+                "match" => "C.match"
+              ),
+              $CapsWord
+            ),
+            Project(
+              (
+                "__auto__id" => "F.__auto__id",
+                "match" => "F.match"
+              ),
+              $FirstName
+            )
+          )
+        )
+      )
+    )
+  )
+);
+
+$__Union__1__TempOp__1 =
+Project(
+  (
+    "PersonSelect.type" => "type",
+    "PersonSelect.match" => "match",
+    "@@genericModule@@__Union__1__TempOp__1@@__auto__id" => "__auto__id",
+    "@@genericModule@@__Union__1__TempOp__1@@__stmt__type" => "__stmt__type",
+    "PersonSelect.__auto__id" => "PersonSelect_____sep_____PersonSelect____id"
+  ),
+  ApplyFunc(
+    StringConst(
+      "STMT_TYPE_SELECT"
+    ) => "@@genericModule@@__Union__1__TempOp__1@@__stmt__type",
+    ApplyFunc(
+      AutoID()
+ => "@@genericModule@@__Union__1__TempOp__1@@__auto__id",
+      Project(
+        (
+          "__auto__id" => "PersonSelect.__auto__id",
+          "match" => "PersonSelect.match",
+          "type" => "PersonSelect.type"
+        ),
+        $PersonSelect
+      )
+    )
+  )
+);
+
+$_{"___Base__PersonPattern__Temp_TmpView_<F.match>__2"} =
+Project(
+  (
+    "F.match" => "group_0",
+    "F.type" => "F_type"
+  ),
+  Project(
+    (
+      "match" => "F.match",
+      "type" => "F.type"
+    ),
+    $FirstName
+  )
+);
+
+$_{"___Base__PersonPattern__Temp_TmpView_<C.match>__3"} =
+Project(
+  (
+    "C.match" => "group_0",
+    "C.type" => "C_type"
+  ),
+  Project(
+    (
+      "match" => "C.match",
+      "type" => "C.type"
+    ),
+    $CapsWord
+  )
+);
+
+$_{"___Base__PersonPattern__Temp_TmpView_<F.match> <C.match>__4"} =
+Project(
+  (
+    "@@genericModule@@___Base__PersonPattern__Temp_TmpView_<F.match> <C.match>__4@@group_0" => "group_0",
+    "S0.F_type" => "F_type",
+    "S1.C_type" => "C_type"
+  ),
+  ApplyFunc(
+    CombineSpans(
+      GetCol(
+        "S0.group_0"
+      ),
+      GetCol(
+        "S1.group_0"
+      )
+    ) => "@@genericModule@@___Base__PersonPattern__Temp_TmpView_<F.match> <C.match>__4@@group_0",
+    AdjacentJoin(
+      FollowsTok(
+        GetCol(
+          "S0.group_0"
+        ),
+        GetCol(
+          "S1.group_0"
+        ),
+        IntConst(
+          0
+        ),
+        IntConst(
+          0
+        )
+      ),
+      Project(
+        (
+          "F_type" => "S0.F_type",
+          "group_0" => "S0.group_0"
+        ),
+        $_{"___Base__PersonPattern__Temp_TmpView_<F.match>__2"}
+      ),
+      Project(
+        (
+          "C_type" => "S1.C_type",
+          "group_0" => "S1.group_0"
+        ),
+        $_{"___Base__PersonPattern__Temp_TmpView_<C.match>__3"}
+      )
+    )
+  )
+);
+
+$__Base__PersonPattern__Temp =
+Project(
+  (
+    "@@genericModule@@__Base__PersonPattern__Temp@@type" => "type",
+    "V.F_type" => "ftype",
+    "V.C_type" => "ctype",
+    "V.group_0" => "match"
+  ),
+  ApplyFunc(
+    StringConst(
+      "Full"
+    ) => "@@genericModule@@__Base__PersonPattern__Temp@@type",
+    Project(
+      (
+        "C_type" => "V.C_type",
+        "F_type" => "V.F_type",
+        "group_0" => "V.group_0"
+      ),
+      $_{"___Base__PersonPattern__Temp_TmpView_<F.match> <C.match>__4"}
+    )
+  )
+);
+
+$PersonPattern =
+Project(
+  (
+    "Op.type" => "type",
+    "Op.ftype" => "ftype",
+    "Op.ctype" => "ctype",
+    "Op.match" => "match",
+    "@@genericModule@@PersonPattern@@__auto__id" => "__auto__id"
+  ),
+  ApplyFunc(
+    AutoID()
+ => "@@genericModule@@PersonPattern@@__auto__id",
+    Project(
+      (
+        "ctype" => "Op.ctype",
+        "ftype" => "Op.ftype",
+        "match" => "Op.match",
+        "type" => "Op.type"
+      ),
+      $__Base__PersonPattern__Temp
+    )
+  )
+);
+
+$__Union__1__TempOp__2 =
+Project(
+  (
+    "P.type" => "type",
+    "P.match" => "match",
+    "@@genericModule@@__Union__1__TempOp__2@@__auto__id" => "__auto__id",
+    "@@genericModule@@__Union__1__TempOp__2@@__stmt__type" => "__stmt__type",
+    "P.__auto__id" => "PersonPattern_____sep_____P____id"
+  ),
+  ApplyFunc(
+    StringConst(
+      "STMT_TYPE_SELECT"
+    ) => "@@genericModule@@__Union__1__TempOp__2@@__stmt__type",
+    ApplyFunc(
+      AutoID()
+ => "@@genericModule@@__Union__1__TempOp__2@@__auto__id",
+      Project(
+        (
+          "__auto__id" => "P.__auto__id",
+          "match" => "P.match",
+          "type" => "P.type"
+        ),
+        $PersonPattern
+      )
+    )
+  )
+);
+
+$PersonSingleToken =
+Union(
+  Project(
+    (
+      "Op.type" => "type",
+      "Op.match" => "match",
+      "@@genericModule@@PersonSingleToken_1@@__auto__id" => "__auto__id",
+      "@@genericModule@@PersonSingleToken_1@@__stmt__type" => "__stmt__type",
+      "Op.__auto__id" => "__union_op__id"
+    ),
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_UNION"
+      ) => "@@genericModule@@PersonSingleToken_1@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@PersonSingleToken_1@@__auto__id",
+        Project(
+          (
+            "__auto__id" => "Op.__auto__id",
+            "match" => "Op.match",
+            "type" => "Op.type"
+          ),
+          $__Union__1__TempOp__0
+        )
+      )
+    )
+  ),
+  Project(
+    (
+      "Op.type" => "type",
+      "Op.match" => "match",
+      "@@genericModule@@PersonSingleToken_2@@__auto__id" => "__auto__id",
+      "@@genericModule@@PersonSingleToken_2@@__stmt__type" => "__stmt__type",
+      "Op.__auto__id" => "__union_op__id"
+    ),
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_UNION"
+      ) => "@@genericModule@@PersonSingleToken_2@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@PersonSingleToken_2@@__auto__id",
+        Project(
+          (
+            "__auto__id" => "Op.__auto__id",
+            "match" => "Op.match",
+            "type" => "Op.type"
+          ),
+          $__Union__1__TempOp__1
+        )
+      )
+    )
+  ),
+  Project(
+    (
+      "Op.type" => "type",
+      "Op.match" => "match",
+      "@@genericModule@@PersonSingleToken_3@@__auto__id" => "__auto__id",
+      "@@genericModule@@PersonSingleToken_3@@__stmt__type" => "__stmt__type",
+      "Op.__auto__id" => "__union_op__id"
+    ),
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_UNION"
+      ) => "@@genericModule@@PersonSingleToken_3@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@PersonSingleToken_3@@__auto__id",
+        Project(
+          (
+            "__auto__id" => "Op.__auto__id",
+            "match" => "Op.match",
+            "type" => "Op.type"
+          ),
+          $__Union__1__TempOp__2
+        )
+      )
+    )
+  )
+);
+
+Output: $CapsWord, $FirstName, $PersonPattern, $PersonSelect, $PersonSingleToken, $__Base__CapsWord__Temp, $__Base__PersonPattern__Temp, $__Union__1__TempOp__0, $__Union__1__TempOp__1, $__Union__1__TempOp__2;

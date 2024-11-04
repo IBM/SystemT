@@ -1,0 +1,832 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module FinancialAnnouncements; 
+
+-- ================ GENERAL RULES FOR DETECTING CompanyInfo ========================
+
+
+-- =================================================================================
+--                           STRONG COMPANY CLUES
+-- =================================================================================
+
+--exclude governmental organizations from further consideration when identifying financial events
+create view OrgFinancial as
+select O.organization as organization
+from Organization_ O
+where Not(Equals(GetText(O.type), 'Government'));
+
+
+--Orgs which appear within a strong ticker clue
+create view OrgsWithinStrongTicker as
+select O.organization as org 
+from OrgFinancial O, StockExchangeAndTicker S
+where Contains(S.exchange, O.organization);
+
+
+--Ignore orgs appearing within a strong ticker clue
+create view Orgs as
+(select O.organization as org from OrgFinancial O)
+minus
+(select O.org as org from OrgsWithinStrongTicker O);
+
+
+--strong company with strong ticker clue
+create view CompanyInfoStrongWithTickerStrong as
+  select S.exchange as exchange, S.ticker as ticker, C.org as companyname, CombineSpans(C.org, S.ticker) as match
+  from Orgs C, StockExchangeAndTicker S
+  where FollowsTok(C.org, S.exchange, 0, 2);
+  
+
+-- identify weak ticker clue: 1 to 7 capitals between parenthesis
+create view TickerWeak as
+select T.ticker as ticker, T.fullmatch as match, LeftContextTok(T.fullmatch, 5) as lc
+from
+(
+	extract 
+		-- Sudarshan regex : 10/13/2011 - backreference on line 46
+		-- Sudarshan regex : 10/13/2011 - changed regex from line 45 to 46 - added combination marks detection
+		--regex /\((\p{Lu}{1,7})\)/
+		regex /\(((\p{Lu}\p{M}*){1,7})\)/ 
+			on D.text
+			return
+				group 1 as ticker and
+				group 0 as fullmatch
+	from DocumentText D
+) T;
+
+
+--strong company with weak ticker clue
+create view CompanyInfoStrongWithTickerWeak as
+  select LeftContext(T.ticker,0) as exchange, T.ticker as ticker, C.org as companyname, CombineSpans(C.org, T.match) as match
+  from Orgs C, TickerWeak T
+  where Or( FollowsTok(C.org, T.match, 0,0) ,
+  	-- Sudarshan regex : 10/13/2011 - backreference on line 61
+			And( Follows(C.org,T.match,0,3) , MatchesRegex(/[ ]*('|'s)[ ]*/, SpanBetween(C.org,T.match)) )
+		  );
+		  
+-- Strong companies with strong and weak tickers	  
+create view CompanyInfoStrongAll as
+select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match
+from
+(
+  (select RightContext(C.org ,0) as exchange, RightContext(C.org ,0) as ticker, C.org as companyname, 'STRONG' as rule, C.org as match from Orgs C)
+  union all
+  (select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, 'SS' as rule, C.match as match from CompanyInfoStrongWithTickerStrong C)
+  union all
+  (select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, 'SW' as rule, C.match as match from CompanyInfoStrongWithTickerWeak C)
+) C;
+  		
+
+
+-- =================================================================================
+--                           MEDIUM COMPANY CLUES
+-- =================================================================================
+
+--extract medium companies (w/ weak ticker) 
+create view CompanyInfoMediumWithTickerWeakTmp1 as
+select LeftContext(T.ticker,0) as exchange, T.ticker as ticker, T.companyname as companyname, 
+	   CombineSpans(T.companyname, T.match) as match
+from
+	(
+	  extract 
+		T.ticker as ticker, T.match as match,
+		-- Sudarshan regex : 10/13/2011 - backreference on line 91
+		regex /(\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|-|[ ]*&|\.)+([ ]*\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|-|[ ]*&|\.)+)*)[ ]*$/ 
+			on between 1 and 5 tokens in T.lc 
+	    	return 
+	    		group 1 as companyname
+	  from TickerWeak T
+	) T
+where Not(ContainsDict('FiltersForFinancialAnnouncements', T.companyname))
+consolidate on T.companyname;
+
+--remove any terminal ' or 's from medium company names
+create view CompanyInfoMediumWithTickerWeakTmp as
+select CW.exchange as exchange, CW.ticker as ticker, CW.companyname as companyname, CW.match as match
+from
+(
+	(
+		select CW.exchange as exchange, CW.ticker as ticker, CW.companyname as companyname, CW.match as match
+		from CompanyInfoMediumWithTickerWeakTmp1 CW
+		-- Sudarshan regex : 10/13/2011 - backreference on lines 109 and 118
+		where Not(ContainsRegex(/'|('s)[ ]*$/, CW.companyname))
+	)
+	union all
+	(
+		select CW.exchange as exchange, CW.ticker as ticker, 
+	           SpanBetween(LeftContext(CW.companyname,0), LeftContext(CW.trim,0)) as companyname, CW.match as match
+		from
+		(
+			extract CW.exchange as exchange, CW.ticker as ticker, CW.companyname as companyname, CW.match as match,
+			        regex /'|('s)[ ]*$/ on CW.companyname as trim
+			from CompanyInfoMediumWithTickerWeakTmp1 CW
+		) CW
+	)
+) CW
+consolidate on CW.companyname using 'NotContainedWithin';
+
+
+--medium companies with weak tickers overlapping with strong companies
+create view CompanyInfoMediumOverlapStrong as
+select CW.exchange as exchange, CW.ticker as ticker, CW.companyname as companyname, CW.match as match
+from CompanyInfoMediumWithTickerWeakTmp CW, Orgs CS
+where Overlaps(CW.companyname, CS.org);
+
+
+--filter out medium companies with weak tickers overlapping with strong companies
+create view CompanyInfoMediumWithTickerWeak as
+(select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.match as match from CompanyInfoMediumWithTickerWeakTmp C)
+minus
+(select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.match as match from CompanyInfoMediumOverlapStrong C);
+
+-- Strong and medium companies
+create view CompanyInfoStrongMediumTemp as
+select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match
+from
+(
+  (select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match from CompanyInfoStrongAll C)
+  union all
+  (select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, 'MW' as rule, C.match as match from CompanyInfoMediumWithTickerWeak C)
+) C
+consolidate on C.match;
+
+
+--Merge strong company immediately followed by a strong or medium company into a single company name
+create view CompanyInfoStrongFollowedByMedium as
+select C2.exchange as exchange, C2.ticker as ticker, 
+	   CombineSpans(C1.org, C2.companyname) as companyname, 
+       CombineSpans(C1.org, C2.match) as match
+from Orgs C1, CompanyInfoStrongMediumTemp C2
+where FollowsTok(C1.org, C2.companyname, 0, 1) and
+      --
+      MatchesRegex(/([ ]+)|-/, SpanBetween(C1.org, C2.companyname)) and
+      -- filter out matches starting with the same token
+      Not(Equals(GetText(SubSpanTok(C1.org,1,1)), GetText(SubSpanTok(C2.companyname,1,1))));
+
+
+-- Strong and medium companies
+create view CompanyInfoStrongMedium as
+select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match
+from
+(
+  (select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match from CompanyInfoStrongMediumTemp C)
+  union all
+  (select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, 'SM' as rule, C.match as match from CompanyInfoStrongFollowedByMedium C)
+) C
+consolidate on C.match
+order by GetEnd(C.match);
+
+
+
+-- =================================================================================
+--                           WEAK COMPANY CLUES
+-- ================================================================================= 
+
+--Find additional company info occurences based on one to three tokens of strong-medium companies
+ create view CapsOrgFromNE as
+(select C.match as match from CapsOrg C)
+union all
+(select C.match as match from AllCapsOrg C);
+
+
+create view CapsWordOnetoThree as
+  select R.block as match
+  from BlockTok(0,1,3,CapsOrgFromNE.match) R;
+
+
+-- Extract One to Three tokens out of StrongMedium companies
+create view CapsWordStrongMedium as
+	extract 
+		-- Sudarshan regex : 10/13/2011 - backreference on lines 198 and 206
+		regex /\p{Lu}\p{M}*([\p{Ll}\p{Lo}]\p{M}*|[\&\.'\-\,])+\b/  --'
+        on between 1 and 6 tokens in R.companyname
+        as word
+	from CompanyInfoStrongMedium R; 
+
+ 
+create view AllCapsWordStrongMedium as
+	extract 
+		regex /(\p{Lu}\p{M}*){1,2}((\s*&\s*)?(\p{Lu}\p{M}*)+|([\p{Ll}\p{Lo}]\p{M}*)+(\p{Lu}\p{M}*)([\p{Ll}\p{Lo}]\p{M}*)+)/
+        on between 1 and 3 tokens in R.companyname 
+        as word
+	from CompanyInfoStrongMedium R;
+
+	
+create view CapsWordFromStrongMedium as
+(select C.word as word from CapsWordStrongMedium C)
+union all
+(select C.word as word from AllCapsWordStrongMedium C);
+
+
+create view CapsWordOnetoThreeFromStrongMedium as
+	extract blocks
+    	with count between 1 and 3
+    	-- allow ./of/and between tokens by requiring up to one token inbetween
+    	--TODO: enforce that the inbetween token matches one of ./of/and/&
+    	and separation between 0 and 1 tokens
+    	on CW.word as match
+	from CapsWordFromStrongMedium CW;
+
+
+--filter out matches of the filter dictionary, and matches that do not start at the beginning of company name
+create view CompanyNamesStrongMediumOneToThree as
+select CW.match as match
+from CapsWordOnetoThreeFromStrongMedium CW, CompanyInfoStrongMedium C
+where Equals( GetBegin(C.companyname), GetBegin(CW.match) )
+		and Not(MatchesDict('FiltersForCompanyNamesInFinancialAnnouncements', CW.match));
+
+
+-- Find matches for one to three tokens out of StrongMedium company names in the entire text
+create view CompanyInfoWeakTemp1 as
+  select CW.match as match
+  from 	CapsWordOnetoThree CW,  
+  		CompanyNamesStrongMediumOneToThree CN
+  where Equals(GetText(CW.match),GetText(CN.match))
+  consolidate on CW.match; 
+  
+  
+--remove any terminal ' or 's from weak company names
+create view CompanyInfoWeakTemp as
+select RightContext(CW.companyname,0) as ticker, RightContext(CW.companyname,0) as exchange,
+       CW.companyname as companyname, CW.companyname as match
+from
+(
+	(
+		select CW.match as companyname
+		from CompanyInfoWeakTemp1 CW
+		-- Sudarshan regex : 10/13/2011 - backreference on lines 256 and 264
+		where Not(ContainsRegex(/'|('s)[ ]*$/, CW.match))
+	)
+	union all
+	(
+		select SpanBetween(LeftContext(CW.match,0), LeftContext(CW.trim,0)) as companyname
+		from
+		(
+			extract CW.match as match,
+			        regex /'|('s)[ ]*$/ on CW.match as trim
+			from CompanyInfoWeakTemp1 CW
+		) CW
+	)
+) CW
+consolidate on CW.companyname using 'NotContainedWithin';
+  
+  
+-- Extend one to three token matches with industry suffixes
+create view IndustrySuffixWeak as 
+extract dictionary 'ProfessionBasedSuffixesForOrganizations' on D.text as match
+from DocumentText D;
+
+
+create view CompanyInfoWeakExtendedIndustry as
+select CombineSpans(CW.match, S.match) as companyname, CW.ticker as ticker, CW.exchange as exchange, CombineSpans(CW.match, S.match) as match
+from CompanyInfoWeakTemp CW, IndustrySuffixWeak S
+where FollowsTok(CW.match, S.match, 0, 1) and
+      --capture only occurences of the form compName space_or_& industry suffix
+      MatchesRegex( /[ ]*&?[ ]*/, SpanBetween(CW.match, S.match));
+      
+
+create view CompanyInfoWeakExtendedTemp as
+select C.companyname as companyname, C.ticker as ticker, C.exchange as exchange, C.match as match
+from
+(
+	( select CW.companyname as companyname, CW.ticker as ticker, CW.exchange as exchange, CW.match as match from CompanyInfoWeakExtendedIndustry CW )
+	union all 
+	( select CW.companyname as companyname, CW.ticker as ticker, CW.exchange as exchange, CW.match as match from CompanyInfoWeakTemp CW )
+) C;
+
+
+-- Extend one to three token matches with organization suffixes
+create view CompanyInfoWeakExtendedOrgSuffix as
+select CombineSpans(CW.match, S.match) as companyname, CW.ticker as ticker, CW.exchange as exchange, CombineSpans(CW.match, S.match) as match
+from CompanyInfoWeakExtendedTemp CW, OrgClueStSuffixCaps S
+where FollowsTok(CW.match, S.match, 0, 0) and
+      --capture only occurences of the form compName space_or_& organization suffix
+      MatchesRegex( /[ ]*&?[ ]*/, SpanBetween(CW.match, S.match));      
+
+
+-- All one to three token matches with extended with industry and organization suffixes
+create view CompanyInfoWeakNoTicker as
+select C.companyname as companyname, C.ticker as ticker, C.exchange as exchange, C.match as match
+from
+(
+	( select CW.companyname as companyname, CW.ticker as ticker, CW.exchange as exchange, CW.match as match from CompanyInfoWeakExtendedOrgSuffix CW )
+	union all 
+	( select CW.companyname as companyname, CW.ticker as ticker, CW.exchange as exchange, CW.match as match from CompanyInfoWeakExtendedTemp CW )
+) C
+consolidate on C.match;
+
+
+--weak companies contained within weak ticker -- to filter out
+create view CompanyInfoWeakOverlapWeakTicker as
+select CW.exchange as exchange, CW.ticker as ticker, CW.companyname as companyname, CW.match as match
+from CompanyInfoWeakTemp CW, TickerWeak T
+where Contains(T.ticker, CW.companyname);
+
+--weak companies completely contained within a strong/medium company -- to filter out
+create view CompanyInfoWeakContainedInStrongMedium as
+select CW.exchange as exchange, CW.ticker as ticker, CW.companyname as companyname, CW.match as match
+from CompanyInfoWeakNoTicker CW, CompanyInfoStrongMedium CS
+where Contains(CS.companyname, CW.companyname);
+
+
+--weak companies overlapping with two strong/medium companies -- to filter out
+create view CompanyInfoWeakOverlapTwoStrongMedium as
+select CW.exchange as exchange, CW.ticker as ticker, CW.companyname as companyname, CW.match as match
+from CompanyInfoWeakNoTicker CW, CompanyInfoStrongMedium CS1, CompanyInfoStrongMedium CS2
+where Overlaps(CS1.companyname, CW.companyname) and
+	Overlaps(CS2.companyname, CW.companyname) and
+	Not(Equals(CS1.match, CS2.match));
+
+--weak companies which are exact matches with the NonOrgsDictMatches --to filter out
+
+/**create view ProvinceMatches as
+extract dictionary 'loc_chinaIndia_provin_en.dict' on D.text as match
+from DocumentText D;*/
+
+-- Replaced above code snippet with better dictionaries than one used earlier
+create view ProvincesOfChina as
+extract dictionary 'ProvincesOfChina' on D.text as match
+from DocumentText D;
+
+create view StatesOfIndia as
+extract dictionary 'StatesOfIndia' on D.text as match
+from DocumentText D;
+
+create view ProvinceMatches as
+(select P.* from ProvincesOfChina P)
+union all 
+(select S.* from StatesOfIndia S);
+
+create view NonOrgdDictMatchesAll as
+( select O.match as match from NonOrgDictMatches O )
+union all
+( select P.match as match from ProvinceMatches P );
+
+create view CompanyInfoWeakExactMatchNonOrg as
+select CW.exchange as exchange, CW.ticker as ticker, CW.companyname as companyname, CW.match as match
+from CompanyInfoWeakNoTicker CW, NonOrgdDictMatchesAll NO
+where Equals(GetText(CW.companyname), GetText(NO.match));
+
+create view CompanyInfoWeakFilter as
+( select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.match as match from CompanyInfoWeakOverlapWeakTicker C)
+union all
+( select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.match as match from CompanyInfoWeakContainedInStrongMedium C)
+union all
+( select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.match as match from CompanyInfoWeakOverlapTwoStrongMedium C)
+union all
+( select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.match as match from CompanyInfoWeakExactMatchNonOrg C);
+
+--filter out weak companies
+create view CompanyInfoWeakNoOverlap as
+(select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.match as match from CompanyInfoWeakNoTicker C)
+minus
+(select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.match as match from CompanyInfoWeakFilter C);
+
+
+-- combine weak companies with weak tickers
+create view CompanyInfoWeakAll as
+select C.companyname as companyname, C.ticker as ticker, C.exchange as exchange, C.rule as rule, C.match as match
+from
+(
+	(
+	  select C.exchange as exchange, T.ticker as ticker, C.companyname as companyname, 'WW' as rule, CombineSpans(C.match, T.match) as match
+	  from CompanyInfoWeakNoOverlap C, TickerWeak T
+	  where Or( FollowsTok(C.match, T.match, 0,0) ,
+	  		-- Sudarshan regex : 10/13/2011 - backreference on line 382
+			    And( Follows(C.match,T.match,0,3) , MatchesRegex(/[ ]*('|'s)[ ]*/, SpanBetween(C.match,T.match)) )
+			  )
+	)
+	union all
+	(select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, 'WEAK' as rule, C.match as match from CompanyInfoWeakNoOverlap C)
+) C
+consolidate on C.match;
+
+
+
+/*
+--discard two weak companies close to each other
+create view CompanyInfoWeakCloseAll as
+select CW1.companyname as companyname1, CW1.ticker as ticker1, CW1.exchange as exchange1, CW1.match as match1,
+	   CW2.companyname as companyname2, CW2.ticker as ticker2, CW2.exchange as exchange2, CW2.match as match2
+from CompanyInfoWeakAll CW1, CompanyInfoWeakAll CW2
+where FollowsTok(CW1.match, CW2.match,0,2);
+
+create view CompanyInfoWeakCloseTemp as
+(
+	select CW.companyname1 as companyname1, CW.ticker1 as ticker1, CW.exchange1 as exchange1, CW.match1 as match1,
+		   CW.companyname2 as companyname2, CW.ticker2 as ticker2, CW.exchange2 as exchange2, CW.match2 as match2
+	from CompanyInfoWeakCloseAll CW
+)
+--disregard close weak companies with a sentence boundary between them
+minus
+(
+	select CW.companyname1 as companyname1, CW.ticker1 as ticker1, CW.exchange1 as exchange1, CW.match1 as match1,
+		   CW.companyname2 as companyname2, CW.ticker2 as ticker2, CW.exchange2 as exchange2, CW.match2 as match2
+	from CompanyInfoWeakCloseAll CW, SentenceBoundaryAll S
+	where Contains(SpanBetween(CW.match1, CW.match2), S.boundary)
+);
+
+create view CompanyInfoWeakClose as
+(
+select CW.companyname1 as companyname, CW.ticker1 as ticker, CW.exchange1 as exchange, CW.match1 as match
+from CompanyInfoWeakCloseTemp CW
+)
+union all
+(
+select CW.companyname2 as companyname, CW.ticker2 as ticker, CW.exchange2 as exchange, CW.match2 as match
+from CompanyInfoWeakCloseTemp CW
+);
+*/
+
+create view CompanyInfoWeak as
+select CW.companyname as companyname, CW.ticker as ticker, CW.exchange as exchange, CW.rule as rule, CW.match as match from CompanyInfoWeakAll CW;
+
+--Find company names based on financial event clues
+--extract company clues related to financial events
+create view EventClue as
+select E.clue as clue, RightContext(E.clue, 60) as rc
+from
+(
+	extract dictionary 'PositiveCluesForFinancialEvents'
+	on D.text as clue
+	from DocumentText D
+) E
+consolidate on E.clue;
+
+ 
+-- look for patterns of the form "to acquire/buy [comp-name] for"
+
+create view EventClueAfterCompanyInfo as
+select E.match as clue
+from
+(
+	extract dictionary 'PositiveCluesInRightContextForFinancialEvents'
+	on E.rc as match
+	from EventClue E
+) E;
+
+
+create view CompanyInfoWeakNoTickerTemp1 as
+select RightContext(C.companyname,0) as exchange, RightContext(C.companyname,0) as ticker, C.companyname as companyname, C.companyname as match
+from
+(
+  extract E.match as match,
+  	-- Sudarshan regex : 10/13/2011 - backreference in line 469 
+	regex /\A[ ]*(\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|\.|-)+([ ]*\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|\.|-)+)*)[ ]*(\.)?[ ]*$/ on E.match 
+    	return 
+    		group 1 as companyname
+  from 
+  (
+  	select SpanBetween(E1.clue, E2.clue) as match
+  	from EventClue E1, EventClueAfterCompanyInfo E2
+  	where Follows(E1.clue, E2.clue, 0, 60) and Not(ContainsDict('PositiveCluesInRightContextForFinancialEvents', SpanBetween(E1.clue, E2.clue)))
+  ) E
+) C
+where Not(ContainsDict('FiltersForFinancialAnnouncements', C.companyname));
+
+
+--weak company w/o ticker overlapping with strong company
+create view CompanyInfoWeakNoTickerOverlapStrong1 as
+select CW.exchange as exchange, CW.ticker as ticker, CW.companyname as companyname, CW.match as match
+from CompanyInfoWeakNoTickerTemp1 CW, Orgs CS
+where Overlaps(CW.companyname, CS.org);
+
+
+--weak company w/o ticker not overlapping with strong company
+create view CompanyInfoWeakNoTicker1 as
+(select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.match as match from CompanyInfoWeakNoTickerTemp1 C)
+minus
+(select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.match as match from CompanyInfoWeakNoTickerOverlapStrong1 C);
+
+
+--look for patterns of the form "to acquire/buy [1-2 caps words] [strong_company]"
+create view CompanyInfoStrongExtendLeftOneToTwo as
+select C.exchange as exchange, C.ticker as ticker, 
+	   Chomp(CombineSpans(SpanBetween(E.clue, C.match), C.companyname)) as companyname, 
+	   Chomp(CombineSpans(SpanBetween(E.clue, C.match), C.match)) as match
+from EventClue E, CompanyInfoStrongAll C
+where FollowsTok(E.clue, C.match, 1, 2) and
+	-- Sudarshan : changed regex to replace [ ] with \p{Zs} which matches whitespace/invisible separators 
+	  MatchesRegex(/\s+(\p{Lu}\p{M}*(\p{Ll}\p{M}*)+\p{Zs}*){1,2}\p{Zs}*/, SpanBetween(E.clue, C.match));
+	  
+	  
+--all companies
+create view CompanyInfoStrongMediumWeak as
+select R.exchange as exchange, R.ticker as ticker, R.companyname as companyname, R.rule as rule, R.match as match
+from
+(
+  (select R.exchange as exchange, R.ticker as ticker, R.companyname as companyname, R.rule as rule, R.match as match from CompanyInfoStrongMedium R)
+  union all
+  (select R.exchange as exchange, R.ticker as ticker, R.companyname as companyname, R.rule as rule, R.match as match from CompanyInfoWeak R)
+  union all
+  (select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, 'NoTik1' as rule, C.match as match from CompanyInfoWeakNoTicker1 C)
+  union all
+  (select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, 'StrongExtLeft' as rule, C.match as match from CompanyInfoStrongExtendLeftOneToTwo C)
+) R
+order by GetBegin(R.match);
+
+
+--TODO: weak rule for short title, use it for entire text as caps words
+
+  
+--************************* Special COMPANY rules for ShortText ***********************--
+
+--Find company names based on financial event clues in short text
+--extract company clues related to financial events
+create view EventClueShort as
+select E.clue as clue, 
+       --get only the context within the short text
+       CombineSpans(RightContext(E.clue,0), RightContext(A.match,0)) as rc
+from EventClue E, ShortText A
+where Contains(A.match, E.clue);
+
+ 
+-- look for patterns of the form "to acquire/buy [new_company_name]"
+create view CompanyInfoWeakNoTickerShortTemp2 as
+select RightContext(CW.companyname,0) as exchange, RightContext(CW.companyname,0) as ticker, CW.companyname as companyname, CW.companyname as match
+from
+(
+  extract 
+  	-- Sudarshan regex : 10/13/2011 - backreference on lines 547 and 548
+	regexes /\A[ ]*(\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|-)+([ ]*\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|-)+){0,4})[ ]*(\.)?[ ]*\z/ and
+            /\A[ ]*(\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|-)+([ ]*\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|-)+){0,4})[ ]*;/
+    on E.rc
+    return 
+    	group 1 as companyname
+  from EventClueShort E
+) CW
+where Not(ContainsDict('FiltersForFinancialAnnouncements', CW.companyname));
+
+/*
+create view temp as
+extract 
+    regexes /\A[ ]*(\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|-)+([ ]*\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|-)+)*)[ ]*(\.)?[ ]*\z/ and
+            /\A[ ]*(\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|-)+([ ]*\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|-)+)*)[ ]*;/
+            on E.rc 
+  --regex /\A[ ]*(\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|-)+([ ]*\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|-)+)*)[ ]*\z/ on E.rc 
+  --regex /\A[ ]*(\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|-)+([ ]*\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|-)+)*)[ ]*(\.|;)?[ ]*\z/ on E.rc 
+    	return 
+    		group 1 as companyname
+  from EventClueShort E;
+  
+output view temp;
+*/
+
+
+create view Conjunction as
+extract 
+	dictionary 'ConjunctionsInEnglish'
+	on D.text as match
+from DocumentText D;
+
+--look for patterns of the form "to acquire/buy [strong_medium_weak_company] and [new_company_name]"
+create view CompanyInfoWeakNoTickerShortTemp3 as
+select RightContext(CW.companyname,0) as exchange, RightContext(CW.companyname,0) as ticker, CW.companyname as companyname, CW.companyname as match
+from
+(
+  extract 
+    --company names occuring after "and"
+    -- Sudarshan regex : 10/13/2011 - backreference on lines 586 and 587
+	regexes /\A[ ]*(\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|-)+([ ]*\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|-)+)*)[ ]*(\.)?[ ]*\z/ and
+            /\A[ ]*(\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|-)+([ ]*\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|-)+)*)[ ]*;/
+            on E.comprc 
+    	return 
+    		group 1 as companyname
+  from 
+  (
+  	select SpanIntersection(E.rc, RightContext(Conj.match, 70)) as comprc
+  	from EventClueShort E, CompanyInfoStrongMediumWeak C, Conjunction Conj
+  	where FollowsTok(E.clue, C.match, 0, 0) and 
+  		  FollowsTok(C.match, Conj.match, 0, 0) and
+  		  NotNull(SpanIntersection(E.rc, RightContext(Conj.match, 70)))
+  ) E
+) CW
+where Not(ContainsDict('FiltersForFinancialAnnouncements', CW.companyname));
+
+--look for patterns of the form "to acquire/buy [new_company_name] and [strong_medium_weak_company]"
+create view CompanyInfoWeakNoTickerShortTemp4 as
+select RightContext(CW.companyname,0) as exchange, RightContext(CW.companyname,0) as ticker, CW.companyname as companyname, CW.companyname as match
+from
+(
+  extract 
+  	-- Sudarshan regex : 10/13/2011 - backreference on line 610
+	regex /\A[ ]*(\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|-)+([ ]*\p{Lu}\p{M}*(\p{L}\p{M}*|'|,|[ ]*&|-)+)*)[ ]*(\.)?[ ]*\z/
+            on E.match
+    	return 
+    		group 1 as companyname
+  from 
+  (
+  	select SpanBetween(E.clue, Conj.match) as match
+  	from EventClueShort E, CompanyInfoStrongMediumWeak C, Conjunction Conj
+  	where FollowsTok(E.clue, Conj.match, 1, 5) and 
+  		  FollowsTok(Conj.match, C.match, 0, 0)
+  ) E
+) CW
+where Not(ContainsDict('FiltersForFinancialAnnouncements', CW.companyname));
+
+
+
+create view CompanyInfoWeakNoTickerShortTemp as
+select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match
+from
+(
+  (select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, 'NoTik2' as rule, C.match as match from CompanyInfoWeakNoTickerShortTemp2 C)
+  union all
+  (select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, 'NoTik3' as rule, C.match as match from CompanyInfoWeakNoTickerShortTemp3 C)
+  union all
+  (select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, 'NoTik4' as rule, C.match as match from CompanyInfoWeakNoTickerShortTemp4 C)
+) C
+order by GetBegin(C.match);
+
+
+--weak company w/o ticker overlapping with strong company
+create view CompanyInfoWeakNoTickerOverlapStrongShort234 as
+select CW.exchange as exchange, CW.ticker as ticker, CW.companyname as companyname, CW.rule as rule, CW.match as match
+from CompanyInfoWeakNoTickerShortTemp CW, Orgs CS
+where Overlaps(CW.companyname, CS.org) and 
+      --keep names with strong company clue suffix (as an extesion of the strong company to the left)
+      Not(Equals(GetEnd(CW.match), GetEnd(CS.org)));
+
+
+--weak company w/o ticker not overlapping with strong company
+create view CompanyInfoWeakNoTickerShort234 as
+(select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match from CompanyInfoWeakNoTickerShortTemp C)
+minus
+(select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match from CompanyInfoWeakNoTickerOverlapStrongShort234 C);
+
+
+
+
+  --************************* Company info general and from short text ***********************--
+
+create view CompanyInfoAll as
+select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match
+from
+(
+  (select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match from CompanyInfoStrongMediumWeak C)
+  union all
+  (select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match from CompanyInfoWeakNoTickerShort234 C)
+) C
+order by GetBegin(C.match);
+  		
+  		
+create view CompanyInfo as
+select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match
+from CompanyInfoAll C
+consolidate on C.match using 'LeftToRight';
+
+
+-- *************** Identify subsidiary information ***********************--
+
+create view SubsidiaryMatch as
+extract 
+	dictionary 'PositiveCluesForFinancialOrganizations' 
+	on D.text as match
+from DocumentText D;
+
+
+create view OfMatch as
+extract 
+	dictionary 'OfAsAToken' 
+	on D.text as match
+from DocumentText D;
+
+create view CommaMatch as
+extract 
+	dictionary 'CommaAsAToken' 
+	on D.text as match
+from DocumentText D;
+
+-- match patterns of the form "[company-name]'s subsidiary"
+create view ParentCompanyInfo1 as
+select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule,
+       C.match as originalmatch,
+	   CombineSpans(C.match, S.match) as match
+from CompanyInfo C, SubsidiaryMatch S
+where FollowsTok(C.match, S.match, 0, 2) and
+	-- Sudarshan regex : 10/13/2011 - backreference on lines 715 and 741
+      MatchesRegex(/\s*(('s)|')?\s*/, SpanBetween(C.match, S.match)); --'
+
+-- match patterns of the form "A subsidiary, B" and retain B as company info
+create view PrimaryCompanyInfo1 as
+select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, 
+       CombineSpans(P.match, C.match) as match
+from ParentCompanyInfo1 P, CompanyInfo C
+where FollowsTok(P.match, C.match, 0, 1) and
+      MatchesRegex(/\s*,?\s*/, SpanBetween(P.match, C.match));
+
+-- match patterns of the form "subsidiary of [company-name]"
+create view ParentCompanyInfo2 as
+select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule,
+       C.match as originalmatch, 
+       CombineSpans(S.match, C.match) as match
+from SubsidiaryMatch S, CompanyInfo C, OfMatch O
+where FollowsTok(S.match, O.match, 0, 0) and
+      FollowsTok(O.match, C.match, 0, 0);
+      
+-- match patterns of the form "A subsidiary of B" and retain A as company info
+create view PrimaryCompanyInfo2 as
+select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, 
+       CombineSpans(C.match, P.match) as match,
+       C.match as originalmatch
+from CompanyInfo C, ParentCompanyInfo2 P
+where FollowsTok(C.match, P.match, 0, 2) and
+      MatchesRegex(/\s*,?\s*(a|an)?\s*/, SpanBetween(C.match, P.match));
+      
+
+-- match patterns of the form "[company-name]'s"      
+create view ParentCompanyInfo3Potential as
+select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match
+from CompanyInfo C
+where MatchesRegex(/'s/, RightContext(C.companyname,2) ); --'
+
+
+-- match patterns of the form "A's B" and retain B as company info
+create view PrimaryCompanyInfo3 as
+select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, 
+       CombineSpans(P.match, C.match) as match
+from ParentCompanyInfo3Potential P, CompanyInfo C
+where FollowsTok(P.match, C.match, 0, 2) and
+      -- check if the span between is whitespace or contains the character ')' - artifact from strong company ticker
+      Or(MatchesRegex(/[ ]*\)?[ ]*/, SpanBetween(P.match, C.match)) ,
+         MatchesRegex(/'s\s*/, SpanBetween(P.companyname, C.match))  --'
+        );
+      
+
+-- union all parent companies - to filter out from the set of financial companies
+create view ParentCompanyInfoAll as
+( select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match, C.originalmatch as originalmatch from ParentCompanyInfo1 C)
+union all
+( select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match, C.originalmatch as originalmatch from ParentCompanyInfo2 C);
+--
+--union all
+--( select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match from ParentCompanyInfo3Potential C);
+
+
+--union all PrimaryCompanies -- to be consolidated with all companies
+create view PrimaryCompanyInfoAll as
+( select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match from PrimaryCompanyInfo1 C)
+union all
+( select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match from PrimaryCompanyInfo2 C)
+union all
+( select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match from PrimaryCompanyInfo3 C);
+
+
+create view SubsidiaryMissed as
+( select S.match as match from SubsidiaryMatch S )
+minus
+( select S.match as match from SubsidiaryMatch S, ParentCompanyInfoAll C where Contains(C.match, S.match) );
+
+
+create view CompanyInfoWithPrimary as
+select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match
+from
+(
+	( select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match from PrimaryCompanyInfoAll C)
+	union all
+	( select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match from CompanyInfo C)
+) C
+consolidate on C.match;
+
+create view CompanyInfoWithPrimaryNoParent as
+( select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match from CompanyInfoWithPrimary C )
+minus
+( select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.originalmatch as match from ParentCompanyInfoAll C );
+
+
+-- *************** Separate CompanyInfo in Short and Long Text ***********************--
+
+create view CompanyInfoShort as
+select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match
+from CompanyInfoWithPrimaryNoParent C, ShortText A
+where Contains(A.match, C.match);
+
+
+create view CompanyInfoLong as
+select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match
+from CompanyInfoWithPrimaryNoParent C, LongText A
+where Contains(A.match, C.match);
+
+create view CompanyInfoShortLong as
+select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match 
+from 
+(
+	( select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match from CompanyInfoShort C )
+	union all
+	( select C.exchange as exchange, C.ticker as ticker, C.companyname as companyname, C.rule as rule, C.match as match from CompanyInfoLong C )
+) C
+consolidate on C.match;

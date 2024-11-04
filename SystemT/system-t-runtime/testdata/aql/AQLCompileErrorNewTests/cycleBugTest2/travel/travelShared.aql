@@ -1,0 +1,809 @@
+module travel;
+
+import dictionary Loc_Alias_USCities_Dict from module geographicExtractorText as Loc_Alias_USCities_Dict;
+import dictionary Loc_Alias_NonUSCities_Dict from module geographicExtractorText as Loc_Alias_NonUSCities_Dict;
+import dictionary Loc_Alias_USStates_Dict from module geographicExtractorText as Loc_Alias_USStates_Dict;
+import dictionary Loc_Alias_Countries_Dict from module geographicExtractorText as Loc_Alias_Countries_Dict;
+import dictionary Loc_CitiesDict from module geographicExtractorText as Loc_CitiesDict;
+import dictionary Loc_StatesDict from module geographicExtractorText as Loc_StatesDict;
+import dictionary Loc_StateAbbrvsDict from module geographicExtractorText as Loc_StateAbbrvsDict;
+import dictionary Loc_CountryDict from module geographicExtractorText as Loc_CountryDict;
+import dictionary Loc_CountryDict_Alias from module geographicExtractorText as Loc_CountryDict_Alias;
+import dictionary Loc_AmbiguousCitiesDict from module geographicExtractorText as Loc_AmbiguousCitiesDict;
+import dictionary Loc_AmbiguousMentions_Dict from module geographicExtractorText as Loc_AmbiguousMentions_Dict;
+import table Loc_StateToAbbrv from module geographicExtractorText as Loc_StateToAbbrv;
+ 
+-- Common travel dictionaries and views
+--include 'geographic/dictionaries/Loc_DictsAndTables.aql';
+
+-- Aliases
+
+create dictionary travel_to_word_dict as 
+('to',
+'2');
+
+create dictionary travel_my_dict as 
+('my',
+'our');
+
+create dictionary travel_firstPerson_pronoun_dict as 
+('I',
+'we');
+
+
+create dictionary travel_bookWord_dict as
+('booked',
+'to book',
+'booking');
+
+create dictionary travel_sentenceEnd_dict as
+('!',
+'!!',
+'!!!',
+--'.',
+'?',
+'??',
+'???',
+'!?',
+'?!',
+'!?!');
+
+create view travel_firstPersonPronoun as 
+extract dictionary 'travel_firstPerson_pronoun_dict'  on D.text as iWe
+from travel_inputView D;
+
+-- Other dictionaries and views
+
+
+
+
+create dictionary travel_habitual_dict as 
+('every time',
+'regularly');
+
+create dictionary travel_negation_dict as 
+('didn\'t',
+'not',
+'no',
+'don\'t',
+'dont',
+'should have',
+'should of',
+'shouldve',
+'should\'ve',
+'had a dream',
+'don' -- seems to be needed to catch some don'ts, don't understand why
+);
+
+
+create dictionary travel_noti_dict as 
+('he',
+'she',
+'they',
+'you',
+'u',
+'your',
+'my bro',
+'my brother',
+'my sis',
+'my sister',
+'my mom',
+'my dad',
+'my mother',
+'my father',
+'my friend',
+'my best friend',
+'my mother',
+'my father',
+'my parents'
+--'does',
+-- This one is actually okay if it's the first thing in the pattenrn...
+--'@'
+);
+
+
+-- This is an internal-only dictionary; we'd never think of moving it outside the file, even
+-- in a final version.
+create dictionary travel_I_dict as (
+'I',
+'we',
+'Im',
+'I\'m',
+'I am',
+'We are',
+'we r',
+'we\'re',
+'.', -- in a tweet, a sentence w/o a subject has an implicit I.  This rule is clumsy, though.
+',',
+'!'
+);
+
+
+create dictionary travel_firstperson_present_dict as (
+'I\'m',
+'I \' m',
+'I am',
+'Im',
+'We are',
+'we r',
+'we\'re',
+'we \' re');
+
+create view travel_firstperson_present as 
+extract dictionary 'travel_firstperson_present_dict' on I.text as firstPerson
+from travel_inputView I;
+
+
+create dictionary travel_adverb_dict as 
+('finally',
+'already',
+'just',
+'on the way to',
+'on my way to',
+'chilling',
+'sick',
+'now',
+'chillin',
+'chilling',
+'currently',
+'out',
+'holy shit');
+
+create dictionary travel_liveNotTravel_dict as 
+('move',
+'live',
+'lived',
+'stay');
+
+create view travel_username as
+extract regex /@[A-Za-z0-9_]+/ on between 2 and 14 tokens in I.text as username
+from travel_inputView I;
+
+-- anyone else at airportname
+-- Airport names that are not words go here.
+create dictionary travel_airportnames_dict with case insensitive as 
+('EWR',
+'JFK',
+'SFO',
+'ORD',
+'LGA',
+'ATL',
+'SFO',
+'PHX',
+'IAH',
+'DFW');
+
+-- airport names that are words go here.
+create dictionary travel_airportnames_case_dict with case exact as
+('SEA',
+'LAX',
+'DEN',
+'LAS',
+'MIA');
+
+--Create a dictionary for all the 4000+ airports obtained from the FAA website.
+create dictionary airports_within_USA_dict from file 
+	'dictionaries/airport_usa.dict' with
+	case exact;
+	
+create view travel_airports_US as 
+	extract D.text as text, dictionary 'airports_within_USA_dict' on D.text as airport_names 
+from travel_inputView D
+--having Not(ContainsDict('dictionaries/airport_filter_phrases.dict',text))
+;
+
+create view travel_airportname_allcase as
+extract dictionary 'travel_airportnames_dict' on D.text  as airportName
+from travel_inputView D; 
+
+create view travel_airportname_uppercase as
+extract dictionary 'travel_airportnames_case_dict' on D.text as airportName
+from travel_inputView D;
+
+create view travel_airportname_withdup as
+(select * from travel_airportname_allcase)
+union all
+(select * from travel_airportname_uppercase)
+union all
+(select C.airport_names as airportName from travel_airports_US C);
+
+create view travel_airportname as
+select A.airportName as airportName 
+from  travel_airportname_withdup A
+consolidate on A.airportName using 'ExactMatch';
+
+create dictionary travel_airport_dict as
+('airport');
+
+create view travel_airport as
+extract dictionary 'travel_airport_dict' on D.text as airport
+from travel_inputView D;
+
+create view travel_airportNameOrAirportWord as
+(select A.airportName as airport from travel_airportname A)
+union all
+(select B.airport as airport from travel_airport B);
+
+create view travel_begin as
+extract regex /^/  on D.text as begin
+from travel_inputView D;
+
+create view travel_end as
+extract regex /$/ on D.text as end
+from travel_inputView D;
+
+create view travel_I_fromdict as 
+extract dictionary 'travel_I_dict'  on D.text as firstPerson from
+travel_inputView D;
+
+create view travel_I_all_plain as
+(select A.begin as firstPerson from travel_begin A)
+union all
+(select B.firstPerson as firstPerson from travel_I_fromdict B);
+
+create view travel_I_adverb as
+select CombineSpans(I.firstPerson, RightContextTok(I.firstPerson,1)) as firstPerson -- protected automatically
+from travel_I_all_plain I
+where MatchesDict('travel_adverb_dict', RightContextTok(I.firstPerson,1));
+
+create view travel_I_all as 
+(select A.firstPerson as firstPerson from travel_I_all_plain A)
+union all
+(select B.firstPerson as firstPerson from travel_I_adverb B);
+
+create view travel_I_present as
+select A.firstPerson as firstPerson 
+from travel_I_all A, travel_begin B
+where Or(Overlaps(A.firstPerson,B.begin),
+		ContainsDict('travel_firstperson_present_dict',CombineSpans(A.firstPerson,RightContextTok(A.firstPerson,3)))); --protected automatically
+
+		
+-- Three destination dictionaries
+-- (1) in dictionary, for places you can be "in", eg, "in California"
+create dictionary travel_destination_in_dict from file
+'dictionaries/destination_in.dict' with
+	case insensitive;
+
+-- (2) at dictionary, for places you can be "at", eg, "at Legoland", "at Seaworld", but not "at California"
+create dictionary travel_destination_at_dict from file 
+	'dictionaries/destination_at.dict' with
+	case insensitive;
+
+-- (3) case-sensitive dictionary.  So far this is only "in" terms.  "in LA"
+create dictionary travel_destination_case_dict from file
+	'dictionaries/destination_in_case.dict' with
+	case exact;
+
+-- These are hand-selected not-destinations
+create dictionary travel_AmbiguousDestDict
+	from file 'dictionaries/travel_AmbiguousDest.dict';
+
+-- These are probably not destinations, generated via an automated process
+create dictionary travel_commonWordsDict 
+	from file 'dictionaries/travel_commonWords.dict';
+
+-- Three destination dictionaries
+-- (1) in dictionary, for places you can be "in", eg, "in California"
+create dictionary travel_destination_remove_dict from file
+'dictionaries/travel_filter.dict' with
+	case insensitive;
+
+
+-- Gather all destinations into one view
+create view travel_destination_word_nocase as 
+extract D.text as text,
+	dictionaries 
+	-- See next view
+	--'travel_destination_at_dict'  and 
+	--	'travel_destination_in_dict' and
+		'Loc_Alias_USCities_Dict' and
+		'Loc_Alias_NonUSCities_Dict' and
+		'Loc_Alias_USStates_Dict' and
+		'Loc_Alias_Countries_Dict' and
+		 'Loc_StatesDict' and
+		 'Loc_CitiesDict' and
+	--	  'Loc_StateAbbrvsDict' and
+		   'Loc_CountryDict' and
+		    'Loc_CountryDict_Alias' and
+		     'travel_airportnames_dict'
+	on D.text as destination
+from travel_inputView D
+having Not(MatchesDict('Loc_AmbiguousCitiesDict',destination)) and
+	Not(MatchesDict('Loc_AmbiguousMentions_Dict',destination)) and
+	Not(MatchesDict('travel_AmbiguousDestDict',destination)) and
+	Not(MatchesDict('travel_commonWordsDict',destination));
+
+create view travel_destination_word_nocase_local as 
+extract D.text as text,
+	dictionaries 'travel_destination_at_dict'  and 
+		'travel_destination_in_dict'  on D.text as destination
+from travel_inputView D;
+
+create view travel_destination_word_case as 
+extract D.text as text,
+	dictionaries 'travel_destination_case_dict' and
+		'travel_airportnames_case_dict'
+	with flags 'Exact' on D.text as destination
+from travel_inputView D;
+
+create view travel_state_full as
+extract dictionary 'Loc_StatesDict' on I.text as stateName
+from travel_inputView I;
+
+create view travel_state_abbrev1 as
+extract dictionary 'Loc_StateAbbrvsDict' 
+on I.text as stateAbbr
+from travel_inputView I
+having MatchesRegex(/[A-Z][A-Z]\.?/,stateAbbr)
+;
+
+-- Needed for bug in multilingual mode.  Otherwise, worthless.
+create view travel_state_abbrev2a as
+extract dictionary 'dictionaries/state_abbrev.dict' on I.text as stateAbbrWithPeriod
+from travel_inputView I
+having MatchesRegex(/[A-Z][A-Z]\./,stateAbbrWithPeriod);
+
+create view travel_state_abbrev2b as 
+extract regex /[A-Z][A-Z]/ on A.stateAbbrWithPeriod as stateAbbr
+from  travel_state_abbrev2a A;
+
+create view travel_state_abbrev as 
+select 
+A.stateAbbr as stateAbbr
+from ((select B.stateAbbr as stateAbbr from travel_state_abbrev2b B ) union all (select C.stateAbbr as stateAbbr from travel_state_abbrev1 C)) A
+consolidate on A.stateAbbr using 'ExactMatch';
+
+create view travel_city as 
+extract dictionary 'Loc_CitiesDict' on I.text as cityName
+from travel_inputView I;
+
+create view travel_comma as 
+extract regex /,/ on between 1 and 1 tokens in I.text as comma
+from travel_inputView I;
+
+create view travel_destinationCityState_1 as
+select I.text as text,
+	C.cityName as city,
+	S.stateAbbr as state,
+CombineSpans(C.cityName,S.stateAbbr) as destination 
+from travel_city C, travel_state_abbrev S, travel_comma A, travel_inputView I
+where FollowsTok(C.cityName,A.comma,0,0) and
+	  FollowsTok(A.comma, S.stateAbbr,0,0);
+
+create view travel_destinationCityState_2 as
+select I.text as text,
+	C.cityName as city,
+--	S.stateName as state,
+	T.abbrv as state,
+CombineSpans(C.cityName,S.stateName) as destination 
+from travel_city C, travel_state_full S, travel_comma A, travel_inputView I,Loc_StateToAbbrv T
+where FollowsTok(C.cityName,A.comma,0,0) and
+	  FollowsTok(A.comma, S.stateName,0,0) and
+	  Equals(ToLowerCase(S.stateName),ToLowerCase(T.state))
+	;
+
+create view travel_destinationCityState as
+select A.text as text, A.destination as destination, A.city as city, A.state as state 
+from ((select B.*  from travel_destinationCityState_1 B) 
+      union all
+      (select C.*  from travel_destinationCityState_2 C)
+     ) A
+consolidate on A.destination using 'ContainedWithin';
+
+	
+create view travel_destination_word_withdup as 
+(select * from travel_destination_word_nocase)
+union all
+(select * from travel_destination_word_case)
+union all
+(select C.text as text, C.destination as destination  from travel_destinationCityState C)
+union all
+(select * from travel_destination_word_nocase_local);
+
+create dictionary travel_destination_right_disqualifier_dict as
+('\'',
+'\'s',
+'arena',
+'statium',
+'park',
+'location',
+'state');
+
+create dictionary travel_destination_left_disqualifier_dict as 
+('dr',
+'mr',
+'mrs',
+'ms');
+
+create view travel_destination_word as
+select A.text as text,
+	A.destination as destination
+	 --  ,RightContextTok(A.destination,1) as rightContext
+	   from travel_destination_word_withdup A
+where Not(MatchesDict('travel_destination_right_disqualifier_dict',RightContextTok(A.destination,1))) and
+Not(MatchesDict('travel_destination_left_disqualifier_dict',LeftContextTok(A.destination,1)))
+consolidate on A.destination using 'ExactMatch';
+
+
+
+
+-- Words for trips.  
+create dictionary travel_trip_word_dict as 
+('trip',
+'vacation',
+'vacay',
+'travel',
+'road trip',
+'roadtrip',
+'journey'
+);
+
+
+-- view for all trip words
+-- we could filter for  trips here instead of later.
+create view travel_trip_word as 
+extract D.text as text,
+	dictionary 'travel_trip_word_dict'  on  D.text
+	as tripWord
+from travel_inputView D;  
+
+-- a dictionary of mundane destinations, used to exclude "kids need a trip to the dentist" from rule.
+-- expanding this could help; but it may be an unending task
+create dictionary travel_boring_trip as 
+(
+'gym',
+'grow',
+'in Christ',
+'dentist',
+'dentists',
+'doctor',
+'doctors',
+'store',
+'grocery store',
+'@',
+'\'s',
+'mall',
+'bookstore',
+'pepper pot',
+'applebee',
+'applebees',
+'burger king',
+'McDonalds',
+'mc donalds',
+'church',
+'library',
+'strip club',
+'vet',
+'vets',
+'mechanic',
+'mechanics',
+'memory lane',
+'down memory lane',
+'Mickey',
+'future',
+'into the future',
+'into',
+'work',
+'movies',
+'movie',
+'target',
+'vicky',
+'victoria\'s secret',
+'victorias secret', 
+'secret',
+'the',
+'that',
+'shopping',
+'pizza kitchen',
+'bed',
+'field',
+'school',
+'red lobster',
+'bed',
+'game',
+'love',
+'rock',
+'see',
+'make',
+'how',
+'the shops',
+'shopping',
+'the store',
+'store',
+'white castle'
+);
+
+create view travel_tripOrDest_Pre_Filter as	
+(select D.text as text, D.destination as indirectObject
+	from travel_destination_word D)
+union all
+(select D.text as text , D.tripWord as indirectObject
+	from travel_trip_word D);
+
+
+create view travel_tripOrDest as 
+select D.text as text, D.indirectObject as indirectObject from travel_tripOrDest_Pre_Filter D
+where Not(ContainsDict('travel_destination_remove_dict',D.indirectObject));
+	
+	
+/*
+output view travel_destination_word;
+output view travel_trip_word;	
+*/
+-- Look for tweets saying "trip to" , but exclude mundane destinations.
+-- No time frame estimated in this view -- this should contribute to "unknown" if not otherwise represented
+create view travel_tripto as 
+select T.text as text,
+CombineSpans(T.tripWord,RightContextTok(T.tripWord,1)) as keyPhrase -- protected via context
+from travel_trip_word T where
+MatchesDict('travel_to_word_dict',RightContextTok(T.tripWord,1)) and
+Not(ContainsDict('travel_boring_trip',RightContextTok(T.tripWord,5))) and
+Not(ContainsDict('travel_boring_trip',LeftContextTok(T.tripWord,3)));
+
+-- my trip
+create view travel_myWord as 
+extract dictionary 'travel_my_dict' on D.text as my
+from travel_inputView D;
+
+-- Look for a trip description...
+create view travel_mytrip as
+extract
+	pattern <M.my> <Token>{0,2} <T.tripWord> as keyPhrase
+from travel_trip_word T, travel_myWord M
+having Not(ContainsDict('travel_boring_trip',keyPhrase));
+
+-- buyObjects -- used by intent and wishful
+create dictionary travel_buyObject_dict as
+('plane tickets',
+'plane ticket',
+'airplane tickets',
+'airplane ticket',
+'vacation package',
+'cruise tickets',
+'cruise ticket',
+'flight ticket',
+'flight tickets',
+'cruise package',
+'train tickets',
+'train ticket');
+
+-- unknown time frame
+create dictionary travel_strongtravel_notime_dict as
+('on my flight',
+'on our flight',
+'my hotel',
+'our hotel',
+'my flight',
+'our flight',
+'my plane',
+'our plane',
+'my airplane',
+'our airplane',
+'my train',
+'our train',
+'road trip',
+'roadtrip',
+'my connecting flight',
+'our connecting flight'
+);
+
+create dictionary travel_notime_travelObj_dict as
+('flight',
+	'hotel');
+
+create view travel_notime_travelObj as 
+extract dictionary 'travel_notime_travelObj_dict' on I.text as flight
+from travel_inputView I;
+
+create view travel_strongtravel_notime as
+(extract dictionary 'travel_strongtravel_notime_dict' on I.text as keyPhrase
+from travel_inputView I)
+union all 
+(select CombineSpans(M.my,F.flight) as keyPhrase
+from travel_myWord M, travel_notime_travelObj F 
+where FollowsTok(M.my,F.flight,0,2)
+)
+;
+
+create dictionary travel_ononly_dict as 
+(
+'on'
+);
+
+create view travel_onWord as 
+extract dictionary 'travel_ononly_dict' on I.text as onWord
+from travel_inputView I;
+
+create view travel_onMyFlight as
+select CombineSpans(O.onWord, T.keyPhrase) as onMyFlight
+from travel_strongtravel_notime T, travel_onWord O
+where FollowsTok(O.onWord,T.keyPhrase,0,1);
+
+-- visiting my friends in
+
+create dictionary travel_in_dict as
+('in');
+
+create view travel_inWord as 
+extract dictionary 'travel_in_dict' on I.text as inWord
+from travel_inputView I;
+
+create dictionary travel_atin_dict as
+('at','in','@');
+
+create view travel_atWord as
+extract dictionary 'travel_atin_dict' on D.text as at 
+from travel_inputView D;
+
+--
+
+-- "in aberdeen airport"
+create view travel_inDestAirport as
+select CombineSpans(A.at,P.airport) as inDestAirport
+from travel_destination_word D, travel_atWord A,travel_airport P
+where FollowsTok(A.at,D.destination,0,0) and
+	FollowsTok(D.destination,P.airport,0,0);
+
+-- Dictionary of strong travel indicators.  
+-- 		If proceeded by an "until/til/when", etc, then intent
+--		If a want, wanna, etc then wishful
+-- 		If neither, then present.
+-- view is named for 'leaving on a jet plane' pattern.
+create dictionary travel_jetplane_dict as 
+('leaving on a jet plane',
+'getting on a plane',
+'getting on the plane',
+'getting on the jet plane',
+'getting on a jet plane',
+'boarding the plane',
+'boarding a plane',
+'in airport waiting', -- waiting makes sure it's not news
+'in the airport waiting'
+);
+
+
+create dictionary travel_jetplane_exclude_dict as
+('peter','#np','johndenver','#now playing','classic','classics');
+
+create view travel_jetplane as 
+extract D.text as text,
+	dictionary 'travel_jetplane_dict' on D.text as leavingOnJetPlane
+from travel_inputView D
+having Not(ContainsDict('travel_jetplane_exclude_dict',text));
+
+create view travel_presentTravelIndicator as
+(select A.leavingOnJetPlane as travelAct from travel_jetplane A)
+union all
+(select B.inDestAirport as travelAct from travel_inDestAirport B);
+
+create dictionary travel_peopleToVisit_dict as 
+('friend',
+'friends',
+'mom',
+'dad',
+'mother',
+'sister',
+'sis',
+'bro',
+'brother',
+'cousin',
+'family',
+'familia');
+
+create view travel_peopleToVisit as 
+extract dictionary 'travel_peopleToVisit_dict' on I.text as host
+from travel_inputView I;
+
+create view travel_MyIn as 
+select CombineSpans(M.my,I.inWord) as myFriendIn
+from travel_inWord I, travel_myWord M, travel_peopleToVisit V
+where FollowsTok(M.my, V.host,0,2) and
+	FollowsTok(V.host,I.inWord,0,2);
+
+create dictionary travel_currently_visiting as
+('I\'m visiting',
+'Im visiting',
+'I am visiting',
+'visiting');
+
+create view travel_visiting_word as 
+extract dictionary 'travel_currently_visiting' on I.text as visiting
+from travel_inputView I;
+
+-- used in both intent and ontrip
+create view travel_visitingMyFriendIn as
+(select CombineSpans(V.visiting, M.myFriendIn) as keyPhrase
+from travel_MyIn M, travel_visiting_word V
+where Follows(V.visiting,M.myFriendIn,0,140))
+union all
+(select CombineSpans(V.visiting,I.inWord) as keyPhrase
+from  travel_peopleToVisit P, travel_visiting_word V , travel_inWord I
+where FollowsTok(V.visiting,P.host,0,2) and
+	FollowsTok(P.host,I.inWord,0,1) and 
+	ContainsDict('travel_firstPerson_pronoun_dict',V.visiting)
+	);
+
+--- wishful clues
+create view travel_wishful_wanna as 
+extract regex /[Ww]+[Aa]+[Nn][Nn]+[Aa]+/ on between 1 and 1 tokens in D.text as wishPhrase
+from travel_inputView D
+having ContainsDict('travel_firstPerson_pronoun_dict',LeftContextTok(wishPhrase,2));
+
+create view travel_wishful_pattern_iwant as
+extract pattern 'I' <Token> 'want' 'to' as wishPhrase
+from travel_inputView D;
+
+  --- Look for wishful phrases
+create dictionary travel_wishful_dict as (
+'hopefully, I\'ll be able to',
+'hopefully, I can',
+'hopefully, I will',
+'hopefully, I\'ll',
+'hopefully, ill',
+'hopefully I\'ll be able to',
+'hopefully I can',
+'hopefully I will',
+'hopefully I\'ll',
+'hopefully ill',
+'hope I\'ll be able to',
+'hope I can',
+'hope I will',
+'hope I\'ll',
+'hope ill',
+'I want to',
+'wanna',
+'I wish',
+'wishing I',
+'have to',
+'need to',
+'before I die',
+'can i',
+', always wanted',
+'. always wanted',
+'always wanted',
+'my dream is to',
+'im determined to',
+'i am determined to',
+'i\'m determined to',
+'would like to',
+'wish',
+'wanted to',
+'wish I could');
+--wanted
+
+--exclude
+-- you wanna 
+create view travel_wishful_fromdict as 
+extract dictionary 'travel_wishful_dict'  on D.text  as wishPhrase
+from travel_inputView D having
+Not(MatchesDict('travel_noti_dict',LeftContextTok(wishPhrase,1)));
+
+
+--output view travel_wishful_fromdict;
+
+create view travel_wishful_all as 
+(select * from travel_wishful_pattern_iwant)
+union all
+(select * from travel_wishful_fromdict)
+union all
+(select * from travel_wishful_wanna);
+
+--- Roadtrip base.  Roadtrip is a very strong present indicator, unless there's a gooing.
+
+create dictionary travel_roadtrip_dict as
+('roadtrip',
+'#roadtrip',
+'#road #trip',
+ '#road #trip',
+ '#road#trip',
+ 'road trip');
+
+create view travel_roadtrip as 
+extract I.text as text,
+dictionary 'travel_roadtrip_dict' on I.text as roadtrip
+from travel_inputView I
+consolidate on roadtrip using 'ContainedWithin';
+
+create dictionary travel_going_dict  as 
+('going'
+);

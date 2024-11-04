@@ -1,0 +1,46 @@
+ create view CanadianProvinceStrongAbbrev  as
+	select
+		D.match as match
+	from
+		Dictionary('location/provinceAbbrev_canada.dict',  'Exact', Doc.text) D;
+
+create view CanadianProvinceWeakAbbrev  as
+	select
+		D.match as match
+	from
+		Dictionary('location/provinceAbbrev_canada.dict',  Doc.text) D;
+		
+
+-- Yunyao: created on 05/22/2008
+
+-- major cities around the world
+create view MajorCity1 as
+	select 
+		D.match as match
+	from
+		Dictionary('cities/majorCity_world.dict', Doc.text) D;
+		
+create view MajorCity2 as
+	select 
+		D.match as match
+	from
+		Dictionary('cities/majorCities.dict', Doc.text) D;
+		
+-- created to make sure that we capture cities in the bay area
+create view MajorCity3 as
+	select 
+		D.match as match
+	from
+		Dictionary('cities/city_bayarea.dict', Doc.text) D;
+		
+		
+create view MajorCity as
+	(select	M.match as match
+	 from MajorCity1 M)
+	 union all
+	(select	M.match as match
+	 from MajorCity2 M)
+	 union all
+	(select	M.match as match
+	 from MajorCity3 M);
+	 

@@ -1,0 +1,34 @@
+module travel;
+
+-- Obviously extremely simplistic; precision is about 70%, most of the false positives
+-- are ads the like.
+
+create dictionary travel_desc_dict as 
+(
+'travel',
+'go places',
+'travelling',
+'traveller',
+'traveler',
+'traveling'
+);
+
+create dictionary travel_desc_spamClues_dict as
+('visit our website',
+'secrets',
+'questions answered',
+'deal',
+'deals',
+'just got easier',
+'agency',
+'company'
+);
+
+-- renamed travelers (from travelers_from_desc) again 
+-- to make the test cases pass.  We need to fix this.
+create view travelers as 
+	extract D.text as text,
+		dictionary travel_desc_dict on D.text as keyPhrase
+from Document D
+having Not(ContainsDict('travel_desc_spamClues_dict',text));
+

@@ -1,0 +1,22 @@
+
+-- ******************************************
+-- (i) Extract each line from the input log
+-- ******************************************
+
+create view SingleLine_Intermediate_Span as 
+    extract 
+		-- all new lines
+        -- regex /[^\n]*(\n)/
+        -- new lines of length at least 3
+        -- regex /[^\n]{3,}(\n)/
+        -- fix the issue with the last \n (make it optional)
+        regex /[^\n]{3,}(\n)?/ 
+        on D.text as match
+    from Doc D;
+    
+create view SingleLine as 
+	select S.match as logSpan, GetText(S.match) as logText
+	from SingleLine_Intermediate_Span S;
+ 
+
+

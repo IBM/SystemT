@@ -1,0 +1,110 @@
+--file gives all 2 letterwords back, that are not listed in conjunctions, irrespective of case; as possible 
+--Acronymes or titles
+--chances of multiple meaning in different languages highest
+
+create dictionary gramm2Lett as
+(
+    'in', 'or', 'on', 
+
+'en','by','so','ah','uh','oh','eh','an','ce','il','er','he','it','es','se','ne','as','ja','nö','da','je','tu','yo','le','la','el','de','du','hi'
+); -- still incomplete, order alphabetically attribute languages , next 3 letter words, 1 letter words, which problems increase with ordlength, what decreases, like cross-language homonymprobability
+--include also interjections with wordlike spelling or typical spelling mistakes, drop hhh,  aiu universale vokale, combine with plosives + nasals and oter common consonants, possible syllable structure for 2 letterwords 2LW is
+--VV or VC or CV
+
+create view nongramm2LW as
+        extract
+	      dictionary 'gramm2Lett' on D.text as twoLett
+        from Document D
+        having MatchesRegex Not((/\w{2}/, twoLett));
+		
+output view nongramm2LW;
+
+/*
+These items are twoletteritems which carry meaning in the specified languages   D = German FR = French EN = English ES = Spanish
+with an exclamation mark those that are present and occur most often in more than one language
+!am   D, EN
+!an   D, EN
+!as   EN, FR
+!au   FR, D
+!da  D, ES
+!de  FR, ES
+!du  FR, D
+!es  D, FR
+!in  D,EN
+!la  FR, ES
+!me  EN, FR
+!no  EN,ES
+!nu  D,FR
+!or  EN,FR
+!se  FR, ES
+!si  ES, FR
+!so  EN,D
+!su  ES,FR
+!te  FR,ES
+!tu  ES,FR
+!un  ES,FR
+!va  FR,ES
+#the most important twoletterwords with most important meanings in our corpus languages, no meanings that occur statistically too seldom
+ab   D
+ag   Case AG 
+ah   D
+ai   ES
+at   EN
+ay   ES, FR
+ca  FR(ohne UTF8)
+cc  MAIL
+cd  corps diplomatiq
+ce  FR, ES
+ci  FR
+co  &CO Ca
+eh  Interje
+ei  D
+el  ES
+en  FR,ES
+er  D
+et  FR
+eu  Case EU
+ey  EN
+go  EN
+ha  D
+he  D
+hi  EN
+ho  EN
+if  EN
+im  D
+ir  ES
+is  EN
+it  EN
+ja  D
+je  FR
+jo  D
+kz  Ca
+le  FR
+lo  ES
+ma FR
+mi ES
+na  D
+ne  FR
+ni  ES
+of EN
+oh D
+ok  EN
+ou  FR
+ox  EN
+pc  Case 
+po  D
+ps  Lat Ca
+re  L
+sa FR
+ta  FR
+ti  ES
+to  EN
+uh EN
+us EN -> US und us
+vu  FR
+we  EN
+wo  D
+ya  EN
+ye  EN
+yo  ES
+*/

@@ -1,0 +1,37 @@
+module SentimentCustom; 
+-- TODO: Add AQL content here 
+
+--------------------------
+-- Target.
+--------------------------
+create view TargetCustom as
+	select NP.text from NounPhrases NP;
+	
+create view Target as
+	(select NP.text from NounPhrases NP where MatchesDict('Target',NP.headNormalForm))
+	union all
+	(select * from TargetCustom);	
+	
+	
+--------------------------
+-- Speaker.
+--------------------------
+create view SpeakerCustom as
+	select NP.text from NounPhrases NP;
+	
+create view Speaker as
+	(select NP.text from NounPhrases NP where MatchesDict('Speaker',NP.headNormalForm))
+	union all
+	(select * from SpeakerCustom);	
+
+
+create view ImmediateExtraNegatedActions as
+	select A.*
+	from Actions A
+	where Or(Equals(GetText(A.voice),'interrogative'), Equals(GetText(A.tense),'conditional'));
+	
+create view ExtraNegatedActions as
+	select A.* 
+	from Actions A, ImmediateExtraNegatedActions NA
+	where Contains(NA.text,A.text);
+		

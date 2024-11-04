@@ -1,0 +1,281 @@
+
+--4.13 Organization
+create view  OrganizationUnsorted as
+select  O.organization as organization
+from
+(
+(select O.organization as organization, O.type as type, O.reference as reference from OrganizationFull O )
+-- TODO: to recover
+union all
+(select O.organization as organization, '' as type, O.organization as reference from OrganizationVBJ O)
+union all
+(select O.organization as organization, '' as type, O.organization as reference from NationalityAndOrgGov O)
+union all
+(select O.organization as organization, '' as type, O.organization as reference from StockExchangeOrg O)
+union all
+(select O.organization as organization, '' as type, O.organization as reference from NewspaperShortForm O)
+union all
+(select O.organization as organization, '' as type, O.organization as reference from OrgTerrorist O)
+union all
+(select O.organization as organization, '' as type, O.organization as reference from OrgReligious O)
+union all
+(select O.organization as organization, '' as type, O.organization as reference from OrgByCountry O)
+union all
+(select O.organization as organization, '' as type, O.organization as reference from OrgWithRegionalBranch O)
+union all
+(select O.organization as organization, '' as type, O.organization as reference from OrgPoliticalUS O)
+union all
+(select O.organization as organization, '' as type, O.organization as reference from OrgSportsGeneral O)
+union all
+(select O.organization as organization, '' as type, O.organization as reference from ACE2005CollegeSportsTeam O)
+union all
+(select O.organization as organization, '' as type, O.organization as reference from OrgSportsTeam O)
+union all
+(select O.organization as organization, '' as type, O.organization as reference from ACE2005MissingOrganization O)
+union all
+(select O.organization as organization, '' as type, O.organization as reference from ACE2005PartialOrganization O)
+) O
+consolidate on  O.organization;
+
+
+
+
+
+
+
+
+-- Customization 5: filter out org matches within abbrev email, e.g., "jdullu...@yahoo.com"
+create view EmailAnon as
+extract regex /\w+(\.){3}@\w+\.\w+/ 
+	on D.text as email
+from Doc D;
+
+create view OrgWithinEmailAnon as
+select O.organization as organization 
+from OrganizationUnsorted O, EmailAnon E
+where Contains(E.email, O.organization);
+
+create dictionary OrgInvalidCase as(
+	'UNITED NATIONS', 'Federal Court', 'Bush Administration', 'Clinton Administration',
+	'American Marines', 'Coalition', 'CENTRAL COMMAND', 'EU', 'European Union',
+	'U.S. Supreme Court', 'Senators', 'Wall Street', 'Best Companies', 'Kings', 'Security',
+	'New Yorker', '108th Congress',
+	 'allyourtv.com', 'dot.com', 'GunControlPolicy.com', 'democrats', 'republicans',
+	 'homeland security', 'Trade', 'Trade Center','Democrats', 
+	 'Absurdly Well-Off Government', 'Anniston Army' , 'Bluegrass Army', 'Toelle Army',
+	 'Apatriotism Yahoo Group', 'Jazz', 'LOT', 'Disaster Relief Fund',
+	 'Asia Tsunami Response Fund', 'Habitat', 'Tsunami Relief Fund',
+	 'Guess', 'U.S. Marines', 'Houston Center', 'Republican National Committee' ,
+	 'Government', 'Defense Systems', 'Insurance', 'City of Richmond', 'Washington',
+	 'democratic', 'republican', 'Excellent Management', 'Athletic Department',
+	 'Royal Marines'
+);
+
+create view OrgInvalid1 as
+select *
+from OrganizationUnsorted O
+where MatchesDict('OrgInvalidCase', 'Exact', O.organization);
+
+-- All Caps Orgs in Person titles are part of Person, not Org
+-- LT. COL. ROBERT LEONHARD, U.S. ARMY (RET.)
+create view PersonAllCaps as
+select P.name as name, RightContextTok(P.name, 10) as rc
+from Person P
+where Not(ContainsRegex(/\p{Ll}\p{M}*/, P.name));
+
+create view OrgAllCaps as
+select O.organization
+from OrganizationUnsorted O
+where Not(ContainsRegex(/\p{Ll}\p{M}*/, O.organization));
+
+create view OrgInvalid2 as
+select O.organization
+from OrgAllCaps O, PersonAllCaps P
+where Contains(P.rc, O.organization)
+  and Not(ContainsRegex(/[\n\r]/, SpanBetween(P.name, O.organization)));
+
+output view PersonAllCaps;
+output view OrgInvalid2;
+
+
+create dictionary OrgInvalidContainsDict as(
+	'Cabinet', 'Commonwealth', 'Palestinian Authority', 'Rangers'
+);
+
+create view OrgInvalid3 as
+select *
+from OrganizationUnsorted O
+where ContainsDict('OrgInvalidContainsDict', O.organization);
+
+
+create dictionary OrgUsStandAloneDict as(
+	'Navy', 'Central Command', 'House'
+);
+
+create dictionary USDict as(
+	'U.S.', 'United States'
+);
+
+create view OrgInvalid4 as
+extract pattern ('U.S.'|'United States') ('Navy'|'Central Command'|'House') 
+	return group 2 as org
+	   and group 0 as invalidorg
+	with inline_match on Doc.text
+from Doc D;
+
+
+create view OrgInvalid5 as
+extract pattern ('UN'|'U.N.'|'United Nations') ('Security Council') 
+	return group 1 as org1
+	   and group 2 as org2
+	   and group 0 as invalidorg
+	with inline_match on Doc.text
+from Doc D;
+
+output view OrgInvalid4;
+
+
+-- Yunyao: added on 01/15/2010
+create view OrgInvalid as
+	(select O.organization as organization from OrgWithinEmailAnon O)
+	union all
+	(select O.unit as organization from MilitaryUnitAsPerson O)
+	union all
+	(select O.organization as organization from OrgInvalid1 O)
+	union all
+	(select O.organization as organization from OrgInvalid2 O)
+	union all
+	(select O.organization as organization from OrgInvalid3 O)
+	union all
+	(select O.invalidorg as organization from OrgInvalid4 O)
+	union all
+	(select O.invalidorg as organization from OrgInvalid5 O);
+
+
+create view OrgUnsortedFiltered as
+(select O.organization as organization from OrganizationUnsorted O)
+minus
+(select O.organization as organization from OrgInvalid O);
+
+
+
+create dictionary RightExtensionDict as(
+	'militia', 'movement', 'magazine', '" magazine', '\' magazine', '," magazine', 'newspaper', 'Online',--'
+	'systems', 'services',  'business daily'
+);
+
+create view RightExtension as
+extract dictionary 'RightExtensionDict' on D.text as match
+from Doc D;
+
+create view OrgExtended1 as
+extract pattern <O.organization> <E.match> as organization
+from OrgUnsortedFiltered O, RightExtension E;
+
+-- extend to left with CapsToken if preceding token is lower case
+create view OrgExtended2 as
+select CombineSpans(O.lc, O.organization) as organization
+from 
+(
+	select O.organization as organization, LeftContextTok(O.organization, 1) as lc 
+	from OrgUnsortedFiltered O
+) O
+where MatchesRegex(/\p{Lu}\p{M}*(\p{Ll}\p{M}*)+\s+/, O.lc)
+  and MatchesRegex(/\p{Ll}\p{M}*.*/, LeftContextTok(O.lc, 1))
+  and Not(ContainsRegex(/[\n\r]/, O.lc))
+  and Not(MatchesDict('nationality.dict', O.lc))
+  and Not(MatchesDict('country.dict', O.lc))
+  and Not(MatchesDict('wkday.dict', O.lc))
+  and Not(MatchesDict('month.dict', O.lc));
+  
+  
+-- extend to right with -... 
+create view OrgExtended3 as
+select CombineSpans(O.organization, O.rc) as organization
+from 
+(
+	select O.organization as organization, RightContextTok(O.organization, 2) as rc 
+	from OrgUnsortedFiltered O
+	where MatchesRegex(/-[\p{Lu}\p{M}*\d].*/, RightContextTok(O.organization, 2))
+) O;
+  
+create dictionary PoliticalAffiliationDict as(
+	'R', 'D'
+);
+
+create view OrgExtended4 as
+extract dictionary 'PoliticalAffiliationDict' with flags 'Exact' on D.text as match
+from Doc D
+having MatchesRegex(/\s*[-,]/, RightContextTok(match, 1));
+
+
+-- Orgs in list
+create view OrgExtended5Cand as
+extract pattern (<O1.organization> ',') <Token>{1,3} ((','|'and') <O2.organization>)
+	return group 1 as lc
+	   and group 2 as rc
+	with inline_match on Doc.text
+from OrgUnsortedFiltered O1, OrgUnsortedFiltered O2;
+
+create view OrgExtended5 as
+select Chomp(SpanBetween(O.lc, O.rc)) as org
+from OrgExtended5Cand O
+where MatchesRegex(/(\s+(\p{Lu}\p{M}*).*)+/, SpanBetween(O.lc, O.rc));
+
+create dictionary NegClue6Dict as(
+	'Jordan', 'Grace', 'St', 'Macedon'
+);
+
+-- [Fred Smith of] FEDEX,
+-- [Norman Waitt Of] Gateway, [Jeff Skoll of] Ebay, [Roger Marino of]
+-- EMC, [Marc Turtletaub of] The Money Store
+create view OrgExtended6Cand as
+extract pattern (<P.name> 'of') (/\p{Lu}\p{M}*(\p{L}\p{M}*)*/{1,3})
+	return group 1 as clue 
+	   and group 2 as org
+	with inline_match on Doc.text
+from Person P
+having Not(ContainsDict('stateList.dict', RightContextTok(clue, 4)))
+   and Not(ContainsDict('stateListAbbrev.dict', RightContextTok(clue, 4)))
+   and Not(ContainsDict('country.dict', org))
+   and Not(ContainsDict('NegClue6Dict', org))
+   and Not(ContainsDict('location/cities/majorCities.dict', org));
+   
+create view OrgExtended6Invalid as
+select O.org
+from OrgExtended6Cand O, Location L
+where Overlaps(L.loc, O.org);
+
+create view OrgExtended6 as
+(select O.org as org from OrgExtended6Cand O)
+minus
+(select O.org as org from OrgExtended6Invalid O);
+
+output view OrgExtended6;
+
+create view OrgExtended as
+(select O.organization as organization from OrgUnsortedFiltered O)
+union all
+(select O.organization as organization from OrgExtended1 O)
+--union all
+--(select O.organization as organization from OrgExtended2 O)
+union all
+(select O.organization as organization from OrgExtended3 O)
+union all
+(select O.org as organization from OrgInvalid4 O)
+union all
+(select O.org1 as organization from OrgInvalid5 O)
+union all
+(select O.org2 as organization from OrgInvalid5 O)
+union all
+(select O.match as organization from OrgExtended4 O)
+union all
+(select O.org as organization from OrgExtended5 O)
+union all
+(select O.org as organization from OrgExtended6 O);
+
+
+create view Organization as
+select * from OrgExtended O 
+consolidate on O.organization
+order by O.organization;

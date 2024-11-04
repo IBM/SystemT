@@ -1,0 +1,77 @@
+
+create view Example1 as 
+	extract regex /a|(abc)|(abcd)|(bcde)|(fghi)/ on D.text as match
+	from Document D;
+
+output view Example1;
+
+create view Example2 as 
+	extract regex /(abcde)|(bcde)|(cdef)|(fgh)/ on D.text as match
+	from Document D;
+	
+create view Example3 as 
+    extract regex /(abcd)/ on D.text as match
+    from Document D;	
+
+output view Example2;
+
+create view AllPriorities as 
+	(
+	select D.match as match, '1' as weight
+	from Example1 D
+	)
+	union all
+ 	(
+	select D.match as match, '2' as weight
+	from Example2 D
+	)
+	union all
+	(
+	select D.match as match, '2' as weight
+	from Example3 D
+	)
+	;
+
+create view ConsolidateWithPrioritiesDescending as
+	select N.match as match, N.weight as weight
+	from AllPriorities N
+	consolidate on N.match
+	using 'LeftToRight'
+	with priority from N.weight 
+	descending;
+
+create view ConsolidateWithPrioritiesAscending as
+	select N.match as match, N.weight as weight
+	from AllPriorities N
+	consolidate on N.match
+	using 'LeftToRight'
+	with priority from N.weight 
+	ascending;
+
+create view ConsolidateWithPrioritiesDefault as
+	select N.match as match, N.weight as weight
+	from AllPriorities N
+	consolidate on N.match
+	using 'LeftToRight'
+	with priority from N.weight;
+
+create view ConsolidateWithPriorityFunction as
+	select N.match as match, N.weight as weight
+	from AllPriorities N
+	consolidate on N.match
+	using 'LeftToRight'
+	with priority from GetText(N.weight);
+
+create view ConsolidateNoPriorities as
+    select N.match as match, N.weight as weight
+    from AllPriorities N
+    consolidate on N.match
+    using 'LeftToRight';
+ 
+    
+--output view AllPriorities;
+output view ConsolidateWithPrioritiesAscending;
+output view ConsolidateWithPrioritiesDescending;
+output view ConsolidateWithPrioritiesDefault;
+output view ConsolidateNoPriorities;
+output view ConsolidateWithPriorityFunction;

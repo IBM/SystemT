@@ -1,0 +1,569 @@
+--  ****************************************************************************
+--	@Nisanth Simon July 14 2011
+--	
+--	Purpose: Standardize the various date formats into one common format  
+-- ****************************************************************************
+
+--- Functions used in Date Normalization ------------------------------
+create function NormalizedDate(date Span, month Span, year Span)
+	return String
+	external_name '../lib/logAAqlUDFs.jar:com.ibm.logparse.aql.DateNormalized!normalizedDate'
+	language java
+	deterministic
+	called on null input;
+
+create function getNullSpan(span Span)
+	return String
+	external_name '../lib/logAAqlUDFs.jar:com.ibm.logparse.aql.Util!getNullSpan'
+	language java
+	deterministic
+	return null on null input;
+
+create function getYear(group1 Span, group4 Span)
+	return Span like group1
+	external_name '../lib/logAAqlUDFs.jar:com.ibm.logparse.aql.DateNormalized!getYear'
+	language java
+	deterministic
+	return null on null input;
+
+
+create function getDate(group1 Span, group4 Span, group3 Span, group2 Span)
+	return Span like group2
+	external_name '../lib/logAAqlUDFs.jar:com.ibm.logparse.aql.DateNormalized!getDate'
+	language java
+	deterministic
+	return null on null input;
+	
+create function getMonth(group1 Span, group4 Span, group3 Span, group2 Span)
+	return Span like group2
+	external_name '../lib/logAAqlUDFs.jar:com.ibm.logparse.aql.DateNormalized!getMonth'
+	language java
+	deterministic
+	return null on null input;
+
+create function getDateCategory(dateNormalized String)
+	return String
+	external_name '../lib/logAAqlUDFs.jar:com.ibm.logparse.aql.DateNormalized!getDateCategory'
+	language java
+	deterministic
+	called on null input;
+
+--- Extraction Starts for View Date11, Date11a, Date12 ----------------
+create view Date11And12 as
+	(select * from Date11 d1)
+	union all 
+	(select * from Date11a d1a)
+	union all 
+	(select * from Date12 d12);
+	
+create view Date11And12ExtractYear as
+	select 	
+		D.match as match,
+		F.match as year
+	from FourDigits F, Date11And12 D
+	where Overlaps(D.match, F.match);
+
+create view Date11And12ExtractDate1 as
+	extract 
+		D.match as match, 
+		regex /((\d)|(\d\d))/ on D.match as date
+ 	from Date11And12 D;
+ 
+create view Date11And12ExtractDate2 as
+	select 
+		D.match as match, 
+		D.date as date
+ 	from Date11And12ExtractDate1 D, Date11And12ExtractYear Y
+ 	where Equals(Y.match , D.match) ;
+
+create view Date11And12ExtractDate as
+ 	(select * from Date11And12ExtractDate1 D1)
+ 	minus
+  	(select * from Date11And12ExtractDate2 D2);
+  	
+create view Date11And12ExtractMonth as
+	select 	
+		D.match as match,
+		M.match as month
+	from Month M, Date11And12 D, Date11And12ExtractYear Y
+	where Overlaps(D.match, M.match);
+	
+create view Date11And12Extract as
+	select 	
+		D.match,
+		getNullSpan(D.match) as day,
+		D.date,
+		M.month,
+		getNullSpan(D.match) as year
+	from Date11And12ExtractMonth M, Date11And12ExtractDate D
+	where Equals(D.match, M.match);
+
+--- Extraction Ends for View Date11, Date11a, Date12 ----------------
+
+--- Extraction Starts for View Date6, Date7, Date7a, Date4to5--------
+
+create view Date6And7And4to5 as
+	(select * from Date6 d6)
+	union all 
+	(select * from Date7 d7)
+	union all 
+	(select * from Date7a d7a)
+	union all 
+	(select * from Date4to5 d4to5);
+	
+create view Date6And7And4to5Consolidated as
+	select * 
+	from Date6And7And4to5 D
+	consolidate on D.match
+	using 'LeftToRight';
+
+create view Date6And7And4to5ExtractYear as
+	select 	
+		D.match as match,
+		F.match as year
+	from FourDigits F, Date6And7And4to5Consolidated D
+	where Overlaps(D.match, F.match);
+ 	
+create view Date6And7And4to5ExtractDate1 as
+	extract D.match as match, 
+	regex /((\d)|(\d\d))/ on D.match as date
+	from Date6And7And4to5Consolidated D;
+
+create view Date6And7And4to5ExtractDate as
+	select 
+		D.match as match, 
+		D.date as date
+ 	from Date6And7And4to5ExtractDate1 D, Date6And7And4to5ExtractYear Y
+ 	where Equals(Y.match , D.match) 
+ 	and Not ( Overlaps(Y.year, D.date));
+
+create view Date6And7And4to5ExtractMonth as
+	select 	
+		D.match as match,
+		M.match as month
+	from Month M, Date6And7And4to5Consolidated D
+	where Overlaps(D.match, M.match);
+
+create view Date4to5ExtractDay as
+	select 	
+		D.match as match,
+		W.match as day
+	from WKDay W, Date6And7And4to5Consolidated D
+	where Overlaps(D.match, W.match);
+
+create view Date6And7Extract as
+	select 	
+		D.match,
+		getNullSpan(D.match) as day,
+		D.date,
+		M.month,
+		Y.year
+	from Date6And7And4to5ExtractMonth M, Date6And7And4to5ExtractDate D, 
+	Date6And7And4to5ExtractYear Y
+	where Equals(D.match, M.match) and Equals(D.match, Y.match);
+	
+create view Date4to5Extract as
+	select 	
+		D.match,
+		W.day,
+		D.date,
+		M.month,
+		Y.year
+	from Date6And7And4to5ExtractMonth M, Date6And7And4to5ExtractDate D, 
+	Date6And7And4to5ExtractYear Y, Date4to5ExtractDay W
+	where Equals(D.match, M.match) and Equals(D.match, Y.match)
+	and Equals(D.match, W.match);
+
+	--- Extraction Ends for View Date6, Date7, Date7a, Date4to5--------
+
+	--- Extraction Starts for View Date8 ------------------------------
+
+create view Date8ExtractYear as
+	select 	
+		D.match as match,
+		F.match as year
+	from FourDigits F, Date8 D
+	where Overlaps(D.match, F.match);
+	
+create view Date8ExtractMonth as
+	select 	
+		D.match as match,
+		M.match as month
+	from Month M, Date8 D
+	where Overlaps(D.match, M.match);
+
+create view Date8Extract as
+	select 	
+		M.match,
+		getNullSpan(M.match) as day,
+		getNullSpan(M.match) as date,
+		M.month,
+		Y.year
+	from Date8ExtractMonth M, Date8ExtractYear Y
+	where Equals(M.match, Y.match);
+
+	--- Extraction Ends for View Date8 ------------------------------
+	
+	--- Extraction Starts for View Date9 ----------------------------
+	
+create view Date91 as
+ 	select 
+ 		D9.match 
+	from Date9 D9, Date4to5 D4to5
+ 	where Contains(D4to5.match, D9.match);
+ 	
+create view Date92 as
+ 	(select * from Date9 D9)
+ 	minus
+ 	(select * from Date91 D91);
+ 	
+create view Date92ExtractDay as
+	select 	
+		D.match as match,
+		W.match as day
+	from WKDay W, Date92 D
+	where Overlaps(D.match, W.match);
+	
+create view Date92ExtractMonth as
+	select 	
+		D.match as match,
+		M.match as month
+	from Month M, Date92 D
+	where Overlaps(D.match, M.match);
+	
+create view Date92ExtractDate as
+	extract D.match as match, 
+	regex /((\d)|(\d\d))/ on D.match as date
+	from Date92 D;
+	
+create view Date92Extract as
+	select 	
+		M.match,
+		DAY.day,
+		D.date,
+		M.month,
+		getNullSpan(M.match) as year
+	from Date92ExtractMonth M, Date92ExtractDay DAY, Date92ExtractDate D
+	where Equals(M.match, DAY.match) and Equals(M.match, D.match);
+
+	--- Extraction Ends for View Date9 ----------------------------
+
+	--- Extraction Starts for View Date10 ----------------------------
+
+create view Date10ExtractDay as
+	select 	
+		D.match as match,
+		W.match as day
+	from WKDay W, Date10 D
+	where Overlaps(D.match, W.match);
+	
+create view Date10ExtractMonth as
+	select 	
+		D.match as match,
+		M.match as month
+	from Month M, Date10 D
+	where Overlaps(D.match, M.match);
+	
+create view Date10ExtractDate as
+	extract D.match as match, 
+	regex /((\d)|(\d\d))/ on D.match as date
+	from Date10 D;
+
+create view Date10ExtractYear as
+	extract D.match as match, 
+	regex /\d\d\d\d/ on D.match as year 
+	from Date10 D;
+	
+create view Date10Extract as
+	select 	
+		M.match,
+		DAY.day,
+		D.date,
+		M.month,
+		Y.year as year
+	from Date10ExtractMonth M, Date10ExtractDay DAY, Date10ExtractDate D, Date10ExtractYear Y
+	where Equals(M.match, DAY.match) and Equals(M.match, D.match) and Equals(M.match, Y.match);
+
+	--- Extraction Ends for View Date10 ----------------------------
+
+	--- Extraction Starts for View DateISO ----------------------------
+
+create view DateISOExtract1 as
+extract regex
+	/(([0-9]{4})(?:[-\.](1[0-2]|0[1-9])[-\.])(3[0-1]|0[1-9]|[1-2][0-9]))/
+	on D.match
+	return 
+	   group 0 as match
+       and group 2 as year 
+       and group 3 as month
+       and group 4 as date
+from DateISO D;
+
+create view DateISOExtract as
+	select 	
+		D.match,
+		getNullSpan(D.match) as day,
+		D.date,
+		D.month,
+		D.year
+	from DateISOExtract1 D;
+
+	--- Extraction Ends for View DateISO ----------------------------
+
+	--- Extraction Starts for View Date14 ----------------------------
+
+create view Date14Extract1 as
+extract regex
+	/((\d{1,2})|\d{4})[\-\/](\d{1,2})[\-\/](\d{1,4})/
+	on D.match
+	return 
+	   group 0 as match
+       and group 4 as group4 
+       and group 1 as group1
+       and group 3 as group3
+       and group 2 as group2
+from Date14 D;
+
+create view Date14Extract as
+	select 	
+		D.match,
+		getNullSpan(D.match) as day,
+		getDate(D.group1, D.group4, D.group3, D.group2) as date,
+		getMonth(D.group1, D.group4, D.group3, D.group2) as month,
+		getYear(D.group1, D.group4) as year
+	from Date14Extract1 D;
+
+	--- Extraction Ends for View Date14 ----------------------------
+	
+	--- Extraction Starts for View Date12 ----------------------------
+
+create view Date12Extract as
+	extract regex
+			/(([a-zA-Z]{3,9}) ([0-9 ]{1,2})())/
+		on D.match
+		return 
+	   	group 0 as match
+	   	and group 4 as day --empty
+	   	and group 3 as date
+	   	and group 2 as month
+	   	and group 4 as year --empty
+	from Date12 D;
+	
+create view Date12ExtractNormalized as
+	select 	
+		D.match as OrginalDateSpan, 
+		GetText(D.match) as OrginalDateText,
+		getNullSpan(D.match) as day,
+		D.date,
+		D.month,
+		getNullSpan(D.match) as year,
+		NormalizedDate(D.date, D.month, D.year) as dateNormalized
+		
+	from Date12Extract D;
+	
+create view Date12ExtractNormalizedDetail as
+	select 	
+		D.OrginalDateSpan, 
+		D.OrginalDateText,
+		D.day,
+		D.date,
+		D.month,
+		D.year,
+		D.dateNormalized,
+		getDateCategory(GetString(D.dateNormalized)) as category
+	from Date12ExtractNormalized D;
+
+	
+--- Extraction ends for View Date12 ----------------------------
+----------------- Changes for Essbase logs -----------------
+create view essbase as
+extract 
+regex
+/((?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Tues|Thur|Thurs|Sun|Mon|Tue|Wed|Thu|Fri|Sat))\s((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Sept|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?))\s((\d[\d\p{Alpha}\-\,]*(\d[\d\p{Alpha}]*)?))\s((((?:(?:[0-1][0-9])|(?:[2][0-3])|(?:[0-9])):(?:[0-5][0-9])(?::[0-5][0-9])?(?:\\s?(?:am|AM|pm|PM))?)))\s((((20)|(19)|(18)|(17)|(16))[\d][\d]))/
+  on D.text 
+  return
+  group 0 as match
+  and group 1 as day
+  and group 3 as date
+  and group 2 as month
+  --and group 6 as time
+  and group 9 as year
+  from Doc D;
+  
+create view essbaseExtractNormalized as
+	select 	
+		D.match as OrginalDateSpan, 
+		GetText(D.match) as OrginalDateText,
+		D.day as day,
+		D.date,
+		D.month,
+		D.year as year,
+		NormalizedDate(D.date, D.month, D.year) as dateNormalized
+		
+	from essbase D;  
+
+create view essbaseExtractNormalizedDetail as
+	select 	
+		D.OrginalDateSpan, 
+		D.OrginalDateText,
+		D.day,
+		D.date,
+		D.month,
+		D.year,
+		D.dateNormalized,
+		getDateCategory(GetString(D.dateNormalized)) as category
+	from essbaseExtractNormalized D;
+		
+----------------------------------------------------------------
+--- Consolidate all the views	
+create view DateExtractAll as
+ 	(select * from Date4to5Extract d4to5)
+	union all
+	(select * from Date6And7Extract d67)
+		union all 
+	(select * from Date92Extract d92)
+	union all 
+	(select * from Date10Extract d10)
+		union all 
+	(select * from Date11And12Extract d12)
+	union all 
+	(select * from Date8Extract d8)
+	union all 
+	(select * from DateISOExtract dISO)
+		union all 
+	(select * from Date14Extract d14)
+	union all
+	(select * from Date12Extract d12)
+	union all
+	(select * from essbase es);
+	
+
+	
+		
+create view DateExtractAllConsolidated as
+	select * 
+	from DateExtractAll D
+	consolidate on D.match
+	using 'LeftToRight';
+
+create view DateNormalized as
+	select 
+		D.match as OrginalDateSpan, 
+		GetText(D.match) as OrginalDateText,
+		D.day, 
+		D.date, 
+		D.month, 
+		D.year, 
+		NormalizedDate(D.date, D.month, D.year) as dateNormalized
+		from DateExtractAllConsolidated D;
+
+create view DateNormalizedDetail as
+	select 
+		D.OrginalDateSpan, 
+		D.OrginalDateText,
+		D.day, 
+		D.date, 
+		D.month, 
+		D.year, 
+		D.dateNormalized,
+		getDateCategory(GetString(D.dateNormalized)) as category
+	from DateNormalized D;
+
+
+	--- Extraction Starts for View DateISOExtended ----------------------------
+create view DateISOExtendedExtract as
+	extract regex
+			/([0-9]{4})(?:[-\.](1[0-2]|0[1-9])[-\.])(3[0-1]|0[1-9]|[1-2][0-9])-?/
+		on D.match
+		return 
+	   	group 0 as match
+       	and group 1 as year 
+       	and group 2 as month
+       	and group 3 as date
+	from DateISOExtended D;
+
+create view DateISOExtendedNormalized as
+	select 	
+		D.match as OrginalDateSpan, 
+		GetText(D.match) as OrginalDateText,
+		getNullSpan(D.match) as day,
+		D.date,
+		D.month,
+		D.year,
+		NormalizedDate(D.date, D.month, D.year) as dateNormalized
+	from DateISOExtendedExtract D;
+
+create view DateISOExtendedNormalizedDetail as
+	select 	
+		D.OrginalDateSpan, 
+		D.OrginalDateText,
+		D.day,
+		D.date,
+		D.month,
+		D.year,
+		D.dateNormalized,
+		getDateCategory(GetString(D.dateNormalized)) as category
+	from DateISOExtendedNormalized D;
+
+	--- Extraction Ends for View DateISOExtended ----------------------------
+	
+		--- Extraction Starts for View DateOptMsTz ----------------------------
+create view DateOptMsTzExtract as
+	extract regex
+			/([0-9]{4})(?:[-\.](1[0-2]|0[1-9])[-\.])(3[0-1]|0[1-9]|[1-2][0-9])-?/
+		on D.match
+		return 
+	   	group 0 as match
+       	and group 1 as year 
+       	and group 2 as month
+       	and group 3 as date
+	from DateOptMsTz D;
+
+create view DateOptMsTzNormalized as
+	select 	
+		D.match as OrginalDateSpan, 
+		GetText(D.match) as OrginalDateText,
+		getNullSpan(D.match) as day,
+		D.date,
+		D.month,
+		D.year,
+		NormalizedDate(D.date, D.month, D.year) as dateNormalized
+	from DateOptMsTzExtract D;
+
+create view DateOptMsTzNormalizedDetail as
+	select 	
+		D.OrginalDateSpan, 
+		D.OrginalDateText,
+		D.day,
+		D.date,
+		D.month,
+		D.year,
+		D.dateNormalized,
+		getDateCategory(GetString(D.dateNormalized)) as category
+	from DateOptMsTzNormalized D;
+	--- Extraction Ends for View DateOptMsTz ----------------------------
+
+create view DateNormalizedDetailInterim as
+	(select * from DateISOExtendedNormalizedDetail)
+	union all
+	(select * from DateNormalizedDetail)
+	union all
+	(select * from DateOptMsTzNormalizedDetail)
+	union all
+	(select * from Date12ExtractNormalizedDetail);
+	
+	
+	
+--create view DateOutput as 
+--select 
+--	D.OrginalDateSpan as span,
+--	D.OrginalDateText as text,
+--	D.day,
+--	D.date,
+--	D.month,
+--	D.year,
+--	D.dateNormalized as normalized_text,
+--	GetString('Date') as field_type,
+--	D.category as category 
+--from DateNormalizedDetailInterim D
+--consolidate on D.OrginalDateSpan using 'LeftToRight';

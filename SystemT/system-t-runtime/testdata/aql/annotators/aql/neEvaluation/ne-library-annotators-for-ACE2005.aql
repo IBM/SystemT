@@ -1,0 +1,116 @@
+---------------------------------------
+-- Document Preprocessing
+---------------------------------------
+include 'detag.aql';
+
+---------------------------------------
+-- UDFs Declarations
+---------------------------------------
+create function getAbbreviation(span Span)
+return String
+external_name 'NamedEntityUDFs.jar:com.ibm.avatar.udf.NamedEntityUDFs!getAbbreviation'
+language java
+deterministic
+return null on null input;
+
+create function toUpperCase(span Span)
+return String
+external_name 'NamedEntityUDFs.jar:com.ibm.avatar.udf.NamedEntityUDFs!toUpperCase'
+language java
+deterministic
+return null on null input;
+
+
+----------------------------------------
+-- Basic Named Entity Annotators
+----------------------------------------
+
+--------------------------------------------------------------------------------
+-- First, include the server side version of certain dictionaries
+include 'GenericNE/serverSideSpecific/AdditionalDictsForAddress.aql';
+include 'GenericNE/serverSideSpecific/AdditionalDictsForOrganization.aql';
+--------------------------------------------------------------------------------
+
+include 'specific-for-ACE2005/DictsForAddress-for-ACE2005.aql';
+include 'GenericNE/Sentence.aql';
+include 'GenericNE/MacrosForTimeDates.aql';
+include 'GenericNE/Date.aql';
+include 'GenericNE/Time.aql';
+include 'GenericNE/PhoneNumber.aql';
+include 'GenericNE/Address.aql';
+include 'GenericNE/CityStateCountry.aql';
+include 'GenericNE/County.aql';
+include 'GenericNE/StockExchangeAndTicker.aql';
+include 'GenericNE/URL.aql';
+include 'GenericNE/EmailAddress.aql';
+include 'GenericNE/NotesEmailAddress.aql';
+include 'specific-for-ACE2005/Organization-for-ACE2005.aql';
+include 'GenericNE/Organization-FilterDoubleNewLineTab.aql';
+include 'GenericNE/Organization-Sentence.aql';
+include 'specific-for-ACE2005/Person-for-ACE2005.aql';
+include 'specific-for-ACE2005/Person-FilterMultiNewLineTab-ACE2005.aql';
+include 'GenericNE/Person-Filter.aql';
+include 'specific-for-ACE2005/Location-Context-Based-for-ACE2005.aql';
+include 'GenericNE/Town.aql';
+include 'specific-for-ACE2005/Region-for-ACE2005.aql';
+include 'specific-for-ACE2005/GeoLand-for-ACE2005.aql';
+include 'specific-for-ACE2005/Road-for-ACE2005.aql';
+include 'specific-for-ACE2005/Facility-for-ACE2005.aql';
+include 'specific-for-ACE2005/WaterBody-for-ACE2005.aql';
+include 'GenericNE/Address-consolidation.aql';
+include 'GenericNE/OrgWithinNotesEmail.aql';
+include 'GenericNE/Organization-FilterAddress.aql';
+include 'specific-for-ACE2005/Organization-consolidation-for-ACE.aql';
+include 'specific-for-ACE2005/Person-consolidation-for-ACE2005.aql';
+include 'GenericNE/DateTime-consolidation.aql';
+include 'GenericNE/StateStrongAbbrev.aql';
+include 'GenericNE/Person-Group.aql';
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> location consolidation section <<<<<<<<<<<<<<<<
+-- ===========================================================================
+include 'specific-for-ACE2005/Location-filter-for-ACE2005.aql';
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Assign attributes for output section <<<<<<<<<<<<<<<<
+-- ===========================================================================
+include 'GenericNE/OrganizationTypes.aql';
+include 'GenericNE/AttributesAssigner.aql';
+include 'specific-for-ACE2005/AttributesAssigner-Person-for-ACE2005.aql';
+
+include 'specific-for-ACE2005/Facility-filter-for-ACE2005.aql';
+
+include 'specific-for-ACE2005/Person-Additional-for-ACE2005.aql';
+include 'specific-for-ACE2005/Person-filter-for-ACE2005.aql';
+include 'specific-for-ACE2005/Person-Aggregate-for-ACE2005.aql';
+--4.12 Person
+
+output view Person;
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Output section <<<<<<<<<<<<<<<<
+-- ===========================================================================		
+
+--4.8 MapLocation
+--output view MapLocation;
+
+-----------------------------------------------------
+-- customization for ACE2005
+-----------------------------------------------------
+include 'specific-for-ACE2005/Location-Additional-for-ACE2005.aql';
+include 'specific-for-ACE2005/Location-Aggregate-for-ACE2005.aql';
+
+output view Location;
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Perform Value-Based Join for Organization <<<<<<<<<<<<<<<<
+-- ===========================================================================
+
+include 'specific-for-ACE2005/Organization-ValueBasedJoin-for-ACE2005.aql';
+include 'specific-for-ACE2005/Organization-Additional-for-ACE2005.aql';
+include 'specific-for-ACE2005/Organization-Aggregate-for-ACE2005.aql';
+
+output view Organization;
+
+include 'specific-for-ACE2005/GPE-for-ACE2005.aql';
+output view GPE;

@@ -1,0 +1,38 @@
+------------------------------------------------------------------------------
+-- Tests of cast() support for nulls and Lists
+------------------------------------------------------------------------------
+require document with columns text Text;
+
+create dictionary CommonWords as (
+	'a', 'the', 'of', 'of a', 'of the'
+);
+
+-- Find pairs of common words within 20 tokens of each other.
+create view WordPairs_Unsorted as
+	select D1.match as first, D2.match as second
+	from Dictionary('CommonWords', Document.text) D1, Dictionary('CommonWords', Document.text) D2
+	where FollowsTok(D1.match, D2.match, 0, 20);
+output view WordPairs_Unsorted;
+
+create view WordPairs_Sorted as
+	select * from WordPairs_Unsorted WPS
+	order by WPS.first, WPS.second;
+output view WordPairs_Sorted;
+
+create table CommonWordsText (word Text) as
+	values 
+		('a'), ('the'), ('of'), ('of a'), ('of the');
+
+create view WordPairsText_Unsorted as
+	select WPU.first as first, C.word as second
+	from WordPairs_Unsorted WPU, CommonWordsText C
+	where Equals(GetText(WPU.second), GetText(C.word));
+output view WordPairsText_Unsorted;
+
+create view WordPairsText_Grouped as
+	select WPTU.first as first, List(WPTU.second) as second
+	from WordPairsText_Unsorted WPTU
+	group by WPTU.first;
+output view WordPairsText_Grouped;
+
+

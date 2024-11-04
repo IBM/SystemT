@@ -1,0 +1,56 @@
+------------------------------------------------------------------------------
+-- SkipDocumentBeforeDetag.aql 
+--
+-- Implements the following SkipDocument rules applied to HTML 
+-- content before detagging:
+-- 1) SHORT DOCUMENT: 
+--		overall length of the raw HTML, as measured in characters, is < 48
+-- 2) BAD HEADER: 
+--		there is no match for the regular expression "html|xml|<!--|<!doctype|<title>" 
+--      within the first 80 characters
+--
+-- Required to be executed before HTML.aql. Additional SkipDocument rules 
+-- that apply to document content after detagging are in SkipDocumentAfterDetag.aql.
+-- 
+-------------------------------------------------------------------------------
+
+-- ***********************************************************************
+-- ***                        UDF declarations                        ****
+-- ***********************************************************************
+
+--UDF to decide if the document should be skipped by the detagger
+--minCharCount: minimum number of characters in the document
+--headerCheckLimit: look for evidence of html|xml in these many number of chars
+--bodyCharCount: Minimum number of characters in the body
+create function skipDocument(text Span, minCharCount Integer, headerCheckLimit Integer, outList ScalarList)
+return ScalarList like outList 
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.SkipUDF!SkipDocument'
+language java
+deterministic
+return null on null input;
+
+-- ***********************************************************************
+
+-- Create a fake list in order to hold the result of SkipDocument() UDF
+create view OutListForSkipDocument as
+select List(0) as list
+from Document D;
+
+-- Compute the result of SkipDocument
+--minCharCount: 48 "<html><head><title></title></head><body/></html>"
+--headerCheckLimit: look for evidence of html|xml in the first 80 chars of the document
+create view SkipDocumentAll as
+select skipDocument(D.text, 48, 80, L.list) as skipResult
+from Document D, OutListForSkipDocument L;
+
+
+-- If skipDocument() returns a non-null result, create a SkipDocument annotation
+-- Includes
+---> short documents,
+---> documents with a bad header i.e. not html/xml,
+create view SkipDocumentBeforeDetagging as
+select getElementFromStrList(S.skipResult, 0) as reason,
+	   getElementFromStrList(S.skipResult, 1) as content
+from SkipDocumentAll S
+where NotNull(S.skipResult);
+

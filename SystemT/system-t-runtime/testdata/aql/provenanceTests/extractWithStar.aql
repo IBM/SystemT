@@ -1,0 +1,43 @@
+-- Test cases to make sure statements with wildcards in the select list are rewritten properly.
+
+
+create view CapsWord as
+extract 'CapsWord' as type, 
+		1 as typeInt,
+	regex /[A-Z].*/ on 1 token in D.text as match
+from Document D;
+
+create view LowWord as
+extract 'LowWord' as type,
+		2 as typeIntL,
+	regex /[a-z]*/ on 1 token in D.text as match
+from Document D;
+
+-- Extract with <viewname>.* 
+-- Will throw an exception because the output schema contains duplicate attribute "match"
+create view Extract1 as
+extract C.*,
+	regex /[A-Z]+/ on C.match as match1
+from CapsWord C;
+
+output view Extract1;
+
+-- Top level and subquery extract with *
+create view Extract2 as
+extract C.*,
+	regex /[A-Z]+/ on C.match as match2
+from 
+( 
+	extract C.*,
+		regex /[A-Z].*/ on C.match as match1
+	from CapsWord C
+) C;
+
+output view Extract2;
+
+create view Union3 as
+(extract C.*, regex /[A-Z]+/ on C.match as match1 from CapsWord C)
+union all
+(extract C.*, regex /[A-Z].*/ on C.match as match1 from CapsWord C);
+
+output view Union3;

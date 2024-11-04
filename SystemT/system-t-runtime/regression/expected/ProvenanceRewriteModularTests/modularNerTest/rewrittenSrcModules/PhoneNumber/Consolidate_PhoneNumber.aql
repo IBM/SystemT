@@ -1,0 +1,333 @@
+module PhoneNumber;
+
+
+create view PhoneNumFull as
+  (select  Op.num as num,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__26__TempOp__0 Op)
+  union all
+  (select  Op.num as num,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__26__TempOp__1 Op)
+  union all
+  (select  Op.num as num,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__26__TempOp__2 Op)
+  union all
+  (select  Op.num as num,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__26__TempOp__3 Op)
+  union all
+  (select  Op.num as num,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__26__TempOp__4 Op)
+  union all
+  (select  Op.num as num,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__26__TempOp__5 Op)
+  union all
+  (select  Op.num as num,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__26__TempOp__6 Op)
+  union all
+  (select  Op.num as num,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__26__TempOp__7 Op);
+
+output view PhoneNumFull;
+
+create view ExtensionNums as
+  (select  Op.num as num,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__27__TempOp__0 Op)
+  union all
+  (select  Op.num as num,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__27__TempOp__1 Op);
+
+output view ExtensionNums;
+
+create view PhoneNumWithExtension as
+  select  CombineSpans(P.num, E.num) as num,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PhoneNumFull_____sep_____P____id,
+          E.__auto__id as ExtensionNums_____sep_____E____id
+  from  PhoneNumFull P,
+        ExtensionNums E
+  where FollowsTok(P.num, E.num, 0, 0)
+     and Not(ContainsRegex(/[\n\r]/, SpanBetween(P.num, E.num)));
+
+output view PhoneNumWithExtension;
+
+create view PhoneNumAll as
+  (select  Op.num as num,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__28__TempOp__0 Op)
+  union all
+  (select  Op.num as num,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__28__TempOp__1 Op)
+  union all
+  (select  Op.num as num,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__28__TempOp__2 Op);
+
+output view PhoneNumAll;
+
+create view PhoneNumCons as
+  select  __t2.num as num,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__29__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__29__Temp__1 __t1,
+        __Consolidate__29__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.num;
+
+output view PhoneNumCons;
+
+create view NonPhoneNum as
+  (select  Op.num as num,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__30__TempOp__0 Op)
+  union all
+  (select  Op.num as num,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__30__TempOp__1 Op);
+
+output view NonPhoneNum;
+
+create view PhoneNumOnly as
+  select  Op.num as num,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__31__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__31__TempOp__1 Op,
+        __Minus__31__Temp __t
+  where Equals(Op.num, __t.num);
+
+output view PhoneNumOnly;
+
+create view __Consolidate__29__Temp__1 as
+  select  C.num as num,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as PhoneNumAll_____sep_____C____id,
+          C.num as __consolidate__target
+  from  PhoneNumAll C;
+
+output view __Consolidate__29__Temp__1;
+
+create view __Consolidate__29__Temp__2 as
+  select  __t1.num as num,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__29__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__29__Temp__2;
+
+create view __Minus__31__Temp as
+  select  __t.num as num
+  from  
+    ((select  Op.num as num
+      from  __Minus__31__TempOp__1 Op)
+    minus
+    (select  Op.num as num
+      from  __Minus__31__TempOp__2 Op)
+    ) __t
+  group by __t.num;
+
+output view __Minus__31__Temp;
+
+create view __Minus__31__TempOp__1 as
+  select  P.num as num,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PhoneNumCons_____sep_____P____id
+  from  PhoneNumCons P;
+
+output view __Minus__31__TempOp__1;
+
+create view __Minus__31__TempOp__2 as
+  select  NP.num as num,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          NP.__auto__id as NonPhoneNum_____sep_____NP____id
+  from  NonPhoneNum NP;
+
+output view __Minus__31__TempOp__2;
+
+create view __Union__26__TempOp__0 as
+  select  P.num as num,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PhoneNumber_R1a_____sep_____P____id
+  from  PhoneNumber_R1a P;
+
+output view __Union__26__TempOp__0;
+
+create view __Union__26__TempOp__1 as
+  select  P.num as num,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PhoneNumber_R1b_2_____sep_____P____id
+  from  PhoneNumber_R1b_2 P;
+
+output view __Union__26__TempOp__1;
+
+create view __Union__26__TempOp__2 as
+  select  P.num as num,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PhoneNumber_R2a_____sep_____P____id
+  from  PhoneNumber_R2a P;
+
+output view __Union__26__TempOp__2;
+
+create view __Union__26__TempOp__3 as
+  select  P.num as num,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PhoneNumber_R3_____sep_____P____id
+  from  PhoneNumber_R3 P;
+
+output view __Union__26__TempOp__3;
+
+create view __Union__26__TempOp__4 as
+  select  P.num as num,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PhoneNumber_R3a_____sep_____P____id
+  from  PhoneNumber_R3a P;
+
+output view __Union__26__TempOp__4;
+
+create view __Union__26__TempOp__5 as
+  select  P.num as num,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PhoneNumber_R7a_7b_7c_____sep_____P____id
+  from  PhoneNumber_R7a_7b_7c P;
+
+output view __Union__26__TempOp__5;
+
+create view __Union__26__TempOp__6 as
+  select  P.num as num,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PhoneNumber_R8ILPhone_____sep_____P____id
+  from  PhoneNumber_R8ILPhone P;
+
+output view __Union__26__TempOp__6;
+
+create view __Union__26__TempOp__7 as
+  select  P.num as num,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as StrongPhoneNumber_____sep_____P____id
+  from  StrongPhoneNumber P;
+
+output view __Union__26__TempOp__7;
+
+create view __Union__27__TempOp__0 as
+  select  P.num as num,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PhoneNumber_R4_____sep_____P____id
+  from  PhoneNumber_R4 P;
+
+output view __Union__27__TempOp__0;
+
+create view __Union__27__TempOp__1 as
+  select  P.num as num,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PhoneNumber_R5_____sep_____P____id
+  from  PhoneNumber_R5 P;
+
+output view __Union__27__TempOp__1;
+
+create view __Union__28__TempOp__0 as
+  select  P.num as num,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PhoneNumFull_____sep_____P____id
+  from  PhoneNumFull P;
+
+output view __Union__28__TempOp__0;
+
+create view __Union__28__TempOp__1 as
+  select  P.num as num,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as ExtensionNums_____sep_____P____id
+  from  ExtensionNums P;
+
+output view __Union__28__TempOp__1;
+
+create view __Union__28__TempOp__2 as
+  select  P.num as num,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PhoneNumWithExtension_____sep_____P____id
+  from  PhoneNumWithExtension P;
+
+output view __Union__28__TempOp__2;
+
+create view __Union__30__TempOp__0 as
+  select  P.num as num,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PhoneNumCons_____sep_____P____id,
+          F.__auto__id as PhoneFilter_____sep_____F____id
+  from  PhoneNumCons P,
+        PhoneFilter F
+  where FollowsTok(F.annot, P.num, 0, 4)
+     and MatchesRegex(/\s*\:*\s*.{0,10}\s*\+*\s*/, SpanBetween(F.annot, P.num));
+
+output view __Union__30__TempOp__0;
+
+create view __Union__30__TempOp__1 as
+  select  P.num as num,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PhoneNumCons_____sep_____P____id,
+          F.__auto__id as PhoneFilter_____sep_____F____id
+  from  PhoneNumCons P,
+        PhoneFilter F
+  where FollowsTok(P.num, F.annot, 0, 2)
+     and MatchesRegex(/\s*\:?[\(\[]\s*/, SpanBetween(P.num, F.annot));
+
+output view __Union__30__TempOp__1;
+

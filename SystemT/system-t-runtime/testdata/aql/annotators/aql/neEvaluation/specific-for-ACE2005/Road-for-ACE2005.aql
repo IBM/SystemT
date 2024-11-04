@@ -1,0 +1,75 @@
+-- Yunyao: created on 03/29/2010 to extract road
+
+
+-- no facility name should be just solely for the following dictionary
+create dictionary FacilityFilterDict as (
+	'The', 'World', 'That', 'At', 'Catholic', 'In', 'Of', 'International', 'Holy', 'White'
+);
+
+create view FacilityFilter1 as 
+	extract
+		dictionaries
+			'FacilityFilterDict'
+		on D.text
+		as match
+		from Doc D;
+		
+create view FacilityFilter as
+	(select F.* from FacilityFilter1 F)
+	union all
+	(select N.* from Nationalities N);
+
+create view RoadSuffix as
+	extract
+    dictionaries
+        'location/roads/roadSuffix.dict'
+        on D.text   
+        as match     
+        from Doc D;
+        
+
+create view RoadPrefix as
+	extract
+    dictionaries
+        'location/roads/roadPrefix.dict'
+        on D.text   
+        as match     
+        from Doc D;
+ 
+create view CapsRoadCandidate as
+    select
+        R.match as match
+    from
+       RegexTok(/((\p{Upper}[\p{Lower}\&\.\-\/\d]{1,20})(\s*(\p{Upper}[\p{Lower}\&\.\-\/\d]{1,20}))?|\d{1,2})/, 25, Doc.text) R;
+       
+create view CapsRoad as
+	(
+	(select C.* from CapsRoadCandidate C)
+	union all
+	(select D.* from Direction D))
+	minus
+	(select F.* from FacilityFilter F);
+          
+create view RoadAll as
+(select CombineSpans(C.match, F.match) as road 
+from CapsRoad C,
+	 RoadSuffix F
+where FollowsTok(C.match, F.match, 0, 0)
+  and Not(ContainsRegex(/[\n\r\t]/, SpanBetween(C.match, F.match)))
+  -- don't match the start of a sentence
+  and Not(MatchesRegex(/\p{Lu}\p{M}*.*/, LeftContextTok(C.match, 1))))
+union all
+(select CombineSpans(F.match, C.match) as road 
+from CapsRoad C,
+	 RoadPrefix F
+where FollowsTok(F.match, C.match, 0, 0)
+  and Not(ContainsRegex(/[\n\r\t]/, SpanBetween(C.match, F.match))))
+union all
+(extract regex /I-\d{1,2}/ on 3 token in D.text as road from Doc D);
+	
+create view Road as
+select F.* 
+from  RoadAll F
+consolidate on F.road;
+
+--output view Road;

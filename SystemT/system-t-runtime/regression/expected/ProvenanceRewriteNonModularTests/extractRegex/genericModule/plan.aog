@@ -1,0 +1,63 @@
+$Document = DocScan(
+  (
+    "text" => "Text",
+    "label" => "Text"
+  )
+);
+$PhoneNumber =
+Project(
+  (
+    "@@genericModule@@PhoneNumber@@__auto__id" => "__auto__id",
+    "@@genericModule@@PhoneNumber@@__stmt__type" => "__stmt__type",
+    "@@genericModule@@PhoneNumber@@Document_____sep_____D____id" => "Document_____sep_____D____id",
+    "num" => "num"
+  ),
+  Union(
+    ApplyFunc(
+      IntConst(
+        -1
+      ) => "@@genericModule@@PhoneNumber@@Document_____sep_____D____id",
+      ApplyFunc(
+        StringConst(
+          "STMT_TYPE_EXTRACT_REGEX"
+        ) => "@@genericModule@@PhoneNumber@@__stmt__type",
+        ApplyFunc(
+          AutoID()
+ => "@@genericModule@@PhoneNumber@@__auto__id",
+          FastRegex(/\+?\([1-9]\d{2}\)\d{3}-\d{4}/, (0 => "num"), "DOTALL", "D.text",
+            Project(
+              (
+                "text" => "D.text"
+              ),
+              $Document
+            )
+          )
+        )
+      )
+    ),
+    ApplyFunc(
+      IntConst(
+        -1
+      ) => "@@genericModule@@PhoneNumber@@Document_____sep_____D____id",
+      ApplyFunc(
+        StringConst(
+          "STMT_TYPE_EXTRACT_REGEX"
+        ) => "@@genericModule@@PhoneNumber@@__stmt__type",
+        ApplyFunc(
+          AutoID()
+ => "@@genericModule@@PhoneNumber@@__auto__id",
+          FastRegex(/\+?[Xx]\.?\d{4,5}/, (0 => "num"), "DOTALL", "D.text",
+            Project(
+              (
+                "text" => "D.text"
+              ),
+              $Document
+            )
+          )
+        )
+      )
+    )
+  )
+);
+
+Output: $PhoneNumber;

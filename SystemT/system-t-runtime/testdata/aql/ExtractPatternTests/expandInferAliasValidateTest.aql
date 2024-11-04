@@ -1,0 +1,87 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test cases for extension to sequence patterns to pass through attributes
+-- Verifies that wild card expansion and alias inference is performed properly when a ParseNode appears inside a subquery.
+--
+-------------------------------------------------------------------------------
+
+create view CapsWord as
+extract 'CapsWord' as type,
+	regex /[A-Z].*/ on 1 token in D.text as match
+from Document D
+limit 10;
+
+create view LowWord as
+extract 'LowWord' as type,
+	regex /[a-z]*/ on 1 token in D.text as match
+from Document D
+limit 10;
+
+
+-- Subquery output schema contains duplicate column names. Will throw Exception:
+-- The select list already has a column called 'match'. Columns are: [type, match]
+create view SubqueryInSelect as
+select P.*
+from
+(
+	extract C.*,
+	    pattern <C.match> <L.match> as match
+	    from CapsWord C, LowWord L
+) P;
+
+output view SubqueryInSelect;
+
+-- Subquery output schema contains duplicate column names. Will throw exception:
+-- The select list already has a column called 'match'. Columns are: [type, match]
+create view SubqueryInExtract as
+extract regex /smtg/ on P.match as match
+from
+(
+	extract C.*,
+	    pattern <C.match> <L.match> as match
+	    from CapsWord C, LowWord L
+) P;
+
+output view SubqueryInExtract;
+
+-- Top level stmt uses an attribute not defined in the subquery. Will throw exception:
+-- Subquery P has no output column called 'match1' (columns are [type, match, match2])
+create view SubqueryInExtract2 as
+extract regex /smtg/ on P.match1 as match
+from
+(
+	extract C.*,
+	    pattern <C.match> <L.match> as match2
+	    from CapsWord C, LowWord L
+) P;
+
+output view SubqueryInExtract2;
+
+-- Correct statement. Verifies that alias inference works in the subquery.
+create view SubqueryInExtract3 as
+extract regex /smtg/ on P.match as match
+from
+(
+	extract C.match,
+	    pattern <C.match> <L.match> as match2
+	    from CapsWord C, LowWord L
+) P;
+
+output view SubqueryInExtract3;
+
+-- Correct statement. Verifies that wildcard expansion works in the subquery.
+create view SubqueryInExtract4 as
+extract part_of_speech 'NN' with language 'en' on P.match as match
+from
+(
+	extract C.*,
+	    pattern <C.match> <L.match> as match2
+	    from CapsWord C, LowWord L
+) P;
+
+output view SubqueryInExtract4;
+
+
+
+
+

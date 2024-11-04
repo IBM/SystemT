@@ -1,0 +1,41 @@
+module syslog;
+
+
+create view ErrorCands as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /(\%[A-Z]+([\dA-Za-z-_])+[A-Z]+)\s*\:/
+    with flags 'DOTALL'
+    on D.text
+    return group 1 as match
+  from Document D;
+
+output view ErrorCands;
+
+
+
+create view CandidateCiscoErrorsInterim as
+  select  D.match as annot_span,
+          GetString(D.match) as annot_text,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as ErrorCands_____sep_____D____id
+  from  ErrorCands D;
+
+output view CandidateCiscoErrorsInterim;
+
+create view ErrorSyslogOutput as
+  select  D.annot_span as span,
+          D.annot_text as text,
+          GetString('ErrorSyslog') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as CandidateCiscoErrorsInterim_____sep_____D____id
+  from  CandidateCiscoErrorsInterim D;
+
+output view ErrorSyslogOutput;
+
+export view syslog.ErrorSyslogOutput;
+
+

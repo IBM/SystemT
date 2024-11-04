@@ -1,0 +1,354 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module PersonCandidates;
+
+require document with columns
+text Text;
+
+
+create view CapsPerson as
+select C.name as name
+from CapsPersonCandidate C
+where Not(MatchesRegex(/(\p{Lu}\p{M}*)+-.*([\p{Ll}\p{Lo}]\p{M}*).*/, C.name))
+  and Not(MatchesRegex(/.*([\p{Ll}\p{Lo}]\p{M}*).*-(\p{Lu}\p{M}*)+/, C.name))
+   and Not(MatchesRegex(/[ ]*[\u0093\u0094\u2018\u2019\u0022\u0027\u00AB\u00BB\u201A\u201B\u201C\u201D\u201E\u301D\u301E\u301F]\p{M}*[^sld]/, RightContextTok(C.name, 2)))
+   and Not(MatchesRegex(/(\p{Lu}\p{M}*){2,}\p{Ll}\p{M}*.*/, C.name));
+
+-- Two CapsPerson
+create view TwoCapsPerson as
+select CombineSpans(CP1.name, CP2.name) as name
+from CapsPerson CP1,
+	 CapsPerson CP2
+where FollowsTok(CP1.name, CP2.name, 0, 0);
+
+create view OneOrTwoCapPerson as
+	(select CP.name as name from CapsPerson CP)
+	union all
+	(select CP.name as name from TwoCapsPerson CP);
+
+ -- Find strict capitalized words with two letter or more  (relaxed version of StrictCapsPerson)
+
+create view CapsPersonNoP as
+  select CP.name as name
+  from CapsPerson CP
+where
+  Not(ContainsRegex(/[\u0093\u0094\u2018\u2019\u0022\u0027\u00AB\u00BB\u201A\u201B\u201C\u201D\u201E\u301D\u301E\u301F]\p{M}*/, CP.name));
+
+create view StrictCapsPersonR as
+select R.match as name
+from (extract regex /\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}/
+			on 1 token in D.text
+			as match from DocumentText D) R;
+
+-- Find strict capitalized words
+create view StrictCapsPerson as
+select R.name as name
+from StrictCapsPersonR R
+where MatchesRegex(/\b\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){1,20}\b/, R.name);
+
+-- Find dictionary matches for all last names
+create view StrictLastName1 as
+select D.match as lastname
+from (extract dictionary 'LastNamesUsedGlobally' on D.text as match from DocumentText D) D
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+create view StrictLastName2 as
+select D.match as lastname
+from (extract dictionary 'LastNamesUsedInGermanyLong' on D.text as match from DocumentText D) D
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+create view StrictLastName3 as
+select D.match as lastname
+from (extract dictionary 'LastNamesUsedInGermanyShort' on D.text as match from DocumentText D) D
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);
+
+create view StrictLastName4 as
+select D.match as lastname
+from (extract dictionary 'LastNamesUsedGloballyUnique' on D.text as match from DocumentText D) D
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);
+
+create view StrictLastName5 as
+select D.match as lastname
+from (extract dictionary 'LastNamesUsedInItaly' on D.text as match from DocumentText D) D
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);
+
+create view StrictLastName6 as
+select D.match as lastname
+from (extract dictionary 'LastNamesUsedInFrance' on D.text as match from DocumentText D) D
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);
+
+create view StrictLastName7 as
+select D.match as lastname
+from (extract dictionary 'LastNamesUsedInSpain' on D.text as match from DocumentText D) D
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);
+
+create view StrictLastName8 as
+select D.match as lastname
+from (extract dictionary 'LastNamesUsedInIndia' on D.text as match from DocumentText D) D
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);
+
+create view StrictLastName9 as
+select D.match as lastname
+from (extract dictionary 'LastNamesUsedInIsrael' on D.text as match from DocumentText D) D
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);
+
+create view StrictLastNameAll as
+	(select S.lastname as lastname from StrictLastName1 S)
+	union all
+	(select S.lastname as lastname from StrictLastName2 S)
+	union all
+	(select S.lastname as lastname from StrictLastName3 S)
+	union all
+	(select S.lastname as lastname from StrictLastName4 S)
+	union all
+	(select S.lastname as lastname from StrictLastName5 S)
+	union all
+	(select S.lastname as lastname from StrictLastName6 S)
+	union all
+	(select S.lastname as lastname from StrictLastName7 S)
+	union all
+	(select S.lastname as lastname from StrictLastName8 S)
+	union all
+	(select S.lastname as lastname from StrictLastName9 S)
+	--------------------------------------------------------------
+	-- NOTE: Customization Point
+	--------------------------------------------------------------
+	-- Yunyao: Added on 11/04/2013
+	--         Specify strong last name
+	--------------------------------------------------------------
+	union all
+	(select S.match as lastname from LastNameCustom S);
+
+create view StrictLastName as
+select S.*
+from  StrictLastNameAll S
+where
+	 Not(MatchesRegex(/[ ]*[\u0093\u0094\u2018\u2019\u0022\u0027\u00AB\u00BB\u201A\u201B\u201C\u201D\u201E\u301D\u301E\u301F]\p{M}*[^sld]/, RightContextTok(S.lastname, 2)));
+
+-- Relaxed version of last name
+create view RelaxedLastName1 as
+select CombineSpans(SL.lastname, CP.name) as lastname
+from StrictLastName SL,
+     StrictCapsPerson CP
+where FollowsTok(SL.lastname, CP.name, 1, 1)
+  and MatchesRegex(/\-/, SpanBetween(SL.lastname, CP.name));
+
+create view RelaxedLastName2 as
+select CombineSpans(CP.name, SL.lastname) as lastname
+from StrictLastName SL,
+     StrictCapsPerson CP
+where FollowsTok(CP.name, SL.lastname, 1, 1)
+  and MatchesRegex(/\-/, SpanBetween(CP.name, SL.lastname));
+
+-- all the last names
+create view LastNameAll as
+	(select N.lastname as lastname from StrictLastName N)
+	union all
+	(select N.lastname as lastname from RelaxedLastName1 N)
+	union all
+	(select N.lastname as lastname from RelaxedLastName2 N);
+
+create view WrongLastNameAll as
+select L.*
+from LastNameAll L
+where MatchesRegex(/\p{Ll}\p{M}*.*[ ]*/, LeftContextTok(L.lastname, 1))
+  and MatchesRegex(/[ ]+\p{Lu}\p{M}*.*/, RightContextTok(L.lastname, 1));
+  
+
+create view ValidLastNameAll as
+select N.lastname as lastname
+from LastNameAll N
+where Not(MatchesRegex(/(\p{Lu}\p{M}*)+-.*([\p{Ll}\p{Lo}]\p{M}*).*/, N.lastname))
+  and Not(MatchesRegex(/.*([\p{Ll}\p{Lo}]\p{M}*).*-(\p{Lu}\p{M}*)+/, N.lastname));
+	
+create view LastName as
+select C.lastname as lastname
+from ValidLastNameAll C
+consolidate on C.lastname;
+
+-- Find dictionary matches for all first names
+-- Mostly US first names
+create view StrictFirstName1 as
+select D.match as firstname
+from (extract dictionary 'FirstNamesUsedGlobally' on D.text as match from DocumentText D) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+-- German first names
+create view StrictFirstName2 as
+select D.match as firstname
+from (extract dictionary 'FirstNamesUsedInGermanyLong' on D.text as match from DocumentText D) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+-- nick names for US first names
+create view StrictFirstName3 as
+select D.match as firstname
+from (extract dictionary 'NickNamesUsedGlobally' on D.text as match from DocumentText D) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);
+
+-- german first name from blue page
+create view StrictFirstName4 as
+select D.match as firstname
+from (extract dictionary 'FirstNamesUsedInGermanyShort' on D.text as match from DocumentText D) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+-- Italy first name from blue pages
+create view StrictFirstName5 as
+select D.match as firstname
+from (extract dictionary 'FirstNamesUsedInItaly' on D.text as match from DocumentText D) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+-- France first name from blue pages
+create view StrictFirstName6 as
+select D.match as firstname
+from (extract dictionary 'FirstNamesUsedInFrance' on D.text as match from DocumentText D) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+-- Spain first name from blue pages
+create view StrictFirstName7 as
+select D.match as firstname
+from (extract dictionary 'FirstNamesUsedInSpain' on D.text as match from DocumentText D) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+-- Indian first name from blue pages
+create view StrictFirstName8 as
+select D.match as firstname
+from (extract dictionary 'FirstNamesUsedInIndia' on D.text as match from DocumentText D) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+-- Israel first name from blue pages
+create view StrictFirstName9 as
+select D.match as firstname
+from (extract dictionary 'FirstNamesUsedInIsrael' on D.text as match from DocumentText D) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+
+-- union all the dictionary matches for first names
+create view StrictFirstNameAll as
+	(select S.firstname as firstname from StrictFirstName1 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName2 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName3 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName4 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName5 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName6 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName7 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName8 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName9 S)
+	--------------------------------------------------------------
+	-- NOTE: Customization Point
+	--------------------------------------------------------------
+	-- Yunyao: Added on 11/04/2013
+	--         Specify strong first name
+	--------------------------------------------------------------
+	union all
+	(select S.match as firstname from FirstNameCustom S);
+
+create view StrictFirstNameOrig as
+select S.*
+from  StrictFirstNameAll S
+where 
+  Not(MatchesRegex(/[ ]*[\u0093\u0094\u2018\u2019\u0022\u0027\u00AB\u00BB\u201A\u201B\u201C\u201D\u201E\u301D\u301E\u301F]\p{M}*[^sld]/, RightContextTok(S.firstname, 2)));
+
+create view StrictFirstNameExtended as
+select CombineSpans(LeftContext(S.firstname, 2), S.firstname) as firstname
+from  StrictFirstNameAll S
+where MatchesRegex(/O'/, LeftContext(S.firstname, 2)); 
+
+create view StrictFirstNameCandidate as
+	(select F.* from StrictFirstNameOrig F)
+	union all
+	(select F.* from StrictFirstNameExtended F);
+
+create view StrictFirstName as
+select F.*
+from StrictFirstNameCandidate F
+consolidate on F.firstname;
+
+-- Relaxed versions of first name
+create view RelaxedFirstName1 as
+select CombineSpans(S.firstname, CP.name) as firstname
+from StrictFirstName S,
+     StrictCapsPerson CP
+where FollowsTok(S.firstname, CP.name, 1, 1)
+  and MatchesRegex(/\-/, SpanBetween(S.firstname, CP.name));
+
+create view RelaxedFirstName2 as
+select CombineSpans(CP.name, S.firstname) as firstname
+from StrictFirstName S,
+     StrictCapsPerson CP
+where FollowsTok(CP.name, S.firstname, 1, 1)
+  and MatchesRegex(/\-/, SpanBetween(CP.name, S.firstname));
+  
+-- all the first names
+create view FirstNameAll as
+	(select N.firstname as firstname from StrictFirstName N)
+	union all
+	(select N.firstname as firstname from RelaxedFirstName1 N)
+	union all
+	(select N.firstname as firstname from RelaxedFirstName2 N);
+
+create view ValidFirstNameAll as
+select N.firstname as firstname
+from FirstNameAll N
+where Not(MatchesRegex(/(\p{Lu}\p{M}*)+-.*([\p{Ll}\p{Lo}]\p{M}*).*/, N.firstname))
+  and Not(MatchesRegex(/.*([\p{Ll}\p{Lo}]\p{M}*).*-(\p{Lu}\p{M}*)+/, N.firstname));
+	
+create view FirstName as
+select C.firstname as firstname
+from ValidFirstNameAll C
+consolidate on C.firstname;
+
+-- Combine all dictionary matches for both last names and first names
+create view NameDict as
+select D.match as name
+from (extract dictionary 'FirstOrLastNamesUsedGlobally' on D.text as match from DocumentText D) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+create view NameDict1 as
+select D.match as name
+from (extract dictionary 'FirstOrLastNamesUsedInItaly' on D.text as match from DocumentText D) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+create view NameDict2 as
+select D.match as name
+from (extract dictionary 'FirstOrLastNamesUsedInFrance' on D.text as match from DocumentText D) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+create view NameDict3 as
+select D.match as name
+from (extract dictionary 'FirstOrLastNamesUsedInSpain' on D.text as match from DocumentText D) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+create view NameDict4 as
+select D.match as name
+from (extract dictionary 'FirstOrLastNamesUsedInIsrael' on D.text as match from DocumentText D) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);
+
+-----------------------------------------------------
+-- customization for CoNLL2003
+-----------------------------------------------------
+create view NameDict5 as
+select D.match as name
+from (extract dictionary 'PopularBabyNamesUsedInWesternWorld' on D.text as match from DocumentText D) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);

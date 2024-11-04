@@ -1,0 +1,172 @@
+-------------------------------------------------------------------------------
+--
+-- timeslow.aql
+--
+-- The Avatar built-in 'time' annotator, translated from the original 
+-- regex grammar into AQL (Annotation Query Language).  
+--
+-- The original rules have been left as comments.
+-- 
+-------------------------------------------------------------------------------
+
+-- Detect sentences; we call the output 'Sent' because 'Sentence' is a
+-- reserved word.
+create view Sent as
+extract 
+    split using B.boundary 
+        retain right split point
+        on B.text
+        as sentence
+from (
+    extract 
+        D.text as text,
+        regex /(?:(?:[\;\.\?!]+\s)|(\n\s*\n))/ on D.text as boundary 
+        from Document D
+    having Not(ContainsDict('dictionaries/abbreviations.dict', 
+    CombineSpans(LeftContextTok(boundary, 1), boundary)))
+) B;
+
+-- Tokenize within each sentence.
+create view Tokens as 
+select T.match as token, T.sentence as sentence
+from Tokenize(Sent.sentence) T;
+
+-------------------------------------------------------------------------------
+-- Dictionaries and regular expressions over tokens.
+-- Used by the rules below as building blocks.
+
+-- TWODIGITSINTERVAL: Regex for an interval like '10-11'
+-- Original spec: 
+-- <definition name=TWODIGITSINTERVAL>((0)|(1)|(2)|(3))?[\d][\-]((0)|(1)|(2)|(3))?[\d]</definition>
+create view TWODIGITSINTERVAL as
+select T.token as token, T.sentence as sentence
+from Tokens T
+where MatchesRegex(/((0)|(1)|(2)|(3))?[\d][\-]((0)|(1)|(2)|(3))?[\d]/, T.token);
+
+-- PRD_WKDAY: A dictionary of terms for days of the week
+create dictionary Weekdays as
+( 
+	'monday', 'mon', 'tuesday', 'tue', 'tues', 'wednesday', 'wed', 'thursday',
+ 	'thu', 'thur', 'thurs', 'friday', 'fri', 'saturday', 'sat', 'sunday', 'sun'
+);
+
+-- Create a separate view, since this dictionary is used twice.
+create view PRD_WKDAY as
+select T.token as token, T.sentence as sentence
+from Tokens T
+where InDictionary('Weekdays', T.token);
+
+-- TIMEZONE: A dictionary of timezones like 'pst' and terms like 'a.m.'
+create dictionary TimeZone as
+(
+	'a.m.', 'p.m.', 'a.m', 'p.m', 'am', 'pm', 'GMT', 'gmt', 'G.M.T', 'g.m.t',
+	'G.M.T.', 'g.m.t.'
+);
+
+
+-------------------------------------------------------------------------------
+-- RULE 1: Handles time intervals such as  10-11 Sat
+-- 
+-- Original rule:
+-- <rule annotation=Time id=1>
+-- <internal>
+-- <token attribute={etc}>TWODIGITSINTERVAL</token>
+-- <token attribute={etc}PRD:WKDAY{etc}>ANYWORD</token>
+-- </internal>
+-- </rule>
+create view Time1 as
+select 
+	tdi.token as first_tok,
+	wkday.token as last_tok,
+	tdi.sentence as sentence,
+	CombineSpans(tdi.token, wkday.token) as annot
+from TWODIGITSINTERVAL tdi, PRD_WKDAY wkday
+where 
+	FollowsTok(tdi.token, wkday.token, 0, 0)
+	and Equals(tdi.sentence, wkday.sentence);
+
+-------------------------------------------------------------------------------
+-- RULE 2: Handles time intervals such as  Sat 10-11
+--
+-- Original rule:
+-- <rule annotation=Time id=2>
+-- <internal>
+-- <token attribute={etc}PRD:WKDAY{etc}>ANYWORD</token>
+-- <token attribute={etc}>TWODIGITSINTERVAL</token>
+-- </internal>
+-- </rule>
+create view Time2 as
+select 
+	wkday.token as first_tok,
+	tdi.token as last_tok,
+	tdi.sentence as sentence,
+	CombineSpans(wkday.token, tdi.token) as annot
+from TWODIGITSINTERVAL tdi, PRD_WKDAY wkday
+where 
+	FollowsTok(wkday.token, tdi.token, 0, 0)
+	and Equals(tdi.sentence, wkday.sentence);
+
+-------------------------------------------------------------------------------
+-- RULE 3: Handles times according to a watch: 9:00 A.M, 9 AM, 9:00 PM
+-- 
+-- Original rule:
+-- <rule annotation=Time id=3>
+-- <internal>
+-- <token attribute={etc}>[0-9\\:\\.]+</token>
+-- <token attribute={etc}TIMEZONE{etc}>ANYWORD</token>
+-- </internal>
+-- </rule>
+--create view Time3 as
+select 
+	T1.token as first_tok,
+	T2.token as last_tok,
+	T1.sentence as sentence,
+	CombineSpans(T1.token, T2.token) as annot
+into Time3
+from Tokens T1, Tokens T2
+where 
+	-- Note that we are evaluating a dictionary and regular expression
+	-- inline here, instead of creating a separate view.
+	MatchesRegex(/[0-9\:\.]+/, T1.token)
+	and InDictionary('TimeZone', T2.token)
+	and FollowsTok(T1.token, T2.token, 0, 0)
+	and Equals(T1.sentence, T2.sentence);
+
+-------------------------------------------------------------------------------
+-- RULE 4: Handles times of the form: 9:00 
+--
+-- Original rule:
+-- <rule annotation=Time id=4>
+-- <internal>
+-- <token attribute={etc}>\d{1,2}\\:\d{2}(\\:\d{2})?</token>
+-- </internal>
+-- </rule>
+create view Time4 as
+select 
+	T.sentence as sentence,
+	-- HACK: Use a dummy call to CombineSpans to convert the type of T
+	-- from Token to Annotation so that the UNION ALL down below will
+	-- work properly.
+	CombineSpans(T.token, T.token) as annot
+from Tokens T
+where 
+	-- Note that we are evaluating a dictionary and regular expression
+	-- inline here, instead of creating a separate view.
+	MatchesRegex(/\d{1,2}\:\d{2}(\:\d{2})?/, T.token);
+	
+
+-------------------------------------------------------------------------------
+-- Consolidate to remove overlap.
+create view TimeAll as
+	(select T1.annot as annot from Time1 T1)
+	union all
+	(select T2.annot as annot from Time2 T2)
+	union all
+	(select T3.annot as annot from Time3 T3)
+	union all
+	(select T4.annot as annot from Time4 T4);
+
+select C.annot as annot
+into Time
+from Consolidate(TimeAll.annot) C;
+

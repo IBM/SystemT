@@ -1,0 +1,429 @@
+
+module concepts_en;
+
+import module udf;
+import module pos_base_en;
+import view Sentences_en from module sentence_en as Sentences;
+import module pospatterns_en;
+import module nonling_en;
+import module type_base;
+import module type_user_en;
+import module excludes_en;
+-- import dictionary dict_type_base from module type_base as dict_type_base;
+-- import dictionary user_typed_concept_en from module type_user_en as user_typed_concept_en;
+
+set default dictionary language as 'en';
+
+create view PosPattern_All_And_NonLing_Unconsolidated_en as
+ (select 1 as priorityLevel, P.typeName as typeName, 'PosPattern_Nonling' as ruleId, P.concept as concept from nonling_en.Nonling_en P)
+-- union all
+-- (select 2 as priorityLevel, 'pos_s' as typeName, 'pos_s' as ruleId, P.partOfSpeech as concept from pos_base_en.pos_base_s_compound_en P)
+ union all
+(
+select 3 as priorityLevel, P.typeName as typeName, P.ruleId as ruleId, P.concept as concept from pospatterns_en.PosPattern_All_en P
+)
+;
+
+-- output view PosPattern_All_And_NonLing_Unconsolidated_en;
+
+----------------------------------------------------------------------------------
+-- Consolidate all pattern matches retaining the left most non-overlapping spans.
+----------------------------------------------------------------------------------
+
+create view PosPattern_All_And_NonLing_en as
+select P.priorityLevel as priorityLevel, P.typeName as typeName, P.ruleId as ruleId, P.concept as concept
+from PosPattern_All_And_NonLing_Unconsolidated_en P
+consolidate on P.concept using 'LeftToRight' with priority from P.priorityLevel;
+
+-- output view PosPattern_All_And_NonLing_en;
+
+----------------------------------------------------------------------------------
+-- Finalize all pattern matches by removing PoS 's' compound words
+----------------------------------------------------------------------------------
+
+-- create view PoSs_Only_enom_PosPattern_All_And_NonLing_en as
+-- select P.*
+-- from
+-- 	PosPattern_All_And_NonLing_And_PoSs_en P,
+-- 	pos_base_en.pos_base_s_compound_en S 
+-- where Equals(P.concept, S.partOfSpeech);
+
+-- output view PoSs_Only_enom_PosPattern_All_And_NonLing_And_PoSs_en;
+
+-- create view PosPattern_All_And_NonLing_en as
+-- (select * from PosPattern_All_And_NonLing_And_PoSs_en)
+-- minus
+-- (select * from PoSs_Only_enom_PosPattern_All_And_NonLing_And_PoSs_en);
+
+-- output view PosPattern_All_And_NonLing_en;
+
+----------------------------------------------------------------------------------
+-- Merge Concepts found by PoS patterns with User forced concept (maked as "Entire" in the input SPSSML)
+----------------------------------------------------------------------------------
+
+create view User_Forced_Concepts_en as
+extract
+dictionaries
+'./dict/user_forced_concept_en.dict'
+with flags 'IgnoreCase'
+on D.sentence
+as concept
+from Sentences D;
+
+-- -- output view User_Forced_Concepts_en;
+
+create view PosPattern_And_User_Forced_Concept_Unconsolidated_en as
+(select P.typeName, P.concept from PosPattern_All_And_NonLing_en P)
+union all 
+(select 'Unknown' as typeName, P.concept from User_Forced_Concepts_en P);
+
+-- output view PosPattern_And_User_Forced_Concept_Unconsolidated_en;
+
+create view PosPattern_And_User_Forced_Concept_en as
+select * from PosPattern_And_User_Forced_Concept_Unconsolidated_en P
+consolidate on P.concept using 'LeftToRight';
+
+-- -- output view PosPattern_And_User_Forced_Concept_en;
+
+
+----------------------------------------------------------------------
+-- create the final concept list just by filtering with excluded list
+----------------------------------------------------------------------
+
+-- exclude list could contains compound words like "if i have question"
+-- so we need to match those compound words and filter out them form the valid concepts
+-- (with left to right consolidation)
+--
+create view PosPattern_And_User_Forced_Concept_and_Excluded_unconsolidated_en as
+(select 2 as priorityLevel, C.concept as concept, C.typeName as typeName from PosPattern_And_User_Forced_Concept_en C)
+union all
+(select 1 as priorityLevel, excludes_en.Excludes_en.concept as concept, 'Excluded' as typeName from excludes_en.Excludes_en);
+
+-- output view PosPattern_And_User_Forced_Concept_and_Excluded_unconsolidated_en;
+
+create view PosPattern_And_User_Forced_Concept_and_Excluded_en as
+select * from PosPattern_And_User_Forced_Concept_and_Excluded_unconsolidated_en C
+consolidate on C.concept using 'LeftToRight' with priority from C.priorityLevel;
+
+-- output view PosPattern_And_User_Forced_Concept_and_Excluded_en;
+
+create view PosPattern_And_User_Forced_Concept_Not_Excluded_en as
+select C.concept as concept, C.typeName as typeName from PosPattern_And_User_Forced_Concept_and_Excluded_en C
+where Not(Equals(GetText(C.typeName), 'Excluded'));
+
+
+-- also exlcude uses the *:
+-- 
+-- exclude "copyright*" + "information development" + "development* *"
+-- (converted in regexp: copyright[^ ]*|information development|development[^ ]* .*)
+--
+-- Sample:
+-- copyright -> filtered out by "copyright*"
+--
+-- copyrighting -> filtered out by "copyright*"
+--
+-- copyright test -> not filtered out 
+--
+-- information development -> filtered out by "information development"
+--
+-- information development manager -> not filtered out 
+--
+-- development manager -> filtered out by "development* *"
+--
+-- developments manager -> filtered out by "development* *"
+--
+-- developments manager blabla -> filtered out by "development* *"
+--
+
+create view PosPattern_And_User_Forced_Concept_Excluded_RegExp_en
+as
+select C.concept as concept, C.typeName as typeName
+from PosPattern_And_User_Forced_Concept_Not_Excluded_en C
+where MatchesRegex(/copyright[^ ]*/, C.concept);
+
+create view PosPattern_And_User_Forced_Concept_Not_Excluded_Final_en as 
+(select C.concept, C.typeName from PosPattern_And_User_Forced_Concept_Not_Excluded_en C)
+minus
+(select R.concept, R.typeName from PosPattern_And_User_Forced_Concept_Excluded_RegExp_en R);
+
+
+---------------------------------------------------------------------------------
+-- Apply Equals to type concepts using type dictionnaries with ENTIRE Anchor
+-- Typing on Location and hyphen insensitive mode (very old behaviour in TA)
+---------------------------------------------------------------------------------
+
+-- TODO: should create a cleansed table directly instead of having to create a view for that
+create view TypeBaseEntire_Cleansed_en
+as
+        select
+                TI.priorityLevel as priorityLevel,
+                TI.typeName as typeName,
+                udf.stripDiacritics(ToLowerCase(GetText(TI.dictEntry))) as dictEntry
+                from type_base.TypeBaseEntire TI;
+
+create view TypeBaseEntire_Cleansed_Location_en
+as
+        select * 
+        from TypeBaseEntire_Cleansed_en TI
+        where Equals('Location', GetText(TI.typeName));
+
+create view PosPattern_And_User_Forced_Concept_Not_Excluded_Final_Cleansed_NoHyphen_en
+as
+        select
+                C.concept as concept,
+                udf.removeHyphens(udf.stripDiacritics(ToLowerCase(GetText(C.concept)))) as cleansedAndNoHyphenConcept
+                from PosPattern_And_User_Forced_Concept_Not_Excluded_Final_en C;
+                
+
+create view Concepts_Typed_With_Location_HyphenInsensitive_en
+as
+        select
+                TI.priorityLevel as priorityLevel,
+                TI.typeName as typeName,
+                C.concept as concept
+                from TypeBaseEntire_Cleansed_Location_en TI, PosPattern_And_User_Forced_Concept_Not_Excluded_Final_Cleansed_NoHyphen_en C
+                where Equals(GetText(C.cleansedAndNoHyphenConcept), GetText(TI.dictEntry));
+
+
+-- create view Concepts_Typed_With_Location_HyphenInsensitive_en
+-- as
+--	select
+--		TI.priorityLevel as priorityLevel,
+--		TI.typeName as typeName,
+--		C.concept as concept
+--		from type_base.TypeBaseEntire TI, PosPattern_And_User_Forced_Concept_Not_Excluded_Final_en C
+--		where Equals('Location', GetText(TI.typeName))
+--		and Equals(udf.removeHyphens(udf.stripDiacritics(ToLowerCase(GetText(C.concept)))), udf.stripDiacritics(ToLowerCase(GetText(TI.dictEntry))));
+		
+----------------------------------------------------------------------------
+-- Apply Equals to type concepts using type dictionnaries with ENTIRE Anchor
+----------------------------------------------------------------------------
+
+
+create view PosPattern_And_User_Forced_Concept_Not_Excluded_Final_Cleansed_en
+as
+        select
+                C.concept as concept,
+                udf.stripDiacritics(ToLowerCase(GetText(C.concept))) as cleansedConcept
+                from PosPattern_And_User_Forced_Concept_Not_Excluded_Final_en C;
+
+create view Concepts_Typed_With_TypeBaseEntire_Unconsolidated_en
+as
+        select
+                TI.priorityLevel as priorityLevel,
+                TI.typeName as typeName,
+                C.concept as concept
+                from TypeBaseEntire_Cleansed_en TI, PosPattern_And_User_Forced_Concept_Not_Excluded_Final_Cleansed_en C
+                where Equals(GetText(C.cleansedConcept), GetText(TI.dictEntry));
+
+
+-- create view Concepts_Typed_With_TypeBaseEntire_Unconsolidated_en
+-- as
+-- 	select
+-- 		TI.priorityLevel as priorityLevel,
+--		TI.typeName as typeName,
+--		C.concept as concept
+--		from type_base.TypeBaseEntire TI, PosPattern_And_User_Forced_Concept_Not_Excluded_Final_en C
+--		where Equals(udf.stripDiacritics(ToLowerCase(GetText(C.concept))), udf.stripDiacritics(ToLowerCase(GetText(TI.dictEntry))));
+		
+---------------------------------------------------------------------------------------------------------------
+-- Apply the UDF to type concepts using type dictionnaries with Anchor other than ENTIRE (need to use a regexp)
+---------------------------------------------------------------------------------------------------------------
+
+create view TypeBaseNotEntire_Location_buffer
+as
+	select
+		TI.priorityLevel as priorityLevel,
+		TI.typeName as typeName,
+		GetText(TI.matchType) as matchType
+		from type_base.TypeBaseNotEntire TI
+		where
+		Equals('Location', GetText(TI.typeName));
+
+create view TypeBaseNotEntire_NotLocation_buffer
+as
+	select
+		TI.priorityLevel as priorityLevel,
+		TI.typeName as typeName,
+		GetText(TI.matchType) as matchType
+		from type_base.TypeBaseNotEntire TI
+		where
+		Not(Equals('Location', GetText(TI.typeName)));
+
+create view PosPattern_And_User_Forced_Concept_Not_Excluded_Final_Lowercase_en
+as
+	select
+		C.concept as concept,
+		ToLowerCase(GetText(C.concept)) as concept_lowercase
+		from PosPattern_And_User_Forced_Concept_Not_Excluded_Final_en C;
+		
+create view PosPattern_And_User_Forced_Concept_Not_Excluded_Final_Lowercase_NoHyphens_en
+as
+	select
+		C.concept as concept,
+		udf.removeHyphens(C.concept_lowercase) as concept_lowercase
+		from PosPattern_And_User_Forced_Concept_Not_Excluded_Final_Lowercase_en C;
+		
+create view Concepts_Typed_With_TypeBaseNotEntire_Unconsolidated_en
+as
+	(
+	select 
+		TI.priorityLevel as priorityLevel,
+		TI.typeName as typeName,
+		C.concept as concept
+		from TypeBaseNotEntire_NotLocation_buffer TI, PosPattern_And_User_Forced_Concept_Not_Excluded_Final_Lowercase_en C
+		where Equals(TI.matchType, C.concept_lowercase)
+	)
+	union all
+	(
+	select 
+		TI.priorityLevel as priorityLevel,
+		TI.typeName as typeName,
+		C.concept as concept
+		from TypeBaseNotEntire_Location_buffer TI, PosPattern_And_User_Forced_Concept_Not_Excluded_Final_Lowercase_NoHyphens_en C
+		where Equals(TI.matchType, C.concept_lowercase)
+	);
+
+---------------------------------------------------------------------------------------------------------------
+-- Combine and Consolidate
+---------------------------------------------------------------------------------------------------------------
+
+create view Concepts_Typed_With_TypeBase_Unconsolidated_en
+as
+(select * from Concepts_Typed_With_Location_HyphenInsensitive_en)
+union all
+(select * from Concepts_Typed_With_TypeBaseEntire_Unconsolidated_en)
+union all
+(select * from Concepts_Typed_With_TypeBaseNotEntire_Unconsolidated_en);
+		
+create view Concepts_Typed_With_TypeBase_en
+as
+select * from Concepts_Typed_With_TypeBase_Unconsolidated_en
+consolidate on Concepts_Typed_With_TypeBase_Unconsolidated_en.concept using 'LeftToRight' with priority from Concepts_Typed_With_TypeBase_Unconsolidated_en.priorityLevel;
+
+-- output view Concepts_Typed_With_TypeBase_en;
+
+----------------------------------------------------------------------------
+-- Apply Equals to type concepts using type User (spssml) with ENTIRE Anchor
+----------------------------------------------------------------------------
+
+-- TODO: should create a cleansed table directly instead of having to create a view for that
+create view TypeUserEntire_Cleansed_en
+as
+        select
+                TI.priorityLevel as priorityLevel,
+                TI.typeName as typeName,
+                udf.stripDiacritics(ToLowerCase(GetText(TI.dictEntry))) as dictEntry
+                from type_user_en.TypeUserEntire TI;
+
+
+create view Concepts_Typed_With_TypeUserEntire_Unconsolidated_en
+as
+	select
+		TI.priorityLevel as priorityLevel,
+		TI.typeName as typeName,
+		C.concept as concept
+		from TypeUserEntire_Cleansed_en TI, PosPattern_And_User_Forced_Concept_Not_Excluded_Final_Cleansed_en C
+		where Equals(GetText(C.concept), GetText(TI.dictEntry));
+
+---------------------------------------------------------------------------------------
+-- Apply Udf to type concepts using type User (spssml) with Anchor other than ENTIRE
+---------------------------------------------------------------------------------------
+
+create view Concepts_Typed_With_TypeUserNotEntire_Unconsolidated_en
+as
+	select
+		TI.priorityLevel as priorityLevel,
+		TI.typeName as typeName,
+		C.concept as concept
+		from type_user_en.TypeUserNotEntire TI, PosPattern_And_User_Forced_Concept_Not_Excluded_Final_en C
+		where
+-- activate the following line for using UDF function to type concept regarding anchors : issue Very Slow performance as it's via UDF
+--        udf.typeConcept(C.concept, TI.dictEntry, TI.matchType, TI.typeName );
+-- activate the following line for builtin function to type concept : better performance but not complete typing (exact match instead of anchors)
+      Equals(udf.stripDiacritics(ToLowerCase(GetText(C.concept))), udf.stripDiacritics(ToLowerCase(GetText(TI.dictEntry))));
+		
+-- output view Concepts_Typed_With_TypeUser_Unconsolidated_en;
+
+---------------------------------------------------------------------------------------------------------------
+-- Combine and Consolidate
+---------------------------------------------------------------------------------------------------------------
+
+create view Concepts_Typed_With_TypeUser_Unconsolidated_en
+as
+(select * from Concepts_Typed_With_TypeUserEntire_Unconsolidated_en)
+union all
+(select * from Concepts_Typed_With_TypeUserNotEntire_Unconsolidated_en);
+
+create view Concepts_Typed_With_TypeUser_en
+as
+select * from Concepts_Typed_With_TypeUser_Unconsolidated_en
+consolidate on Concepts_Typed_With_TypeUser_Unconsolidated_en.concept using 'LeftToRight' with priority from Concepts_Typed_With_TypeUser_Unconsolidated_en.priorityLevel;
+
+-- output view Concepts_Typed_With_TypeUser_en;
+
+------------------------------------------------------------------------------------------------------------------------------------
+-- previous views only contains concepts with valid type but skip all other concepts (with 'Unknown' type)
+-- to accomodate with that we need to create another view to merge both (with priority for concepts with valid type)
+------------------------------------------------------------------------------------------------------------------------------------
+
+-- tricky situation
+-- Concepts could have priorityLevel of base type ie (1001 - 1004) but also of user type (1 - 999)
+-- Concepts from nonling should not be in conflict with the other concepts but i prefer it to have a priority of 1000
+-- in order to have less priority than user type but higher priority than base type
+-- then we can add non typed concept with priorityLevel of 2000 (less priority than other cases)
+
+create view Concepts_Typed_And_Not_Typed_Unconsolidated_en as
+(select Concepts_Typed_With_TypeUser_en.priorityLevel as priorityLevel, 
+Concepts_Typed_With_TypeUser_en.typeName as typeName, 
+Concepts_Typed_With_TypeUser_en.concept as concept from Concepts_Typed_With_TypeUser_en)
+union all
+(select 1000 as priorityLevel, P.typeName as typeName, 
+P.concept as concept from nonling_en.Nonling_en P)
+union all
+(select Concepts_Typed_With_TypeBase_en.priorityLevel as priorityLevel, 
+Concepts_Typed_With_TypeBase_en.typeName as typeName, 
+Concepts_Typed_With_TypeBase_en.concept as concept from Concepts_Typed_With_TypeBase_en)
+union all
+(select 2000 as priorityLevel, 
+'Unknown' as typeName, 
+PosPattern_And_User_Forced_Concept_Not_Excluded_Final_en.concept as concept from PosPattern_And_User_Forced_Concept_Not_Excluded_Final_en);
+
+create view Concepts_Typed_And_Not_Typed_en
+as
+select * 
+from Concepts_Typed_And_Not_Typed_Unconsolidated_en
+consolidate on Concepts_Typed_And_Not_Typed_Unconsolidated_en.concept using 'LeftToRight' with priority from Concepts_Typed_And_Not_Typed_Unconsolidated_en.priorityLevel;
+--from PosPattern_And_User_Forced_Concept_Not_Excluded_Final_en V;
+
+-- output view Concepts_Typed_And_Not_Typed_en;
+ 
+-- exclude Nonling that are not validated (do it at the very end to be sure no other pattern (Pos) will find something into it
+create view preFinal_Concepts_en as
+select C.concept as concept, C.typeName as typeName from Concepts_Typed_And_Not_Typed_en C
+where Not(Equals(GetText(C.typeName), 'Excluded'));
+
+-- enforce concept having a specific suffix and typed as Unknown to be typed as Product
+--  (c), (r), (tm), [c], [r], [tm], �,  �, �
+create view Products as
+select C.concept as concept, 'Product' as typeName
+from preFinal_Concepts_en C
+where 
+Equals(GetText(C.typeName), 'Unknown')
+and
+MatchesRegex(/.*\(c\)|.*\(r\)|.*\(tm\)|.*\[c\]|.*\[r\]|.*\[tm\]|.*�|.*�|.*�/, C.concept);
+
+create view Final_Concepts_unconsolidated_en as
+(select 1 as PriorityLevel, P.concept, P.typeName from Products P)
+union all
+(select 2 as PriorityLevel, C.concept, C.typeName from preFinal_Concepts_en C);
+
+
+create view Final_Concepts_en as
+select * from Final_Concepts_unconsolidated_en C
+consolidate on C.concept using 'LeftToRight' order by C.PriorityLevel;
+
+export view Final_Concepts_en;
+
+-- output view Final_Concepts_en;
+

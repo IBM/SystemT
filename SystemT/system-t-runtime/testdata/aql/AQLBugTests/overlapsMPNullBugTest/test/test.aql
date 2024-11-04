@@ -1,0 +1,39 @@
+module test;
+
+require document with columns text Text;
+
+-- Test Overlaps as a join predicate
+
+-- View with non-null + null columns
+create view ExtractString as
+extract null as nullColVal, regex /ABC/
+on D.text as match
+from Document D;
+
+-- View with null span column
+create view NullArgView as 
+  select null as nullCol
+  from Document D;
+  
+-- 1st arg is null
+create view TestFirstArgAsNull as
+	select *
+	from ExtractString E, NullArgView N
+	where Overlaps(N.nullCol, E.match);
+
+-- 2nd arg is null
+create view TestSecondArgAsNull as
+	select *
+	from ExtractString E, NullArgView N
+	where Overlaps(E.match, N.nullCol);
+
+-- Both args are null
+create view TestBothArgsAsNull as
+	select *
+	from ExtractString E, NullArgView N
+	where Overlaps(E.nullColVal, N.nullCol);
+	
+output view TestFirstArgAsNull;
+output view TestSecondArgAsNull;
+output view TestBothArgsAsNull;
+	

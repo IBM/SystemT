@@ -1,0 +1,144 @@
+module Linguistics;
+
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText
+;
+
+
+import dictionary DefiniteArticleAll from module Dictionaries as DefiniteArticleAll
+;
+
+
+import dictionary PrefixesForProperNounNames from module Dictionaries as PrefixesForProperNounNames
+;
+
+
+require document with columns
+  text Text;
+
+create view CapsPlace as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__1__Temp_____sep_____R____id
+  from  __Subquery__1__Temp R;
+
+output view CapsPlace;
+
+create view CapsPlaceTwo as
+  select  CombineSpans(cp1.match, cp2.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          cp1.__auto__id as CapsPlace_____sep_____cp1____id,
+          cp2.__auto__id as CapsPlace_____sep_____cp2____id
+  from  CapsPlace cp1,
+        CapsPlace cp2
+  where FollowsTok(cp1.match, cp2.match, 0, 0);
+
+output view CapsPlaceTwo;
+
+create view CapsPlaceOnetoTwo as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__2__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__2__TempOp__1 Op);
+
+output view CapsPlaceOnetoTwo;
+
+create view The as
+  select  D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__3__Temp_____sep_____D____id
+  from  __Subquery__3__Temp D;
+
+output view The;
+
+create view InitialWord1 as
+  select  R.match as word,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__4__Temp_____sep_____R____id
+  from  __Subquery__4__Temp R
+  where Not(MatchesRegex(/(M\.D\.|U\.S\.|U\.N\.|E\.U\.)/, R.match));
+
+output view InitialWord1;
+
+create view InitialWord2 as
+  select  D.match as word,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as __Subquery__5__Temp_____sep_____D____id
+  from  __Subquery__5__Temp D;
+
+output view InitialWord2;
+
+create view __Subquery__1__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    regex /\p{Lu}\p{M}*([\p{Ll}\&\.-\/]\p{M}*){1,20}/
+    with flags 'DOTALL'
+    on between 1 and 25 tokens in D.text
+    return group 0 as match
+  from DocumentText D;
+
+output view __Subquery__1__Temp;
+
+create view __Subquery__3__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'DefiniteArticleAll'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__3__Temp;
+
+create view __Subquery__4__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    regex /(\p{Lu}\p{M}*\.\s*){1,5}/
+    with flags 'DOTALL'
+    on between 1 and 10 tokens in D.text
+    return group 0 as match
+  from DocumentText D;
+
+output view __Subquery__4__Temp;
+
+create view __Subquery__5__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    dictionary 'PrefixesForProperNounNames'
+    on D.text as match
+  from DocumentText D;
+
+output view __Subquery__5__Temp;
+
+create view __Union__2__TempOp__0 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as CapsPlace_____sep_____R____id
+  from  CapsPlace R;
+
+output view __Union__2__TempOp__0;
+
+create view __Union__2__TempOp__1 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as CapsPlaceTwo_____sep_____R____id
+  from  CapsPlaceTwo R;
+
+output view __Union__2__TempOp__1;
+

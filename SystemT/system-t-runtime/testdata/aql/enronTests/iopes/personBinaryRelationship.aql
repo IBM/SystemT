@@ -1,0 +1,113 @@
+-- include 'namedentity.aql';
+
+create view PersonsPhoneCand as
+select P.person as person, N.num as phone, CombineSpans(P.person, N.num) as personphone
+from Person P, PhoneNumber N
+where Follows(P.person,N.num,0,100);
+
+create view PersonsPhone1 as 
+select PP.person as person, PP.phone as phone, PP.personphone as personphone
+from PersonsPhoneCand PP
+where  MatchesRegex(/('s?)?\s+((#|number)|(phone|cell([-(\s)*]*phone)?)(\s)*(#|number)?)\s*((is)|.)?\s*/,SpanBetween(PP.person,PP.phone));
+ 
+create view PersonsPhone2 as 
+select PP.person as person, PP.phone as phone, PP.personphone as personphone
+from PersonsPhoneCand PP
+where  MatchesRegex(/(\s|\n)*(.|\n){0,10}(\s|\n)*(or\s+(at\s*)?(.|\n){0,10}(\s|\n)*)?/,SpanBetween(PP.person,PP.phone));
+--where  MatchesRegex(/(\s|\n)*/,PP.personphone);
+
+create view PersonsPhone3 as 
+select PP.person as person, PP.phone as phone, PP.personphone as personphone
+from PersonsPhoneCand PP
+where  MatchesRegex(/\s*a\s*call\s*at\s*/,SpanBetween(PP.person,PP.phone));
+
+create view PersonsPhone4 as 
+select PP.person as person, PP.phone as phone, PP.personphone as personphone
+from PersonsPhoneCand PP
+where  MatchesRegex(/\s+can\s*be\s*(\b\w+\b\s*){0,3}/,SpanBetween(PP.person,PP.phone));
+
+create view PersonsPhone5 as 
+select PP.person as person, PP.phone as phone, PP.personphone as personphone
+from PersonsPhoneCand PP
+where  MatchesRegex(/\s*at\s*/,SpanBetween(PP.person,PP.phone));
+
+create view PersonsPhoneAll as
+(select R.person as person, R.phone as phone, R.personphone as personphone from PersonsPhone1 R)
+union all
+(select R.person as person, R.phone as phone, R.personphone as personphone from PersonsPhone2 R)
+union all
+(select R.person as person, R.phone as phone, R.personphone as personphone from PersonsPhone3 R)
+union all
+(select R.person as person, R.phone as phone, R.personphone as personphone from PersonsPhone4 R)
+union all
+(select R.person as person, R.phone as phone, R.personphone as personphone from PersonsPhone5 R);
+
+create view PersonsPhoneOutput1 as
+select PPA.person as person, PPA.phone as phone, PPA.personphone as personphone
+--into PersonsPhoneOutput
+from PersonsPhoneAll PPA;
+
+create view PersonsAddressCand as
+select P.person as person, A.loc as address, CombineSpans(P.person, A.loc) as personaddress
+from Person P, Address A
+where Follows(P.person,A.loc,0,100);
+
+create view PersonsAddress1 as 
+select PA.person as person, PA.address as address, PA.personaddress as personaddress
+from PersonsAddressCand PA
+where  MatchesRegex(/\s+can\s*be\s*(\b\w+\b\s*){0,3}\s*/,SpanBetween(PA.person,PA.address));
+ 
+create view PersonsAddress2 as 
+select PA.person as person, PA.address as address,PA.personaddress as personaddress
+from PersonsAddressCand PA
+where  MatchesRegex(/\s+at\s*(\b\w+\b\s*){0,3}\s*/,SpanBetween(PA.person,PA.address));
+
+create view PersonsAddress3 as 
+select PA.person as person, PA.address as address,PA.personaddress as personaddress
+from PersonsAddressCand PA
+where  MatchesRegex(/(.|\n){0,10}/,SpanBetween(PA.person,PA.address));
+ 
+create view PersonsAddressAll as
+(select R.person as person, R.address as address,R.personaddress as personaddress from PersonsAddress1 R)
+union all
+(select R.person as person, R.address as address,R.personaddress as personaddress from PersonsAddress2 R)
+union all
+(select R.person as person, R.address as address,R.personaddress as personaddress from PersonsAddress3 R);
+
+create view PersonsAddressOutput1 as
+select PA.person as person, PA.address as address,PA.personaddress as personaddress
+--into PersonsAddressOutput
+from PersonsAddressAll PA;
+ 
+create view PersonsEmailAddressCand as
+select P.person as person, E.email as email, CombineSpans(P.person, E.email) as personemail
+from Person P, EmailAll E
+where Follows(P.person,E.email,0,100);
+
+create view PersonsEmailAddress1 as 
+select PE.person as person, PE.email as email,PE.personemail as personemail
+from PersonsEmailAddressCand PE
+where  MatchesRegex(/\s+can\s*be\s*(\b\w+\b\s*){0,3}\s*/,SpanBetween(PE.person,PE.email));
+ 
+create view PersonsEmailAddress2 as 
+select PE.person as person, PE.email as email,PE.personemail as personemail
+from PersonsEmailAddressCand PE
+where  MatchesRegex(/\s+at\s*(\b\w+\b\s*){0,3}\s*/,SpanBetween(PE.person,PE.email));
+ 
+create view PersonsEmailAddress3 as 
+select PE.person as person, PE.email as email,PE.personemail as personemail
+from PersonsEmailAddressCand PE
+where  MatchesRegex(/\s*[^\s](\W){0,5}/,SpanBetween(PE.person,PE.email));
+ 
+create view PersonsEmailAddressAll as
+(select R.person as person, R.email as email, R.personemail as personemail from PersonsEmailAddress1 R)
+union all
+(select R.person as person, R.email as email, R.personemail as personemail from PersonsEmailAddress2 R)
+union all
+(select R.person as person, R.email as email, R.personemail as personemail from PersonsEmailAddress3 R);
+
+create view PersonsEmailAddressOutput1 as
+select PE.person as person, PE.email as email, PE.personemail as personemail
+-- into PersonsEmailAddressOutput1
+from PersonsEmailAddressAll PE;
+ 

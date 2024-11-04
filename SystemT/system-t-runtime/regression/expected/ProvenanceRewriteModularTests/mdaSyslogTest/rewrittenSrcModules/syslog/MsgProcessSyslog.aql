@@ -1,0 +1,100 @@
+module syslog;
+
+
+create view MsgProcessBoundaries as
+  select  SpanBetween(DT.span, E.span) as span,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          DT.__auto__id as MsgDateTimeOutput_____sep_____DT____id,
+          E.__auto__id as ErrorSyslogOutput_____sep_____E____id
+  from  MsgDateTimeOutput DT,
+        ErrorSyslogOutput E;
+
+output view MsgProcessBoundaries;
+
+create view MsgProcess as
+  extract D.span as span,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    D.__auto__id as MsgProcessBoundaries_____sep_____D____id,
+    regex /:\s+(([a-zA-Z_]*)\[?(\d{0,7})\]?)\s*\:/
+    with flags 'DOTALL'
+    on D.span
+    return group 2 as appName
+       and group 3 as procId
+       and group 1 as match
+  from MsgProcessBoundaries D;
+
+output view MsgProcess;
+
+create view MsgProcesswithOnlyId as
+  select  D.procId as small_extent,
+          D.appName as appName,
+          D.procId as procId,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as MsgProcess_____sep_____D____id
+  from  MsgProcess D
+  where MatchesRegex(/\d{0,7}/, D.match);
+
+output view MsgProcesswithOnlyId;
+
+create view MsgProcesswithName as
+  select  D.appName as small_extent,
+          D.appName as appName,
+          D.procId as procId,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as MsgProcess_____sep_____D____id
+  from  MsgProcess D
+  where MatchesRegex(/[^\d{0,7}].*/, D.match);
+
+output view MsgProcesswithName;
+
+create view MsgProcessMatch as
+  (select  Op.small_extent as small_extent,
+            Op.appName as appName,
+            Op.procId as procId,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__45__TempOp__0 Op)
+  union all
+  (select  Op.small_extent as small_extent,
+            Op.appName as appName,
+            Op.procId as procId,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__45__TempOp__1 Op);
+
+output view MsgProcessMatch;
+
+create view __Union__45__TempOp__0 as
+  select  M.small_extent as small_extent,
+          M.appName as appName,
+          M.procId as procId,
+          M.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          M.__auto__id as MsgProcesswithName_____sep_____M____id
+  from  MsgProcesswithName M;
+
+output view __Union__45__TempOp__0;
+
+create view __Union__45__TempOp__1 as
+  select  M.small_extent as small_extent,
+          M.appName as appName,
+          M.procId as procId,
+          M.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          M.__auto__id as MsgProcesswithOnlyId_____sep_____M____id
+  from  MsgProcesswithOnlyId M;
+
+output view __Union__45__TempOp__1;
+

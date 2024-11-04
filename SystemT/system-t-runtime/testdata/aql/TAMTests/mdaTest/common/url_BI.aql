@@ -1,0 +1,56 @@
+module common;
+
+
+-- ****************************************************************************
+--
+-- Created By : Yunyao Li (yunyaoli@us.ibm.com)
+-- 
+-- Annotator type : Built-in
+-- 
+-- Purpose : Extract urls from plain text
+-- Examples :
+--			http://explorer.msn.com
+--          www.BlackBerry.net
+--
+-- This is a translation based on UrlRecognizer
+-- ****************************************************************************
+create view startsWithProtocol as
+select R.match as annot
+from RegexTok(/((ht|f)tps?:\/\/\w+[\w\-:&=_?\/~.<>@:]+[\w\-:&=_?\/~]{2,100})/,
+50, Document.text) R;
+--from RegexTok(/((?:(?:ht|f)tp(?:s?)?:\/\/\w+[\w\-:&=_?\/~.<>@:]+[\w\-:&=_?\/~]{2,100})/, 50, Doc.text) R;
+
+create view startsWithoutProtocol as
+select R.match as annot
+from
+RegexTok(/((www\d{0,3}|(w\d[a-zA-Z\-\d]*)+)\.\w+[\w\-:&=_?\/~.<>@:]+[\w\-:&=_?\/~]{2,100})/,
+50, Document.text) R;
+
+create view URLAll as
+	(select U.annot as annot from startsWithProtocol U)
+	union all
+	(select U.annot as annot from startsWithoutProtocol U);
+
+-- View used by webaccess rules
+export view URLAll;
+
+create view URLAllConsolidated as
+select C.annot as annot
+from URLAll C
+consolidate on C.annot 
+using 'ContainedWithin';
+	
+create view URLAllInterim as 
+select D.annot as URL_Span, GetText(D.annot) as URL_Text
+from URLAllConsolidated D;
+
+-- This view used by datapower rules
+export view URLAllInterim;
+
+create view URLOutput as
+select D.URL_Span as span, D.URL_Text as text, GetString('URL') as field_type
+from URLAllInterim D;
+ 
+export view URLOutput;
+
+

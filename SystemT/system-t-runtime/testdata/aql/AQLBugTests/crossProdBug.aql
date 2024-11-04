@@ -1,0 +1,25 @@
+-----------------------------------------------------------------------------
+-- crossProdBug.aql
+--
+-- A bug in code generation for statements that specify a cross-product.
+-----------------------------------------------------------------------------
+require document with columns text Text;
+
+create view Test2 as
+extract
+    regexes /test([0-9])->/ and /<-test([0-9])/
+        on D.text
+        return group 0 as txt and group 1 as number
+from Document D;
+
+create dictionary Numbers as ('1', '2', '3', '4', '5', '6', '7', '8', '9', '0');
+
+create view Test3 as
+select 
+    --CombineSpans(RightContext(A.txt, 1), LeftContext(B.txt, 1)) as newspan
+	SpanBetween(A.txt, B.txt) as newspan
+from Test2 A, Test2 B
+where ContainsDict('Numbers', A.number) and ContainsDict('Numbers', B.number);
+
+output view Test3;
+

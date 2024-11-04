@@ -1,0 +1,406 @@
+-- Laura 08/26/09 - added value based join to catch more orgs in the text
+--******************** BEGIN VALUE-BASED JOIN BLOCK *********************
+
+/*
+--Find additional company info occurences based on one to three tokens of existing org matches
+create view CapsWordOnetoThree as
+  select R.block as match
+  from BlockTok(0,1,3,AnyCapsOrg.match) R;
+
+
+-- Extract One to Three tokens out of StrongMedium companies
+create view CapsWordFromFinalOrg as
+	extract R.org as org,
+		regex /\p{Lu}\p{M}*([\p{Ll}\p{Lo}]\p{M}*|[\&\.'\-\,])+\b/  --'
+        on between 1 and 6 tokens in R.org
+        as word
+	from FinalOrgConsolidated R
+	having ContainsDict('organization_suffix.dict', org); 
+
+ 
+create view AllCapsFromFinalOrg as
+	extract R.org as org,
+		regex /(\p{Lu}\p{M}*){1,2}((\s*&\s*)?(\p{Lu}\p{M}*)+|([\p{Ll}\p{Lo}]\p{M}*)+(\p{Lu}\p{M}*)([\p{Ll}\p{Lo}]\p{M}*)+)/
+        on between 1 and 3 tokens in R.org 
+        as word
+	from FinalOrgConsolidated R
+	having ContainsDict('organization_suffix.dict', org);
+
+	
+create view CapsWordFromFinalOrgCand as
+(select C.word as word from CapsWordFromFinalOrg C)
+union all
+(select C.word as word from AllCapsFromFinalOrg C);
+
+
+create view CapsWordOnetoThreeFromFinalOrgCand as
+	extract blocks
+    	with count between 1 and 3
+    	-- allow ./of/and between tokens by requiring up to one token inbetween
+    	--TODO: enforce that the inbetween token matches one of ./of/and/&
+    	and separation between 0 and 1 tokens
+    	on CW.word as match
+	from CapsWordFromFinalOrgCand CW;
+
+
+--filter out matches that do not start at the beginning of company name
+create view PrefixFromFinalOrg as
+select O.org as original, CW.match as match
+from CapsWordOnetoThreeFromFinalOrgCand CW, FinalOrgConsolidated O
+where Equals( GetBegin(O.org), GetBegin(CW.match) ) and
+      Contains(O.org, CW.match);
+*/
+
+
+  
+
+
+  
+-- Remove organization suffix from strong organizations
+create view StrongOrgWithoutOrgSuffix as
+select R.organization as organization, R.match as match
+from
+(
+	(
+		select R.organization as organization, SpanBetween(LeftContext(R.organization,0), R.totrim) as match
+		from
+		(
+			extract R.organization as organization,
+					dictionary 'organization_suffix.dict' on R.organization as totrim
+			from OrganizationFull R
+			having Equals(GetEnd(organization), GetEnd(totrim))
+		) R
+	)
+	union all
+	(
+		select R.organization as organization, R.organization as match 
+		from OrganizationFull R
+		where Not(ContainsDict('organization_suffix.dict', R.organization))
+	)
+) R
+consolidate on R.match using 'NotContainedWithin';
+
+
+-- Clean up trailing ,-& and "and" tokens
+create view StrongOrgWithoutOrgSuffixClean as
+(
+	select R.organization as organization, Chomp(SpanBetween(LeftContext(R.match,0), R.totrim)) as match
+	from
+	(
+		extract R.organization as organization, R.match as match,
+				regex /(,|-|&|(\s+and))\s*\z/ on R.match as totrim
+		from StrongOrgWithoutOrgSuffix R
+	) R
+)
+union all
+(
+	select R.organization as organization, Chomp(R.match) as match 
+	from StrongOrgWithoutOrgSuffix R 
+	where Not(ContainsRegex(/(,|-|&|(\s+and))\s*\z/, R.match)) 
+);
+
+
+-- Customization for ACE2005
+create dictionary IndustrySuffixAdditional as(
+	'Group', 'Cruises', 'Cruise', 'Cruise Line', 'Cruise Lines', 'Line', 'Tours',
+	'Auction', 'Auctions', 'Auction House',
+	'Auction Gallery', 'Auction Galleries', 'Auctioneers & Appraisers',
+	'Auctioneers', 'Auction Services', 'Air', 'Airlines', 'Airways',
+	'Mining', 'Pictures',
+	'Systems', 'Technology', 'Motor', 'Motors', 'Gold', 'Medical', 'Communications', 'Estates',
+	'Petroleum', 'Publications', 'Medical Resources', 'Semiconductor', 'Municipals', 'Investment',
+	'Holdings', 'NV', 'Mines', 'Minerals', 'Intelligence Service', 'Service', 'Services', 'Resources',
+	'Communications', 'Pharmaceutical'
+);
+
+-- Find organizations with industry type suffixes
+create view StrongOrgWithIndustrySuffix as
+extract R.organization as organization,
+		dictionaries 'industryTypeCompany_suffix.dict' 
+				 and 'industryTypeEducation_suffix.dict'
+				 and 'industryTypeMedical_suffix.dict'
+				 and 'industryTypeMedia_suffix.dict'
+				 and 'industryTypeNewspaper_suffix.dict'
+				 and 'IndustrySuffixAdditional'
+			--with flags 'Exact'
+			on R.organization as totrim
+from 
+(
+	(select R.organization as organization from OrganizationFull R)
+	union all
+	(select R.match as organization from StrongOrgWithoutOrgSuffixClean R)
+) R
+having Equals(GetEnd(organization), GetEnd(totrim));
+
+
+create dictionary IndustrySuffixToIgnore as(
+	'Real Estate'
+);
+
+-- Remove industry type suffixes from strong orgs
+-- In the process, also ignore some matches that most likely cause false positives
+create view StrongOrgWithoutIndustryOrgSuffix as
+select R.organization as organization, Chomp(SpanBetween(LeftContext(R.organization,0), R.totrim)) as match
+from StrongOrgWithIndustrySuffix R
+where Not(MatchesDict('IndustrySuffixToIgnore', R.totrim));
+
+
+--------------------------------------------------------
+-- CoNLL2003 customization
+-- Capture <Org>( <Abbrv> )
+-- E.g., "banned Algerian Islamic Salvation Front ( [FIS] )"
+--       "Federal Securities Corporation ( [FFK] )"
+--------------------------------------------------------
+create view OrgAbbrvClue as
+extract 
+	regex /\(\s+((\p{Lu}\p{M}*){2,})\s+\)/ on D.text 
+		return group 0 as match
+		   and group 1 as organization
+from Doc D;
+
+create view OrgAbbrvValid as
+select C.organization
+from OrganizationFull O, OrgAbbrvClue C
+where FollowsTok(O.organization, C.match, 0, 2);
+ 
+create view AbbrvDelta as
+(select O.organization as organization from OrgAbbrvClue O)
+minus
+(select O.organization as organization from OrgAbbrvValid O);
+
+
+--output view OrgAbbrvClue;
+--output view OrgAbbrvValid;
+--output view AbbrvDelta;
+
+
+---******************************************************** 
+--- Pattern 3: E.g., [Le Monde] said; [Kekkila] said - not used yet
+---********************************************************
+/*
+create dictionary Clue3Dict as
+(
+	'said'
+);
+  
+create view OrgAdditional3Cand as
+select O.match 
+from AnyCapsWordOnetoFour O
+where MatchesDict('Clue3Dict', RightContextTok(O.match,1))
+  and Not(ContainsDict('NegativeClue1Dict', O.match))
+  and Not(ContainsDict('wkday.dict', O.match));
+
+create view OrgAdditional3Invalid as
+(select O.match from AnyCapsWordOnetoFour O, PersonWithAttrAllValid P where Overlaps(O.match, P.person))
+union all
+(select O.match from AnyCapsWordOnetoFour O, LocationConsolidated L where Overlaps(O.match, L.loc));
+  
+create view OrgAdditional3 as
+(select * from OrgAdditional3Cand)
+minus
+(select * from OrgAdditional3Invalid);
+
+--output view OrgAdditional3;
+*/
+
+
+-- Strong orgs with organization and industry suffixes removed
+create view PrefixFromFinalOrg as
+(select R.organization as original, R.match from StrongOrgWithoutOrgSuffixClean R)
+union all
+(select R.organization as original, R.match from StrongOrgWithoutIndustryOrgSuffix R)
+union all
+(select R.organization as original, R.organization as match from OrgAbbrvValid R);
+
+
+-- Deduplicate the list before Value-Based Join for performance
+create view PrefixFromFinalOrgDedup as
+select R.original as original, R.match as match, toUpperCase(R.match) as normMatch
+from
+(
+	select GetText(R.original) as original, GetText(R.match) as match
+	from PrefixFromFinalOrg R
+	group by GetText(R.original), GetText(R.match)
+) R;
+
+
+
+-- Perform the Value-Based Join (VBJ)
+create view OrgTokenCand as
+select O.original, O.organization
+from
+(
+	(
+	  select CN.original as original, CW.match as organization
+	  from 	CapsWordOnetoFive CW,  
+	  		PrefixFromFinalOrgDedup CN
+	  where Equals(GetText(CW.match),GetText(CN.match))
+	)
+	union all
+	(
+	select CN.original as original, CW.match as organization
+	  from 	CapsWordOnetoFive CW,  
+	  		PrefixFromFinalOrgDedup CN
+	  where Equals(GetText(CW.match),GetText(CN.normMatch))
+	)
+) O
+consolidate on O.organization; 
+  
+  
+--output view PrefixFromFinalOrgDedup;
+ 
+  
+-- VBJ matches contained within other organizations - to filter out
+create view OrgTokenOverlap as
+	select T.*
+	from OrgTokenCand T, OrganizationFull O
+	where Contains(O.organization, T.organization);
+	
+	
+-- VBJ matches overlapping but not contained within other organizations - for debugging only
+create view OrgTokenOverlapNotContains as
+	select O.organization as overlap, T.*
+	from OrgTokenCand T, OrganizationFull O
+	where Not(Contains(O.organization, T.organization)) and Overlaps(O.organization, T.organization);
+
+--output view OrgTokenOverlapNotContains;
+
+
+-- Filter out overlapping VBJ matches
+create view OrgToken as
+	(select * from OrgTokenCand)
+	minus
+	(select * from OrgTokenOverlap);
+  
+	
+-- VBJ matches with Caps word to the right - to filter out
+create view OrgTokenWithRightCapsWord as
+	select T.*, RightContextTok(T.organization,1) as RC
+	from OrgToken T
+	where ContainsRegex(/\A\s*\p{Lu}\p{M}*/, RightContextTok(T.organization,1))
+	  and Not(Equals(GetText(T.organization), toUpperCase(T.organization)));
+
+	
+-- VBJ matches with Caps word to the left
+create view OrgTokenWithLeftCapsWordCand as
+	select LeftContextTok(T.organization,1) as LC, T.*
+	from OrgToken T
+	where MatchesRegex(/\p{Lu}\p{M}*.*/, LeftContextTok(T.organization,1))
+	  and Not(Equals(GetText(T.organization), toUpperCase(T.organization)))
+	  and Not(MatchesRegex(/The\s+/, LeftContextTok(T.organization,1)));
+
+	
+-- VBJ matches with Caps word to the left containing sentence boundary
+create view OrgTokenWithLeftCapsWordFilter as
+	select T.*
+	from OrgTokenWithLeftCapsWordCand T, SentenceBoundary B
+	where Or(Contains(T.LC, B.boundary),
+	         Follows(B.boundary, T.LC, 0, 0));
+
+
+-- VBJ matches with Caps word to the left not containing sentence boundary - to filter out
+create view OrgTokenWithLeftCapsWord as
+(select * from OrgTokenWithLeftCapsWordCand)
+minus
+(select * from OrgTokenWithLeftCapsWordFilter);
+
+
+-- VBJ matches within UrlEmailPlace - to filter out only in certain versions of annotators (i.e., eDA)
+create view OrgTokenWithinUrlEmailPlace as
+select O.*
+from OrgToken O, UrlEmailPlace UEP
+where Contains (UEP.match, O.organization);
+
+
+-- VBJ matches within Location - to filter out
+create view OrgTokenWithinLocation as
+select O.*
+from OrgToken O, LocationConsolidated L
+where Contains (L.loc, O.organization);
+
+
+-- VBJ matches within Person - to filter out if needed (currently not done)
+create view OrgTokenWithinPerson as
+select O.*
+from OrgToken O, PersonBeforeFinalOrgFilter P
+where Contains (P.person, O.organization);
+
+/*create view OrgTokenWithinPerson as
+select O.*
+from OrgToken O, 
+(
+ (select P.person as person from Person P)
+ minus
+ (select P.person as person from PersonWithAttrAllValid P)
+) P
+where Contains (P.person, O.organization);
+
+
+--output view OrgTokenWithinPerson;
+*/
+
+
+-- VBJ matches filtered
+create view OrgTokenFiltered as
+(select * from OrgToken)
+minus
+(
+	(select O.original, O.organization from OrgTokenWithRightCapsWord O)
+	union all
+	(select O.original, O.organization from OrgTokenWithLeftCapsWord O)
+	--union all
+	--(select * from OrgTokenWithinUrlEmailPlace)
+	union all
+	(select * from OrgTokenWithinLocation)
+	union all
+	(select * from OrgTokenWithinPerson)
+);
+
+
+create dictionary OrgTokenToIgnore as(
+	'International', 'National', 'World', 'European', 'State', 'Security', 'Securities',  
+	'Economics', 'Marketing', 'Research', 'Communication', 'Commerce', 'Conservation',
+	'Development', 'Medicine', 'Medical', 'Staff', 'Training', 'Information', 'Internet',
+	'Ambulance', 'Environment', 'Sale', 'Fund', 'Innovation', 'Science', 'Credit',
+	'Network', 'Networks', 'Rehabilitation', 'Nursery', 'Proliferation', 'Tissue', 
+	--'News', 
+	'Miss Universe', 'HK'
+);
+
+
+-- Final VBJ matches to be unioned with the rest of orgs
+create view OrganizationVBJ as
+	select *
+	from OrgTokenFiltered O
+	where Not(MatchesDict('OrgTokenToIgnore', O.organization))
+	  and Not(MatchesDict('nationality.dict', O.organization));
+
+
+--output view OrganizationFull;
+--output view StrongOrgWithoutOrgSuffix;
+--output view StrongOrgWithoutOrgSuffixClean;
+--output view StrongOrgWithoutIndustryOrgSuffix;
+--output view PrefixFromFinalOrg;
+--output view OrgAbbrvValid;
+
+--output view OrgTokenCand;
+--output view OrgTokenOverlap;
+--output view OrgTokenWithRightCapsWord;
+
+--output view OrgTokenWithLeftCapsWordCand;
+--output view OrgTokenWithLeftCapsWordFilter;
+--output view OrgTokenWithLeftCapsWord;
+
+--output view OrgTokenWithinUrlEmailPlace;
+--output view OrgTokenWithinLocation;
+--output view OrgTokenWithinPerson;
+
+--output view OrgTokenFiltered;
+--output view OrgTokenCandSportsTeams;
+--output view OrganizationVBJ;
+
+
+
+
+--******************** END VALUE-BASED JOIN BLOCK   *********************
+

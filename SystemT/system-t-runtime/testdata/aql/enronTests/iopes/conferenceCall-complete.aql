@@ -1,0 +1,370 @@
+/*******************************************************************************
+* conferenceCall.aql
+*
+* A version of the 'conferenceCall' annotator that uses the Avatar operator
+* framework.
+*
+* This file is written based on ConferenceCallRecognizer.xml
+*******************************************************************************/
+
+/*******************************************************************************
+* REGULAR EXPRESSIONS OVER DOCUMENTS
+*
+* Identify strong conference call candidates by regular expression matching
+* 
+* Each regex is evaluated as a selection over $Document, producing 'Raw' tuples
+* with the schema: <doc, ConferenceCallCandidates>
+*
+* The union of the candidates are then consolidated: any candidate that is
+* contained by another is discarded
+*******************************************************************************/
+
+create view ConferenceCallCandidates1 as
+select R.match as annot
+from Regex(/((((call|dial)-?in)|(toll)|(p\/c))\s*((#|number)|(.{0,10}:))\s*.{0,10}\s*\(?\s*\d{3,}(-|\d|\.| |\)){0,10})/, Document.text) R;
+
+create view ConferenceCallCandidates2 as
+select R.match as annot  
+from Regex(/(([Pp]aticipant|[Hh]ost|[Mm]oderator)\s*(pin)?\s*(access)?\s*code\s*.{0,10}\s*\d{3,}(-|\d|\.){0,10})/, Document.text) R;
+
+create view ConferenceCallCandidates3 as
+select R.match as annot  
+from Regex(/((pass|conference)\s?code\s*.{0,2}\s*\d{3,}(-|\d|\.){0,10})/, Document.text) R;
+
+create view ConferenceCallCandidates4 as
+select R.match as annot 
+from Regex(/(conference\s+call.{0,10}\s*\(?\s*\d{3,}(-|\d|\.| |\)){0,10})/, Document.text) R;
+
+/*
+Consolidate all conference call candidates
+*/
+create view ConferenceCallCandidatesAll as 
+     (select CCC1.annot as annot from ConferenceCallCandidates1 CCC1)
+     union all
+     (select CCC2.annot as annot from ConferenceCallCandidates2 CCC2)
+     union all
+     (select CCC3.annot as annot from ConferenceCallCandidates3 CCC3)
+     union all
+     (select CCC4.annot as annot from ConferenceCallCandidates4 CCC4);    
+ 
+create view ConferenceCallCandidates as
+select CCC.annot as annot
+--into ConferenceCallCandidates
+from Consolidate(ConferenceCallCandidatesAll.annot) CCC;   
+
+/*******************************************************************************
+* REGULAR EXPRESSIONS OVER DOCUMENTS
+*
+* Identify week conference call candidates by regular expression matching
+* 
+* Each regex is evaluated as a selection over $Document, producing 'Raw' tuples
+* with the schema: <doc, WeakConferenceCallCandidates>
+*
+*******************************************************************************/
+create view WeakConferenceCallCandidates as
+select R.match as annot
+--into WeakConferenceCallCandidates
+from Regex(/((Tie|(T\/L)|TL|PC|Intl|International|Domestic|number|Toll|Call-in\s+(information|info)|dial|info|password))(.{0,10}\s*(-|\d|\.| |\(|\)){4,15})*/, Document.text) R;
+
+/********************************************************************************
+* CREATE BLOCKS OF DIRECTION
+*
+* All blocks satisfying the conditions are created. 
+*
+* First of all, we identify all the blocks containing at least one conference call candidates, 
+* which can be strong direction candidates or week direction candidates.
+*
+* Then only the blocks contain at least one strong direction candidates are kept
+*
+********************************************************************************/
+
+create view AllConferenceCallCandidates as
+ 	  (select CCC.annot as annot from ConferenceCallCandidates CCC)
+ 	  union all
+ 	  (select WCCC.annot as annot from WeakConferenceCallCandidates WCCC);
+
+create view AllConferenceCallBlockCandidates as
+select B.block as annot
+--into AllConferenceCallBlockCandidates
+from Block(100, 1, AllConferenceCallCandidates.annot) B;
+
+create view ConferenceCallBlockCandidates as
+select ACCBC.annot as annot
+--into ConferenceCallBlockCandidates
+from AllConferenceCallBlockCandidates ACCBC, ConferenceCallCandidates CCC
+where Contains(ACCBC.annot, CCC.annot);
+
+/********************************************************************************
+* REGULAR EXPRESSIONS OVER DOCUMENTS
+*
+* Identify email headers by regular expression matching 
+*
+* Each regex is evaluated as a selection over $Document, producing 'Raw' tuples
+* with the schema: <doc, HeaderBegin>
+*
+* The original regular expressions defined as startPatterns in
+* annotators/src/java/com/ibm/avatar/annotators.email/ForwardBlockExtractor.java
+********************************************************************************/
+create view HeaderBegin1 as
+select R.match as annot
+-- into HeaderBegin1 
+from Regex(/(total\W{0,2}\w{0,15}\W{0,2}((time)|(distance)))([ A-Za-z0-9\t,])*/, Document.text) R;
+
+create view HeaderBegin2 as
+select R.match as annot
+--into HeaderBegin2 
+from Regex(/.{1,30}\/.{1,25}\/.{1,20}(\@.{1,20})?\s*\n(>\s*)*\d{2,4}(\/|\.)\d{2,4}(\/|\.)\d{2,4}\s\d{2}\:\d{2}(\s+(PM|AM))?/, Document.text) R;
+
+create view HeaderBegin3 as
+select R.match as annot
+--into HeaderBegin3
+from Regex(/(To\s*\n(>\s*)*.{5,1000}?\s*\n(>\s*)*\s*cc\s*\n)/, Document.text) R;
+
+create view HeaderBegin4 as
+select R.match as annot
+--into HeaderBegin4 
+from Regex(/To:\s*.{1,200}\s*\n(>\s*)*\s*(CC|cc|Cc):\s*(\n)?/, Document.text) R;
+
+create view HeaderBegin5 as
+select R.match as annot
+--into HeaderBegin5 
+from Regex(/On\s*(([A-Z][a-z]{2,10},?\s*\d{1,2},?\s*[A-Z][a-z]{2,10}\s*\d{2,4},)|(\d{1,2}\/\d{1,2}\/\d{1,2},))\s*.{1,100}?\s*wrote\:/, Document.text) R;
+
+create view HeaderBegin6 as
+select R.match as annot
+--into HeaderBegin6 
+from Regex(/At\s+\d{2}:\d{2}\s+.{1,9}\s+.{1,6},\s+you wrote:/, Document.text) R;
+
+create view HeaderBegin7 as
+select R.match as annot
+--into HeaderBegin7
+from Regex(/(From:\s*.{1,40}\s*\[mailto:.{5,50}\])|(From:\s*.{1,50}\s*\n\s*To:)/, Document.text) R;
+
+create view HeaderBegin8 as
+select R.match as annot
+--into HeaderBegin8
+from Regex(/\-{5}\s*Message\sfrom\s*.{5,30}\s.{6,40}\s*on\s*[A-Z][a-z]{2,8},\s*\d{1,2}\s*[A-Z][a-z]{2,8}\s*\d{4}(.|\n){10,18}\s*\-{5}/, Document.text) R;
+
+create view HeaderBegin9 as
+select R.match as annot
+--into HeaderBegin9
+from Regex(/\s*\-{5}\s+Original\s*Message\s+\-{5}\s*(\n{0,3})?\s*From:.{1,50}?/, Document.text) R;
+
+create view HeaderBegin10 as
+select R.match as annot
+--into HeaderBegin10
+from Regex(/Quoting\s*.{1,120}?:\s*(\n)+\s*(>\s*)/, Document.text) R;
+
+create view HeaderBegin11 as
+select R.match as annot
+--into HeaderBegin11
+from Regex(/\[[Aa]ttachment\s*deleted\s*by\s*.{1,60}?\]/, Document.text) R;
+
+/********************************************************************************
+* REGULAR EXPRESSIONS OVER DOCUMENTS
+*
+* Identify email headers by regular expression matching 
+*
+* Each regex is evaluated as a selection over $Document, producing 'Raw' tuples
+* with the schema: <doc, HeaderEnd>
+*
+* The original regular expressions defined as endPatterns in
+* annotators/src/java/com/ibm/avatar/annotators.email/ForwardBlockExtractor.java
+********************************************************************************/
+
+create view HeaderEnd1 as
+select R.match as annot
+--into HeaderEnd1
+from Regex(/(Subject:)|(Subject\s*\n)/, Document.text) R;
+
+create view HeaderEnd2 as
+select R.match as annot
+--into HeaderEnd2
+from Regex(/Subject\s*\n/, Document.text) R;
+
+create view HeaderEnd3 as
+select R.match as annot
+--into HeaderEnd3
+from Regex(/Subject\s*\n/, Document.text) R;
+
+create view HeaderEnd4 as
+select R.match as annot
+--into HeaderEnd4
+from Regex(/Subject:/, Document.text) R;
+
+create view HeaderEnd7 as
+select R.match as annot
+--into HeaderEnd7
+from Regex(/(Subject:)|(Date:.{20,80}\s*\n)/, Document.text) R;
+
+create view HeaderEnd8 as
+select R.match as annot
+--into HeaderEnd8
+from Regex(/Subject:/, Document.text) R;
+
+create view HeaderEnd9 as
+select R.match as annot
+--into HeaderEnd9
+from Regex(/\s*Subject:/, Document.text) R;
+	
+/********************************************************************************
+* IDENTIFY EMAIL FORWARD HEADERS
+*
+* LOOK FOR END PATTERNS CORRESPONDING TO THE APPROPRIATE FORWARD HEADER
+*
+* Find the end patterns that is within 1000 characters of a start pattern with
+* the same identifier.  
+*
+* Then merge each such <start pattern, end pattern> into a tuple in $ForwardBlockCandidates
+* 
+* Any forward block candidate that contains another forward block candidate is discarded
+*
+* producing 'Raw' tuples with the schema: <doc, HeaderBegin, HeaderEnd>
+*
+********************************************************************************/   
+
+create view ForwardBlockCandidates1 as
+select B.annot as headerBegin, 
+       E.annot as headerEnd,
+       CombineSpans(B.annot, E.annot) as annot
+from HeaderBegin1 B, HeaderEnd1 E
+where FollowsTok(B.annot, E.annot, 0, 1000);
+
+create view FinalForwardBlockCandidates1 as
+select FBC.annot as annot
+--into FinalForwardBlockCandidates1
+from Consolidate('NotContainedWithin',ForwardBlockCandidates1.annot) FBC;
+
+create view ForwardBlockCandidates2 as
+select B.annot as headerBegin, 
+       E.annot as headerEnd,
+       CombineSpans(B.annot, E.annot) as annot
+from HeaderBegin2 B, HeaderEnd2 E
+where FollowsTok(B.annot, E.annot, 0, 1000);
+
+create view FinalForwardBlockCandidates2 as
+select FBC.annot as annot
+--into FinalForwardBlockCandidates2
+from Consolidate('NotContainedWithin',ForwardBlockCandidates2.annot) FBC;
+
+create view ForwardBlockCandidates3 as
+select B.annot as headerBegin, 
+       E.annot as headerEnd,
+       CombineSpans(B.annot, E.annot) as annot
+from HeaderBegin3 B, HeaderEnd3 E
+where FollowsTok(B.annot, E.annot, 0, 1000);
+
+create view FinalForwardBlockCandidates3 as
+select FBC.annot as annot
+--into FinalForwardBlockCandidates3
+from Consolidate('NotContainedWithin',ForwardBlockCandidates3.annot) FBC;
+
+create view ForwardBlockCandidates4 as
+select B.annot as headerBegin, 
+       E.annot as headerEnd,
+       CombineSpans(B.annot, E.annot) as annot
+from HeaderBegin4 B, HeaderEnd4 E
+where FollowsTok(B.annot, E.annot, 0, 1000);
+
+create view FinalForwardBlockCandidates4 as
+select FBC.annot as annot
+--into FinalForwardBlockCandidates4
+from Consolidate('NotContainedWithin',ForwardBlockCandidates4.annot) FBC;
+
+create view ForwardBlockCandidates7 as
+select B.annot as headerBegin, 
+       E.annot as headerEnd,
+       CombineSpans(B.annot, E.annot) as annot
+from HeaderBegin7 B, HeaderEnd7 E
+where FollowsTok(B.annot, E.annot, 0, 1000);
+
+create view FinalForwardBlockCandidates7 as
+select FBC.annot as annot
+--into FinalForwardBlockCandidates7
+from Consolidate('NotContainedWithin',ForwardBlockCandidates7.annot) FBC;
+
+create view ForwardBlockCandidates8 as
+select B.annot as headerBegin, 
+       E.annot as headerEnd,
+       CombineSpans(B.annot, E.annot) as annot
+from HeaderBegin8 B, HeaderEnd8 E
+where FollowsTok(B.annot, E.annot, 0, 1000);
+
+create view FinalForwardBlockCandidates8 as
+select FBC.annot as annot
+--into FinalForwardBlockCandidates8
+from Consolidate('NotContainedWithin',ForwardBlockCandidates8.annot) FBC;
+
+create view ForwardBlockCandidates9 as
+select B.annot as headerBegin, 
+       E.annot as headerEnd,
+       CombineSpans(B.annot, E.annot) as annot
+from HeaderBegin9 B, HeaderEnd9 E
+where FollowsTok(B.annot, E.annot, 0, 1000);
+
+create view FinalForwardBlockCandidates9 as
+select FBC.annot as annot
+--into FinalForwardBlockCandidates9
+from Consolidate(ForwardBlockCandidates9.annot) FBC;
+
+/*
+Consolidate all forward blocks
+*/
+
+create view ForwardBlock as 
+     (select FB1.annot as annot from FinalForwardBlockCandidates1 FB1)
+     union all
+     (select FB2.annot as annot from FinalForwardBlockCandidates2 FB2)
+     union all
+     (select FB3.annot as annot from FinalForwardBlockCandidates3 FB3)
+     union all
+     (select FB4.annot as annot from FinalForwardBlockCandidates4 FB4)
+     union all
+     (select HB5.annot as annot from HeaderBegin5 HB5)
+     union all
+     (select HB6.annot as annot from HeaderBegin6 HB6)
+     union all
+     (select FB7.annot as annot from FinalForwardBlockCandidates7 FB7)
+     union all
+     (select FB8.annot as annot from FinalForwardBlockCandidates8 FB8)
+     union all
+     (select FB9.annot as annot from FinalForwardBlockCandidates9 FB9)
+     union all
+     (select HB10.annot as annot from HeaderBegin10 HB10)
+     union all
+     (select HB11.annot as annot from HeaderBegin11 HB11);
+
+create view FinalForwardBlock as
+select FB.annot as annot
+--into FinalForwardBlock
+from Consolidate(ForwardBlock.annot) FB; 
+/********************************************************************************
+* SELECT CONFERENCE CALL EXISING IN THE BODY OF EACH EMAIL
+*
+* $ConferenceCallBlockCandidates generated earlier contains all the possible conference 
+* call blocks, 
+* Here all $ConferenceCallBlockCandidates contain $ForwardBlock are discarded such that
+* Direction contained emails are seperated by forward blocks. 
+*
+* In addition, all the $ConferenceCallBlockCandidates that are contained by others are
+* discarded as well
+*
+* This process is divided into three steps:
+* Step 1: Identifying all the $ConferenceCallBlockCandidates that contain $ForwardBlock
+* Step 2: Discard all the $ConferenceCallBlockCandidates identified at Step 1
+* Step 3: Discard all the remaining $ConferenceCallBlockCandidates contained by others 
+********************************************************************************/
+create view WrongConferenceCallBlocks as
+select CCBC.annot as annot
+--into WrongConferenceCallBlocks
+from ConferenceCallBlockCandidates CCBC, FinalForwardBlock FB
+where Contains(CCBC.annot, FB.annot);
+
+create view CorrectConferenceCallBlocks as
+	(select CCBC.annot as annot from ConferenceCallBlockCandidates CCBC)
+		minus
+	(select WCCB.annot as annot from WrongConferenceCallBlocks WCCB);
+	
+select CCCB.annot as annot
+into ConferenceCall
+from Consolidate(CorrectConferenceCallBlocks.annot) CCCB;     

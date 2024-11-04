@@ -1,0 +1,32 @@
+###############################################################################
+# person.aog
+#
+# ("aog" stands for Avatar Operator Graph.)
+#
+# File that specifies a plan for annotating just the "Person" part of 
+# personphone_xry.aog.
+###############################################################################
+
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+
+# Detect sentences.
+$SentenceScan = 
+Project(("match" => "sentence"),
+	Project(("match"=>"match"), Sentence("text", $Document)));
+
+$Person = 
+	Project(("person" => "person"),
+		Select(MatchesRegex(/[A-Z][a-z]*/, "person"), 
+		Project( ("match" => "person"),
+			Dictionary("dictionaries/first.dict", "text", $Document))
+	));
+
+			
+# Specify the output.
+Output: $Person, $SentenceScan;
+

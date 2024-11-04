@@ -1,0 +1,101 @@
+create view USStateCandidate  as
+select
+		D.match as match
+	from
+		--Dictionary('stateList.dict',  Doc.text) D;
+		--Dictionary('loc_usa_states_en.dict',  Doc.text) D;
+		(extract dictionary 'loc_usa_states_en.dict' on D.text as match from Doc D) D;
+
+create view CanadianProvinceCandidate  as
+select
+		D.match as match
+	from
+		--Dictionary('location/statesOrProvinces/province-canada.dict',  Doc.text) D;
+		--Dictionary('location/statesOrProvinces/loc_canada_provin_en.dict',  Doc.text) D;
+		(extract dictionary 'location/statesOrProvinces/loc_canada_provin_en.dict' on D.text as match from Doc D) D;
+		
+create view StateCandidate as
+	(select C.match as match from USStateCandidate C)
+	union all	
+	(select C.match as match from CanadianProvinceCandidate C)
+	union all
+	(select C.* from StatesFromOtherMajorCountries C);
+		
+-- The following do exact dictionary matching may missing entries such as 'Al', 'Ms'
+ -- to avoid false positives in weak rules (e.g. the one w/o zipcode)	
+ create view USStateStrongAbbrev  as
+ extract 
+ 	dictionaries 
+ 		--'stateListAbbrev.dict' and
+ 		'loc_usa_states_abbrev_case_en.dict' and
+ 		--'stateAbbrv.ChicagoAPStyle.dict'
+ 		'loc_usa_states_abbrev_chicagoAP_case_en.dict'
+    with flags 'Exact'
+ 		on D.text   
+        as match     
+        from Doc D;
+
+-- Yunyao: updated on 11/06/2009 to include state abbreviations in chicago AP style as well
+ create view USStateWeakAbbrev  as
+    extract 
+ 	dictionaries 
+ 		--'stateListAbbrev.dict' and
+ 		'loc_usa_states_abbrev_case_en.dict' and
+ 		--'stateAbbrv.ChicagoAPStyle.dict'
+ 		'loc_usa_states_abbrev_chicagoAP_case_en.dict'
+    	on D.text   
+        as match     
+        from Doc D;
+		
+		
+create view StateStrongAbbrev as
+	(select A.match as match from USStateStrongAbbrev A)
+	union all
+	(select A.match as match from CanadianProvinceStrongAbbrev A);
+	
+create view StateWeakAbbrev as
+	(select A.match as match from USStateWeakAbbrev A)
+	union all
+	(select A.match as match from CanadianProvinceWeakAbbrev A);
+
+create view StatesFromMajorCountries as
+	(select C.match as match from StateCandidate C)
+	union all
+	(select C.match as match from StatesFromOtherMajorCountries C);
+
+  create view StateStrongAll
+	as
+	(select S.match as match from StatesFromMajorCountries S)
+	union all 
+	 (select S.match as match from StateStrongAbbrev S);	
+	 
+  create view StateWeakAll
+	as
+	(select S.match as match from StateCandidate S)
+	union all 
+	 (select S.match as match from StateWeakAbbrev S);	
+
+create view USCity as
+	select
+		D.match as match
+	from
+	--	Dictionary('city.dict', 'Exact', Doc.text) D
+		--Dictionary('city.dict', Doc.text) D
+		--Dictionary('loc_usa_cities_en.dict', Doc.text) D
+		(extract dictionary 'loc_usa_cities_en.dict' on D.text as match from Doc D) D
+	where MatchesRegex(/\p{Lu}\p{M}*.+/, D.match);	
+
+create view GermanCities as
+	select
+		D.match as match 
+	from
+		--Dictionary('city_german.dict', Doc.text) D;
+		--Dictionary('loc_germany_cities_de.dict', Doc.text) D;
+		(extract dictionary 'loc_germany_cities_de.dict' on D.text as match from Doc D) D;  
+
+-- Following block to be activated (uncommented) only in Romanian-customized version of the NER extractors 
+/*create view RomanianCities as
+extract dictionaries 'language/ro/location/cities-ro.dict' and 'language/ro/location/cities-ro-noD.dict'
+on D.text as match
+from Doc D;*/
+		

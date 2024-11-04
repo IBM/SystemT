@@ -1,0 +1,23 @@
+require document with columns text Text and label Text;
+
+-- Find first names, using an exhaustive dictionary.
+create view FirstName as 
+extract 
+    dictionary 'firstnames.dict' on D.text as name
+from Document D
+having MatchesRegex(/\A[A-Z][a-z]*\Z/, name);
+
+output view FirstName;
+
+
+create dictionary FirstNameInline as(
+	'Anna', 'Alex', 'Sibel', 'Cahil' 
+);
+
+create view FirstName1 as 
+extract 
+    dictionary 'FirstNameInline' on D.text as name
+from Document D
+having MatchesRegex(/\A[A-Z][a-z]*\Z/, name);
+
+output view FirstName1;

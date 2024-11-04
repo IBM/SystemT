@@ -1,0 +1,48 @@
+-------------------------------------------------------------------------------
+-- bufferBug3.aql
+--
+-- Yet another bug in TeeOutput buffer management.
+-------------------------------------------------------------------------------
+require document with columns text Text;
+
+create view Email2_a as
+select R.match as annot
+from   Regex(/\b((\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*[\p{Ll}\p{Lu}\p{Lt}\p{Lo}\p{Nd}\p{Pc}]{1,20}\s*[\/]\s*)((\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}\s*){1,2}[\/]\s*){1,2}(\p{Lu}\p{M}*){2,20}(@(\p{L}\p{M}*){2,20})?)(?!\/)\b/, Document.text) R;
+
+create view OrgClueStIndCaps as
+select D.match as match
+from Dictionary('dictionaries/lotus/industry_types_retained.dict', 'Exact', Document.text) D;
+
+create view StrictFirstName1 as
+select D.match as firstname
+from   Dictionary('dictionaries/lotus/strictfirst.dict', Document.text) D;	
+
+create view ValidOrg as 
+	(select O.match as org from OrgClueStIndCaps O)
+	minus
+	(select OP.annot as org from Email2_a OP);
+ 
+
+create view UrlEmailPlaceOrg as 
+     (select R.annot as match from Email2_a R)
+     union all
+     (select R.org as match from ValidOrg R);
+
+ 
+create view FinalPersonStrongSingleToken as 
+	(select P.firstname as person from StrictFirstName1 P)
+	minus
+	(select P1.match as person from UrlEmailPlaceOrg P1);
+ 
+ 
+select O.org as org
+into Organization
+from ValidOrg O;
+
+
+select P.person as person
+into PersonSingleToken
+from FinalPersonStrongSingleToken P; 
+
+
+

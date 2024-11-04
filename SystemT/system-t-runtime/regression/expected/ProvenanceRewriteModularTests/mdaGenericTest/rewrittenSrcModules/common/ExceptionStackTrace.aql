@@ -1,0 +1,88 @@
+module common;
+
+
+create view AllClassesInTrace as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /((?:[a-z])*)\.((?:\w|-|_|\.)*)\.(_?[A-Za-z](?:(\w|\$))+)(\._?[a-z](\w|\d)+)?/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as match
+  from Document D;
+
+output view AllClassesInTrace;
+
+create view SubsequentClassInTraceCands as
+  select  D.match as match,
+          RightContextTok(D.match, 11) as r_ctx,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as AllClassesInTrace_____sep_____D____id
+  from  AllClassesInTrace D
+  where MatchesRegex(/(at)\s+/, LeftContextTok(D.match, 1));
+
+output view SubsequentClassInTraceCands;
+
+create view SubsequentClassInTraceFiltered as
+  extract D.match as match,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    D.__auto__id as SubsequentClassInTraceCands_____sep_____D____id,
+    regex /\(\w(\w|\d|\.|\:|\s)+\)/
+    with flags 'DOTALL'
+    on D.r_ctx
+    return group 0 as pars
+  from SubsequentClassInTraceCands D;
+
+output view SubsequentClassInTraceFiltered;
+
+create view SubsequentClassInTrace as
+  select  CombineSpans(D.match, D.pars) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as SubsequentClassInTraceFiltered_____sep_____D____id
+  from  SubsequentClassInTraceFiltered D
+  where Follows(D.match, D.pars, 0, 1);
+
+output view SubsequentClassInTrace;
+
+
+
+
+
+create view ClassBlock as
+  select  Op.cblock as cblock,
+          AutoID() as __auto__id
+  from  __Base__common__ClassBlock__Temp Op;
+
+output view ClassBlock;
+
+
+
+
+
+create view ExceptionStackOutput as
+  select  T.cblock as span,
+          GetString(T.cblock) as text,
+          GetString('ExceptionStack') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          T.__auto__id as ClassBlock_____sep_____T____id
+  from  ClassBlock T;
+
+output view ExceptionStackOutput;
+
+export view common.ExceptionStackOutput;
+
+
+create view __Base__common__ClassBlock__Temp as
+  extract blocks
+    with count between 2 and 70
+    and separation between 0 and 4 tokens
+    on D.match as cblock
+  from SubsequentClassInTrace D
+  consolidate on cblock using 'ContainedWithin';
+
+output view __Base__common__ClassBlock__Temp;
+

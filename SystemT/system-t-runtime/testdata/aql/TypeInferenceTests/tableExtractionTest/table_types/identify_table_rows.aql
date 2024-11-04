@@ -1,0 +1,78 @@
+/**
+	This file identifies all rows from the financial tables 
+	extracted in the financial_tables_type.aql
+	If a table is extracted with multiple title keys,
+	the earliest key is used.
+*/
+module table_types;
+
+import view TR from module detag_doc as TR;
+import view TD from module detag_doc as TD;
+import view TH from module detag_doc as TH;
+import view Doc from module detag_doc as Doc;
+import view TABLE from module detag_doc as TABLE;
+
+import function GetStEndColumnNumber from module java_udf as GetStEndColumnNumber;
+
+-------------------------------------------------------------------------------
+--	if table extracted twice with different titlekey, use earliest titlekey
+-------------------------------------------------------------------------------
+create view FinancialTables_All_2 as
+select T.table1, Min(GetBegin(T.titlekey)) as earliest_titlekey 
+from FinancialTables_All_1 T
+group by T.table1;
+
+-------------------------------------------------------------------------------
+--	Semantics:  view has record for each unique tablespan with earliest titlekey 
+--	used to extract the table
+-------------------------------------------------------------------------------
+create view FinancialTables_All_3 as
+select T1.*
+from FinancialTables_All_2 T2, FinancialTables_All_1 T1
+where Equals(T2.earliest_titlekey, GetBegin(T1.titlekey))
+consolidate on T1.table1;
+
+-------------------------------------------------------------------------------
+--  extract all table rows (TRs)
+-------------------------------------------------------------------------------
+create view FinancialTables_All_Rows_temp_1 as
+select S.label	as label,
+	   S.type	as type,
+	   S.table1 as tablespan,
+	   R.match 	as row,
+	   S.leftmatch as leftmatch,
+	   S.titlekey as titlekey
+from FinancialTables_All_3 S,TR R
+where Contains(S.table1,R.match);
+
+-------------------------------------------------------------------------------
+--  extract the beginning of the tablespan (i.e., first character in table)
+-------------------------------------------------------------------------------
+create view StartOfTable_2 as
+extract F.table1 as table1 ,
+regex /^./ on F.table1 as tablestart
+from FinancialTables_All_3 F;
+
+-------------------------------------------------------------------------------
+--	Dummy rule to create a list of integers.  Solves a bug in the function declaration.
+-------------------------------------------------------------------------------
+create view DummyScalarListOfInteger as
+select List(GetBegin(D.text)) as intList  
+from Document D;
+
+
+-------------------------------------------------------------------------------
+--	Output all rows of all tables
+--	Semantics: each record is a row in a finanical table, with additional attributes
+--	defining table row occurs in
+-------------------------------------------------------------------------------
+create view FinancialTables_All_Rows_temp_2 as
+select S.label		as label,
+	   S.type		as type,
+	   S.tablespan 	as tablespan,
+	   S.row 		as row,
+	   S.leftmatch 	as leftmatch,
+	   S.titlekey 	as titlekey,
+	   B.tablestart as tablestart
+from FinancialTables_All_Rows_temp_1 S, StartOfTable_2 B
+where Contains(S.tablespan, B.tablestart);

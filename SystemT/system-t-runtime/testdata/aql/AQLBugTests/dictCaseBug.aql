@@ -1,0 +1,43 @@
+-------------------------------------------------------------------------------
+-- dictCaseBug.aql
+--
+-- Test of a bug in handling the new case-sensitivity parameters for 
+-- dictionaries.
+--
+
+require document with columns text Text;
+
+
+
+-- Old way
+create dictionary NoCaseDict as ('US');
+
+create view US1 as 
+extract dictionary 'NoCaseDict'
+	with flags 'Exact' on D.text as match
+from Document D;
+
+-- New way
+create dictionary CaseDict 
+	with language as 'en'
+	and case exact
+as ('US');
+
+-- Other new way
+create dictionary CaseDict2
+	from file 'dictionaries/country.dict'
+	with language as 'en'
+	and case exact;
+
+
+create view US2 as
+extract dictionary 'CaseDict' on D.text as match
+from Document D;
+
+create view US3 as
+extract dictionary 'CaseDict2' on D.text as match
+from Document D;
+
+output view US1;
+output view US2;
+output view US3;

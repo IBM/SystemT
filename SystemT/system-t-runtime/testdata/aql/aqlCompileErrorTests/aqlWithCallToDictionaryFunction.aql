@@ -1,0 +1,17 @@
+-------------------------------------------------------------------------------
+-- aqlWithCallToDictionaryFunction.aql
+
+-- Test for a defect# 17124:Compilation : Get multiple compilation errors for the 
+-- same line
+-- Missing error location when Dictionary/RegexTok function refer to an view not
+-- defined
+
+-------------------------------------------------------------------------------
+
+create view ViewDependentOnDictionary  as
+select D.text as match
+from Dictionary('dict1/strictFirst.dict',Document1.text) D;
+
+create view ViewDependentOnRegexTok as
+select D.text as word 
+from RegexTok(/[A-Z][a-z]*/, 'CANON_EQ', 1, Document1.text) D;

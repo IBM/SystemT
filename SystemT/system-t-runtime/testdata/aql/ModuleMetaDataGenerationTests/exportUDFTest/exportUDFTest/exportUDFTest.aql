@@ -1,0 +1,41 @@
+/*
+Test to verify, that only exported function are written to module meta-data.
+*/
+module exportUDFTest;
+
+--UDF to skip the tags
+create function SkipTags(text String, skiplist ScalarList)
+return String 
+external_name 'udfs.jar:com.ibm.test.udfs.W3LAPortedUDF!SkipTags'
+language java
+deterministic
+return null on null input;
+
+-- A function with no AQL doc comment
+create function combineSpans (p1 Span, p2 Span)
+return Span like p1
+external_name 'udfs.jar:com.ibm.test.udfs.udf1!combineSpans'
+language java 
+deterministic
+return null on null input;
+
+
+--UDF for concatenating the contents of a list of Spans using a given separator
+create function ListJoin(listOfSpans ScalarList, separator String)
+return String 
+external_name 'udfs.jar:com.ibm.test.udfs.W3LAPortedUDF!ListJoin'
+language java
+deterministic
+called on null input;
+
+-- udf not exported
+create function LocalListJoin(listOfSpans ScalarList, separator String)
+return String 
+external_name 'udfs.jar:com.ibm.test.udfs.W3LAPortedUDF!ListJoin'
+language java
+deterministic
+called on null input;
+
+export function ListJoin;
+export function combineSpans;
+export function SkipTags;

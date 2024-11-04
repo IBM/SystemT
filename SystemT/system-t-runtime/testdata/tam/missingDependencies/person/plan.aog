@@ -1,0 +1,857 @@
+$Document = DocScan(
+  (
+    "text" => "Text",
+    "label" => "Text"
+  )
+);
+CreateDict(
+    "name" => "dict/strictFirst.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+CreateDict(
+    "name" => "dict/strictLast.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+CreateDict(
+    "name" => "person.GreetingDict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+CreateDict(
+    "name" => "person.Salutation",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+CreateDict(
+    "name" => "person.SalutationDict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+CreateFunction(
+    "functionName" => "myToUpperCase",
+    "externalName" => "StringUtil.JAR:com.ibm.udf.test.StringUtil!toUpperCase",
+    "language" => "Java",
+    "returnType" => "String",
+    "deterministic" => "true",
+    "returnsNullOnNullInp" => "true",
+    "inputText" => "String"
+);
+
+$_{"person.CapsPerson"} =
+Select(
+  Not(
+    MatchesDict(
+      StringConst(
+        "person.GreetingDict"
+      ),
+      GetCol(
+        "word"
+      )
+    )
+  ),
+  Project(
+    (
+      "word" => "word"
+    ),
+    RegexTok(/\b\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}\b/, (0 => "word"), "DOTALL", 1, 10,"D.text",
+      Project(
+        (
+          "text" => "D.text"
+        ),
+        $Document
+      )
+    )
+  )
+);
+
+$_{"person.FirstName"} =
+Select(
+  MatchesRegex(
+    RegexConst(
+      /\p{Lu}\p{M}*.{1,20}/,
+      "SimpleRegex"
+    ),
+    GetCol(
+      "first"
+    )
+  ),
+  Project(
+    (
+      "first" => "first"
+    ),
+    Project(
+      (
+        "text" => "D.text",
+        "__sdm_match" => "first"
+      ),
+      $SDM_OUTPUT_dict_strictFirst_dict_WITH_Default_OVER_Document_text
+    )
+  )
+);
+
+$_{"person.InitialWord"} =
+Project(
+  (
+    "word" => "word"
+  ),
+  RegexTok(/\b([\p{Upper}]\.\s*){1,5}\b/, (0 => "word"), "DOTALL", 1, 10,"D.text",
+    Project(
+      (
+        "text" => "D.text"
+      ),
+      $Document
+    )
+  )
+);
+
+$_{"person.LastName"} =
+Select(
+  MatchesRegex(
+    RegexConst(
+      /((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/,
+      "SimpleRegex"
+    ),
+    GetCol(
+      "last"
+    )
+  ),
+  Project(
+    (
+      "last" => "last"
+    ),
+    Project(
+      (
+        "text" => "D.text",
+        "__sdm_match" => "last"
+      ),
+      $SDM_OUTPUT_dict_strictLast_dict_WITH_Default_OVER_Document_text
+    )
+  )
+);
+
+$_{"person.Salutation"} =
+Project(
+  (
+    "salutation" => "salutation"
+  ),
+  Project(
+    (
+      "text" => "D.text",
+      "__sdm_match" => "salutation"
+    ),
+    $SDM_OUTPUT_person_SalutationDict_WITH_Default_OVER_Document_text
+  )
+);
+
+$_{"person.CapsInitialCaps"} =
+Project(
+  (
+    "@@CapsInitialCaps@@col0" => "name"
+  ),
+  ApplyFunc(
+    CombineSpans(
+      GetCol(
+        "CP1.word"
+      ),
+      GetCol(
+        "CP2.word"
+      )
+    ) => "@@CapsInitialCaps@@col0",
+    Select(
+      FollowsTok(
+        GetCol(
+          "CP1.word"
+        ),
+        GetCol(
+          "IW.word"
+        ),
+        IntConst(
+          0
+        ),
+        IntConst(
+          0
+        )
+      ),
+      AdjacentJoin(
+        FollowsTok(
+          GetCol(
+            "IW.word"
+          ),
+          GetCol(
+            "CP2.word"
+          ),
+          IntConst(
+            0
+          ),
+          IntConst(
+            0
+          )
+        ),
+        AdjacentJoin(
+          FollowsTok(
+            GetCol(
+              "CP1.word"
+            ),
+            GetCol(
+              "IW.word"
+            ),
+            IntConst(
+              0
+            ),
+            IntConst(
+              0
+            )
+          ),
+          Project(
+            (
+              "word" => "CP1.word"
+            ),
+            $_{"person.CapsPerson"}
+          ),
+          Project(
+            (
+              "word" => "IW.word"
+            ),
+            $_{"person.InitialWord"}
+          )
+        ),
+        Project(
+          (
+            "word" => "CP2.word"
+          ),
+          $_{"person.CapsPerson"}
+        )
+      )
+    )
+  )
+);
+
+$_{"person.CapsLast"} =
+Project(
+  (
+    "@@CapsLast@@col0" => "name"
+  ),
+  ApplyFunc(
+    CombineSpans(
+      GetCol(
+        "CP.word"
+      ),
+      GetCol(
+        "LN.last"
+      )
+    ) => "@@CapsLast@@col0",
+    AdjacentJoin(
+      FollowedByTok(
+        GetCol(
+          "LN.last"
+        ),
+        GetCol(
+          "CP.word"
+        ),
+        IntConst(
+          0
+        ),
+        IntConst(
+          0
+        )
+      ),
+      Project(
+        (
+          "last" => "LN.last"
+        ),
+        $_{"person.LastName"}
+      ),
+      Project(
+        (
+          "word" => "CP.word"
+        ),
+        $_{"person.CapsPerson"}
+      )
+    )
+  )
+);
+
+$_{"person.FirstCaps"} =
+Project(
+  (
+    "@@FirstCaps@@col0" => "name"
+  ),
+  ApplyFunc(
+    CombineSpans(
+      GetCol(
+        "FN.first"
+      ),
+      GetCol(
+        "CP.word"
+      )
+    ) => "@@FirstCaps@@col0",
+    AdjacentJoin(
+      FollowsTok(
+        GetCol(
+          "FN.first"
+        ),
+        GetCol(
+          "CP.word"
+        ),
+        IntConst(
+          0
+        ),
+        IntConst(
+          0
+        )
+      ),
+      Project(
+        (
+          "first" => "FN.first"
+        ),
+        $_{"person.FirstName"}
+      ),
+      Project(
+        (
+          "word" => "CP.word"
+        ),
+        $_{"person.CapsPerson"}
+      )
+    )
+  )
+);
+
+$_{"person.FirstInitialLast"} =
+Project(
+  (
+    "@@FirstInitialLast@@col0" => "name"
+  ),
+  ApplyFunc(
+    CombineSpans(
+      GetCol(
+        "FN.first"
+      ),
+      GetCol(
+        "LN.last"
+      )
+    ) => "@@FirstInitialLast@@col0",
+    Select(
+      FollowsTok(
+        GetCol(
+          "FN.first"
+        ),
+        GetCol(
+          "IW.word"
+        ),
+        IntConst(
+          0
+        ),
+        IntConst(
+          0
+        )
+      ),
+      AdjacentJoin(
+        FollowsTok(
+          GetCol(
+            "IW.word"
+          ),
+          GetCol(
+            "LN.last"
+          ),
+          IntConst(
+            0
+          ),
+          IntConst(
+            0
+          )
+        ),
+        AdjacentJoin(
+          FollowsTok(
+            GetCol(
+              "FN.first"
+            ),
+            GetCol(
+              "IW.word"
+            ),
+            IntConst(
+              0
+            ),
+            IntConst(
+              0
+            )
+          ),
+          Project(
+            (
+              "first" => "FN.first"
+            ),
+            $_{"person.FirstName"}
+          ),
+          Project(
+            (
+              "word" => "IW.word"
+            ),
+            $_{"person.InitialWord"}
+          )
+        ),
+        Project(
+          (
+            "last" => "LN.last"
+          ),
+          $_{"person.LastName"}
+        )
+      )
+    )
+  )
+);
+
+$_{"person.FirstLast"} =
+Project(
+  (
+    "@@FirstLast@@col0" => "name"
+  ),
+  ApplyFunc(
+    CombineSpans(
+      GetCol(
+        "FN.first"
+      ),
+      GetCol(
+        "LN.last"
+      )
+    ) => "@@FirstLast@@col0",
+    AdjacentJoin(
+      FollowsTok(
+        GetCol(
+          "FN.first"
+        ),
+        GetCol(
+          "LN.last"
+        ),
+        IntConst(
+          0
+        ),
+        IntConst(
+          0
+        )
+      ),
+      Project(
+        (
+          "first" => "FN.first"
+        ),
+        $_{"person.FirstName"}
+      ),
+      Project(
+        (
+          "last" => "LN.last"
+        ),
+        $_{"person.LastName"}
+      )
+    )
+  )
+);
+
+$_{"person.InitialFirst"} =
+Project(
+  (
+    "@@InitialFirst@@col0" => "name"
+  ),
+  ApplyFunc(
+    CombineSpans(
+      GetCol(
+        "IW.word"
+      ),
+      GetCol(
+        "FN.first"
+      )
+    ) => "@@InitialFirst@@col0",
+    AdjacentJoin(
+      FollowedByTok(
+        GetCol(
+          "FN.first"
+        ),
+        GetCol(
+          "IW.word"
+        ),
+        IntConst(
+          0
+        ),
+        IntConst(
+          0
+        )
+      ),
+      Project(
+        (
+          "first" => "FN.first"
+        ),
+        $_{"person.FirstName"}
+      ),
+      Project(
+        (
+          "word" => "IW.word"
+        ),
+        $_{"person.InitialWord"}
+      )
+    )
+  )
+);
+
+$_{"person.InitialLast"} =
+Project(
+  (
+    "@@InitialLast@@col0" => "name"
+  ),
+  ApplyFunc(
+    CombineSpans(
+      GetCol(
+        "IW.word"
+      ),
+      GetCol(
+        "LN.last"
+      )
+    ) => "@@InitialLast@@col0",
+    AdjacentJoin(
+      FollowedByTok(
+        GetCol(
+          "LN.last"
+        ),
+        GetCol(
+          "IW.word"
+        ),
+        IntConst(
+          0
+        ),
+        IntConst(
+          0
+        )
+      ),
+      Project(
+        (
+          "last" => "LN.last"
+        ),
+        $_{"person.LastName"}
+      ),
+      Project(
+        (
+          "word" => "IW.word"
+        ),
+        $_{"person.InitialWord"}
+      )
+    )
+  )
+);
+
+$_{"person.SalCaps"} =
+Project(
+  (
+    "CP.word" => "name"
+  ),
+  AdjacentJoin(
+    FollowsTok(
+      GetCol(
+        "S.salutation"
+      ),
+      GetCol(
+        "CP.word"
+      ),
+      IntConst(
+        0
+      ),
+      IntConst(
+        0
+      )
+    ),
+    Project(
+      (
+        "salutation" => "S.salutation"
+      ),
+      $_{"person.Salutation"}
+    ),
+    Project(
+      (
+        "word" => "CP.word"
+      ),
+      $_{"person.CapsPerson"}
+    )
+  )
+);
+
+$_{"person.SalCapsCaps"} =
+Project(
+  (
+    "@@SalCapsCaps@@col0" => "name"
+  ),
+  ApplyFunc(
+    CombineSpans(
+      GetCol(
+        "CP1.word"
+      ),
+      GetCol(
+        "CP2.word"
+      )
+    ) => "@@SalCapsCaps@@col0",
+    Select(
+      FollowsTok(
+        GetCol(
+          "S.salutation"
+        ),
+        GetCol(
+          "CP1.word"
+        ),
+        IntConst(
+          0
+        ),
+        IntConst(
+          0
+        )
+      ),
+      AdjacentJoin(
+        FollowsTok(
+          GetCol(
+            "CP1.word"
+          ),
+          GetCol(
+            "CP2.word"
+          ),
+          IntConst(
+            0
+          ),
+          IntConst(
+            0
+          )
+        ),
+        AdjacentJoin(
+          FollowsTok(
+            GetCol(
+              "S.salutation"
+            ),
+            GetCol(
+              "CP1.word"
+            ),
+            IntConst(
+              0
+            ),
+            IntConst(
+              0
+            )
+          ),
+          Project(
+            (
+              "salutation" => "S.salutation"
+            ),
+            $_{"person.Salutation"}
+          ),
+          Project(
+            (
+              "word" => "CP1.word"
+            ),
+            $_{"person.CapsPerson"}
+          )
+        ),
+        Project(
+          (
+            "word" => "CP2.word"
+          ),
+          $_{"person.CapsPerson"}
+        )
+      )
+    )
+  )
+);
+
+$_{"person.PersonCand"} =
+Union(
+  Project(
+    (
+      "P.first" => "person"
+    ),
+    Project(
+      (
+        "first" => "P.first"
+      ),
+      $_{"person.FirstName"}
+    )
+  ),
+  Project(
+    (
+      "P.last" => "person"
+    ),
+    Project(
+      (
+        "last" => "P.last"
+      ),
+      $_{"person.LastName"}
+    )
+  ),
+  Project(
+    (
+      "P.name" => "person"
+    ),
+    Project(
+      (
+        "name" => "P.name"
+      ),
+      $_{"person.FirstLast"}
+    )
+  ),
+  Project(
+    (
+      "P.name" => "person"
+    ),
+    Project(
+      (
+        "name" => "P.name"
+      ),
+      $_{"person.CapsLast"}
+    )
+  ),
+  Project(
+    (
+      "P.name" => "person"
+    ),
+    Project(
+      (
+        "name" => "P.name"
+      ),
+      $_{"person.FirstCaps"}
+    )
+  ),
+  Project(
+    (
+      "P.name" => "person"
+    ),
+    Project(
+      (
+        "name" => "P.name"
+      ),
+      $_{"person.SalCaps"}
+    )
+  ),
+  Project(
+    (
+      "P.name" => "person"
+    ),
+    Project(
+      (
+        "name" => "P.name"
+      ),
+      $_{"person.SalCapsCaps"}
+    )
+  ),
+  Project(
+    (
+      "P.name" => "person"
+    ),
+    Project(
+      (
+        "name" => "P.name"
+      ),
+      $_{"person.InitialLast"}
+    )
+  ),
+  Project(
+    (
+      "P.name" => "person"
+    ),
+    Project(
+      (
+        "name" => "P.name"
+      ),
+      $_{"person.InitialFirst"}
+    )
+  ),
+  Project(
+    (
+      "P.name" => "person"
+    ),
+    Project(
+      (
+        "name" => "P.name"
+      ),
+      $_{"person.FirstInitialLast"}
+    )
+  ),
+  Project(
+    (
+      "P.name" => "person"
+    ),
+    Project(
+      (
+        "name" => "P.name"
+      ),
+      $_{"person.CapsInitialCaps"}
+    )
+  )
+);
+
+$_{"person.Person"} =
+Project(
+  (
+    "@@Person@@col0" => "person"
+  ),
+  Consolidate(
+    "LeftToRight",
+    GetCol(
+      "P.person"
+    ),
+    ApplyFunc(
+      myToUpperCase(
+        ToString(
+          GetCol(
+            "P.person"
+          )
+        )
+      ) => "@@Person@@col0",
+      Project(
+        (
+          "person" => "P.person"
+        ),
+        $_{"person.PersonCand"}
+      )
+    )
+  )
+);
+
+# Dicts() operator created through Shared Dictionary Matching
+(
+  $SDM_TMP_dict_strictFirst_dict_WITH_Default_OVER_Document_text,
+  $SDM_TMP_dict_strictLast_dict_WITH_Default_OVER_Document_text,
+  $SDM_TMP_person_SalutationDict_WITH_Default_OVER_Document_text
+) = 
+Dicts(
+  (
+    "dict/strictFirst.dict" => "Default",
+    "dict/strictLast.dict" => "Default",
+    "person.SalutationDict" => "Default"
+  ),
+  "text", "__sdm_match", $Document
+);
+
+# Apply labels to outputs of generated Dicts() operator.
+$SDM_OUTPUT_dict_strictFirst_dict_WITH_Default_OVER_Document_text = Project(("__sdm_match" => "__sdm_match", "text" => "text" ), $SDM_TMP_dict_strictFirst_dict_WITH_Default_OVER_Document_text);
+$SDM_OUTPUT_dict_strictLast_dict_WITH_Default_OVER_Document_text = Project(("__sdm_match" => "__sdm_match", "text" => "text" ), $SDM_TMP_dict_strictLast_dict_WITH_Default_OVER_Document_text);
+$SDM_OUTPUT_person_SalutationDict_WITH_Default_OVER_Document_text = Project(("__sdm_match" => "__sdm_match", "text" => "text" ), $SDM_TMP_person_SalutationDict_WITH_Default_OVER_Document_text);
+
+
+Jar(
+  "StringUtil.JAR",
+"UEsDBBQACAAIANVxqUAAAAAAAAAAAAAAAAAUAAQATUVUQS1JTkYvTUFOSUZFU1QuTUb+ygAA803M
+y0xLLS7RDUstKs7Mz7NSMNQz4OXi5QIAUEsHCLJ/Au4bAAAAGQAAAFBLAwQUAAgACAAucalAAAAA
+AAAAAAAAAAAAIQAAAGNvbS9pYm0vdWRmL3Rlc3QvU3RyaW5nVXRpbC5jbGFzc31QTU/CQBSchZZK
+QUHErxgPXgxg4ibeDMYLiadGD3zct2XFJaUlZWv8WXrRxIM/wB9lfNuSEJW4hzfvzZvJzu7n1/sH
+gAscOigwHAXxjCt/xtPxPddyoXlfJyqaDLUKHVgM9al4FDwU0YTf+VMZaIbSlYqUvmYottojBqsX
+j6WLIspV2Cgx1DwVydt05stkIPxQMjS8OBDhSCTKzEvS0g9qwXDs/ROhy1DR8XA+l0lPLMh02vJW
+gXJdt/2XcrGNHQeNH/nzXRVbaDI0W2tsDGUVzVM9kE/apF4jcPtxmgTyRpkn1FZJz40WJ6BfgTkF
+6ug3qDo0cUJGaHfesPGSrV2qpYwsokK1mgsINwkZpawtzZeEBbM7e0X9+ZfZzsx7uWBpNt0ucebO
+/Ux/8A1QSwcIQ1xv7S0BAAD3AQAAUEsBAhQAFAAIAAgA1XGpQLJ/Au4bAAAAGQAAABQABAAAAAAA
+AAAAAAAAAAAAAE1FVEEtSU5GL01BTklGRVNULk1G/soAAFBLAQIUABQACAAIAC5xqUBDXG/tLQEA
+APcBAAAhAAAAAAAAAAAAAAAAAGEAAABjb20vaWJtL3VkZi90ZXN0L1N0cmluZ1V0aWwuY2xhc3NQ
+SwUGAAAAAAIAAgCVAAAA3QEAAAAA
+");
+
+Output: $_{"person.Person"};

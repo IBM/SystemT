@@ -1,0 +1,42 @@
+module genericModule;
+
+
+create view CapsToken as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /\p{Lu}\p{Ll}+/
+    with flags 'DOTALL'
+    on between 1 and 1 tokens in D.text
+    return group 0 as match
+  from Document D;
+
+output view CapsToken;
+
+create view CompoundNoun as
+  select  N.noun as noun,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          N.__auto__id as __Subquery__2__Temp_____sep_____N____id
+  from  __Subquery__2__Temp N;
+
+output view CompoundNoun;
+
+
+
+create view __Base__1__Temp as
+  extract blocks
+    with count between 1 and 3
+    and separation between 0 and 0 tokens
+    on N.match as noun
+  from CapsToken N;
+
+output view __Base__1__Temp;
+
+create view __Subquery__2__Temp as
+  select  Op.noun as noun,
+          AutoID() as __auto__id
+  from  __Base__1__Temp Op;
+
+output view __Subquery__2__Temp;
+

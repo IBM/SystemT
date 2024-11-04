@@ -1,0 +1,339 @@
+include 'geographic/dictionaries/LocationDescr_PlaceAbbrvTable.aql';
+
+
+--Overview: This annotator looks at descriptions and attempts to extract location information.
+--Based on markers, locations are classified as either places where one has lived in previously
+--or is currently living in.
+
+create function replaceDescrChars(string1 String)
+return String
+external_name 'udfjars/smarc_4aql.jar:com.ibm.midas.utils.StringManipulation!replaceDescrChars'
+language java
+deterministic
+return null on null input;
+
+create view AllTweets_1 as
+	select replaceDescrChars(GetString(D.text)) as text, D.text as orig_text
+	from LocationDescr_Input D;
+
+create view AllTweets as
+    extract D.orig_text as orig_text, regex /.*/ on D.text as text
+    from AllTweets_1 D;
+    
+create dictionary LocDescr_LivingIn_LCDict
+	from file 'geographic/dictionaries/LocationDescr_LivingInLC.dict';
+
+create dictionary LocDescr_LivingIn_RCDict
+	from file 'geographic/dictionaries/LocationDescr_LivingInRC.dict';
+	
+create dictionary LocDescr_LivedIn_LCDict
+	from file 'geographic/dictionaries/LocationDescr_LivedInLC.dict';
+	
+create dictionary LocDescr_LivedIn_RCDict
+	from file 'geographic/dictionaries/LocationDescr_LivedInRC.dict';
+	
+create dictionary LocDescr_Abbrv_Dict
+	from table LocationDescr_PlaceAbbrvTable
+	with entries from abbrv;
+
+
+
+---- Pattern 1: 
+---- Detecting indicators that the user is currently living in a particular location
+
+	
+create dictionary LocDescr_LivingIn_LCNegativeDict
+with case insensitive
+as 
+(
+'do not', 
+'dont', 
+'don\'t', 
+'no longer'
+);
+
+create view LocDescr_LivingIn_LCMentions as
+	select T.match as key, T.text, T.orig_text
+	from
+	(
+	extract D.orig_text as orig_text, D.text as text, dictionary 'LocDescr_LivingIn_LCDict' on D.text as match
+	from AllTweets D
+	)T
+	consolidate on T.match using 'ContainedWithin'
+	;
+
+
+create view LocDescr_LivingIn_LCReference as
+	select T.key, RightContextTok(T.key, 3) as ref, T.text, T.orig_text
+	from LocDescr_LivingIn_LCMentions T
+	where Not(ContainsDict('LocDescr_LivingIn_LCNegativeDict', 'IgnoreCase', LeftContextTok(T.key, 4)))
+	--and ContainsRegex(/\p{Lu}[\p{Lu}\p{Ll}]/, RightContextTok(T.key, 3))
+	;
+
+
+create view LocDescr_LivingIn_RCMentions as
+	select T.match as key, T.text, T.orig_text
+	from
+	(
+		extract D.orig_text as orig_text, D.text as text, dictionary 'LocDescr_LivingIn_RCDict' on D.text as match
+		from AllTweets D
+	)T
+	consolidate on T.match using 'ContainedWithin'
+;
+
+create view LocDescr_LivingIn_RCReference as
+	select T.key, LeftContextTok(T.key, 2) as ref, T.text, T.orig_text
+	from LocDescr_LivingIn_RCMentions T
+;
+
+create view LocDescr_LivingIn_Reference as
+(
+	select D.key,D.ref,D.text,D.orig_text
+	from LocDescr_LivingIn_LCReference D
+)
+union all 
+(
+	select D.key,D.ref,D.text,D.orig_text
+	from LocDescr_LivingIn_RCReference D
+)
+;
+
+--- Pattern 2
+--- Pattern to find users who said they lived at a particular location at any point in time
+
+create view LocDescr_LivedIn_LCMentions as
+	select T.match as key, T.text,T.orig_text
+	from
+	(
+	extract D.orig_text as orig_text, D.text as text, 
+			dictionary 'LocDescr_LivedIn_LCDict' 
+			on D.text as match
+	from AllTweets D
+	)T
+	consolidate on T.match using 'ContainedWithin'
+	;
+
+create view LocDescr_LivedIn_LCReference as
+	select T.key, RightContextTok(T.key, 3) as ref, T.text, T.orig_text
+	from LocDescr_LivedIn_LCMentions T
+	--where ContainsRegex(/\p{Lu}[\p{Lu}\p{Ll}]/, RightContextTok(T.key, 3))
+	;
+
+
+
+create view LocDescr_LivedIn_RCSource as
+	(
+		select D.text,D.orig_text 
+		from AllTweets D
+	)
+	minus
+	(
+		select D.text,D.orig_text 
+		from LocDescr_LivedIn_LCMentions D
+	);
+
+create view LocDescr_LivedIn_RCMentions as
+	select T.match as key, T.text,T.orig_text
+	from
+	(
+		extract D.orig_text as orig_text, D.text as text, dictionary 'LocDescr_LivedIn_RCDict' on D.text as match
+		from LocDescr_LivedIn_RCSource D
+	)T
+	consolidate on T.match using 'ContainedWithin'
+	;
+
+create view LocDescr_LivedIn_RCReference as
+	select T.key, LeftContextTok(T.key, 2) as ref, T.text,T.orig_text
+	from LocDescr_LivedIn_RCMentions T
+	where ContainsRegex(/\p{Lu}[\p{Lu}\p{Ll}]/, LeftContextTok(T.key, 2))
+	;
+
+
+create view LocDescr_LivedIn_Reference as 
+(
+	select D.key,D.ref,D.text,D.orig_text
+	from LocDescr_LivedIn_LCReference D
+)
+union all
+(
+	select D.key,D.ref,D.text,D.orig_text
+	from LocDescr_LivedIn_RCReference D
+)
+;
+-----
+
+--- This pattern is a slightly weak pattern like "from Wisconsin"
+--- Doesnt have any strong qualifying keywords like "i'm from" etc
+
+create view LocDescr_Pat1_Src as
+(
+	select D.text,D.orig_text 
+	from AllTweets D
+)
+minus
+(
+	select D.text,D.orig_text 
+	from LocDescr_LivedIn_Reference D
+);
+
+create view LocDescr_Pat1_FromLoc as 
+	extract T.orig_text as orig_text, T.text as text,
+	regex /((from|From|FROM)\s+)[A-Z](.*)$/
+	on T.text
+	return group 1 as match
+	from LocDescr_Pat1_Src T;
+
+create view LocDescr_Pat1_Final as
+	select  T.match as key, RightContextTok(T.match, 2) as ref, T.text, T.orig_text
+	from LocDescr_Pat1_FromLoc T;
+
+--
+
+-- This pattern indicates businesses serving a particular area
+-- Most probably these businesses are in near the area they serve.
+create view LocDescr_Pat2_ServingArea as 
+	extract T.orig_text as orig_text, T.text as text,
+	regex /(serving)\s+(.*)\s+(area|areas)/
+	with flags 'CASE_INSENSITIVE'
+	on T.text
+	return group 1 as match
+		   and group 2 as ref
+	from AllTweets T;
+
+create view LocDescr_Pat2_Final as
+	select  T.match as key, T.ref as ref, T.text,T.orig_text
+	from LocDescr_Pat2_ServingArea T;
+
+----
+
+create view LocDescr_Pat3_Univ1 as
+	extract T.orig_text as orig_text, T.text as text,
+	regex /(university of|univ of)\s+/
+	with flags 'CASE_INSENSITIVE'
+	on T.text
+	return group 1 as match
+	from AllTweets T;
+
+create view LocDescr_Pat3_Univ1_Final as 
+	select T.match as key, RightContextTok(T.match, 2) as ref, T.text,T.orig_text
+	from LocDescr_Pat3_Univ1 T;
+
+
+create view LocDescr_Pat3_Univ2_Src as
+(
+	select T.text,T.orig_text 
+	from AllTweets T
+)
+minus
+(
+	select T.text,T.orig_text
+	from LocDescr_Pat3_Univ1_Final T
+);
+
+create view LocDescr_Pat3_Univ2 as
+	extract T.orig_text as orig_text, T.text as text,
+	regex /\s+(university|univ)\s+/
+	with flags 'CASE_INSENSITIVE'
+	on T.text
+	return group 1 as match
+	from LocDescr_Pat3_Univ2_Src T;
+
+create view LocDescr_Pat3_Univ2_Final as 
+	select T.match as key, LeftContextTok(T.match, 2) as ref, T.text,T.orig_text
+	from LocDescr_Pat3_Univ2 T
+	where ContainsRegex(/\p{Lu}[\p{Lu}\p{Ll}]/, LeftContextTok(T.match, 2));
+
+create view LocDescr_Pat3_Final as
+(
+	select D.key,D.ref,D.text,D.orig_text
+	from LocDescr_Pat3_Univ1_Final D
+)
+union all
+(
+	select D.key,D.ref,D.text,D.orig_text
+	from LocDescr_Pat3_Univ2_Final D
+);
+
+-------
+-- Pattern 4: look for explicit mentions of place abbreviations like "new yorker" etc
+--TODO
+create view LocDescr_Pat4_Abbrv as
+	select T.match as key, T.text,T.orig_text
+	from
+	(
+		extract D.orig_text as orig_text, D.text as text, dictionary 'LocDescr_Abbrv_Dict' on D.text as match
+		from AllTweets D 
+	)T
+	consolidate on T.match using 'ContainedWithin'
+	;
+
+create view LocDescr_Pat4_Final as 
+	select D.key as key, E.location as ref, D.text as text, D.orig_text as orig_text
+	from LocDescr_Pat4_Abbrv D, LocationDescr_PlaceAbbrvTable E
+	where Equals(GetText(D.key), GetText(E.abbrv));	
+
+-------
+
+--- Create a combined view
+create view LocDescr_Reference_Combined as
+(
+	select 'livingin' as loc_prov, D.key, D.ref as ref,D.text ,D.orig_text
+	from  LocDescr_LivingIn_Reference D
+)
+union all
+(
+	select 'livedin' as loc_prov, D.key, D.ref as ref,D.text,D.orig_text
+	from  LocDescr_LivedIn_Reference D
+)
+union all
+(
+	select 'livedin' as loc_prov, D.key,D.ref as ref,D.text,D.orig_text
+	from LocDescr_Pat1_Final D
+)
+union all
+(
+	select 'business_area' as loc_prov, D.key,D.ref as ref,D.text,D.orig_text
+	from LocDescr_Pat2_Final D
+)
+union all
+(
+	select 'univ' as loc_prov, D.key,D.ref as ref,D.text,D.orig_text
+	from LocDescr_Pat3_Final D
+)
+union all
+(
+	select 'livedin_mentions' as loc_prov, D.key,D.ref as ref,D.text,D.orig_text
+	from LocDescr_Pat4_Final D
+)
+;
+
+
+-- Now we see if there is an actual match on any known locations
+create view LocDescr_Reference_Extract as
+	select T.*
+	from
+	(
+		extract D.ref as ref,
+			dictionary 'Loc_Alias_USCities_Dict'
+			and 'Loc_Alias_NonUSCities_Dict'
+			and 'Loc_Alias_USStates_Dict'
+			and 'Loc_Alias_Countries_Dict'
+			and 'Loc_StatesDict'
+			and 'Loc_StateAbbrvsDict'
+			and 'Loc_CitiesDict'
+			and 'Loc_PopulousNonUSCitiesDict'
+			and 'Loc_CountryDict'
+			and 'Loc_CountryDict_Alias'
+			and 'Loc_USAbbrvDict'			 
+			on D.ref as match
+		from LocDescr_Reference_Combined D
+	)T
+	;
+
+-- If we can find a location, then its a useful extraction
+create view LocDescr_Reference as 
+    select D.loc_prov as loc_prov, D.key as key, D.ref as ref, E.match as loc_match, D.text as text,D.orig_text as orig_text
+	from LocDescr_Reference_Combined D, LocDescr_Reference_Extract E
+	where Equals(D.ref, E.ref)
+	consolidate on D.ref using 'ExactMatch';
+

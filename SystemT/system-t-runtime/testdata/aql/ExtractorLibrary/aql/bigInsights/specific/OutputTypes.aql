@@ -1,0 +1,529 @@
+create view City as
+select 
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text,  
+	C.stateorprovince as stateorprovince, 
+	C.country as country, 
+	C.continent as continent,
+	C.extendedMatch as extendedMatch, C.extendedMatch_detag as extendedMatch_detag, GetText(C.extendedMatch) as extendedMatch_text, GetText(C.extendedMatch_detag) as extendedMatch_detag_text
+from
+(
+	select 
+		Remap(C.city) as match, C.city as match_detag,   
+		C.stateorprovince as stateorprovince, 
+		C.country as country, 
+		C.continent as continent,
+		Remap(C.reference) as extendedMatch, C.reference as extendedMatch_detag		
+	from City_ C
+) C
+;
+
+
+
+create view County as
+select
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text,	 
+	C.stateorprovince as stateorprovince, 
+	C.country as country, 
+	C.continent as continent, 
+	C.extendedMatch as extendedMatch, C.extendedMatch_detag as extendedMatch_detag, GetText(C.extendedMatch) as extendedMatch_text, GetText(C.extendedMatch_detag) as extendedMatch_detag_text	
+from
+(
+	select
+		Remap(C.county) as match, C.county as match_detag,	 
+		C.stateorprovince as stateorprovince, 
+		C.country as country, 
+		C.continent as continent, 
+		Remap(C.reference) as extendedMatch, C.reference as extendedMatch_detag	
+	from County_ C
+) C
+;
+
+
+create view ZipCode as
+select 
+	--C.zip as zip, C.zip_detag as zip_detag, GetText(C.zip) as zip_text, GetText(C.zip_detag) as zip_detag_text,
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text
+from
+(
+	select 
+		--Remap(C.zip) as zip, C.zip as zip_detag,
+		Remap(C.reference) as match, C.reference as match_detag	
+	from ZipCode_ C
+) C
+;
+
+
+create view Address as
+select 
+	C.address as address, C.address_detag as address_detag, GetText(C.address) as address_text, GetText(C.address_detag) as address_detag_text, 
+	C.city as city, 
+	C.stateorprovince as stateorprovince, 
+	C.zip as zip, 
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text
+from
+(
+	select 
+		Remap(C.address) as address, C.address as address_detag, 
+		C.city as city, 
+		C.stateorprovince as stateorprovince, 
+		C.zip as zip, 
+		Remap(C.reference) as match, C.reference as match_detag	
+	from AddressFinal C
+) C
+;
+
+
+create view StateOrProvince as
+select
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text, 
+	C.country as country, 
+	C.continent as continent, 
+	C.extendedMatch as extendedMatch, C.extendedMatch_detag as extendedMatch_detag, GetText(C.extendedMatch) as extendedMatch_text, GetText(C.extendedMatch_detag) as extendedMatch_detag_text
+from
+(
+	select 
+		Remap(C.stateorprovince) as match, C.stateorprovince as match_detag, 
+		C.country as country, 
+		C.continent as continent, 
+		Remap(C.reference) as extendedMatch, C.reference as extendedMatch_detag	
+	from StateOrProvince_ C
+) C
+;
+
+
+create view Country as
+select 
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text, 
+	C.continent as continent, 
+	C.extendedMatch as extendedMatch, C.extendedMatch_detag as extendedMatch_detag, GetText(C.extendedMatch) as extendedMatch_text, GetText(C.extendedMatch_detag) as extendedMatch_detag_text
+from
+(
+	select 
+		Remap(C.country) as match, C.country as match_detag, 
+		C.continent as continent, 
+		Remap(C.reference) as extendedMatch, C.reference as extendedMatch_detag	
+	from Country_ C
+) C
+;
+
+
+create view Continent as
+select 
+	--C.continent as continent, C.continent_detag as continent_detag, GetText(C.continent) as continent_text, GetText(C.continent_detag) as continent_detag_text,  
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text
+from
+(
+	select 
+		--Remap(C.continent) as continent, C.continent as continent_detag,  
+		Remap(C.reference) as match, C.reference as match_detag	
+	from Continent_ C
+) C
+;
+
+
+create view Location as
+select
+	C.address as address, 
+	C.city as city, 
+	C.county as county, 
+	C.stateorprovince as stateorprovince, 
+	C.zip as zip, 
+	C.country as country, 
+	C.continent as continent, 
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text
+from
+(
+	select 
+		C.address as address, 
+		C.city as city, 
+		C.county as county, 
+		C.stateorprovince as stateorprovince, 
+		C.zip as zip, 
+		C.country as country, 
+		C.continent as continent, 
+		Remap(C.reference) as match, C.reference as match_detag
+	from MapLocation_ C
+) C
+;
+
+
+create view EmailAddress as
+select 
+	--C.email as email, C.email_detag as email_detag, GetText(C.email) as email_text, GetText(C.email_detag) as email_detag_text, 
+	C.local as local, C.local_detag as local_detag, GetText(C.local) as local_text, GetText(C.local_detag) as local_detag_text,  
+	C.domain as domain, C.domain_detag as domain_detag, GetText(C.domain) as domain_text, GetText(C.domain_detag) as domain_detag_text, 
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text
+from
+(
+	select 
+		--Remap(C.email) as email, C.email as email_detag, 
+		Remap(C.local) as local, C.local as local_detag,  
+		Remap(C.domain) as domain, C.domain as domain_detag, 
+		Remap(C.reference) as match, C.reference as match_detag
+	from EmailAddress_ C
+) C
+;
+
+
+create view NotesEmailAddress as
+select 
+	--C.email as email, C.email_detag as email_detag, GetText(C.email) as email_text, GetText(C.email_detag) as email_detag_text, 
+	C.name as name, C.name_detag as name_detag, GetText(C.name) as name_text, GetText(C.name_detag) as name_detag_text,  
+	C.domain as domain, C.domain_detag as domain_detag, GetText(C.domain) as domain_text, GetText(C.domain_detag) as domain_detag_text, 
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text
+from
+(
+	select 
+		--Remap(C.email) as email, C.email as email_detag, 
+		Remap(C.name) as name, C.name as name_detag,  
+		Remap(C.domain) as domain, C.domain as domain_detag, 
+		Remap(C.reference) as match, C.reference as match_detag
+	from NotesEmailAddress_ C
+) C
+;
+
+
+create view PhoneNumber as
+select 
+	--C.phone as phone, C.phone_detag as phone_detag, GetText(C.phone) as phone_text, GetText(C.phone_detag) as phone_detag_text,  
+	C.type as type, 
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text
+from
+(
+	select 
+		--Remap(C.phone) as phone, C.phone as phone_detag, 
+		C.type as type, 
+		Remap(C.reference) as match, C.reference as match_detag
+	from PhoneNumber_ C
+) C;
+
+
+create view Person as
+select 
+	--C.name as name, C.name_detag as name_detag, GetText(C.name) as name_text, GetText(C.name_detag) as name_detag_text,  
+	C.first as first, 
+	C.middle as middle, 
+	C.last as last, 
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text
+from
+(
+	select 
+		--Remap(C.name) as name, C.name as name_detag,
+		C.first as first, 
+		C.middle as middle, 
+		C.last as last, 
+		Remap(C.reference) as match, C.reference as match_detag
+	from Person_ C
+) C;
+
+
+create view Organization as
+select 
+	--C.organization as organization, C.organization_detag as organization_detag, GetText(C.organization) as organization_text, GetText(C.organization_detag) as organization_detag_text,   
+	C.type as type, 
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text
+from
+(
+	select 
+		--Remap(C.organization) as organization, C.organization as organization_detag, 
+		C.type as type, 
+		Remap(C.reference) as match, C.reference as match_detag
+	from Organization_ C
+) C;
+
+
+create view DateTime as
+select
+	--C.datetime as datetime, C.datetime_detag as datetime_detag, GetText(C.datetime) as datetime_text, GetText(C.datetime_detag) as datetime_detag_text,   
+	C.day as day, 
+	C.month as month, 
+	C.year as year, 
+	C.hours as hours, 
+	C.minutes as minutes, 
+	C.seconds as seconds, 
+	C.timezone as timezone, 
+	C.format as format, 
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text
+from
+(
+	select 
+		--Remap(C.datetime) as datetime, C.datetime as datetime_detag, 
+		C.day as day, 
+		C.month as month, 
+		C.year as year, 
+		C.hours as hours, 
+		C.minutes as minutes, 
+		C.seconds as seconds, 
+		C.timezone as timezone, 
+		C.format as format, 
+		Remap(C.reference) as match, C.reference as match_detag
+	from DateTime_ C
+) C
+;
+
+
+create view URL as
+select 
+	--C.url as url, C.url_detag as url_detag, GetText(C.url) as url_text, GetText(C.url_detag) as url_detag_text,  
+	C.protocol as protocol, 
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text
+from
+(
+	select 
+		--Remap(C.url) as url, C.url as url_detag,  
+		C.protocol as protocol, 
+		Remap(C.reference) as match, C.reference as match_detag
+	from UrlWithAttrAll C
+) C
+;
+
+
+create view Merger as
+select 
+	C.company1 as company1, C.company1_detag as company1_detag, GetText(C.company1) as company1_text, GetText(C.company1_detag) as company1_detag_text,  
+	C.stockexchange1 as stockexchange1, 
+	C.stocksymbol1 as stocksymbol1, 
+	C.company2 as company2, C.company2_detag as company2_detag, GetText(C.company2) as company2_text, GetText(C.company2_detag) as company2_detag_text, 
+	C.stockexchange2 as stockexchange2, 
+	C.stocksymbol2 as stocksymbol2, 
+	C.company3 as company3,
+	C.stockexchange3 as stockexchange3, 
+	C.stocksymbol3 as stocksymbol3, 	
+	C.companycreated as companycreated,
+	C.date as date, 
+	C.datestring as datestring,
+	C.status as status, 
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text
+from
+(
+	select
+		Remap(C.company1) as company1, C.company1 as company1_detag, 
+		C.stockexchange1 as stockexchange1, 
+		C.stocksymbol1 as stocksymbol1, 
+		Remap(C.company2) as company2, C.company2 as company2_detag,
+		C.stockexchange2 as stockexchange2, 
+		C.stocksymbol2 as stocksymbol2, 
+		C.company3 as company3,
+		C.stockexchange3 as stockexchange3, 
+		C.stocksymbol3 as stocksymbol3, 	
+		C.companycreated as companycreated,
+		C.date as date, 
+		C.datestring as datestring,
+		C.status as status, 
+		Remap(C.reference) as match, C.reference as match_detag
+	from Merger_ C
+) C
+;
+
+
+create view Acquisition as
+select
+	C.company1 as company1, C.company1_detag as company1_detag, GetText(C.company1) as company1_text, GetText(C.company1_detag) as company1_detag_text,  
+	C.stockexchange1 as stockexchange1, 
+	C.stocksymbol1 as stocksymbol1, 
+	C.company2 as company2, C.company2_detag as company2_detag, GetText(C.company2) as company2_text, GetText(C.company2_detag) as company2_detag_text, 
+	C.stockexchange2 as stockexchange2, 
+	C.stocksymbol2 as stocksymbol2, 
+	C.company3 as company3,
+	C.stockexchange3 as stockexchange3, 
+	C.stocksymbol3 as stocksymbol3, 	
+	C.date as date, 
+	C.datestring as datestring,
+	C.status as status, 
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text
+from
+(
+	select 
+		Remap(C.company1) as company1, C.company1 as company1_detag, 
+		C.stockexchange1 as stockexchange1, 
+		C.stocksymbol1 as stocksymbol1, 
+		Remap(C.company2) as company2, C.company2 as company2_detag,
+		C.stockexchange2 as stockexchange2, 
+		C.stocksymbol2 as stocksymbol2, 
+		C.company3 as company3,
+		C.stockexchange3 as stockexchange3, 
+		C.stocksymbol3 as stocksymbol3, 	
+		C.date as date, 
+		C.datestring as datestring,
+		C.status as status, 
+		Remap(C.reference) as match, C.reference as match_detag
+	from Acquisition_ C
+) C
+;
+
+
+create view Alliance as
+select 
+	C.company1 as company1, C.company1_detag as company1_detag, GetText(C.company1) as company1_text, GetText(C.company1_detag) as company1_detag_text,  
+	C.stockexchange1 as stockexchange1, 
+	C.stocksymbol1 as stocksymbol1, 
+	C.company2 as company2, C.company2_detag as company2_detag, GetText(C.company2) as company2_text, GetText(C.company2_detag) as company2_detag_text, 
+	C.stockexchange2 as stockexchange2, 
+	C.stocksymbol2 as stocksymbol2, 
+	C.company3 as company3,
+	C.stockexchange3 as stockexchange3, 
+	C.stocksymbol3 as stocksymbol3, 	
+	C.date as date, 
+	C.datestring as datestring,
+	C.status as status, 
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text
+from
+(
+	select 
+		Remap(C.company1) as company1, C.company1 as company1_detag, 
+		C.stockexchange1 as stockexchange1, 
+		C.stocksymbol1 as stocksymbol1, 
+		Remap(C.company2) as company2, C.company2 as company2_detag,
+		C.stockexchange2 as stockexchange2, 
+		C.stocksymbol2 as stocksymbol2, 
+		C.company3 as company3,
+		C.stockexchange3 as stockexchange3, 
+		C.stocksymbol3 as stocksymbol3, 	
+		C.date as date, 
+		C.datestring as datestring,
+		C.status as status, 
+		Remap(C.reference) as match, C.reference as match_detag
+	from Alliance_ C
+) C
+;
+
+
+create view JointVenture as
+select 
+	C.company1 as company1, C.company1_detag as company1_detag, GetText(C.company1) as company1_text, GetText(C.company1_detag) as company1_detag_text,  
+	C.stockexchange1 as stockexchange1, 
+	C.stocksymbol1 as stocksymbol1, 
+	C.company2 as company2, C.company2_detag as company2_detag, GetText(C.company2) as company2_text, GetText(C.company2_detag) as company2_detag_text, 
+	C.stockexchange2 as stockexchange2, 
+	C.stocksymbol2 as stocksymbol2, 
+	C.company3 as company3,
+	C.stockexchange3 as stockexchange3, 
+	C.stocksymbol3 as stocksymbol3, 	
+	C.companycreated as companycreated,
+	C.date as date, 
+	C.datestring as datestring,
+	C.status as status, 
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text
+from
+(
+	select 
+		Remap(C.company1) as company1, C.company1 as company1_detag, 
+		C.stockexchange1 as stockexchange1, 
+		C.stocksymbol1 as stocksymbol1, 
+		Remap(C.company2) as company2, C.company2 as company2_detag,
+		C.stockexchange2 as stockexchange2, 
+		C.stocksymbol2 as stocksymbol2, 
+		C.company3 as company3,
+		C.stockexchange3 as stockexchange3, 
+		C.stocksymbol3 as stocksymbol3, 	
+		C.companycreated as companycreated,
+		C.date as date, 
+		C.datestring as datestring,
+		C.status as status, 
+		Remap(C.reference) as match, C.reference as match_detag
+	from JointVenture_ C
+) C
+;
+
+
+create view CompanyEarningsAnnouncement as
+select
+	C.company as company, C.company_detag as company_detag, GetText(C.company) as company_text, GetText(C.company_detag) as company_detag_text,  
+	C.stockexchange as stockexchange, 
+	C.stocksymbol as stocksymbol, 
+	C.year as year, 
+	C.quarter as quarter,
+	C.financialmetricname as financialmetricname, C.financialmetricname_detag as financialmetricname_detag, GetText(C.financialmetricname) as financialmetricname_text, GetText(C.financialmetricname_detag) as financialmetricname_detag_text, 
+	C.financialmetricvalue as financialmetricvalue, C.financialmetricvalue_detag as financialmetricvalue_detag, GetText(C.financialmetricvalue) as financialmetricvalue_text, GetText(C.financialmetricvalue_detag) as financialmetricvalue_detag_text, 
+	C.financialmetricestimated as financialmetricestimated, 
+	'' as date, 
+	'' as datestring,
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text 
+from
+(
+	select
+		Remap(C.company) as company, C.company as company_detag, 
+		C.stockexchange as stockexchange, 
+		C.stocksymbol as stocksymbol, 
+		C.year as year, 
+		C.quarter as quarter, 
+		Remap(C.financialmetricname) as financialmetricname, C.financialmetricname as financialmetricname_detag, 
+		Remap(C.financialmetricvalue) as financialmetricvalue, C.financialmetricvalue as financialmetricvalue_detag, 
+		C.financialmetricestimated as financialmetricestimated, 
+		'' as date, 
+		'' as datestring,
+		Remap(C.reference) as match, C.reference as match_detag 
+	from CompanyEarningsAnnouncement_ C
+) C
+;
+
+
+create view AnalystEarningsEstimate as
+select
+	C.companysource as companysource, 
+	C.personsource as personsource, 
+	C.companyrated as companyrated, C.companyrated_detag as companyrated_detag, GetText(C.companyrated) as companyrated_text, GetText(C.companyrated_detag) as companyrated_detag_text, 
+	C.stockexchange as stockexchange, 
+	C.stocksymbol as stocksymbol, 
+	'' as year, 
+	'' as quarter, 
+	C.financialmetricname as financialmetricname,
+	C.financialmetricestimate as financialmetricestimate,
+	C.financialmetricpreviousestimate as financialmetricpreviousestimate,
+	'' as date, 
+	'' as datestring,
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text
+from
+(
+	select 
+		C.companysource as companysource, 
+		C.personsource as personsource, 
+		Remap(C.companyrated) as companyrated, C.companyrated as companyrated_detag,  
+		C.stockexchange as stockexchange, 
+		C.stocksymbol as stocksymbol, 
+		'' as year, 
+		'' as quarter, 
+		C.financialmetricname as financialmetricname,
+		C.financialmetricestimate as financialmetricestimate,
+		C.financialmetricpreviousestimate as financialmetricpreviousestimate,
+		'' as date, 
+		'' as datestring,
+		Remap(C.reference) as match, C.reference as match_detag 
+	from AnalystEarningsEstimate_ C
+) C
+;
+
+
+create view CompanyEarningsGuidance as
+select 
+	C.company as company, C.company_detag as company_detag, GetText(C.company) as company_text, GetText(C.company_detag) as company_detag_text,  
+	C.stockexchange as stockexchange, 
+	C.stocksymbol as stocksymbol, 
+	'' as year, 
+	'' as quarter, 
+	C.financialmetricname as financialmetricname, C.financialmetricname_detag as financialmetricname_detag, GetText(C.financialmetricname) as financialmetricname_text, GetText(C.financialmetricname_detag) as financialmetricname_detag_text, 
+	C.financialmetricestimate as financialmetricestimate,
+	C.financialmetricpreviousestimate as financialmetricpreviousestimate, 
+	C.financialmetricconsensusestimate as financialmetricconsensusestimate, 
+	'' as date, 
+	'' as datestring,
+	C.match as match, C.match_detag as match_detag, GetText(C.match) as match_text, GetText(C.match_detag) as match_detag_text 
+from
+(
+	select 
+		Remap(C.company) as company, C.company as company_detag, 
+		C.stockexchange as stockexchange, 
+		C.stocksymbol as stocksymbol, 
+		'' as year, 
+		'' as quarter, 
+		Remap(C.financialmetricname) as financialmetricname, C.financialmetricname as financialmetricname_detag,
+		C.financialmetricestimate as financialmetricestimate,
+		C.financialmetricpreviousestimate as financialmetricpreviousestimate, 
+		C.financialmetricconsensusestimate as financialmetricconsensusestimate, 
+		'' as date, 
+		'' as datestring,
+		Remap(C.reference) as match, C.reference as match_detag 
+	from CompanyEarningsGuidance_ C
+) C
+;
+

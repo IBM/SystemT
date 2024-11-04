@@ -1,0 +1,89 @@
+$Document = DocScan(
+  (
+    "text" => "Text",
+    "label" => "Text"
+  )
+);
+CreateFunction(
+    "functionName" => "conflictName",
+    "externalName" => "udfjars/udfs.jar:com.ibm.test.udfs.udf1!combineSpans",
+    "language" => "Java",
+    "returnType" => "Span",
+    "returnSpanLike" => "p1",
+    "deterministic" => "true",
+    "returnsNullOnNullInp" => "true",
+    "p1" => "Span",
+    "p2" => "Span"
+);
+
+$MyTest =
+Project(
+  (
+    "@@genericModule@@MyTest@@res" => "res",
+    "@@genericModule@@MyTest@@__auto__id" => "__auto__id",
+    "@@genericModule@@MyTest@@__stmt__type" => "__stmt__type",
+    "@@genericModule@@MyTest@@Document_____sep_____D____id" => "Document_____sep_____D____id"
+  ),
+  ApplyFunc(
+    IntConst(
+      -1
+    ) => "@@genericModule@@MyTest@@Document_____sep_____D____id",
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_SELECT"
+      ) => "@@genericModule@@MyTest@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@MyTest@@__auto__id",
+        ApplyFunc(
+          conflictName(
+            GetCol(
+              "D.text"
+            ),
+            GetCol(
+              "D.text"
+            )
+          ) => "@@genericModule@@MyTest@@res",
+          Project(
+            (
+              "text" => "D.text"
+            ),
+            $Document
+          )
+        )
+      )
+    )
+  )
+);
+
+$conflictName =
+Project(
+  (
+    "D.text" => "text",
+    "@@genericModule@@conflictName@@__auto__id" => "__auto__id",
+    "@@genericModule@@conflictName@@__stmt__type" => "__stmt__type",
+    "@@genericModule@@conflictName@@Document_____sep_____D____id" => "Document_____sep_____D____id"
+  ),
+  ApplyFunc(
+    IntConst(
+      -1
+    ) => "@@genericModule@@conflictName@@Document_____sep_____D____id",
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_SELECT"
+      ) => "@@genericModule@@conflictName@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@conflictName@@__auto__id",
+        Project(
+          (
+            "text" => "D.text"
+          ),
+          $Document
+        )
+      )
+    )
+  )
+);
+
+Output: $MyTest, $conflictName;

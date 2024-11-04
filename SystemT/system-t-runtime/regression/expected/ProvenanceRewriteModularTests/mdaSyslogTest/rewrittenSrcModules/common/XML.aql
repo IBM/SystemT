@@ -1,0 +1,222 @@
+module common;
+
+
+create function GetXMLCategory(
+  tag String  ,value String)
+return Text
+external_name 'logAAqlUDFs.jar:com.ibm.logparse.aql.Util!getCategory'
+language java
+deterministic
+return null on null input
+
+;
+
+
+create view XMLTag as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /\<[^(\<|\>]*\>/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as tag
+  from Document D;
+
+output view XMLTag;
+
+create view XMLTagAttrs as
+  select  D.tag as tagSpan,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as XMLTag_____sep_____D____id
+  from  XMLTag D;
+
+output view XMLTagAttrs;
+
+create view rightTag as
+  select  D.tagSpan as tagSpan,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as XMLTagAttrs_____sep_____D____id
+  from  XMLTagAttrs D
+  where MatchesRegex(/\<\//, RightContext(LeftContext(D.tagSpan, 1), 2));
+
+output view rightTag;
+
+create view rightTagAttrs as
+  select  D.tagSpan as tagSpan,
+          SpanBetween(RightContext(LeftContext(D.tagSpan, 1), 2), LeftContext(RightContext(D.tagSpan, 1), 1)) as tagText,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as rightTag_____sep_____D____id
+  from  rightTag D;
+
+output view rightTagAttrs;
+
+create view leftTag as
+  select  Op.tagSpan as tagSpan,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__40__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__40__TempOp__1 Op,
+        __Minus__40__Temp __t
+  where Equals(Op.tagSpan, __t.tagSpan);
+
+output view leftTag;
+
+create view leftTagAttrs as
+  select  D.tagSpan as tagSpan,
+          SpanBetween(RightContext(LeftContext(D.tagSpan, 1), 1), LeftContext(RightContext(D.tagSpan, 1), 1)) as tagText,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as leftTag_____sep_____D____id
+  from  leftTag D;
+
+output view leftTagAttrs;
+
+create view leftTagAllAttrs as
+  extract D.tagSpan as tagSpan,
+    D.tagText as tagText,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    D.__auto__id as leftTagAttrs_____sep_____D____id,
+    regex /^[^\s]*/
+    with flags 'DOTALL'
+    on D.tagText
+    return group 0 as miniTag
+  from leftTagAttrs D;
+
+output view leftTagAllAttrs;
+
+create view rightTagAllAttrs as
+  extract D.tagSpan as tagSpan,
+    D.tagText as tagText,
+    AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    D.__auto__id as rightTagAttrs_____sep_____D____id,
+    regex /^[^\s]*/
+    with flags 'DOTALL'
+    on D.tagText
+    return group 0 as miniTag
+  from rightTagAttrs D;
+
+output view rightTagAllAttrs;
+
+create view LeafNodesUnifiltered as
+  select  Dl.tagSpan as l_tagSpan,
+          Dl.miniTag as l_miniTag,
+          Dl.tagText as l_tagText,
+          Dr.tagSpan as r_tagSpan,
+          Dr.miniTag as r_miniTag,
+          Dr.tagText as r_tagText,
+          SpanBetween(Dl.tagSpan, Dr.tagSpan) as leafText,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          Dl.__auto__id as leftTagAllAttrs_____sep_____Dl____id,
+          Dr.__auto__id as rightTagAllAttrs_____sep_____Dr____id
+  from  leftTagAllAttrs Dl,
+        rightTagAllAttrs Dr
+  where Equals(GetText(Dl.miniTag), GetText(Dr.miniTag))
+     and FollowsTok(Dl.tagSpan, Dr.tagSpan, 0, 1000);
+
+output view LeafNodesUnifiltered;
+
+create view LeafNodes as
+  select  __t2.tag as tag,
+          __t2.value as value,
+          __t2.leafSpan as leafSpan,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__41__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__41__Temp__1 __t1,
+        __Consolidate__41__Temp__2 __t2
+  where Contains(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.tag, __t2.value, __t2.leafSpan;
+
+output view LeafNodes;
+
+
+
+
+
+
+
+
+
+
+
+
+
+create view XMLOutput as
+  select  D.value as leaf_Span,
+          GetString(D.value) as leaf_Text,
+          D.tag as tag_Span,
+          GetString(D.tag) as tag_Text,
+          D.leafSpan as leafSpanWithTag_Span,
+          GetString(D.leafSpan) as leafSpanWithTag_Text,
+          D.leafSpan as span,
+          GetString(D.leafSpan) as text,
+          GetXMLCategory(GetString(D.tag), GetString(D.value)) as category,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as LeafNodes_____sep_____D____id
+  from  LeafNodes D;
+
+output view XMLOutput;
+
+export view common.XMLOutput;
+
+
+create view __Consolidate__41__Temp__1 as
+  select  D.r_tagText as tag,
+          D.leafText as value,
+          CombineSpans(D.l_tagSpan, D.r_tagSpan) as leafSpan,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as LeafNodesUnifiltered_____sep_____D____id,
+          D.leafText as __consolidate__target
+  from  LeafNodesUnifiltered D;
+
+output view __Consolidate__41__Temp__1;
+
+create view __Consolidate__41__Temp__2 as
+  select  __t1.tag as tag,
+          __t1.value as value,
+          __t1.leafSpan as leafSpan,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__41__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'NotContainedWithin';
+
+output view __Consolidate__41__Temp__2;
+
+create view __Minus__40__Temp as
+  select  __t.tagSpan as tagSpan
+  from  
+    ((select  Op.tagSpan as tagSpan
+      from  __Minus__40__TempOp__1 Op)
+    minus
+    (select  Op.tagSpan as tagSpan
+      from  __Minus__40__TempOp__2 Op)
+    ) __t
+  group by __t.tagSpan;
+
+output view __Minus__40__Temp;
+
+create view __Minus__40__TempOp__1 as
+  select  D.tagSpan as tagSpan,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as XMLTagAttrs_____sep_____D____id
+  from  XMLTagAttrs D;
+
+output view __Minus__40__TempOp__1;
+
+create view __Minus__40__TempOp__2 as
+  select  D.tagSpan as tagSpan,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as rightTag_____sep_____D____id
+  from  rightTag D;
+
+output view __Minus__40__TempOp__2;
+

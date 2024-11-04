@@ -1,0 +1,140 @@
+-----------------------------------------------------
+-- customization for ACE2005
+-----------------------------------------------------
+create view PersonNameAsCity as 
+extract
+		dictionaries 'names/ace2005/missingPerson_nameAsCity_ace2005.dict'
+		on D.text   
+        as person
+		from Doc D
+		having MatchesRegex(/\p{Lu}\p{M}*.+/, person);
+
+create view MissingSingleTokenPersonACE2005 as
+	extract
+		dictionaries 'names/ace2005/missingPerson_singletok_ace2005.dict'
+		on D.text   
+        as person
+		from Doc D
+		having MatchesRegex(/\p{Lu}\p{M}*.+/, person);
+
+create view MissingSingleTokenPersonLowerCaseACE2005 as
+	extract
+		dictionaries 'names/ace2005/missingPerson_singletok_lowercase_ace2005.dict'
+		on D.text   
+        as person
+		from Doc D
+		having MatchesRegex(/\p{Ll}\p{M}*.+/, person);
+		
+		
+------------------------------------------------------
+-- Customization for ACE2005
+------------------------------------------------------
+create view FamousePeople as
+	extract
+		dictionaries 'names/famous/worldLeaders03-08.dict'
+			    and  'names/famous/uspresidents.dict'
+			    and  'names/famous/greatestAmerican.dict'
+			    and  'names/famous/famousPeople.dict'
+		on D.text   
+        as person
+		from Doc D;
+
+create view MissingPersonACE2005 as
+	extract
+		dictionaries 'names/ace2005/missingPerson_fullname_ace2005.dict'
+		on D.text   
+        as person
+		from Doc D;
+
+create view StrongPersonCandidates as
+	(select P.person as person from PersonNameAsCity P)
+	union all
+	(select P.person as person from MissingSingleTokenPersonACE2005 P)
+	union all
+	(select P.* from MissingSingleTokenPersonLowerCaseACE2005 P)
+	union all
+	(select P.person as person from FamousePeople P)
+	union all
+	(select P.person as person from MissingPersonACE2005 P);
+
+-- remove Person candidates identified using core rules that overlap with the strong person candidates
+create view PersonWithAttrAllValidOverlap as
+select P1.person as person 
+from PersonWithAttrAllValid P1,
+	 StrongPersonCandidates P2
+where Overlaps(P1.person, P2.person)
+ and  Not(Contains(P1.person,P2.person));
+
+create view PersonWithAttrAllValidNonOverlap as
+	(select P.person as person from PersonWithAttrAllValid P)
+	minus
+	(select P.person as person from PersonWithAttrAllValidOverlap P);
+	
+create view StrongPersonCandidatesTokens as
+	(select R.match as person from Regex(/[^\s\.]{2,}(\s+[^\s\.]{2,})?/, StrongPersonCandidates.person) R)
+	union all
+	(select R.match as person from Regex(/[^\s\.]{2,}/, StrongPersonCandidates.person) R)
+	union all
+	(select P.person as person from PersonWithAttrAllValidNonOverlap P);
+
+create view StrongPersonCandidatesTokensDedup as
+select GetText(PT.person) as person
+from StrongPersonCandidatesTokens PT
+group by GetText(PT.person);
+
+-- Laura: replaced with optimized version below
+/*
+create view StrongPersonTokenCandidates as
+select CW.name as person
+from StrongPersonCandidatesTokensDedup SP,
+	ValidCapsPersonCandidates CW
+where equalsIgnoreCaseNormalized(SP.person, CW.name);
+*/
+
+create view StrongPersonTokenCandidates as
+select CW.name as person
+from 
+(select toUpperCase(SP.person) as personNormalized from StrongPersonCandidatesTokensDedup SP) SP,
+(select CW.name as name, toUpperCase(CW.name) as nameNormalized from ValidCapsPersonCandidates CW) CW
+where Equals(GetText(SP.personNormalized), GetText(CW.nameNormalized));
+
+--  referred by ID
+create view PersonReferredByID as
+extract	
+	regex /(call[ ]+him|name[ ]+is)\s*([A-Z])/
+		on between 2 and 3 tokens in D.text
+		return 
+			group 2 as person
+from Doc D;
+
+output view PersonReferredByID;
+
+create view ValidPersonIDCandidates as
+extract
+	regex /[A-Z]/
+	on 1 token in D.text
+	as name
+from Doc D;
+
+create view PersonIDeDedup as
+select GetText(PT.person) as person
+from PersonReferredByID PT
+group by GetText(PT.person);
+
+
+create view ValidPersonID as
+select CW.name as person
+from PersonIDeDedup PT,
+     ValidPersonIDCandidates CW
+where Equals(GetText(PT.person), GetText(CW.name));
+
+output view ValidPersonID;
+
+create view PersonCandidatesAll as
+	(select P.person as person from PersonWithAttrAllValidNonOverlap P)
+	union all
+	(select P.person as person from StrongPersonCandidates P)
+	union all
+	(select P.person as person from StrongPersonTokenCandidates P)
+	union all
+	(select P.* from ValidPersonID P);

@@ -1,0 +1,1156 @@
+
+-- ****************************************************************************
+--
+-- Created By : Yunyao Li (yunyaoli@us.ibm.com)
+-- 
+-- Annotator type : Built-in
+-- 
+-- Purpose : Extract phone numbers from plain text
+-- Examples :
+--			408-927-1234
+--			x1234
+--			1-800-COMCAST
+--
+-- This is a translation based on telnumber.xml and fax-filer.xml
+-- ****************************************************************************
+-----------------------------------------------
+--   Strong Phone Numbers
+-----------------------------------------------
+create dictionary StrongPhoneVariantDictionary as (
+	'phone',
+ 	'cell',
+ 	'contact',
+ 	'direct',
+	'office',
+ 	-- Yunyao: Added new strong clues for phone numbers
+	'tel',
+	'dial',
+	'Telefon',
+	'mobile',
+	'Ph',
+	'Phone Number',
+	'Direct Line',
+	'Telephone No',
+	'TTY',
+	'Toll Free',
+	'Toll-free',
+	-- German
+	'Fon',
+	'Telefon Geschaeftsstelle', 
+	'Telefon Geschäftsstelle',
+	'Telefon Zweigstelle',
+	'Telefon Hauptsitz',
+	'Telefon (Geschaeftsstelle)', 
+	'Telefon (Geschäftsstelle)',
+	'Telefon (Zweigstelle)',
+	'Telefon (Hauptsitz)',
+	'Telefonnummer',
+	'Telefon Geschaeftssitz',
+	'Telefon Geschäftssitz',
+	'Telefon (Geschaeftssitz)',
+	'Telefon (Geschäftssitz)',
+	'Telefon Persönlich',
+	'Telefon persoenlich',
+	'Telefon (Persönlich)',
+	'Telefon (persoenlich)',
+	'Handy',
+	'Handy-Nummer',
+	'Telefon arbeit',
+	'Telefon (arbeit)'
+);
+
+
+create view StrongPhoneVariant as 
+select D.match as match
+from   Dictionary('StrongPhoneVariantDictionary', Document.text) D;
+
+-- start block change of PhoneNumberInstance for speedup
+
+create view PhoneNumberInstance as
+select R.match as match
+--from   Regex(/(\+\s*){0,2}[\d(]([\d ()\-.\/]){9,20}\d\b/, Document.text) R ;
+from   RegexTok(/(\+\s*){0,2}[\d(]([\d ()\-.\/]){9,20}\d/, 10, Document.text) R ;
+
+create view CorrectPhoneNumberInstance as
+select R.match as match
+from PhoneNumberInstance R
+-- do not allow two '/' inside to prevent capturing 01/01/2001
+-- do not allow two '(' and two ')'
+-- do not allow single '(' no corresponding ')' so won't capture '(24' in 'Phone: 713.854.1426 (24 hours)'
+where Not(ContainsRegex(/(\(.+\()|(\).+\)|(\/.+\/)|(\([^)]*$))/,R.match));
+
+create view StrongPhone as
+select CombineSpans(SPV.match,PNI.match) as num
+from StrongPhoneVariant SPV, CorrectPhoneNumberInstance PNI
+where FollowsTok(SPV.match,PNI.match,0,4)
+  and MatchesRegex(/(([Nn](umber|o|um)|#)\s*(is\s*)?)?\W*/, SpanBetween(SPV.match, PNI.match))
+  and Not(ContainsRegex(/[\n\r]/, SpanBetween(SPV.match, PNI.match)));
+-- end block change of PhoneNumberInstance for speedup
+
+create view StrongPhoneNumber as
+select R.match as num
+--from Regex(/[\d(].+/, StrongPhone.num) R;
+from RegexTok(/[\d(].+/, 10, StrongPhone.num) R;
+
+--select SP.match as number
+--into StrongPhoneNumbers
+--from StrongPhoneNumber SP;
+
+--select SP.num as number
+--into StrongPhones
+--from StrongPhone SP;
+
+--create view StrongPhoneNumberOnly as
+--	(select P.match as num from StrongPhoneNumber P)
+--	minus
+--	(select P.num as num from PhoneNumber P);
+
+--select P.num as num into
+--StrongPhoneNumberOnlys
+--from StrongPhoneNumberOnly P;
+
+--===========================================================================
+-- Dictionaries
+--===========================================================================
+-- Strong patterns indicating the existence of a phone number
+create dictionary PhoneVariants as (
+	'+',
+	'phone:',
+	'phone :',
+	'cell:',
+	'cell',
+	'cell :',
+	'contact:',
+	'contact :',
+	'direct:',
+	'direct :',
+	'office:',
+	'office :',
+	-- Yunyao: Added new strong clues for phone numbers
+	'tel #',
+	'dial',
+	'Telefon',
+	'mobile',
+	'Ph',
+	-- German
+	'Fon',
+	'Telefon Geschaeftsstelle', 
+	'Telefon Geschäftsstelle',
+	'Telefon Zweigstelle',
+	'Telefon Hauptsitz',
+	'Telefon (Geschaeftsstelle)', 
+	'Telefon (Geschäftsstelle)',
+	'Telefon (Zweigstelle)',
+	'Telefon (Hauptsitz)',
+	'Telefonnummer',
+	'Telefon Geschaeftssitz',
+	'Telefon Geschäftssitz',
+	'Telefon (Geschaeftssitz)',
+	'Telefon (Geschäftssitz)',
+	'Telefon Persönlich',
+	'Telefon persoenlich',
+	'Telefon (Persönlich)',
+	'Telefon (persoenlich)',
+	'Handy',
+	'Handy-Nummer',
+	'Telefon arbeit',
+	'Telefon (arbeit)'
+);
+ 
+
+/*create dictionary PlusSymbol as (
+    '+'
+)*/
+
+-- Strong patterns indicating the existence of a fax number
+create dictionary FilterPhoneNum as (
+	'fax',
+	'efax',
+	'pager',
+	--Yunyao: added new strong clues for fax numbers
+	'Telefax',
+	'Facsimile',
+	'Telefacsimile',
+	'F',
+	'fx',
+	-- German
+	'Telefax Geschaeftsstelle', 
+	'Telefax Geschäftsstelle',
+	'Telefax Zweigstelle',
+	'Telefax Hauptsitz',
+	'Telefax Geschaeftssitz',
+	'Telefax Geschäftssitz'
+);
+ 
+
+--===========================================================================
+-- Dictionary Matches
+--===========================================================================
+create view PhoneVariant as 
+select D.match as annot
+from   Dictionary('PhoneVariants', Document.text) D;
+
+/*
+create view Plus as
+select D.match as annot
+from   Dictionary('PlusSymbol', Document.text) D;
+*/
+
+create view PhoneFilter as
+select D.match as annot
+from Dictionary('FilterPhoneNum', Document.text) D;
+
+--===========================================================================
+-- Translation for individual rules in telnumber.xml
+--===========================================================================
+--- Rule 1a ---
+-----------------------------------
+-- Purpose:
+--        Matching International phone numbers (most European phone numbers)
+-- Example:
+--        +12 123 123 12
+--        +49 (0) 123-123-1234
+-----------------------------------
+/**----------------------------------------------------------
+    NOTE: Updated the original rule so that all the strong clues in the dictionary 
+    are considered, instead of only considering '+'. The catch is that the 
+    strong clues including '+' will not appear in the annotations 
+   ----------------------------------------------------------**/
+
+/*----------------------------------
+- <rule id='1a' name='PhoneNumber'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  </token>
+- <token>
+  <regex>\d{2}\d?\d?</regex> 
+  <repeatOperator>{3,4}</repeatOperator> 
+  </token>
+  </internal>
+  </rule>
+-----------------------------------*/
+
+create view PhoneNumber_R1a as
+select R.match as num
+--from Regex(/\b\d{2}\d?\d?(\s+\d{2}\d?\d?){3,4}\b/, Document.text) R,
+--from Regex(/\b(\+\s*)?\d{2}\d?\d?(\s*\d{2}\d?\d?){3,4}\b/, Document.text) R,
+-- allow brackets around area code and '-' or '.' between area code and phone number
+-- such as 'Dial (022)-66962482 '
+--from Regex(/\(?\d{2}\d?\d?\)?(\s*-\.\s*)?(\s*\d{2}\d?\d?){3,4}\b/, Document.text) R,
+-- allow optional '(0)' after country code and '.''-'between numbers
+--from Regex(/\(?\d{2}\d?\d?\)?(\s*\(0\)\s*)?(\s*-\.\s*)?(\s*[\s\.-]\d{2}\d?\d?){3,4}\b/, Document.text) R,
+-- To allow more relax matches for German phone numbers such as the following
+--------------------------------------------------------------------
+-- Telefon:  	    	+49 (35601) 30404
+-- Telefax: 	   	+49 (35601) 30406
+-- Telephone:  	    	+49 (37600) 2584
+-- Fax:: 	   	+49 (37600) 3422
+-- Telephone:  	    	+49 (351) 837480
+-- Fax:: 	   	+49 (351) 8374828
+-- Telephone: +49 (04331) 6 06-0
+-- Tel.: +49 (0431)-664 52 17
+-- Tel.: +49 (0431)-593 69-0
+-- Mobil: +49 0173 5 78 90 66
+-- Telefon:  (0 34 93) 51 11 41
+--------------------------------------------------------------------
+--from Regex(/\(?\d{2,4}[\.\-]?\)?(\s*\(0\)\s*)?(\s*[\-\.]\s*)?(\s*[\s\.\-]\(?\d{1,2}(\s*\d{2}\s*){1,2}\)?)?(\s*[\s\.\-]?\d{2,4})(\s*[\s\.-]?\d{1,4}){1,3}\b/, Document.text) R,
+from RegexTok(/\(?\d{2,4}[\.\-]?\)?(\s*\(0\)\s*)?(\s*[\-\.]\s*)?(\s*[\s\.\-]\(?\d{1,2}(\s*\d{2}\s*){1,2}\)?)?(\s*[\s\.\-]?\d{2,4})(\s*[\s\.-]?\d{1,4}){1,3}/, 10, Document.text) R,
+       PhoneVariant Var
+--Allow more noise between phone variant and phone number
+where FollowsTok(Var.annot, R.match, 0, 2)
+  and MatchesRegex(/\s*\.{0,10}\s*/, SpanBetween(Var.annot, R.match));
+
+--------------
+-- Rule 1b and 2
+--
+-- Purpose: 
+--       Match US phone number
+--
+-- Example:
+--       +(734) 1231245
+--       (890)124.4568
+--------------
+/*--------------------------------
+- <rule id='1b' name='PhoneNumber'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>\(</regex> 
+  </token>
+- <token>
+  <regex>[1-9]\d{2}</regex> 
+  </token>
+- <token>
+  <regex>\)</regex> 
+  </token>
+- <token>
+  <regex>[\-]?\d{3}[\-\.]?\d{4}</regex> 
+  </token>
+  </internal>
+  </rule>
+  
+  - <rule id='2' name='PhoneNumber'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>\(</regex> 
+  </token>
+- <token>
+  <regex>[1-9]\d{2}</regex> 
+  </token>
+- <token>
+  <regex>\)</regex> 
+  </token>
+- <token>
+  <regex>\d{3}</regex> 
+  </token>
+- <token>
+  <regex>\d{4}</regex> 
+  </token>
+  </internal>
+  </rule>
+------------------------------------*/
+
+create view PhoneNumber_R1b_2 as
+select R.match as num
+--from Regex(/(\+\s*)?\(\s*[1-9]\d{2}\s*\)\s*[\-\.]?\d{3}[\-\.\s*]?\d{4}\b/, Document.text) R;
+from RegexTok(/(\+\s*)?\(\s*[1-9]\d{2}\s*\)\s*[\-\.]?\d{3}[\-\.\s*]?\d{4}/, 10, Document.text) R;
+
+--------------
+-- Rule 2a
+--
+-- Purpose: 
+--       Match US phone number
+--
+-- Example:
+--       +(734) 123-1245
+--       (124)465 7890
+--------------
+/*----------------------------------------------
+  NOTE: Updated to allow [\-\.] between \d{3} and \d{4}
+ -----------------------------------------------*/  
+/*
+- <rule id='2a' name='PhoneNumber'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>[1-9]\d{2}</regex> 
+  </token>
+- <token>
+  <regex>\d{3}</regex> 
+  </token>
+- <token>
+  <regex>\d{4}</regex> 
+  </token>
+  </internal>
+  </rule>
+*/
+
+create view PhoneNumber_R2a as
+select R.match as num
+--from Regex(/\b(\+\s*)?[1-9]\d{2}\s*[\-\.]?\d{3}[\-\.\s]\s*\d{4}\b/, Document.text) R;
+--from Regex(/\b(\+\s*)?[1-9]\d{2}\s*[\s\-\.]\d{3}[\-\.\s]\s*\d{4}\b/, Document.text) R;
+from RegexTok(/(\+\s*)?[1-9]\d{2}\s*[\s\-\.]\d{3}[\-\.\s]\s*\d{4}/, 10, Document.text) R;
+
+---------------------
+-- Rule 3a
+-- Purpose: 
+--    Find US numbers begin with country code 1
+--
+-- Example
+--    1-234-456-8908
+---------------------
+/**----------------------------------------------------------
+ NOTE: Added optional '()' around area code '[1-9]\d{2}' 
+ -----------------------------------------------------------**/
+/*
+- <rule id='3' name='PhoneNumber'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>(1\-)?[1-9]\d{2}[\-\.]\d{3}[\-\.]\d{4}</regex> 
+  </token>
+  </internal>
+  </rule>
+*/
+
+create view PhoneNumber_R3 as
+select R.match as num
+--from Regex(/\b\+?(1[\-\.\s]\s*)?(\(\s*)?[1-9]\d{2}(\s*\))?[\-\. ]\d{3}[\-\. ]\d{4}\b/, Document.text) R;
+from RegexTok(/\+?(1[\-\.\s]\s*)?(\(\s*)?[1-9]\d{2}(\s*\))?[\-\. ]\d{3}[\-\. ]\d{4}/, 10, Document.text) R;
+
+---------------------
+-- Rule 3a
+-- Purpose: 
+--    Find 1-800 numbers with alphabet
+--
+-- Example
+--    1-800-COMCAST
+---------------------
+/*
+- <rule id='3a' name='PhoneNumber'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>1\-8\d{2}</regex> 
+  </token>
+- <token>
+  <regex>[\-]</regex> 
+  </token>
+- <token>
+  <regex>[A-Z]{7}</regex> 
+  </token>
+  </internal>
+  </rule>
+*/
+
+create view PhoneNumber_R3a as
+select R.match as num
+--from Regex(/\b\+?1[\-\.\s]8\d{2}\s+[\s\-\.][A-Z]{7}\b/, Document.text) R;
+--To allow 1-800-COMCAST
+--from Regex(/\b\+?1[\-\.\s]\s*8\d{2}\s*[\s\-\.][A-Z]{7}\b/, Document.text) R;
+--capture phone numbers such as 1-800-777-TAXI, 866-41GREEN
+--from Regex(/\b(\+?1[\-\.\s]\s*)?8\d{2}\s*[\s\-\.][A-Z\d]{3}[\.\-]?[A-Z]{4}\b/, Document.text) R;
+from RegexTok(/(\+?1[\-\.\s]\s*)?8\d{2}\s*[\s\-\.][A-Z\d]{3}[\.\-]?[A-Z]{4}/, 10, Document.text) R;
+
+----------------
+-- Rule 4
+--
+-- Purpose:
+--       Find extension numbers
+--
+-- Example:
+--       x12456
+--------------------
+/*
+- <rule id='4' name='PhoneNumber'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>[Xx]\.?\d{4,5}</regex> 
+  </token>
+  </internal>
+  </rule>
+*/
+
+create view PhoneNumber_R4 as
+select R.match as num
+--from Regex(/\b[Xx][\.\-]?\d{4,5}\b/, Document.text) R;
+from RegexTok(/[Xx][\.\-]?\d{4,5}/, 3, Document.text) R;
+
+----------------
+-- Rule 5
+--
+-- Purpose:
+--       Find extension numbers
+--
+-- Example:
+--       Ext: 1245
+--------------------
+/*
+- <rule id='5' name='PhoneNumber'>
+- <context>
+- <token>
+  <regex>[Ee][Xx][Tt]</regex> 
+  </token>
+- <token>
+  <regex>[\.\:]</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+  </context>
+- <internal>
+- <token>
+  <regex>\d{4,5}</regex> 
+  </token>
+  </internal>
+  </rule>
+*/
+create view PhoneNumber_R5 as
+select R.match as num
+--from Regex(/\bext\s*[\.\-\:]?\s*\d{3,5}\b/, 'CASE_INSENSITIVE', Document.text) R;
+--from RegexTok(/ext\s*[\.\-\:]?\s*\d{3,5}\b/, 'CASE_INSENSITIVE', 3, Document.text) R;
+from RegexTok(/[Ee]xt\s*[\.\-\:]?\s*\d{3,5}/, 'CASE_INSENSITIVE', 3, Document.text) R;
+
+---------------------------------
+-- Rule 7a, 7b, 7c
+--
+-- Purpose:
+--     Identify Indian phone numbers
+--
+-- Example: 
+--     12 34 5678
+--     123 456 7890 
+---------------------------------
+/*
+- <rule id='7a' name='PhoneNumber'>
+- <context>
+- <token>
+  <regex>PHONEWORD</regex> 
+  <attribute>PHONE:VARIANTS</attribute> 
+  </token>
+  </context>
+- <internal>
+- <token>
+  <regex>[1-9]\d{1,2}</regex> 
+  </token>
+- <token>
+  <regex>\d{2}</regex> 
+  </token>
+- <token>
+  <regex>\d{8}</regex> 
+  </token>
+  </internal>
+  </rule>
+- <rule id='7b' name='PhoneNumber'>
+- <context>
+- <token>
+  <regex>PHONEWORD</regex> 
+  <attribute>PHONE:VARIANTS</attribute> 
+  </token>
+  </context>
+- <internal>
+- <token>
+  <regex>[1-9]\d{1,2}</regex> 
+  </token>
+- <token>
+  <regex>\d{5,5}</regex> 
+  </token>
+- <token>
+  <regex>\d{5,5}</regex> 
+  </token>
+  </internal>
+  </rule>
+- <rule id='7c' name='PhoneNumber'>
+- <context>
+- <token>
+  <regex>PHONEWORD</regex> 
+  <attribute>PHONE:VARIANTS</attribute> 
+  </token>
+  </context>
+- <internal>
+- <token>
+  <regex>[1-9]\d{1,2}</regex> 
+  </token>
+- <token>
+  <regex>\d{2}</regex> 
+  </token>
+- <token>
+  <regex>\d{4}</regex> 
+  </token>
+- <token>
+  <regex>\d{4}</regex> 
+  </token>
+  </internal>
+  </rule>
+- <rule id='IndiaPhone1' name='PhoneNumber'>
+- <context>
+- <token>
+  <regex>PHONEWORD</regex> 
+  <attribute>PHONE:VARIANTS</attribute> 
+  </token>
+  </context>
+- <internal>
+- <token>
+  <regex>[1-9]\d{1,2}[\-]((\d{5}[\-]\d{5})|(\d{2}[\-]\d{4}[\-]\d{4})|(\d{2}[\-]\d{8}))</regex> 
+  </token>
+  </internal>
+  </rule>
+  */
+  
+create view PhoneNumber_R7a_7b_7c as
+select R.match as num
+--from Regex(/\b([1-9]\d{1,2}\s*[\s\-\.]((\d{2}\s*[\s\-\.]\d{8}})|(\d{5}\s*[\s\-\.]\d{5})|(\d{2}\s*[\s\-\.]\d{4}\s*[\s\-\.]\d{4})))\b/, Document.text) R;
+--from Regex(/\b([1-9]\d{1,2}\s*[\(\s\-\.]((\d{2}\s*[\)\s\-\.]\d{8})|(\d{5}\s*[\)\s\-\.]\d{5})|(\d{2}\s*[\)\s\-\.]\d{4}\s*[\s\-\.]\d{4})))\b/, Document.text) R,
+  from RegexTok(/([1-9]\d{1,2}\s*[\(\s\-\.]((\d{2}\s*[\)\s\-\.]\d{8})|(\d{5}\s*[\)\s\-\.]\d{5})|(\d{2}\s*[\)\s\-\.]\d{4}\s*[\s\-\.]\d{4})))/, 10, Document.text) R,
+  PhoneVariant Var
+where FollowsTok(Var.annot, R.match, 0, 2)
+  and MatchesRegex(/\s*\.{0,10}\s*/, SpanBetween(Var.annot, R.match));
+
+
+-------------------------------------
+-- Rule 8ILPhone
+-- 
+-- Purpose: 
+--     Identify Isael Phone numbers
+--
+-- Example:
+--     972-89-1234567
+--------------------------------------
+/*
+- <rule id='8ILPhone' name='PhoneNumber'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  </token>
+- <token>
+  <regex>972\-\d{1,2}\-\d{7}</regex> 
+  </token>
+  </internal>
+  </rule>
+  </rules>
+ */
+ 
+create view PhoneNumber_R8ILPhone as
+select R.match as num
+--from Regex(/\b(972[\-\.]\d{1,2}[\-\.]\d{7})\b/, Document.text) R;
+from RegexTok(/(972[\-\.]\d{1,2}[\-\.]\d{7})/, 5, Document.text) R;
+
+ -- ===========================================================================
+-- Rules for identifying fax numbers
+-- ===========================================================================
+/**---------------------------------------------------------------------------
+ NOTE: Instead translating the individual rules, we simple identify later phone
+       numbers that follows or are followed by the filter words 
+ ----------------------------------------------------------------------------**/
+/*
+  <?xml version='1.0' encoding='ISO-8859-1' ?> 
+- <rules>
+- <rule id='1a' name='FLT:FAXNO'>
+- <context>
+- <token>
+  <attribute>FLT:PhoneNumber</attribute> 
+  <regex>ANYWORD</regex> 
+  </token>
+- <token>
+  <regex>[\=\/\:\.\-]</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+  </context>
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  </token>
+- <token>
+  <regex>\d{2}\d?\d?</regex> 
+  <repeatOperator>{3,4}</repeatOperator> 
+  </token>
+  </internal>
+  </rule>
+- <rule id='1b' name='FLT:FAXNO'>
+- <context>
+- <token>
+  <attribute>FLT:PhoneNumber</attribute> 
+  <regex>ANYWORD</regex> 
+  </token>
+- <token>
+  <regex>[\=\/\:\.\-]</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+  </context>
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>\(</regex> 
+  </token>
+- <token>
+  <regex>[1-9]\d{2}</regex> 
+  </token>
+- <token>
+  <regex>\)</regex> 
+  </token>
+- <token>
+  <regex>[\-]?\d{3}[\-\.]?\d{4}</regex> 
+  </token>
+  </internal>
+  </rule>
+- <rule id='2' name='FLT:FAXNO'>
+- <context>
+- <token>
+  <attribute>FLT:PhoneNumber</attribute> 
+  <regex>ANYWORD</regex> 
+  </token>
+- <token>
+  <regex>[\=\/\:\.\-]</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+  </context>
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>\(</regex> 
+  </token>
+- <token>
+  <regex>[1-9]\d{2}</regex> 
+  </token>
+- <token>
+  <regex>\)</regex> 
+  </token>
+- <token>
+  <regex>\d{3}</regex> 
+  </token>
+- <token>
+  <regex>\d{4}</regex> 
+  </token>
+  </internal>
+  </rule>
+- <rule id='2a' name='FLT:FAXNO'>
+- <context>
+- <token>
+  <attribute>FLT:PhoneNumber</attribute> 
+  <regex>ANYWORD</regex> 
+  </token>
+- <token>
+  <regex>[\=\/\:\.\-]</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+  </context>
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>[1-9]\d{2}</regex> 
+  </token>
+- <token>
+  <regex>\d{3}</regex> 
+  </token>
+- <token>
+  <regex>\d{4}</regex> 
+  </token>
+  </internal>
+  </rule>
+- <rule id='3' name='FLT:FAXNO'>
+- <context>
+- <token>
+  <attribute>FLT:PhoneNumber</attribute> 
+  <regex>ANYWORD</regex> 
+  </token>
+- <token>
+  <regex>[\=\/\:\.\-]</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+  </context>
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>[1-9]\d{2}[\-\.]?\d{3}[\-\.]?\d{4}</regex> 
+  </token>
+  </internal>
+  </rule>
+- <rule id='4' name='FLT:FAXNO'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>\(</regex> 
+  </token>
+- <token>
+  <regex>[1-9]\d{2}</regex> 
+  </token>
+- <token>
+  <regex>\)</regex> 
+  </token>
+- <token>
+  <regex>[\-]?\d{3}[\-\.]?\d{4}</regex> 
+  </token>
+  </internal>
+- <context>
+- <token>
+  <regex>[\(\[]</regex> 
+  </token>
+- <token>
+  <attribute>FLT:PhoneNumber</attribute> 
+  <regex>ANYWORD</regex> 
+  </token>
+- <token>
+  <regex>[\]\)]</regex> 
+  </token>
+  </context>
+  </rule>
+- <rule id='5' name='FLT:FAXNO'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>\(</regex> 
+  </token>
+- <token>
+  <regex>[1-9]\d{2}</regex> 
+  </token>
+- <token>
+  <regex>\)</regex> 
+  </token>
+- <token>
+  <regex>\d{3}</regex> 
+  </token>
+- <token>
+  <regex>\d{4}</regex> 
+  </token>
+  </internal>
+- <context>
+- <token>
+  <regex>[\(\[]</regex> 
+  </token>
+- <token>
+  <attribute>FLT:PhoneNumber</attribute> 
+  <regex>ANYWORD</regex> 
+  </token>
+- <token>
+  <regex>[\]\)]</regex> 
+  </token>
+  </context>
+  </rule>
+- <rule id='5a' name='FLT:FAXNO'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>[1-9]\d{2}</regex> 
+  </token>
+- <token>
+  <regex>\d{3}</regex> 
+  </token>
+- <token>
+  <regex>\d{4}</regex> 
+  </token>
+  </internal>
+- <context>
+- <token>
+  <regex>[\(\[]</regex> 
+  </token>
+- <token>
+  <attribute>FLT:PhoneNumber</attribute> 
+  <regex>ANYWORD</regex> 
+  </token>
+- <token>
+  <regex>[\]\)]</regex> 
+  </token>
+  </context>
+  </rule>
+- <rule id='6' name='FLT:FAXNO'>
+  <context /> 
+- <internal>
+- <token>
+  <regex>\+</regex> 
+  <repeatOperator>?</repeatOperator> 
+  </token>
+- <token>
+  <regex>[1-9]\d{2}[\-\.]?\d{3}[\-\.]?\d{4}</regex> 
+  </token>
+  </internal>
+- <context>
+- <token>
+  <regex>[\(\[]</regex> 
+  </token>
+- <token>
+  <attribute>FLT:PhoneNumber</attribute> 
+  <regex>ANYWORD</regex> 
+  </token>
+- <token>
+  <regex>[\]\)]</regex> 
+  </token>
+  </context>
+  </rule>
+  </rules>
+ */
+
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Aggregation/Consolidation section <<<<<<<<<<<<<<<<
+-- ===========================================================================
+
+-- Merge all the different rules.
+-- First merge all the full phone numbers
+create view PhoneNumFull as
+	(select P.num as num from PhoneNumber_R1a P)
+union all
+    (select P.num as num from PhoneNumber_R1b_2 P)
+union all
+    (select P.num as num from PhoneNumber_R2a P)
+union all
+    (select P.num as num from PhoneNumber_R3 P)
+union all
+    (select P.num as num from PhoneNumber_R3a P)
+union all
+    (select P.num as num from PhoneNumber_R7a_7b_7c P)
+union all
+    (select P.num as num from PhoneNumber_R8ILPhone P)
+union all
+	(select P.num as num from StrongPhoneNumber P);
+
+-- Then merge all the extension numbers
+create view ExtensionNums as
+    (select P.num as num from PhoneNumber_R4 P)
+union all
+    (select P.num as num from PhoneNumber_R5 P);
+    
+-- Merge full phone number with its extension number whenever possible
+create view PhoneNumWithExtension as
+select CombineSpans(P.num, E.num) as num
+from PhoneNumFull P,
+	 ExtensionNums E
+where FollowsTok(P.num, E.num, 0, 0)
+     -- no new line allowed
+  	  and Not(ContainsRegex(/[\n\r]/, SpanBetween(P.num, E.num)));
+
+-- Merge all phone numbers
+create view PhoneNumAll as
+	(select P.num as num from PhoneNumFull P)
+union all
+	(select P.num as num from ExtensionNums P)
+union all
+	(select P.num as num from PhoneNumWithExtension P);
+	
+
+-- -------------------------------------------------------
+-- Consolidation:
+-- For now, we just remove annotations that are completely
+-- contained within other annotations.
+-- -------------------------------------------------------
+
+create view PhoneNumber as
+select C.num as num
+--from Consolidate(PhoneNumAll.num) C;
+from PhoneNumAll C
+consolidate on C.num;
+
+-- Comments out by Yunyao Li to improve recall
+--     sentence S
+--where Contains(S.sentence, C.num)
+
+-- ******************************************************
+-- Laura: Split Phone into three separate views for provenance experiments
+
+create view PhoneNumber1 as
+select C.num as num
+from PhoneNumFull C
+consolidate on C.num;
+
+create view PhoneNumber2 as
+select C.num as num
+from ExtensionNums C
+consolidate on C.num;
+
+create view PhoneNumber3 as
+select C.num as num
+from PhoneNumWithExtension C
+consolidate on C.num;
+
+--output view PhoneNumber1;
+--output view PhoneNumber2;
+--output view PhoneNumber3;
+
+-- ******************************************************
+
+
+-- -------------------------------------------------------
+-- Identify fax/pager numbers
+-- -------------------------------------------------------
+
+-- Laura: Removed filter for provenance experiments
+create view NonPhoneNum as
+	(select P.num as num
+	from   PhoneNumber P,
+    	   PhoneFilter F
+  	where  FollowsTok(F.annot, P.num, 0, 4)
+  	      and  MatchesRegex(/\s*\:*\s*.{0,10}\s*\+*\s*/, SpanBetween(F.annot, P.num)))
+union all 
+	(select P.num as num
+	from   PhoneNumber P,
+           PhoneFilter F
+	where  FollowsTok(P.num, F.annot, 0, 2)
+  	  and MatchesRegex(/\s*\:?[\(\[]\s*/, SpanBetween(P.num, F.annot)));
+
+--=====================================================================
+-- Remove fax/pager numbers
+--=====================================================================
+ create view PhoneNumOnly as
+     (select P.num as num from PhoneNumber P)
+     minus
+     (select NP.num as num from NonPhoneNum NP);
+
+     
+-------------------------------------------------------------------------------
+-- personphone_demo3.aql
+--
+-- Use consolidation to deal with overlapping matches.
+-------------------------------------------------------------------------------
+
+-- Declare a dictionary of first names, to be loaded from an external file
+create dictionary FirstNameDict from file 'firstnames.dict';
+
+-- Find first names, using an exhaustive dictionary.
+create view FirstName as
+extract
+    dictionary FirstNameDict on D.text as name
+from Document D
+having MatchesRegex(/[A-Z][a-z]*/, name);
+
+-- ******************************************************
+-- Laura: Added one more rule for person for provenance experiments
+
+create view CapsPersonCandidate as
+select R.match as name
+from   RegexTok(/\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}/, 4, Document.text) R; --'
+-- Laura: Commented out filters for provenance experiments
+/*where  Not(ContainsDicts(
+		'FilterPersonDict', 
+		'filterPerson_position.dict',
+		'filterPerson_german.dict',
+		'InitialDict',
+		'StrongPhoneVariantDictionary',
+		'stateList.dict',
+		'organization_suffix.dict',
+   		'industryType_suffix.dict',
+   		'streetSuffix_forPerson.dict', 
+   		'wkday.dict',
+   		'nationality.dict',
+   		'stateListAbbrev.dict',
+   		'stateAbbrv.ChicagoAPStyle.dict', R.match));
+*/  		
+create view CapsPerson as
+select C.name as name
+from CapsPersonCandidate C
+where Not(MatchesRegex(/(\p{Lu}\p{M}*)+-.*([\p{Ll}\p{Lo}]\p{M}*).*/, C.name))
+  and Not(MatchesRegex(/.*([\p{Ll}\p{Lo}]\p{M}*).*-(\p{Lu}\p{M}*)+/, C.name));
+  
+create view Person2 as
+select CombineSpans(F.name, CP.name) as name
+from FirstName F, CapsPerson CP
+where FollowsTok(F.name, CP.name, 0, 0)
+consolidate on CombineSpans(F.name, CP.name);
+
+create view FistNameOverlap as
+select F.name as name
+from FirstName F, Person2 P
+where Contains(P.name, F.name);
+
+create view Person1 as
+(select F.name as name from FirstName F)
+minus
+(select F.name as name from FistNameOverlap F);
+
+--output view Person1;
+--output view Person2;
+
+-- ******************************************************
+
+/*
+-- Find phone numbers, using a pair of regular expressions.
+create view PhoneNumber as
+extract 
+    regexes /\+?\([1-9]\d{2}\)\d{3}-\d{4}/ and /\+?[Xx]\.?\d{4,5}/
+    on D.text as num
+from Document D;
+*/
+
+-- Find instances of first name followed within 40 chars by phone number
+-- ******************************************************
+-- Laura: Split into 6 separate views for provenance experiments
+/*
+create view PersonPhoneAll as
+select name.name as person, phone.num as phone,
+       CombineSpans(name.name, phone.num) as personphone
+from FirstName name, PhoneNumber phone
+where Follows(name.name, phone.num, 0, 40);
+*/
+
+create view PersonPhoneAll11 as
+select name.name as person, phone.num as phone,
+       CombineSpans(name.name, phone.num) as personphone
+from Person1 name, PhoneNumber1 phone
+where Follows(name.name, phone.num, 0, 40);
+
+create view PersonPhoneAll12 as
+select name.name as person, phone.num as phone,
+       CombineSpans(name.name, phone.num) as personphone
+from Person1 name, PhoneNumber2 phone
+where Follows(name.name, phone.num, 0, 40);
+
+create view PersonPhoneAll13 as
+select name.name as person, phone.num as phone,
+       CombineSpans(name.name, phone.num) as personphone
+from Person1 name, PhoneNumber3 phone
+where Follows(name.name, phone.num, 0, 40);
+
+create view PersonPhoneAll21 as
+select name.name as person, phone.num as phone,
+       CombineSpans(name.name, phone.num) as personphone
+from Person2 name, PhoneNumber1 phone
+where Follows(name.name, phone.num, 0, 40);
+
+create view PersonPhoneAll22 as
+select name.name as person, phone.num as phone,
+       CombineSpans(name.name, phone.num) as personphone
+from Person2 name, PhoneNumber2 phone
+where Follows(name.name, phone.num, 0, 40);
+
+create view PersonPhoneAll23 as
+select name.name as person, phone.num as phone,
+       CombineSpans(name.name, phone.num) as personphone
+from Person2 name, PhoneNumber3 phone
+where Follows(name.name, phone.num, 0, 40);
+
+create view PersonPhoneAll as
+(select * from PersonPhoneAll11)
+union all
+(select * from PersonPhoneAll12)
+union all
+(select * from PersonPhoneAll13)
+union all
+(select * from PersonPhoneAll21)
+union all
+(select * from PersonPhoneAll22)
+union all
+(select * from PersonPhoneAll23);
+
+-------------------------------------------------------------------------------
+-- Change 1: Add some filtering
+create view PersonPhoneFiltered as 
+( select * from PersonPhoneAll A )
+minus
+(
+    select A.*
+    from PersonPhoneAll A, PhoneNumber P
+    where Contains(SpanBetween(A.person, A.phone), P.num)
+);
+
+-------------------------------------------------------------------------------
+-- Change 2: Consolidate to deal with overlap
+
+-- Remove overlap between annotations
+create view PersonPhone as
+select PPF.personphone
+from PersonPhoneFiltered PPF
+consolidate on PPF.personphone using 'ContainedWithin';
+
+output view PersonPhone;
+

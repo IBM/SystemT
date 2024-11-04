@@ -1,0 +1,32 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test case for applying GetText on a Span column
+--
+-------------------------------------------------------------------------------
+require document with columns text Text;
+
+-- Create a dictionary of words
+create dictionary Words as
+('First');
+
+
+-- Find all matches of the words dictionary.
+create view View1 as
+extract
+    dictionary 'Words' on D.text as match
+from Document D;
+
+
+-- Create a table that maps words.
+create table View2 (orig Text, mapped Text) as
+values
+    ('First', '1st');
+
+-- Use the table to augment the View2 view with new words
+create view View3 as
+select V2.mapped as new, V1.match as match
+from View1 V1, View2 V2
+where Equals(GetText(V1.match), GetText(V2.orig));
+
+output view View3;
+

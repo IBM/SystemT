@@ -1,0 +1,100 @@
+
+include 'includes_was.aql';
+
+    
+create view InternalRegexDelims_RS as 
+    extract 
+        regex /((\n)|(\r))+\[/ on D.text as delim
+    from Doc D;
+
+-- IF BASE ANNOTATION SPECIFIED, otherwise comment out
+create view InternalBADelims_RS as 
+    select D.match as delim
+    from DateTimes4RecSplit D;
+    
+ create view InternalDelims_RS as 
+    select CombineSpans(R.delim, BA.delim) as delim
+    from  InternalRegexDelims_RS R,  InternalBADelims_RS BA
+    where FollowsTok(R.delim, BA.delim, 0, 0);
+    
+-- END IF BASE ANNOTATION SPECIFIED  
+
+  
+/*-- IF BASE ANNOTATION NOT SPECIFIED, otherwise comment out
+
+ create view InternalDelims_RS as 
+    select D.delim as delim
+    from InternalRegexDelims_RS D;
+
+
+*/-- END IF BASE ANNOTATION NOT SPECIFIED  
+
+  create view ChunkDelim_RS as
+(select D.text as text, LeftContext(D.text,0) as match from Doc D)
+union all
+(select  D.text as text, RightContext(D.text,0) as match from Doc D);
+    
+------------------------------------------------------------------------
+-- VERSION OF ALL DELIMS THAT DOES NOT INCLUDE BEGIN AND END OF DOC
+-----------------------------------------------------------------------    
+create view ALLDelims_RS as
+    select N.delim as delim
+    from InternalDelims_RS N;
+
+-----------------------------------------------------------------------
+-- ESCAPE XML BLOCKS AND EXCEPTION STACK TRACE BLOCKS
+-----------------------------------------------------------------------
+
+create view EscapeSpans_RS as 
+    (   
+    select X.xblock as match 
+    from XMLBlockOutput X
+    )
+union all
+    (   
+    select S.tblock as match
+    from TraceBlock S
+    );
+
+create view RecSplitterDelimCands as 
+    (
+    select N.delim as delim
+    from InternalDelims_RS N
+    )
+    minus
+    (
+    select N.delim as delim
+    from InternalDelims_RS N, EscapeSpans_RS E
+    where Overlaps(N.delim, E.match)
+    );
+    
+-- AFTER FILTERING ADD BACK THE BEGIN AND END OF INPUT AS DELIMITERS    
+ create view DelimsNotEscaped as 
+    select  R.delim as delim
+    from RecSplitterDelimCands R;
+    
+  create view EliminatedDelims as 
+    (
+    select D.delim
+    from ALLDelims_RS D
+    )
+    minus
+    (
+    select D.delim
+    from DelimsNotEscaped D
+    );
+    
+    
+
+--------------------------------------
+-- OUTPUT
+--------------------------------------
+-- USE THIS VIEW FOR RECORDS THAT ARE MIXED CONTENT, NOT JUST XML
+ output view DelimsNotEscaped;
+ 
+ -- IF PREVIOUS VIEW IS EMPTY, USE THE NON-ESCAPED VERSION
+ output view ALLDelims_RS;
+
+ 
+
+

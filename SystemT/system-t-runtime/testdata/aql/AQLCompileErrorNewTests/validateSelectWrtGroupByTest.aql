@@ -1,0 +1,53 @@
+-- incorrectSelectListWRTGroupByCaluse.aql
+
+-- Test for a defect# 17974
+-- AQL with select list not correct with respect to group by clause
+-------------------------------------------------------------------------------
+-- Note that we capture some two-word phrases, to make things more interesting.
+create dictionary CommonWords as (
+	'a', 'the', 'of', 'of a', 'of the'
+);
+
+-- Find pairs of common words within 20 tokens of each other.
+create view WordPairs_Unsorted as
+select D1.match as first, D2.match as second, 
+	CombineSpans(D1.match, D2.match) as annot
+from Dictionary('CommonWords', Document.text) D1,
+	Dictionary('CommonWords', Document.text) D2
+where FollowsTok(D1.match, D2.match, 0, 20);
+
+
+-- W.second and W.annot cannot appear in the select list. 
+-- For now we only show one error for W.second, since we do not collect all errors in the catalog validation code.
+create view GroupBy1 as
+select W.first as first, W.second as second, W.annot as third 
+from WordPairs_Unsorted W
+group by W.first;
+
+output view GroupBy1;
+
+-- Mix of aggregate and scalars in the select list, but no GROUP BY. 
+-- Will throw an exception: The SELECT list contains columns, scalar functions and aggregate functions. Either specify a GROUP BY clause, or remove the columns and scalar functions, or remove the aggregate functions.
+create view GroupBy2 as
+select Count(W.first) as first, W.second as second
+from WordPairs_Unsorted W;
+
+output view GroupBy2;
+
+-- No group by and only aggregates in select list. Should compile successfully
+-- Second argument will throw an exception, since W.second is a span.
+create view GroupBy3 as
+select Count(W.first) as first, Sum(W.second) as second
+from WordPairs_Unsorted W;
+
+output view GroupBy3;
+
+-- Second cannot appear in the select list. 
+-- Will throw exception: Scalar function GetText is not valid with respect to the GROUP BY clause.
+create view GroupBy4 as
+select W.first as first, GetText(W.second) as second
+from WordPairs_Unsorted W
+group by W.first;
+
+output view GroupBy4;
+

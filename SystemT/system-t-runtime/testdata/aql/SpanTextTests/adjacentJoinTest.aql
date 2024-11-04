@@ -1,0 +1,33 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test case for selecting a Span column
+--
+-------------------------------------------------------------------------------
+require document with columns text Text;
+
+-- create a view with a Span column
+create view CapsWord as
+extract regex /[A-Z][a-z]*/
+        on 1 token in D.text
+        as match
+from Document D;
+
+-- Combine Span
+-- Test that a Call to a span function on arguments of 
+-- different types (Span and Text) works correctly
+create view Result as
+select CombineSpans('IgnoreOrder', C1.match, D.text) as col1
+from CapsWord C1, Document D;
+
+output view Result;
+
+
+
+create view Sequence8 as
+extract CombineSpans(C1.match, C2.match) as _12,
+        CombineSpans(C2.match, C3.match) as _23,
+        pattern (<C1.match> <C2.match>) <C3.match> 
+        return group 0 as _123
+from CapsWord C1, CapsWord C2, CapsWord C3;
+
+output view Sequence8;

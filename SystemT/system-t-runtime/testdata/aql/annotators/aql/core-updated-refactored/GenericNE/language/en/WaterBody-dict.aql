@@ -1,0 +1,20 @@
+create view WaterBodyRightClue as
+extract
+	--dictionary 'location/geo/waterbodySuffix.dict'
+	dictionary 'location/geo/loc_geolog_waterbody_en.dict'
+	on D.text
+	as match
+from Doc D;
+
+
+create view WaterBodyDictMatch as
+extract
+    dictionaries
+        --'location/geo/sea.dict'
+        'location/geo/loc_geolog_sea_en.dict' 
+    --and 'location/geo/ocean.dict'
+    and 'location/geo/loc_geolog_ocean_en.dict' 
+    on D.text   
+        as match     
+from Doc D
+having MatchesRegex(/\p{Lu}\p{M}*.+/, match);

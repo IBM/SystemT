@@ -1,0 +1,54 @@
+module module1;
+
+-- Select something from the document
+create view mTopic_en as 
+extract regex /[A-Z][a-z]+/ on 1 token in D.text as concept
+from Document D;
+
+-- Subquery with extract pattern statement w/ explicit select list
+create view Test1 as
+select X.concept as concept
+from (
+   extract mTopic1.typeName as type1,
+   pattern <mTopic1.concept> 
+   return group 1 as concept
+   from mTopic_en mTopic1
+   ) X;
+
+-- Subquery with extract pattern statement w/ select * list
+create view Test2 as
+select X.*
+from (
+   extract mTopic1.typeName as type1,
+   pattern
+     <mTopic1.concept> 
+   return group 1 as concept
+   from mTopic_en mTopic1
+   ) X;
+
+-- Top-level extract statement with explicit select list
+create view Test3 as
+   extract mTopic1.typeName as type1,
+   pattern <mTopic1.concept> 
+   return group 1 as concept
+   from mTopic_en mTopic1;
+
+output view Test1;
+output view Test2;
+output view Test3;
+
+-- Test union of non-compatible schemas 
+create view IndicatorInvalid1 as
+select D.text, D.label
+from Document D;
+
+create view IndicatorInvalid2 as
+select T.concept
+from Test2 T;
+
+create view IndicatorInvalid as
+(select R.* from IndicatorInvalid1 R)
+union all
+(select R.* from IndicatorInvalid2 R); 
+
+export view IndicatorInvalid;

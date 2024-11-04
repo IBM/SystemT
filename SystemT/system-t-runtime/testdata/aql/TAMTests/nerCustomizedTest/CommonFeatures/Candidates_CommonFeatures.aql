@@ -1,0 +1,319 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module CommonFeatures;
+
+create view Nationalities as
+select D.match as match
+from (extract dictionary 'WorldNationalities' on D.text as match from DocumentText D) D;
+
+create view CitiesAll as 
+	(select S.match as match from USCity S)
+	union all
+	(select S.match as match from GermanCities S)
+	union all
+	(select S.match as match from MajorCity  S);
+
+create view StateCandidate as
+	(select C.match as match from USStateCandidate C)
+	union all	
+	(select C.match as match from CanadianProvinceCandidate C)
+	union all
+	(select C.* from StatesFromOtherMajorCountries C);
+	
+create view StateStrongAbbrev as
+	(select A.match as match from USStateStrongAbbrev A)
+	union all
+	(select A.match as match from CanadianProvinceStrongAbbrev A);
+
+create view StateWeakAbbrev as
+	(select A.match as match from USStateWeakAbbrev A)
+	union all
+	(select A.match as match from CanadianProvinceWeakAbbrev A);
+
+create view StatesFromMajorCountries as
+	(select C.match as match from StateCandidate C)
+	union all
+	(select C.match as match from StatesFromOtherMajorCountries C);
+
+ create view StateStrongAll
+	as
+	(select S.match as match from StatesFromMajorCountries S)
+	union all 
+	 (select S.match as match from StateStrongAbbrev S);
+	 
+ create view StrongStateAll as
+	(select S.match as match from StateStrongAll S)
+	union all
+	(select S.match as match from StatesFromMajorCountries S);	
+	
+  create view StateWeakAll
+	as
+	(select S.match as match from StateCandidate S)
+	union all 
+	 (select S.match as match from StateWeakAbbrev S);	
+
+
+-- Stock exchange and ticker information extraction 
+
+create view StockExchangeContext1 as 
+  select LeftContext(R.match,50) as lc, RightContext(R.match,10) as rc, R.match as match
+  from StockExchanges1 R;
+
+create view StockExchangeAndTicker1 as
+  extract R.match as exchange, R.lc as lc,
+        regex /[ ]?:[ ]?((\p{Lu}\p{M}*)+)/ on R.rc
+       return group 1 as ticker
+  from StockExchangeContext1 R;
+  
+  
+-- Stock Exchange and ticker, Reuters-style
+  
+create view StockExchangeContext2 as 
+  select LeftContextTok(R.exchange,3) as lc, R.exchange
+  from StockExchange2 R;
+
+create view StockExchangeAndTicker2 as
+select R.exchange, LeftContext(R.ticker, 50) as lc, R.ticker as ticker
+from
+(
+  extract R.exchange as exchange,
+        regex /[\(\[)][ ]?((\p{Lu}\p{M}*)+)[ ]?\.[ ]?\z/ on 3 tokens in R.lc
+       return group 1 as ticker
+  from StockExchangeContext2 R
+) R;
+
+create view StockExchangeAndTicker as
+(select * from StockExchangeAndTicker1)
+union all
+(select * from StockExchangeAndTicker2);
+  
+create view CityAll as
+	select C.match as match from CitiesAll C;
+
+create view CityorStateOrCountry as
+	(select C.match as match from CityAll C)
+	union all
+	(select S.match as match from StateCandidate S)
+	union all
+	(select C.match as match from CountryCandidate C);
+	
+-- ================ Processing syntactic clues for financial extractors ========
+
+-- ================ Detect short headlines =====================================
+
+--HACK - identify lists of short events from StreetInsider.com
+create view ShortAnnouncementListItem as
+	-- Sudarshan regex : 10/13/2011 - backreference on line 29
+extract regex /^-\s([^\n]*)\n/ 
+	with flags 'MULTILINE'
+	on B.match
+	return 
+		group 0 as item
+from Body B;
+
+
+-- the titles and short announcements are treated as short text. 
+-- a plain text document less than 200 characters, is also treated as short text
+create view ShortTextTemp as
+select T.match as text
+from
+(
+	( select T.match as match from Title T )
+	union all
+	( select L.match as match from ListItem L )
+--	union all
+--	( select L.item as match from ShortAnnouncementListItem L );
+	union all
+	( select D.text as match from DocumentText D where GreaterThan(200, GetLength(D.text)))
+) T
+consolidate on T.match using 'NotContainedWithin';
+
+
+--HACK: remove the string before the first '-' in the StreetInsider.com title
+create view ShortText as
+(
+	select Chomp(T.match) as match
+	from 
+		(	
+		-- Sudarshan regex : 10/13/2011 - backreference on line 61
+		extract regex /\A[^-]*-[ ]+(.+)/ 
+			on T.text
+			return 
+				group 1 as match
+		from ShortTextTemp T
+		) T
+)
+union all
+(
+	select T.text as match
+	from ShortTextTemp T
+	where Not(ContainsRegex(/\A[^-]*-[ ]+/, T.text))
+);
+
+
+
+-- ================ Detect body of text =====================
+
+
+-- the body of the html document is treated as long text. 
+-- a plain text document longer than 200 characters, is also treated as long text
+create view MainContent as
+select T.match as match
+from
+(
+	( select B.match as match from Body B )
+	union all
+	( select D.text as match from DocumentText D where GreaterThan(GetLength(D.text), 200))
+) T
+consolidate on T.match using 'NotContainedWithin';
+
+create view SentenceBoundaryInitial as
+extract 
+        C.match as text,
+        -- added "..." boundary for cases where a white-space is not present
+        -- Sudarshan regex : 10/13/2011 - backreference on line 97
+        regex /(([\.\?!]+\s?)|(\n\s*\n))/ on C.match as boundary
+        from MainContent C
+		-- Filter the candidate boundaries.
+		having Not(ContainsDict('MiscellaneousAbbreviations', 
+            CombineSpans(LeftContextTok(boundary, 1), boundary)));
+
+
+create view SentenceInitial as
+extract 
+    split using S.boundary 
+        retain right split point
+        on S.text
+        as match
+from SentenceBoundaryInitial S;
+
+
+-- Find additional sentence boundaries
+
+-- Find list item boundaries: all </li> tags
+create view SentenceBoundaryLI as 
+select RightContext(L.match, 0) as match
+from ListItem L;
+
+
+-- Find informal list item boundaries: all <br> tags followed by '-'
+create view SentenceBoundaryBrDash as 
+select CombineSpans(B.br, B.dash) as match
+from 
+(
+	extract B.br as br, 
+			regex /-/ on B.rc as dash
+	from 
+	(
+		select B.match as br, RightContextTok(B.match, 1) as rc
+		from BR B
+	) B
+) B;
+
+
+-- Find all sentences containing the additional boundaries
+create view SentenceBoundaryAdditional as
+select B.match as boundary, S.match as text
+from SentenceInitial S, 
+	(
+		(select B.match as match from SentenceBoundaryLI B)
+		union all
+		(select B.match as match from SentenceBoundaryBrDash B)
+	) B
+where Contains(S.match, B.match);
+
+create view SentenceBoundaryAll as
+( select S.boundary as boundary from SentenceBoundaryInitial S )
+union all
+( select S.boundary as boundary from SentenceBoundaryAdditional S );
+
+
+--Find additional sentences
+create view SentenceAdditional as
+extract 
+ split using S.boundary 
+        retain right split point
+		on S.text
+		as match
+from SentenceBoundaryAdditional S;
+		
+-- All sentences
+create view SentenceAll as
+(select S.match as match from SentenceInitial S)
+union all
+(select S.match as match from SentenceAdditional S);
+	
+	
+create view LongTextCandidate as
+select Chomp(S.match) as match
+from SentenceAll S
+--to avoid complete sentences (begin,end) to disappear because of the right split point being an empty span (i.e., (end,end)).
+where Not(Equals(GetText(S.match), ''))
+-- consolidation removes sentences containing additional boundaries while retaining their splits
+consolidate on S.match using 'NotContainedWithin';
+
+--indentify long sentences containing short text - to filter out, to avoid incorrect matches on title
+create view LongTextOverlapShort as
+select L.match as match
+from LongTextCandidate L, ShortText S
+where Contains(L.match, S.match);
+
+create view LongText as
+( select L.match as match from LongTextCandidate L )
+minus
+( select L.match as match from LongTextOverlapShort L );
+
+-- find sentences that might be a title (i.e., are preceded and followed by double new line)
+create view SolitarySentence as
+select L.match as match
+from LongText L
+where ContainsRegex(/\s*\n\s*\n$/, LeftContext(L.match,20)) and
+      ContainsRegex(/^\s*\n\s*\n/, RightContext(L.match,20));
+
+-- find sentences that might be part of a bigger paragraph
+create view ParagraphSentence as
+(select L.match as match from LongText L )
+minus
+(select S.match as match from SolitarySentence S);
+
+-- find paragraphs of text (with 2 or more sentences)
+create view ParagraphCandidate as
+select P.match as match
+from
+(
+	extract blocks
+    	with count between 2 and 100
+    	and separation 0 tokens
+    	on L.match as match
+	from ParagraphSentence L
+) P
+consolidate on P.match;
+
+create view Paragraph as
+
+	extract 
+		   split using P.boundary 
+		       on P.text
+		       as match
+	from 
+	(
+		extract 
+	      P.match as text,
+	      -- Sudarshan regex : 10/13/2011 - backreference on line 245
+	      regex /(\n\s*\n)/ on P.match as boundary
+       from ParagraphSentence P
+	) P;

@@ -1,0 +1,50 @@
+module syslog;
+
+
+create view SeqIDNumeric as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__47__Temp_____sep_____R____id
+  from  __Subquery__47__Temp R;
+
+output view SeqIDNumeric;
+
+create view SequenceID as
+  select  Id.match as span,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          Id.__auto__id as SeqIDNumeric_____sep_____Id____id,
+          dIp.__auto__id as DeviceIP_____sep_____dIp____id
+  from  SeqIDNumeric Id,
+        DeviceIP dIp
+  where FollowsTok(dIp.span, Id.match, 0, 0);
+
+output view SequenceID;
+
+create view SequenceIDOutput as
+  select  sid.span as span,
+          GetString(sid.span) as text,
+          GetString('SequenceID') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          sid.__auto__id as SequenceID_____sep_____sid____id
+  from  SequenceID sid;
+
+output view SequenceIDOutput;
+
+export view syslog.SequenceIDOutput;
+
+
+create view __Subquery__47__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____Document____id,
+    regex /\d{3,}/
+    with flags 'DOTALL'
+    on Document.text
+    return group 0 as match
+  from Document Document;
+
+output view __Subquery__47__Temp;
+

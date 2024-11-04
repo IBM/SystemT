@@ -1,0 +1,97 @@
+module Town;
+
+
+import view CapsPlace from module Linguistics as CapsPlace
+;
+
+
+create view TownCandidates1 as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CC.__auto__id as TownLeftClue_____sep_____CC____id,
+          C.__auto__id as CapsPlace_____sep_____C____id
+  from  TownLeftClue CC,
+        CapsPlace C
+  where FollowsTok(CC.match, C.match, 0, 0)
+     and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(CC.match, C.match)))
+     and Not(MatchesRegex(/\s*\p{L}\p{M}*.*/, RightContext(C.match, 5)));
+
+output view TownCandidates1;
+
+create view TownCandidates2 as
+  select  CombineSpans(C.match, RC.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as CapsPlace_____sep_____C____id,
+          RC.__auto__id as TownRightClue_____sep_____RC____id
+  from  CapsPlace C,
+        TownRightClue RC
+  where FollowsTok(C.match, RC.match, 0, 0)
+     and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(C.match, RC.match)));
+
+output view TownCandidates2;
+
+create view TownCandidates as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__55__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__55__TempOp__1 Op);
+
+output view TownCandidates;
+
+create view TownConsolidated as
+  select  __t2.town as town,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__56__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__56__Temp__1 __t1,
+        __Consolidate__56__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.town;
+
+output view TownConsolidated;
+
+create view __Consolidate__56__Temp__1 as
+  select  C.match as town,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as TownCandidates_____sep_____C____id,
+          C.match as __consolidate__target
+  from  TownCandidates C;
+
+output view __Consolidate__56__Temp__1;
+
+create view __Consolidate__56__Temp__2 as
+  select  __t1.town as town,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__56__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__56__Temp__2;
+
+create view __Union__55__TempOp__0 as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as TownCandidates1_____sep_____C____id
+  from  TownCandidates1 C;
+
+output view __Union__55__TempOp__0;
+
+create view __Union__55__TempOp__1 as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as TownCandidates2_____sep_____C____id
+  from  TownCandidates2 C;
+
+output view __Union__55__TempOp__1;
+

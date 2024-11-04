@@ -1,0 +1,97 @@
+-- Overview: this section of the AQL is mainly used to categorize non-US locations into city and country
+
+-- list of all non-US cities that matched the text
+create view  Loc_PopulousNonUSCities as
+    (
+    select GetString(D.match) as match, D.fullspan as fullspan, D.match as orig_match, 
+    	toUpperCase(GetString(D.match)) as match_uc
+    from  Loc_PopulousNonUSCitiesNoAlias D
+    )
+    union all
+    (
+    select GetString(T.city) as match, D.fullspan as fullspan, D.match as orig_match, 
+    	toUpperCase(GetString(T.city)) as match_uc
+    from Loc_Alias_NonUSCities D, Loc_AliasToNormalized_NonUSCities T
+    where equalsIgnoreCaseSmarc(GetString(D.match), GetString(T.alias))
+    );
+
+-- SEPARATE OUT THE FOREIGN ADDRESSES (BY EXPLICIT COUNTRIES) -------------------
+
+-- list of all non-US countries that matched the text
+create view Loc_ForeignCountries as 
+    select D.match as country, I.countryISO as countryISO, D.prov as prov, D.fullspan as fullspan, D.orig_match as orig_match
+    from Loc_AllNames D, Loc_CountryNames C, Loc_CountryToISO I
+    where  Equals(D.fullspan, C.fullspan)
+    and Equals(GetString(C.match),GetString(D.match))
+    and Equals(GetString(toUpperCase(D.match)), GetString(I.country)) 
+    and Not(ContainsRegex(/(United States)|(united states)|(US)|(America)|(U\.S\.)|(USA)/,D.fullspan));
+
+-- for the foreign cities we find, get the mapped country name    
+create view Loc_ForeignCitiesMapped as
+    (
+    select D.fullspan as fullspan, D.match as city, I.country as country, I.countryISO as countryISO, D.orig_match as orig_match   
+    from Loc_PopulousNonUSCities D, Loc_PopulousNonUSCitiesToCountry T, Loc_CountryToISO I
+	where Equals(GetString(D.match_uc),GetString(T.city))
+	and Equals(GetString(T.countryISO),GetString(I.countryISO))
+	and Not(ContainsRegex(/(United States)|(united states)|(US)|(America)|(U\.S\.)|(USA)/,D.fullspan))
+    )
+    union all
+    (
+    select D.fullspan as fullspan, D.match as city, I.country as country, I.countryISO as countryISO, D.orig_match as orig_match 
+    from Loc_PopulousNonUSCities D, Loc_CountryToCapital T, Loc_CountryToISO I
+    where Equals(GetString(D.match_uc),GetString(T.city))
+    and Equals(GetString(T.countryISO),GetString(I.countryISO))
+    and Not(ContainsRegex(/(United States)|(united states)|(US)|(America)|(U\.S\.)|(USA)/,D.fullspan))
+    );
+    
+-- when we have a city and mapped country, check if message contained an explicit country as well,
+-- and if the two conflict    
+create view Loc_ForeignCitiesCountriesAmbiguous as 
+    select C.fullspan as fullspan, M.city, M.country, M.countryISO, C.orig_match as orig_match
+    from Loc_ForeignCountries C, Loc_ForeignCitiesMapped M
+    where Overlaps(C.fullspan, M.fullspan)
+    and Not(equalsIgnoreCaseSmarc(GetString(C.country),GetString(M.country)));
+ 
+-- where we have only country names
+create view Loc_ForeignCountriesNoCities as 
+    (
+    select D.country as country, D.countryISO as countryISO, D.fullspan as fullspan, D.orig_match as orig_match
+    from Loc_ForeignCountries D
+    )
+    minus
+    (
+    select D.country as country, D.countryISO as countryISO, D.fullspan as fullspan, D.orig_match as orig_match
+    from Loc_ForeignCountries D, Loc_ForeignCitiesMapped M
+    where Overlaps(D.fullspan, M.fullspan)
+    );
+
+-- Find a good city to country match
+create view Loc_ForeignCitiesCountryUnambiguous as	
+    (
+    select C.fullspan as fullspan, C.city as city, C.country as country, C.countryISO as countryISO, C.orig_match as orig_match
+    from Loc_ForeignCitiesMapped C
+    )
+    minus
+    (
+    select C.fullspan as fullspan, A.city as city, C.country as country, C.countryISO as countryISO, C.orig_match as orig_match
+    from Loc_ForeignCitiesCountriesAmbiguous A, Loc_ForeignCitiesMapped C
+    where Overlaps(A.fullspan, C.fullspan) 
+    and equalsIgnoreCaseSmarc(GetString(A.country),GetString(C.country))
+    )
+    ;
+ 
+ -- prepare final view for foreign entries    
+create view Loc_ForeignEntriesUnfiltered as 
+    (
+    select D.fullspan as fullspan, GetString('') as city, GetString(D.country) as country, GetString(D.countryISO) as countryISO,
+    	'foreigncountrynocity' as prov, D.orig_match as orig_match
+    from Loc_ForeignCountriesNoCities D
+    consolidate on D.fullspan
+    )
+    union all
+    (
+    select  D.fullspan as fullspan, GetString(D.city) as city, GetString(D.country) as country, GetString(D.countryISO) as countryISO,
+    	'foreigncity' as prov, D.orig_match as orig_match
+    from Loc_ForeignCitiesCountryUnambiguous D
+    consolidate on D.fullspan
+    );

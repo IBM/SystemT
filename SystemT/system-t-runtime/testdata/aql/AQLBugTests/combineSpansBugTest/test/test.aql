@@ -1,0 +1,242 @@
+module test;
+
+-- RTC defect 152301
+
+require document with columns text Text;
+
+create view SampleView1 as
+ extract
+   regex /Germany/ 
+   on D.text as match1
+ from Document D;
+
+create view SampleView2 as
+ extract 
+  regex /Germany is/ 
+  on D.text as match2
+ from Document D;
+
+create view SampleView3 as
+ extract 
+  regex /many/ 
+  on D.text as match3
+ from Document D;
+ 
+create view SampleView4 as
+ extract 
+  regex /Germ/ 
+  on D.text as match4
+ from Document D;
+ 
+create view SampleView5 as
+ extract 
+  regex /is/ 
+  on D.text as match5
+ from Document D;
+
+create view SampleView6 as
+ extract 
+  regex /rma/ 
+  on D.text as match6
+ from Document D;
+ 
+ create view SampleView7 as
+ extract 
+  regex /is a/ 
+  on D.text as match7
+ from Document D;
+
+ create view SampleView8 as
+ extract 
+  regex /place/ 
+  on D.text as match8
+ from Document D;
+    
+-----------------------------------------------------
+--- CombineSpans: L-R order followed
+-----------------------------------------------------
+-- arg1: Germany, arg2: many
+-- [Ger[many]]  => [Germany]
+create view CombineViews13 as
+ select 
+    CombineSpans(S1.match1, S3.match3) as match
+ from 
+    SampleView1 S1, SampleView3 S3;
+    
+output view CombineViews13;   
+
+-- arg1: Germany, arg2: is
+-- [Germany] [is]  => [Germany is]
+create view CombineViews15 as
+ select 
+    CombineSpans(S1.match1, S5.match5) as match
+ from 
+    SampleView1 S1, SampleView5 S5;
+    
+output view CombineViews15;  
+
+-- SPECIAL CASE 3
+-- arg1: Germany, arg2: rma
+-- [Ge[rma]ny] => [Germany]
+ create view CombineViews16 as
+ select 
+    CombineSpans(S1.match1, S6.match6) as match
+ from 
+    SampleView1 S1, SampleView6 S6;
+    
+output view CombineViews16;  
+
+-- arg1: Germany, arg2: Germany
+-- [[Germany]] => [Germany]
+ create view CombineViews11 as
+ select 
+    CombineSpans(S1.match1, S11.match1) as match
+ from 
+    SampleView1 S1, SampleView1 S11;
+    
+output view CombineViews11;  
+
+-------------------------------------------------------------------
+--- CombineSpans: L-R order NOT followed, IgnoreOrder flag used
+-------------------------------------------------------------------
+-- SPECIAL CASE 1
+--- KK's scenario 
+-- arg1: Germany is, arg2: Germany
+-- [[Germany] is] => [Germany is]
+create view CombineViews21 as
+ select 
+    CombineSpans('IgnoreOrder',S2.match2, S1.match1) as match
+ from 
+    SampleView1 S1, SampleView2 S2; 
+
+output view CombineViews21;
+
+-- SPECIAL CASE 2
+-- arg1: rma, arg2: Germany
+-- [Ge[rma]ny] => [Germany]
+create view CombineViews61 as
+ select 
+    CombineSpans('IgnoreOrder',S6.match6, S1.match1) as match
+ from 
+    SampleView1 S1, SampleView6 S6; 
+
+output view CombineViews61;
+
+-- arg1: many, arg2: Germany
+-- [Ger[many]]  => [Germany]
+create view CombineViews31 as
+ select 
+    CombineSpans('IgnoreOrder', S3.match3, S1.match1) as match
+ from 
+    SampleView1 S1, SampleView3 S3;
+    
+output view CombineViews31;   
+
+-- arg1: is a, arg2: Germany
+-- [Germany] [is a]  => [Germany is a]
+create view CombineViews71 as
+ select 
+    CombineSpans('IgnoreOrder', S7.match7, S1.match1) as match
+ from 
+    SampleView1 S1, SampleView7 S7;
+    
+output view CombineViews71;
+
+---------------------------------------------------------
+--- SpanBetween: L-R order followed - Span Between Tests
+---------------------------------------------------------
+-- arg1: Germany, arg2: many
+-- [Ger[many]]  => empty span [7,7]
+create view SpanBetween13 as
+ select 
+    SpanBetween(S1.match1, S3.match3) as match
+ from 
+    SampleView1 S1, SampleView3 S3;
+    
+output view SpanBetween13;   
+
+-- arg1: Germany, arg2: place
+-- [Germany] is a great [place].  => [ is a great ]
+create view SpanBetween18 as
+ select 
+    SpanBetween(S1.match1, S8.match8) as match
+ from 
+    SampleView1 S1, SampleView8 S8;
+    
+output view SpanBetween18;  
+
+-- IMP CASE
+-- arg1: place, arg2: Germany
+-- [Germany] is a great [place].  => empty span [24,24]
+create view SpanBetween811 as
+ select 
+    SpanBetween(S8.match8, S1.match1) as match
+ from 
+    SampleView1 S1, SampleView8 S8;
+    
+output view SpanBetween811;
+
+-- arg1: Germany, arg2: rma
+-- [Ge[rma]ny] => empty span [7,7]
+ create view SpanBetween16 as
+ select 
+    SpanBetween(S1.match1, S6.match6) as match
+ from 
+    SampleView1 S1, SampleView6 S6;
+    
+output view SpanBetween16;  
+
+-- arg1: Germany, arg2: Germany
+-- [[Germany]] => empty span [7,7]
+ create view SpanBetween11 as
+ select 
+    SpanBetween(S1.match1, S11.match1) as match
+ from 
+    SampleView1 S1, SampleView1 S11;
+    
+output view SpanBetween11;  
+
+-----------------------------------------------------------------
+--- SpanBetween: L-R order NOT followed, IgnoreOrder flag used
+-----------------------------------------------------------------
+-- arg1: Germany is, arg2: Germany
+-- [[Germany] is] => empty span [7,7]
+create view SpanBetween21 as
+ select 
+    SpanBetween('IgnoreOrder',S2.match2, S1.match1) as match
+ from 
+    SampleView1 S1, SampleView2 S2; 
+
+output view SpanBetween21;
+
+-- SPECIAL CASE 2
+-- arg1: rma, arg2: Germany
+-- [Ge[rma]ny] => empty span [7,7]
+create view SpanBetween61 as
+ select 
+    SpanBetween('IgnoreOrder',S6.match6, S1.match1) as match
+ from 
+    SampleView1 S1, SampleView6 S6; 
+
+output view SpanBetween61;
+
+-- arg1: many, arg2: Germany
+-- [Ger[many]]  => empty span [7,7]
+create view SpanBetween31 as
+ select 
+    SpanBetween('IgnoreOrder', S3.match3, S1.match1) as match
+ from 
+    SampleView1 S1, SampleView3 S3;
+    
+output view SpanBetween31;   
+
+-- arg1: place, arg2: Germany
+-- [Germany] is a great [place].  => [is a great]
+create view SpanBetween81 as
+ select 
+    SpanBetween('IgnoreOrder', S8.match8, S1.match1) as match
+ from 
+    SampleView1 S1, SampleView8 S8;
+    
+output view SpanBetween81;
+

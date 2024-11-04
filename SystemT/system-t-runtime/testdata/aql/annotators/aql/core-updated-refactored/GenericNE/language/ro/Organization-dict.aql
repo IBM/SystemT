@@ -1,0 +1,179 @@
+create view Continents as
+select D.match as match
+--from   Dictionary('continent.dict', Doc.text) D;
+--from (extract dictionary 'continent.dict' on D.text as match from Doc D) D;
+from (extract dictionary 'loc_continents_en.dict' on D.text as match from Doc D) D; 
+
+create view Nationalities as
+select D.match as match
+--from   Dictionary('nationality.dict', Doc.text) D;
+--from (extract dictionary 'nationality.dict' on D.text as match from Doc D) D;
+from (extract dictionary 'per_nationalities_en.dict' on D.text as match from Doc D) D;
+
+create view OrgGovSuffix as
+	extract 
+		--dictionary 'orgs/industryType/industryTypeGovernment_suffix.dict'
+		dictionary 'orgs/industryType/org_govt_group_suffix_case_en.dict'
+		with flags 'Exact'
+		on D.text as match
+	from Doc D;
+	
+ create view OrgGovPrefix as
+	extract 
+		--dictionary 'orgs/industryType/industryTypeGovernment_prefix.dict'
+		dictionary 'orgs/industryType/org_govt_group_prefix_case_en.dict'
+		with flags 'Exact'
+		on D.text as match
+	from Doc D;
+
+create view OrgNewspaperSuffix as
+	extract 
+		--dictionary 'orgs/industryType/industryTypeNewspaper_suffix.dict'
+		dictionary 'orgs/industryType/org_news_group_suffix_case_en.dict'
+		with flags 'Exact'
+		on D.text as match
+	from Doc D;
+
+create view OrgMediaSuffix as
+	extract 
+		--dictionary 'orgs/industryType/industryTypeMedia_suffix.dict'
+		dictionary 'orgs/industryType/org_media_group_suffix_case_en.dict'
+		with flags 'Exact'
+		on D.text as match
+	from Doc D;
+
+ create view OrgClueStIndCaps as
+	--( select D.match as match from Dictionary('orgs/industryType/industryTypeCompany_suffix.dict', 'Exact', Doc.text) D )
+	( select D.match as match from
+		--(extract dictionary 'orgs/industryType/industryTypeCompany_suffix.dict' with flags 'Exact' on D.text as match from Doc D) D)
+		(extract dictionary 'orgs/industryType/org_company_group_suffix_case_en.dict' with flags 'Exact' on D.text as match from Doc D) D)
+	union all
+	--( select D.match as match from Dictionary('orgs/industryType/industryTypeEducation_suffix.dict', 'Exact', Doc.text) D )
+	( select D.match as match from
+		--(extract dictionary 'orgs/industryType/industryTypeEducation_suffix.dict' with flags 'Exact' on D.text as match from Doc D) D)
+		(extract dictionary 'orgs/industryType/org_edu_group_suffix_case_en.dict' with flags 'Exact' on D.text as match from Doc D) D)
+	union all
+	( select D.match as match from OrgGovSuffix D )
+	union all
+	--( select D.match as match from Dictionary('orgs/industryType/industryTypeMedical_suffix.dict', 'Exact', Doc.text) D )
+	( select D.match as match from
+		--(extract dictionary 'orgs/industryType/industryTypeMedical_suffix.dict' with flags 'Exact' on D.text as match from Doc D) D)
+		(extract dictionary 'orgs/industryType/org_med_group_suffix_case_en.dict' with flags 'Exact' on D.text as match from Doc D) D)
+	union all
+	( select D.match as match from OrgMediaSuffix D )
+	--Laura: Commented out due to many mistakes on news articles
+	--union all
+	--( select D.match as match from OrgNewspaperSuffix D )
+	union all
+	--( select D.match as match from Dictionary('orgs/industryType/industryTypeOthers_suffix.dict', 'Exact', Doc.text) D )
+	( select D.match as match from
+		--(extract dictionary 'orgs/industryType/industryTypeOthers_suffix.dict' with flags 'Exact' on D.text as match from Doc D) D)
+		(extract dictionary 'orgs/industryType/org_others_group_suffix_case_en.dict' with flags 'Exact' on D.text as match from Doc D) D)
+	union all
+	--( select D.match as match from Dictionary('orgs/industryType/industryTypeAdditional_suffix.dict', 'Exact', Doc.text) D );
+	( select D.match as match from
+		--(extract dictionary 'orgs/industryType/industryTypeAdditional_suffix.dict' with flags 'Exact' on D.text as match from Doc D) D);
+		(extract dictionary 'orgs/industryType/org_addl_group_suffix_case_en.dict' with flags 'Exact' on D.text as match from Doc D) D);
+		
+create view OrgClueStIndPrefixCaps as
+	--( select D.match as match from Dictionary('orgs/industryType/industryTypeCompany_prefix.dict', 'Exact', Doc.text) D )
+	( select D.match as match from
+		--(extract dictionary 'orgs/industryType/industryTypeCompany_prefix.dict' with flags 'Exact' on D.text as match from Doc D) D)
+		(extract dictionary 'orgs/industryType/org_company_group_prefix_case_en.dict' with flags 'Exact' on D.text as match from Doc D) D)
+	union all
+	--( select D.match as match from Dictionary('orgs/industryType/industryTypeEducation_prefix.dict', 'Exact', Doc.text) D )
+	( select D.match as match from
+		--(extract dictionary 'orgs/industryType/industryTypeEducation_prefix.dict' with flags 'Exact' on D.text as match from Doc D) D)
+		(extract dictionary 'orgs/industryType/org_edu_group_prefix_case_en.dict' with flags 'Exact' on D.text as match from Doc D) D)
+	union all
+	( select D.match as match from OrgGovPrefix D )
+	union all
+	--( select D.match as match from Dictionary('orgs/industryType/industryTypeMedical_prefix.dict', 'Exact', Doc.text) D )
+	( select D.match as match from
+		--(extract dictionary 'orgs/industryType/industryTypeMedical_prefix.dict' with flags 'Exact' on D.text as match from Doc D) D)
+		(extract dictionary 'orgs/industryType/org_med_group_prefix_case_en.dict' with flags 'Exact' on D.text as match from Doc D) D)
+	union all
+	--( select D.match as match from Dictionary('orgs/industryType/industryTypeOthers_prefix.dict', 'Exact', Doc.text) D )
+	( select D.match as match from
+		--(extract dictionary 'orgs/industryType/industryTypeOthers_prefix.dict' with flags 'Exact' on D.text as match from Doc D) D)
+		(extract dictionary 'orgs/industryType/org_others_group_prefix_case_en.dict' with flags 'Exact' on D.text as match from Doc D) D)
+	union all
+	--( select D.match as match from Dictionary('orgs/industryType/industryTypeAdditional_prefix.dict', 'Exact', Doc.text) D );
+	( select D.match as match from
+		--(extract dictionary 'orgs/industryType/industryTypeAdditional_prefix.dict' with flags 'Exact' on D.text as match from Doc D) D);
+		(extract dictionary 'orgs/industryType/org_addl_group_prefix_case_en.dict' with flags 'Exact' on D.text as match from Doc D) D);
+
+create view OrgFullCase1 as
+extract
+    dictionaries
+        --'orgs/orgs/organization_government.dict' and
+        'orgs/orgs/org_govt_en.dict' and
+    	--'orgs/orgs/university-us.dict'
+    	'orgs/orgs/org_edu_usa_univs_en.dict'
+--NOTE: more dictionaries can be added here
+        on D.text   
+        as match     
+        from Doc D
+        having MatchesRegex(/\p{Lu}\p{M}*.+/, match);
+        
+-- Yunyao: added on 10/11/2009 to capture abbreviations
+create view OrgFullCase2 as
+extract
+    dictionaries
+            --'orgs/orgs/organization_abbrev.dict'
+            'orgs/orgs/org_com_abbrev_case_en.dict'
+	    --and 'orgs/orgs/organization_case.dict'
+	    and 'orgs/orgs/org_com_abbrevFull_case_en.dict' 
+	    --and 'orgs/orgs/organization_media.dict'
+	    and 'orgs/orgs/org_media_global_case_en.dict'
+	    --and 'orgs/orgs/organization_newspaper.dict'
+	    and 'orgs/orgs/org_news_paper_global_case_en.dict'
+	    --and 'orgs/orgs/organization_government_case.dict'
+	    and 'orgs/orgs/org_govt_global_abbrev_case_en.dict'
+    with flags 'Exact'
+    on D.text   
+    as match     
+    from Doc D;  
+    
+    
+ create view OrgFullNoCase as
+	(select
+		D.match as match
+	from
+		--Dictionary('orgs/orgs/organization_noCase.dict', Doc.text) D)
+		--(extract dictionary 'orgs/orgs/organization_noCase.dict' on D.text as match from Doc D) D)
+		(extract dictionary 'orgs/orgs/org_com_en.dict' on D.text as match from Doc D) D)
+	union all
+	(select
+		D.match as match
+	from
+		--Dictionary('orgs/orgs/organization_government_noCase.dict', Doc.text) D)
+		--(extract dictionary 'orgs/orgs/organization_government_noCase.dict' on D.text as match from Doc D) D)
+		(extract dictionary 'orgs/orgs/org_nationalist_en.dict' on D.text as match from Doc D) D)
+		union all
+	(select
+		D.match as match
+	from
+		--Dictionary('orgs/orgs/organization_media_noCase.dict', Doc.text) D)
+		--(extract dictionary 'orgs/orgs/organization_media_noCase.dict' on D.text as match from Doc D) D)
+		(extract dictionary 'orgs/orgs/org_media_regional_en.dict' on D.text as match from Doc D) D)
+	union all
+	(select
+		D.match as match
+	from
+		OrganizationFortune1000_2000_2008 D)
+	union all
+	(select
+		D.match as match
+	from
+		OrganizationFortune1000_2000_2008_NoCase D);
+		
+		
+create view StockEx as
+--extract dictionary 'exchange.dict'
+extract dictionary 'fin_xchngs_types_en.dict' 
+	on D.text as match 
+from Doc D
+having MatchesRegex(/\p{Lu}\p{M}*.+/, SubSpanTok(match,0,1));				    
+    	
+	

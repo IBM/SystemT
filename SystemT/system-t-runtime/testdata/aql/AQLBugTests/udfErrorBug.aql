@@ -1,0 +1,23 @@
+-------------------------------------------------------------------------------
+-- udfErrorBug.aql
+--
+-- Test case for a bug in the error-handling code for UDFs.
+
+-- Declare a user-defined function that expects String arguments.
+-- Use the same UDF implementation used in createFunction.aql.
+create function StringUDF(p1 Integer, p2 Integer, p3 String, p4 String)
+return String
+external_name 'udfjars/udfs.jar:com.ibm.test.udfs.udf1!f1'
+language java;
+
+
+-- Now call the UDF incorrectly, passing it Spans instead of Text
+-- objects.
+-- This call should generate the error message:
+--     "At line 33, column 5: Usage: StringUDF(Integer, Integer, String, String)"
+create view TestView as
+select StringUDF(1, 2, N.name, N.name) as name
+from (extract dictionary 'dictionaries/first.dict' 
+		on D.text as name from Document D) N;
+
+output view TestView;

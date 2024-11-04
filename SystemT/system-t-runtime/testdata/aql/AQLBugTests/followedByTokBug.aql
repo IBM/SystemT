@@ -1,0 +1,65 @@
+require document with columns text Text;
+
+-----------------------------------------------------------------------------
+-- followedByTokBug.aql
+--
+-- Test case for an obscure bug in the FollowedByTokMP join predicate. 
+-----------------------------------------------------------------------------
+
+
+
+-- ===========================================================================
+--   Person, Organization, Places begin here 
+-- ===========================================================================
+
+
+
+-- -----------------------------------------
+-- Person rules begin here
+-- ----------------------------------------- 
+
+ create view CapsPerson as
+	select
+		R.match as name
+	from
+		Regex(/\b\p{Upper}\p{Lower}[\p{Alpha}]{1,20}\b/, Document.text) R;
+ 
+ create view AllName as
+	select
+		D.match as name
+	from
+		Dictionary('dictionaries/namessekar.dict', Document.text) D;
+	
+ create view AllNameCapsWord as 
+ 	select AN.name as name 
+ 	from AllName AN	
+	where 
+		MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{1,20}/, AN.name);		
+ 
+ create view Initials as
+	select
+		R.match as initials
+	from
+		Regex(/\b([\p{Upper}\s*]\.\s*){1,5}/, Document.text) R;
+ 
+	create view ICpAncp as
+	select
+ 		CombineSpans(I.initials, ancp.name) as person
+	from
+		Initials I,
+		CapsPerson cp,
+		AllNameCapsWord ancp
+ 	where
+		FollowsTok(I.initials, cp.name,0, 0) and
+		FollowsTok(cp.name,ancp.name,0, 0);
+
+	
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Aggregation/Consolidation section <<<<<<<<<<<<<<<<
+-- ===========================================================================
+
+select R.person as person
+into Person
+from ICpAncp R;
+ 

@@ -1,0 +1,19 @@
+module StateOrProvince;
+
+import view OrganizationFull from module OrganizationCandidates as OrganizationFull;
+import view StateCandidate from module CommonFeatures as StateCandidate;
+
+require document with columns
+text Text;
+
+
+create view StateCandidateInvalid as
+select S.match as match
+from   StateCandidate S,
+	   OrganizationFull O 
+where  Overlaps(O.organization, S.match); 
+
+create view StateCandidateValid as
+	(select S.match as match from StateCandidate S)
+	minus
+	(select S.match as match from StateCandidateInvalid S); 

@@ -1,0 +1,64 @@
+############################################################
+# noTokFastRegex.aog
+#
+# A version of hotspotFastRegex.aog does not perform any 
+# tokenization; used for measuring the performance of just
+# the Regex implementations.
+
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+# The base regex for CapsPerson
+$CapsPersonRaw = 
+	FastRegex(/\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['\-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}/,
+	(0 => "match"), "text", $Document);
+	
+$CapsOrg = 
+	FastRegex(/\p{Lu}\p{M}*([\p{Ll}\p{Lo}\&\.'\-\,]\p{M}*)*[\p{Ll}\p{Lo}]/,
+	(0 => "match"), "text", $Document);
+	
+$WeakInitialWord = 
+	FastRegex(/([\p{Upper}]\.?\s*){1,5}/,
+	(0 => "match"), "text", $Document);	
+	
+$AllCapsOrg = 
+	FastRegex(/(\p{Lu}\p{M}*){2,30}/,
+	(0 => "match"), "text", $Document);	
+	
+$InitialWord = 
+	FastRegex(/([\p{Upper}]\.\s*){0,4}[\p{Upper}]\./,
+	(0 => "match"), "text", $Document);	
+	
+$Time4 = 
+	FastRegex(/(\d{1,2}:\d{2}(:\d{2})?|\d{1,2}-\d{1,2})(\s*[AP])?/,
+	(0 => "match"), "text", $Document);		
+	
+$TwoDigitsInterval = 
+	FastRegex(/([0123])?[\d]( )*[\-]( )*([0123])?[\d]/, 
+	(0 => "match"), "text", $Document);			
+
+$CapsPersonNoP =
+	Select(Not(ContainsRegex(RegexConst(/'/, "SimpleRegex"), GetCol("match"))), $CapsPersonRaw);
+	
+$StrictCapsPersonR = 
+	FastRegex(/\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}/,
+	(0 => "name"), "match", $CapsPersonNoP);
+	
+$StrictCapsPerson = 
+	Select(
+		MatchesRegex(
+			RegexConst(/\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){1,20}/, "SimpleRegex"), 
+			GetCol("name")), 
+		$StrictCapsPersonR);
+				
+$StrictCapsPerson2 = 
+	FastRegex(/\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){1,20}/, 
+		(0 => "match"), "text", $Document);			
+		
+Output: $CapsPersonRaw, $CapsOrg, $WeakInitialWord, $AllCapsOrg, $InitialWord, 
+	$Time4, $TwoDigitsInterval, $StrictCapsPersonR, $StrictCapsPerson,
+	$StrictCapsPerson2;
+	

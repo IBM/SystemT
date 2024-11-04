@@ -1,0 +1,2334 @@
+
+create dictionary FilterPersonDict as
+(
+	'Travel', 'Fellow', 'Sir', 'IBMer', 'Researcher', 'All','Tell',
+	'Friends', 'Friend', 'Colleague', 'Colleagues', 'Managers','If',
+	'Customer', 'Users', 'User', 'Valued', 'Executive', 'Chairs',
+	'New', 'Owner', 'Conference', 'Please', 'Outlook', 'Lotus', 'Notes',
+	'This', 'That', 'There', 'Here', 'Subscribers', 'What', 'When', 'Where', 'Which',
+	'With', 'While', 'Thanks', 'Thanksgiving','Senator', 'Platinum', 'Perspective',
+	'Manager', 'Ambassador', 'Professor', 'Dear', 'Contact', 'Cheers', 'Athelet',
+	'And', 'Act', 'But', 'Hello', 'Call', 'From', 'Center', 'The', 'Take', 'Junior',
+	'Both', 'Communities', 'Greetings', 
+	--for CoNLL, it is fine 'Hope',
+	'National', 
+	'Restaurants', 'Properties',
+	'Let', 'Corp', 'Memorial', 'You', 'Your', 'Our',  'My', 'His','Her',
+	'Their','Popcorn', 'Name', 'July', 'June','Join',
+	'Business', 'Administrative', 'South', 'Members', 'Address', 'Please', 'List',
+	'Public', 'Inc', 'Parkway', 'Brother', 'Buy', 'Then', 'Services', 'Statements',
+	'President', 'Governor', 'Commissioner', 'Commitment', 'Commits', 'Hey',
+	'Director', 'End', 'Exit', 'Experiences', 'Finance', 'Elementary', 'Wednesday',
+	'Nov', 'Infrastructure', 'Inside', 'Convention',
+	'Judge', 'Lady', 'Friday',  'Project', 'Projected', 
+	'Recalls', 'Regards', 'Recently', 'Administration', 'Independence', 'Denied',
+	'Unfortunately', 'Under', 'Uncle', 'Utility', 'Unlike', 'Was', 'Were', 'Secretary',
+	'Speaker', 'Chairman', 'Consider', 'Consultant', 'County', 'Court', 'Defensive',
+	'Northwestern', 'Place', 'Hi', 'Futures', 'Athlete', 'Invitational', 'System',
+	'International', 'Main', 'Online', 'Ideally', 'State'
+	-- more entries
+	,'If','Our', 'About', 'Analyst', 'On', 'Of', 'By', 'HR', 'Mkt', 'Pre', 'Post',
+	'Condominium', 'Ice', 'Surname', 'Lastname', 'firstname', 'Name', 'familyname',
+	-- Italian greeting
+   'Ciao',
+   -- Spanish greeting
+   'Hola',
+   -- French greeting
+   'Bonjour',
+   -- new entries 
+   'Pro','Bono','Enterprises','Group',
+   --'Said',
+   'Says','Assistant','Vice','Warden','Contribution',
+   'Research', 'Development', 'Product', 'Sales', 'Support', 'Manager', 'Telephone', 'Phone', 'Contact', 'Information',
+   'Electronics','Managed','West','East','North','South', 
+   'Teaches','Ministry', 'Church', 'Association', 'Laboratories', 'Living', 'Community', 'Visiting',
+   'Officer', 'After', 'Pls', 'FYI', 'Only', 'Additionally', 'Adding', 'Acquire', 'Addition', 'America',
+   -- short phrases that are likely to be at the start of a sentence
+   'Yes', 'No', 'Ja', 'Nein','Kein', 'Keine', 'Gegenstimme',
+   -- TODO: to be double checked
+   'Another', 'Anyway','Associate', 'At', 'Athletes', 'It', 'Enron', 'EnronXGate', 'Have', 'However',
+   'Company', 'Companies', 'IBM','Annual', 
+   -- common verbs appear with person names in financial reports
+   -- ideally we want to have a general comprehensive verb list to use as a filter dictionary
+   'Joins', 'Downgrades', 'Upgrades', 'Reports', 'Sees', 
+   'Warns', 'Announces', 'Reviews',
+   -- Laura 06/02/2009: new filter dict for title for SEC domain in filterPerson_title.dict
+   -- Laura 07/22/09: to avoid false positives in SEC filings
+   'To', 'Total', 'Selected', 'Registrant', 'Be', 'For', 'Loans', 'Shares', 'Transition',
+   -- Yunyao: added for CoNLL2003
+   'Agreement','Consumer','Disease','REUTER','BEAT','Keeps','As', 'In','Internet','Startup', 'results'
+   ,'Cup','WORKS','first','open','WORLD', 'Market', 'Stocks','Instead', 'During', 'Although', 'Neither',
+   'Both', 'Affairs', 'Children', 'SIGN', 'Out', 'Rare', 'Like','Stock', 'Exchange', 'Last','Up', 'English',
+   'Championship','Latest','Relay','Before', 'After', 'Earlier', 'Recall','Service','Investors','Olympic',
+   'League','TRIO', 'WINS', 'GETS', 'Year', 'Player', 'Federation', 'Prix', 'Islamist', 'Parrots',
+   'Football', 'Confederation','Republic', 'Extras', 'Aggregate', 'Qualifier', 'Globo', 'Moslems', 'Moslem','Retired',
+   'Bowling', 'Upstages', 'Calls', 'Gives', 'Bans', 'Against', 'Serious', 'Joining', 'Bumping', 'Hat-trick',
+   'City', 'DOUBLE', 'Single', 'Treaty', 'Police'
+);
+
+create dictionary GreetingsDict as
+( 
+   'Hey', 'Hi', 'Hello', 'Dear',
+   -- German greetings
+   'Liebe', 'Lieber', 'Herr', 'Frau', 'Hallo', 
+   -- Italian
+   'Ciao',
+   -- Spanish
+   'Hola',
+   -- French
+   'Bonjour'
+);
+
+
+create dictionary InitialDict as
+(
+	'rev.', 'col.', 'reverend', 'prof.', 'professor.', 
+	'lady', 'miss.', 'mrs.', 'mrs', 'mr.', 'pt.', 'ms.',
+	'messrs.', 'dr.', 'master.', 'marquis', 'monsieur',
+	'ds', 'di', 'mr'
+	--'Dear' (Yunyao: comments out to avoid mismatches such as Dear Member),
+	--'Junior' (Yunyao: comments out to avoid mismatches such as Junior National [team player],
+ 	-- If we can have large negative dictionary to eliminate such mismatches, 
+	-- then this may be recovered 
+	--'Name:' ((Yunyao: comments out to avoid mismatches such as 'Name: Last Name')
+	-- for German names
+	-- TODO: need further test
+	,'herr', 'Fraeulein', 'Doktor', 'Herr Doktor', 'Frau Doktor',
+	'Herr Professor', 'Frau professor', 'Baron', 'graf'
+);
+
+-- Find dictionary matches for all title initials
+create view Initial as
+select D.match as initial
+from   Dictionary('InitialDict', Doc.text) D;
+
+-- Yunyao: added 05/09/2008 to capture person name suffix
+create dictionary PersonSuffixDict as
+(
+--	',jr.', ',jr', 'III', 'IV', 'V', 'VI'
+-- Yunyao: edited as cutomization for CoNLL'03
+	'jr', 'II', 'III', 'IV', 'V', 'VI', 'VII','VIII', 'X'
+);
+
+create view PersonSuffix as
+select D.match as suffix
+from   Dictionary('PersonSuffixDict', Doc.text) D;
+
+-- Find capitalized words that look like person  names and not in the non-name dictionary
+create view CapsPersonCandidate as
+select R.match as name
+--from   Regex(/\b\p{Upper}\p{Lower}[\p{Alpha}]{1,20}\b/, Doc.text) R
+--from   Regex(/\b\p{Upper}\p{Lower}[\p{Alpha}]{0,10}(['-][\p{Upper}])?[\p{Alpha}]{1,10}\b/, Doc.text) R 
+-- change to enable unicode match
+--from   Regex(/\b\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*[\p{L}\p{M}*]{0,10}(['-][\p{Lu}\p{M}*])?[\p{L}\p{M}*]{1,10}\b/, Doc.text) R 
+--from   Regex(/\b\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*[\p{L}\p{M}*]{0,10}(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}\b/, Doc.text) R 
+-- Allow fully capitalized words
+--from   Regex(/\b\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}\b/, Doc.text) R 
+--from   RegexTok(/\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}/, 4, Doc.text) R --'
+-- Customization for CoNLL2003, allow the name after - be lower case
+from   RegexTok(/(al-|\p{Lu}\p{M}*(\p{L}\p{M}*){0,10})(['-][\p{L}\p{M}*])?(\p{L}\p{M}*){1,10}/, 4, Doc.text) R --'
+where  Not(ContainsDicts(
+		'FilterPersonDict', 
+		'filterPerson_position.dict',
+		'filterPerson_german.dict',
+		'InitialDict',
+		'StrongPhoneVariantDictionary',
+		--'stateList.dict',
+		'organization_suffix.dict',
+   		'industryTypeCompany_suffix.dict',
+   		'industryTypeEducation_suffix.dict',
+   		'industryTypeGovernment_suffix.dict',
+   		'industryTypeMedical_suffix.dict',
+   		'industryTypeMedia_suffix.dict',
+   		'industryTypeNewspaper_suffix.dict',
+   		'industryTypeOthers_suffix.dict',
+   		'streetSuffix_forPerson.dict', 
+   		'wkday.dict',
+   		-- added for conll2003
+   		'month.dict',
+   		'nationality.dict',
+   		'location/stateAbbrevs/stateListStrongAbbrev.dict',
+   		'stateAbbrv.ChicagoAPStyle.dict',
+   		'country.dict',
+   		'continent.dict',
+   		-------------------------------------
+   		-- Customization for CoNLL
+   		-------------------------------------
+   		'names/conll2003/sports_related_positions.dict',
+   		--'pos/advs-list',
+   		--'pos/dets-list',
+   		'pos/preps-list',   		
+   		'pos/conjs-list', 
+   		'misc/ethnicGroup.dict', 
+   		'names/conll2003/ordinal.dict',
+   		'location/regions/internationalRegions.dict',	
+   		R.match));
+ 
+
+create view MissingSingleTokenPersonCoNLL2003 as
+	extract
+		dictionaries 'names/conll2003/missingPerson_singletok_conll2003.dict'
+		on D.text   
+        as person
+		from Doc D
+		having MatchesRegex(/\p{Lu}\p{M}*.+/, person);
+
+create view CapsPerson as
+(select C.name as name
+from CapsPersonCandidate C
+where Not(MatchesRegex(/(\p{Lu}\p{M}*)+-.*([\p{Ll}\p{Lo}]\p{M}*).*/, C.name))
+  and Not(MatchesRegex(/.*([\p{Ll}\p{Lo}]\p{M}*).*-(\p{Lu}\p{M}*)+/, C.name)))
+----------------------------------------------------
+-- customization for CoNLL 2003
+----------------------------------------------------
+union all
+(select P.person as name from MissingSingleTokenPersonCoNLL2003 P);
+
+create view RelaxedCapsPerson as
+select R.match as name
+from   RegexTok(/(al-|\p{Lu}\p{M}*(\p{L}\p{M}*){0,10})(['-][\p{L}\p{M}*])?(\p{L}\p{M}*){1,10}/, 4, Doc.text) R
+where Not(MatchesRegex(/(\p{Lu}\p{M}*)+-.*([\p{Ll}\p{Lo}]\p{M}*).*/, R.match))
+  and Not(MatchesRegex(/.*([\p{Ll}\p{Lo}]\p{M}*).*-(\p{Lu}\p{M}*)+/, R.match))
+  and Not(ContainsDict('pos/conjs-list', R.match))
+  and Not(ContainsDict('pos/preps-list', R.match))
+  and Not(ContainsDict('pos/misc-list', R.match))
+  and Not(ContainsDict('pos/dets-list', R.match))
+  and Not(ContainsDict('pos/auxs-list', R.match))
+  and Not(ContainsDict('pos/pronouns-list', R.match));
+  
+--output view RelaxedCapsPerson;
+
+--------------------------------------------------------------
+  
+--output view CapsPerson;
+
+-- Find strict capitalized words with two letter or more  (relaxed version of StrictCapsPerson)
+
+--============================================================
+--TODO: need to think through how to deal with hypened name 
+-- one way to do so is to run Regex(pattern, CP.name) and enforce CP.name does not contain '
+-- need more testing before confirming the change
+
+create view CapsPersonNoP as
+select CP.name as name
+from CapsPerson CP
+where Not(ContainsRegex(/'/, CP.name)); --'
+
+
+create view StrictCapsPersonR as
+select R.match as name
+--from Regex(/\b\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}\b/, CapsPersonNoP.name) R;
+from RegexTok(/\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}/, 1, CapsPersonNoP.name) R;
+
+
+--============================================================
+		
+-- Find strict capitalized words
+--create view StrictCapsPerson as
+create view StrictCapsPerson as
+select R.name as name
+from StrictCapsPersonR R
+where MatchesRegex(/\b\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){1,20}\b/, R.name);
+
+-- Find dictionary matches for all last names
+create view StrictLastName1 as
+select D.match as lastname
+from   Dictionary('strictLast.dict', Doc.text) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+-- changed to enable unicode match
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+create view StrictLastName2 as
+select D.match as lastname
+from   Dictionary('strictLast_german.dict', Doc.text) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+--where  MatchesRegex(/\p{Upper}.{1,20}/, D.match);
+-- changed to enable unicode match
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+create view StrictLastName3 as
+select D.match as lastname
+from   Dictionary('strictLast_german_bluePages.dict', Doc.text) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+--where  MatchesRegex(/\p{Upper}.{1,20}/, D.match);
+-- changed to enable unicode match
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);
+
+create view StrictLastName4 as
+select D.match as lastname
+from   Dictionary('uniqMostCommonSurname.dict', Doc.text) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+--where  MatchesRegex(/\p{Upper}.{1,20}/, D.match);
+-- changed to enable unicode match
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);
+
+create view StrictLastName5 as
+select D.match as lastname
+from   Dictionary('names/strictLast_italy.dict', Doc.text) D
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);
+
+create view StrictLastName6 as
+select D.match as lastname
+from   Dictionary('names/strictLast_france.dict', Doc.text) D
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);
+
+create view StrictLastName7 as
+select D.match as lastname
+from   Dictionary('names/strictLast_spain.dict', Doc.text) D
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);
+
+create view StrictLastName8 as
+select D.match as lastname
+from   Dictionary('names/strictLast_india.partial.dict', Doc.text) D
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);
+
+create view StrictLastName9 as
+select D.match as lastname
+from   Dictionary('names/strictLast_israel.dict', Doc.text) D
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);
+
+------------------------------------------------------
+-- Customization for CoNLL2003
+------------------------------------------------------
+create view StrictLastName10 as
+select D.match as lastname
+from   Dictionary('names/conll2003/missingPerson_lastname_conll2003.dict', Doc.text) D
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);
+------------------------------------------------------
+
+create view StrictLastName as
+	(select S.lastname as lastname from StrictLastName1 S)
+	union all
+	(select S.lastname as lastname from StrictLastName2 S)
+	union all
+	(select S.lastname as lastname from StrictLastName3 S)
+	union all
+	(select S.lastname as lastname from StrictLastName4 S)
+	union all
+	(select S.lastname as lastname from StrictLastName5 S)
+	union all
+	(select S.lastname as lastname from StrictLastName6 S)
+	union all
+	(select S.lastname as lastname from StrictLastName7 S)
+	union all
+	(select S.lastname as lastname from StrictLastName8 S)
+	union all
+	(select S.lastname as lastname from StrictLastName9 S)
+	------------------------------------------------------
+	-- Customization for CoNLL2003
+	------------------------------------------------------	
+	union all
+	(select S.lastname as lastname from StrictLastName10 S);
+	------------------------------------------------------	
+
+--output view StrictLastName1;
+--output view StrictLastName2;
+--output view StrictLastName3;
+--output view StrictLastName4;
+--output view StrictLastName5;
+--output view StrictLastName6;
+--output view StrictLastName7;
+--output view StrictLastName8;
+--output view StrictLastName9;
+--output view StrictLastName10;
+	
+-- Relaxed version of last name
+create view RelaxedLastName1 as
+select CombineSpans(SL.lastname, CP.name) as lastname
+from StrictLastName SL,
+     StrictCapsPerson CP
+where FollowsTok(SL.lastname, CP.name, 1, 1)
+  and MatchesRegex(/\-/, SpanBetween(SL.lastname, CP.name));
+
+create view RelaxedLastName2 as
+select CombineSpans(CP.name, SL.lastname) as lastname
+from StrictLastName SL,
+     StrictCapsPerson CP
+where FollowsTok(CP.name, SL.lastname, 1, 1)
+  and MatchesRegex(/\-/, SpanBetween(CP.name, SL.lastname));
+
+-- all the last names
+create view LastNameAll as
+	(select N.lastname as lastname from StrictLastName N)
+	union all
+	(select N.lastname as lastname from RelaxedLastName1 N)
+	union all
+	(select N.lastname as lastname from RelaxedLastName2 N);
+
+create view ValidLastNameAll as
+select N.lastname as lastname
+from LastNameAll N
+-- do not allow partially all capitalized words
+where Not(MatchesRegex(/(\p{Lu}\p{M}*)+-.*([\p{Ll}\p{Lo}]\p{M}*).*/, N.lastname))
+  and Not(MatchesRegex(/.*([\p{Ll}\p{Lo}]\p{M}*).*-(\p{Lu}\p{M}*)+/, N.lastname));
+	
+create view LastName as
+select C.lastname as lastname
+--from Consolidate(ValidLastNameAll.lastname) C;
+from ValidLastNameAll C
+consolidate on C.lastname;
+
+-- Find dictionary matches for all first names
+-- Mostly US first names
+create view StrictFirstName1 as
+select D.match as firstname
+from   Dictionary('strictFirst.dict', Doc.text) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+-- changed to enable unicode match
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+-- German first names
+create view StrictFirstName2 as
+select D.match as firstname
+from   Dictionary('strictFirst_german.dict', Doc.text) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+--where  MatchesRegex(/\p{Upper}.{1,20}/, D.match);
+-- changed to enable unicode match
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+-- nick names for US first names
+create view StrictFirstName3 as
+select D.match as firstname
+from   Dictionary('strictNickName.dict', Doc.text) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+--where  MatchesRegex(/\p{Upper}.{1,20}/, D.match);
+-- changed to enable unicode match
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);
+
+-- german first name from blue page
+create view StrictFirstName4 as
+select D.match as firstname
+from   Dictionary('strictFirst_german_bluePages.dict', Doc.text) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+--where  MatchesRegex(/\p{Upper}.{1,20}/, D.match);
+-- changed to enable unicode match
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+-- Italy first name from blue pages
+create view StrictFirstName5 as
+select D.match as firstname
+from   Dictionary('names/strictFirst_italy.dict', Doc.text) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+-- France first name from blue pages
+create view StrictFirstName6 as
+select D.match as firstname
+from   Dictionary('names/strictFirst_france.dict', Doc.text) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+-- Spain first name from blue pages
+create view StrictFirstName7 as
+select D.match as firstname
+from   Dictionary('names/strictFirst_spain.dict', Doc.text) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+-- Indian first name from blue pages
+-- TODO: still need to clean up the remaining entries
+create view StrictFirstName8 as
+select D.match as firstname
+from   Dictionary('names/strictFirst_india.partial.dict', Doc.text) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+-- Israel first name from blue pages
+create view StrictFirstName9 as
+select D.match as firstname
+from   Dictionary('names/strictFirst_israel.dict', Doc.text) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+------------------------------------------------------
+-- Customization for CoNLL2003
+------------------------------------------------------
+create view StrictFirstName10 as
+select D.match as firstname
+from   Dictionary('names/conll2003/missingPerson_firstname_conll2003.dict', Doc.text) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);
+------------------------------------------------------
+
+-- union all the dictionary matches for first names
+create view StrictFirstName as
+	(select S.firstname as firstname from StrictFirstName1 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName2 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName3 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName4 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName5 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName6 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName7 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName8 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName9 S)
+	------------------------------------------------------	
+	-- Customization for CoNLL2003
+	------------------------------------------------------
+	union all
+	(select S.firstname as firstname from StrictFirstName10 S);
+	------------------------------------------------------
+
+-- Relaxed versions of first name
+create view RelaxedFirstName1 as
+select CombineSpans(S.firstname, CP.name) as firstname
+from StrictFirstName S,
+     StrictCapsPerson CP
+where FollowsTok(S.firstname, CP.name, 1, 1)
+  and MatchesRegex(/\-/, SpanBetween(S.firstname, CP.name));
+
+create view RelaxedFirstName2 as
+select CombineSpans(CP.name, S.firstname) as firstname
+from StrictFirstName S,
+     StrictCapsPerson CP
+where FollowsTok(CP.name, S.firstname, 1, 1)
+  and MatchesRegex(/\-/, SpanBetween(CP.name, S.firstname));
+  
+-- all the first names
+create view FirstNameAll as
+	(select N.firstname as firstname from StrictFirstName N)
+	union all
+	(select N.firstname as firstname from RelaxedFirstName1 N)
+	union all
+	(select N.firstname as firstname from RelaxedFirstName2 N);
+
+create view ValidFirstNameAll as
+select N.firstname as firstname
+from FirstNameAll N
+where Not(MatchesRegex(/(\p{Lu}\p{M}*)+-.*([\p{Ll}\p{Lo}]\p{M}*).*/, N.firstname))
+  and Not(MatchesRegex(/.*([\p{Ll}\p{Lo}]\p{M}*).*-(\p{Lu}\p{M}*)+/, N.firstname));
+	
+create view FirstName as
+select C.firstname as firstname
+--from Consolidate(ValidFirstNameAll.firstname) C;
+from ValidFirstNameAll C
+consolidate on C.firstname;
+
+-- Combine all dictionary matches for both last names and first names
+create view NameDict as
+select D.match as name
+from   Dictionary('name.dict', Doc.text) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+--where  MatchesRegex(/\p{Upper}.{1,20}/, D.match);	
+-- changed to enable unicode match
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+create view NameDict1 as
+select D.match as name
+from   Dictionary('names/name_italy.dict', Doc.text) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+create view NameDict2 as
+select D.match as name
+from   Dictionary('names/name_france.dict', Doc.text) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+create view NameDict3 as
+select D.match as name
+from   Dictionary('names/name_spain.dict', Doc.text) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+create view NameDict4 as
+select D.match as name
+from   Dictionary('names/name_israel.dict', Doc.text) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);
+
+-----------------------------------------------------
+-- customization for CoNLL2003
+-----------------------------------------------------
+create view NameDict5 as
+select D.match as name
+from   Dictionary('names/popularBabyName.dict', Doc.text) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);
+
+create view NameDict6 as
+select D.match as name
+from   Dictionary('names/conll2003/missingPerson_ambigousname_conll2003.dict', Doc.text) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);		
+-----------------------------------------------------
+
+
+create view NamesAll as
+	(select P.name as name from NameDict P)
+	union all
+	(select P.name as name from NameDict1 P)
+	union all
+	(select P.name as name from NameDict2 P)
+	union all
+	(select P.name as name from NameDict3 P)
+	union all
+	(select P.name as name from NameDict4 P)
+	union all
+	(select P.firstname as name from FirstName P)
+	union all
+	(select P.lastname as name from LastName P)
+	union all
+	(select P.name as name from NameDict5 P)
+	union all 
+	(select P.name as name from NameDict6 P);
+	
+create view PersonDict as
+select C.name as name
+--from Consolidate(NamesAll.name) C;
+from NamesAll C
+consolidate on C.name;
+
+--==========================================================
+-- Actual Rules
+--==========================================================
+
+-- For 3-part Person names
+create view Person3P1 as 
+select CombineSpans(F.firstname, L.lastname) as person
+from StrictFirstName F,
+	 StrictCapsPersonR S,
+	 StrictLastName L
+where FollowsTok(F.firstname, S.name, 0, 0)
+ --and  FollowsTok(S.name, L.lastname, 0, 0)
+ and  FollowsTok(F.firstname, L.lastname, 1, 1)
+ and  Not(Equals(GetText(F.firstname), GetText(L.lastname)))
+ and  Not(Equals(GetText(F.firstname), GetText(S.name)))
+ and  Not(Equals(GetText(S.name), GetText(L.lastname)))
+ --Laura 07/22/09: refactored to allow customization of matching over new lines
+ --and  Not(ContainsRegex(/[\n\r\t]/, SpanBetween(F.firstname, L.lastname)))
+ ;
+ 
+create view Person3P2 as 
+select CombineSpans(P.name, L.lastname) as person
+from PersonDict P,
+	 StrictCapsPersonR S,
+	 StrictLastName L
+where FollowsTok(P.name, S.name, 0, 0)
+ --and  FollowsTok(S.name, L.lastname, 0, 0)
+ and  FollowsTok(P.name, L.lastname, 1, 1)
+ and  Not(Equals(GetText(P.name), GetText(L.lastname)))
+ and  Not(Equals(GetText(P.name), GetText(S.name)))
+ and  Not(Equals(GetText(S.name), GetText(L.lastname)))
+ --Laura 07/22/09: refactored to allow customization of matching over new lines
+ -- and  Not(ContainsRegex(/[\n\r\t]/, SpanBetween(P.name, L.lastname)))
+ ;
+
+create view Person3P3 as 
+select CombineSpans(F.firstname, P.name) as person
+from PersonDict P,
+	 StrictCapsPersonR S,
+	 StrictFirstName F
+where FollowsTok(F.firstname, S.name, 0, 0)
+ --and FollowsTok(S.name, P.name, 0, 0)
+ and FollowsTok(F.firstname, P.name, 1, 1)
+ and  Not(Equals(GetText(P.name), GetText(F.firstname)))
+ and  Not(Equals(GetText(P.name), GetText(S.name)))
+ and  Not(Equals(GetText(S.name), GetText(F.firstname)))
+ --Laura 07/22/09: refactored to allow customization of matching over new lines
+ --and  Not(ContainsRegex(/[\n\r\t]/, SpanBetween(F.firstname, P.name)))
+ ;
+
+/**
+ * Translation for Rule 1
+ * Handles names of persons like Mr. Vladimir E. Putin
+ */
+/*
+<rule annotation=Person id=1>
+<token attribute={etc}INITIAL{etc}>CANYWORD</token>
+<internal>
+<token attribute={etc}>CAPSPERSON</token>
+<token attribute={etc}>INITIALWORD</token>
+<token attribute={etc}>CAPSPERSON</token>
+</internal>
+</rule>
+*/
+ 
+ create view Person1 as
+ select CombineSpans(CP1.name, CP2.name) as person
+ from   Initial I,
+        CapsPerson CP1,
+        InitialWord IW,
+        CapsPerson CP2
+ where  FollowsTok(I.initial, CP1.name, 0, 0)
+   and  FollowsTok(CP1.name, IW.word, 0, 0)
+   and  FollowsTok(IW.word, CP2.name, 0, 0);
+   --and  Not(ContainsRegex(/[\n\r]/, SpanBetween(I.initial, CP2.name)));
+ 
+/**
+ * Translation for Rule 1a
+ * Handles names of persons like Mr. Vladimir Putin
+ */
+/* 
+<rule annotation=Person id=1a>
+<token attribute={etc}INITIAL{etc}>CANYWORD</token>
+<internal>
+<token attribute={etc}>CAPSPERSON</token>{1,3}
+</internal>
+</rule>*/
+
+ -- Split into two rules so that single token annotations are serperated from others
+ -- Single token annotations
+ create view Person1a1 as
+ select CP1.name as person
+ from   Initial I,
+        CapsPerson CP1
+ where  FollowsTok(I.initial, CP1.name, 0, 0)
+ --- start changing this block
+ --- disallow allow newline 
+ --Laura 07/22/09: refactored to allow customization of matching over new lines
+ --and Not(ContainsRegex(/[\n\t]/,SpanBetween(I.initial,CP1.name)))
+--- end changing this block
+;
+
+--output view Person1a1;
+
+-- Yunyao: added 05/09/2008 to match patterns such as "Mr. B. B. Buy"
+ create view Person1a2 as 
+ select CombineSpans(name.block, CP1.name) as person
+ from   Initial I,
+        BlockTok(0, 1, 2, InitialWord.word) name,
+        CapsPerson CP1
+ where  FollowsTok(I.initial, name.block, 0, 0)
+    and FollowsTok(name.block, CP1.name, 0, 0)
+	--Laura 07/22/09: refactored to allow customization of matching over new lines
+    --and Not(ContainsRegex(/[\n\t]/,CombineSpans(I.initial, CP1.name)))
+ ;
+
+create view Person1a as
+	(select P.person as person from Person1a1 P)
+	union all
+ 	(select P.person as person from Person1a2 P);
+	
+ create view Person1a_more as 
+ select name.block as person
+ from   Initial I,
+        BlockTok(0, 2, 3, CapsPerson.name) name
+ where  FollowsTok(I.initial, name.block, 0, 0)
+	and Not(ContainsRegex(/[\n\t]/,name.block))
+--- start changing this block
+-- disallow newline
+ --Laura 07/22/09: refactored to allow customization of matching over new lines
+ --and Not(ContainsRegex(/[\n\t]/,SpanBetween(I.initial,name.block)))
+--- end changing this block
+	;
+
+/**
+ * Translation for Rule 3
+ * Find person names  like Thomas B.M. David
+ */
+ /*
+<rule annotation=Person id=3>
+<internal>
+<token attribute={etc}PERSON{etc}>CAPSPERSON</token>
+<token attribute={etc}>INITIALWORD</token>
+<token attribute={etc}PERSON{etc}>CAPSPERSON</token>
+</internal>
+</rule>*/
+
+ create view Person3 as
+ select CombineSpans(P1.name, P2.name) as person
+ from   PersonDict P1,
+        --InitialWord IW,
+        WeakInitialWord IW,
+        PersonDict P2
+ where  FollowsTok(P1.name, IW.word, 0, 0)
+   and  FollowsTok(IW.word, P2.name, 0, 0)
+   and  Not(Equals(GetText(P1.name), GetText(P2.name)));
+ 
+ /**
+ * Translation for Rule 3r1
+ * 
+ * This relaxed version of rule '3' will find person names  like Thomas B.M. David
+ * But it only insists that the first word is in the person dictionary
+ */
+ /*
+<rule annotation=Person id=3r1>
+<internal>
+<token attribute={etc}PERSON:ST:FNAME{etc}>CAPSPERSON</token>
+<token attribute={etc}>INITIALWORD</token>
+<token attribute={etc}>CAPSPERSON</token>
+</internal>
+</rule>
+*/
+
+create view Person3r1 as
+ select CombineSpans(FN.firstname, CP.name) as person
+ from   FirstName FN,
+        InitialWord IW,
+        CapsPerson CP
+ where  FollowsTok(FN.firstname, IW.word, 0, 0)
+   and  FollowsTok(IW.word, CP.name, 0, 0);
+
+/**
+ * Translation for Rule 3r2
+ * 
+ * This relaxed version of rule '3' will find person names  like Thomas B.M. David
+ * But it only insists that the second word is in the person dictionary
+ */
+/*
+<rule annotation=Person id=3r2>
+<internal>
+<token attribute={etc}>CAPSPERSON</token>
+<token attribute={etc}>INITIALWORD</token>
+<token attribute={etc}PERSON:ST:LNAME{etc}>CAPSPERSON</token>
+</internal>
+</rule>*/
+
+create view Person3r2 as
+select CombineSpans(CP.name, LN.lastname) as person
+from   LastName LN,
+       InitialWord IW,
+       CapsPerson CP
+where  FollowsTok(CP.name, IW.word, 0, 0)
+  and  FollowsTok(IW.word, LN.lastname, 0, 0);
+
+/**
+ * Translation for Rule 4
+ *
+ * This rule will find person names  like David Thomas
+ */
+ /*
+ <rule annotation=Person id=4>
+<internal>
+<token attribute={etc}PERSON:ST:FNAME{etc}>CAPSPERSON</token>
+<token attribute={etc}PERSON:ST:LNAME{etc}>CAPSPERSON</token>
+</internal>
+</rule>
+*/
+create view Person4WithNewLine as
+select CombineSpans(FN.firstname, LN.lastname) as person
+from   FirstName FN,
+       LastName LN
+where  FollowsTok(FN.firstname, LN.lastname, 0, 0);
+
+-- Yunyao: 05/20/2008 revised to Person4WrongCandidates due to performance reason
+--   NOTE: current optimizer execute Equals first thus make Person4Wrong very expensive
+--create view Person4Wrong as
+--select CombineSpans(FN.firstname, LN.lastname) as person
+--from   FirstName FN,
+--       LastName LN
+--where  FollowsTok(FN.firstname, LN.lastname, 0, 0)
+--   and ContainsRegex(/[\n\r]/, SpanBetween(FN.firstname, LN.lastname))
+-- and Equals(GetText(FN.firstname), GetText(LN.lastname)); 
+
+create view Person4WrongCandidates as
+select FN.firstname as firstname, LN.lastname as lastname
+from   FirstName FN,
+       LastName LN
+where  FollowsTok(FN.firstname, LN.lastname, 0, 0)
+     --Laura 07/22/09: refactored to allow customization of matching over new lines
+     --and ContainsRegex(/[\n\r]/, SpanBetween(FN.firstname, LN.lastname))
+     ;
+
+   
+create view Person4 as
+	(select P.person as person from Person4WithNewLine P)
+	minus
+	(select CombineSpans(P.firstname, P.lastname) as person 
+	 from Person4WrongCandidates P
+	 where Equals(GetText(P.firstname), GetText(P.lastname)));  
+  
+/**
+ * Translation for Rule4a
+ * This rule will find person names  like Thomas, David
+ */
+ /*
+<rule annotation=Person id=4a>
+<internal>
+<token attribute={etc}PERSON:ST:LNAME{etc}>CAPSPERSON</token>
+<token attribute={etc}>\,</token>
+<token attribute={etc}PERSON:ST:FNAME{etc}>CAPSPERSON</token>
+</internal>
+</rule>
+ */
+create view Person4a as
+select CombineSpans(LN.lastname, FN.firstname) as person
+from   FirstName FN,
+       LastName LN
+where  FollowsTok(LN.lastname, FN.firstname, 1, 1)
+and   ContainsRegex(/,/,SpanBetween(LN.lastname, FN.firstname)); 
+ 
+-- relaxed version of Rule4a
+-- Yunyao: split the following rules into two to improve performance
+-- TODO:   Test case for optimizer 
+-- create view Person4ar1 as
+-- select CombineSpans(CP.name, FN.firstname) as person
+--from   FirstName FN,
+--       CapsPerson CP
+--where  FollowsTok(CP.name, FN.firstname, 1, 1)
+--and   ContainsRegex(/,/,SpanBetween(CP.name, FN.firstname))
+--and   Not(MatchesRegex(/(.|\n|\r)*(\.|\?|!|'|\sat|\sin)( )*/, LeftContext(CP.name, 10)))
+--and   Not(MatchesRegex(/(?i)(.+fully)/, CP.name))
+--and   GreaterThan(GetBegin(CP.name), 10);
+
+create view Person4ar1temp as
+select FN.firstname as firstname, CP.name as name
+from   FirstName FN,
+       CapsPerson CP
+where  FollowsTok(CP.name, FN.firstname, 1, 1)
+ and   ContainsRegex(/,/,SpanBetween(CP.name, FN.firstname));
+
+
+create view Person4ar1 as
+select CombineSpans(P.name, P.firstname) as person
+  from Person4ar1temp P
+where   Not(MatchesRegex(/(.|\n|\r)*(\.|\?|!|'|\sat|\sin)( )*/, LeftContext(P.name, 10))) --'
+  and   Not(MatchesRegex(/(?i)(.+fully)/, P.name))
+  and   GreaterThan(GetBegin(P.name), 10);	
+
+create view Person4ar2 as
+select CombineSpans(LN.lastname, CP.name) as person
+from   CapsPerson CP,
+       LastName LN
+where  FollowsTok(LN.lastname, CP.name, 0, 1)
+and   ContainsRegex(/,/,SpanBetween(LN.lastname, CP.name));
+
+ 
+/**
+ * Translation for Rule2
+ *
+ * This rule will handles names of persons like B.M. Thomas David, where Thomas occurs in some person dictionary
+ */
+ /*
+<rule annotation=Person id=2>
+<internal>
+<token attribute={etc}>INITIALWORD</token>
+<token attribute={etc}PERSON{etc}>CAPSPERSON</token>
+<token attribute={etc}>CAPSPERSON</token>
+</internal>
+</rule>
+*/
+
+create view Person2 as
+select CombineSpans(IW.word, CP.name) as person
+from   InitialWord IW,
+       PersonDict P,
+       CapsPerson CP
+where  FollowsTok(IW.word, P.name, 0, 0)
+  and  FollowsTok(P.name, CP.name, 0, 0)
+   -- for special word like "van" and "de"
+  and Not(MatchesRegex(/[a-z]+/, IW.word));
+
+/**
+ * Translation for Rule 2a
+ *
+ * The rule handles names of persons like B.M. Thomas David, where David occurs in some person dictionary
+ */
+/*
+<rule annotation=Person id=2a>
+<internal>
+<token attribute={etc}>INITIALWORD</token>
+<token attribute={etc}>CAPSPERSON</token>
+<token attribute={etc}>NEWLINE</token>?
+<token attribute={etc}PERSON{etc}>CAPSPERSON</token>
+</internal>
+</rule>
+*/
+
+create view Person2a as
+select CombineSpans(IW.word, P.name) as person
+from   InitialWord IW,
+	   CapsPerson CP,
+       PersonDict P
+where  FollowsTok(IW.word, CP.name, 0, 0)
+  and  FollowsTok(CP.name, P.name, 0, 0)
+   -- for special word like "van" and "de"
+  and Not(MatchesRegex(/[a-z]+/, IW.word));
+
+
+/**
+ * Translation for Rule 4r1
+ * This relaxed version of rule '4' will find person names  Thomas, David
+ * But it only insists that the FIRST word is in some person dictionary
+ */
+/*
+<rule annotation=Person id=4r1>
+<internal>
+<token attribute={etc}PERSON:ST:FNAME{etc}>CAPSPERSON</token>
+<token attribute={etc}>NEWLINE</token>?
+<token attribute={etc}>CAPSPERSON</token>
+</internal>
+</rule>
+*/
+create view Person4r1 as
+select CombineSpans(FN.firstname, CP.name) as person
+from   FirstName FN,
+	   CapsPerson CP
+where  FollowsTok(FN.firstname, CP.name, 0, 0);
+  
+
+/**
+ * Translation for Rule 4r2
+ *
+ * This relaxed version of rule '4' will find person names  Thomas, David
+ * But it only insists that the SECOND word is in some person dictionary
+ */
+ /*
+<rule annotation=Person id=4r2>
+<token attribute={etc}>ANYWORD</token>
+<internal>
+<token attribute={etc}>CAPSPERSON</token>
+<token attribute={etc}>NEWLINE</token>?
+<token attribute={etc}PERSON:ST:LNAME{etc}>CAPSPERSON</token>
+</internal>
+</rule>
+*/
+create view Person4r2 as
+select CombineSpans(CP.name, LN.lastname) as person
+from   CapsPerson CP,
+       LastName LN
+where  FollowsTok(CP.name, LN.lastname, 0, 0);
+
+
+/**
+ * Translation for Rule 5
+ *
+ * This rule will find other single token person first names
+ */
+ /* 
+<rule annotation=Person id=5>
+<internal>
+<token attribute={etc}>INITIALWORD</token>?
+<token attribute={etc}PERSON:ST:FNAME{etc}>CAPSPERSON</token>
+</internal>
+</rule>
+*/
+create view Person5 as
+select CombineSpans(IW.word, FN.firstname) as person
+from   InitialWord IW,
+       FirstName FN
+where  FollowsTok(IW.word, FN.firstname, 0, 0)
+  -- for special word like "van" and "de"
+  and Not(MatchesRegex(/[a-z]+/, IW.word));
+
+
+/**
+ * Translation for Rule 6
+ *
+ * This rule will find other single token person last names
+ */
+ /* 
+<rule annotation=Person id=6>
+<internal>
+<token attribute={etc}>INITIALWORD</token>?
+<token attribute={etc}PERSON:ST:LNAME{etc}>CAPSPERSON</token>
+</internal>
+</rule>
+*/
+
+create view Person6 as
+select CombineSpans(IW.word, LN.lastname) as person
+from   InitialWord IW,
+       LastName LN
+where  FollowsTok(IW.word, LN.lastname, 0, 0)
+   -- for special word like "van" and "de"
+  and Not(MatchesRegex(/[a-z]+/, IW.word));
+
+--==========================================================
+-- End of rules
+--
+-- Create final list of names based on all the matches extracted
+--
+--==========================================================
+
+/**
+ * Union all matches found by strong rules, except the ones directly come
+ * from dictionary matches
+ */
+
+------------------------------------------------------------------ 
+-- Customization for CoNLL2003
+------------------------------------------------------------------ 
+create view ChineseLastName as
+select D.match as lastname
+from   Dictionary('names/strictLast_china.dict', Doc.text) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,10}/, D.match);
+
+-- Full Chinese name in LastName FirstName
+create view ChineseFullName as
+select CombineSpans(C.lastname, CP.name) as person
+from ChineseLastName C,
+	 CapsPerson CP
+where FollowsTok(C.lastname, CP.name, 0, 0); 
+
+-- Identify three token names
+--1. <FirstName><CapsPerson><CapsPerson>
+create view ThreeTokenPerson1 as
+select CombineSpans(F.firstname, L.name) as person
+from FirstName F,
+	 CapsPerson CP,
+	 CapsPerson L
+where FollowsTok(F.firstname, CP.name, 0, 0)
+ and  FollowsTok(CP.name, L.name, 0, 0)
+ and  Not(ContainsRegex(/[\r\n\t]/, SpanBetween(CP.name, L.name)));
+
+--2. <FirstName><CapsPerson><LastName>
+create view ThreeTokenPerson2 as
+select CombineSpans(F.firstname, L.lastname) as person
+from FirstName F,
+	 CapsPerson CP,
+	 LastName L
+where FollowsTok(F.firstname, CP.name, 0, 0)
+ and  FollowsTok(CP.name, L.lastname, 0, 0);
+
+--3. <CapsPerson><CapsPerson><LastName>
+create view ThreeTokenPerson3 as
+select CombineSpans(F.name, L.lastname) as person
+from CapsPerson F,
+	 CapsPerson CP,
+	 LastName L
+where FollowsTok(F.name, CP.name, 0, 0)
+ and  FollowsTok(CP.name, L.lastname, 0, 0)
+ and  Not(ContainsRegex(/[\r\n\t]/, SpanBetween(CP.name, L.lastname)));
+ 
+create view ThreeTokenPerson as
+	(select P.* from ThreeTokenPerson1 P)
+	union all
+	(select P.* from ThreeTokenPerson2 P);
+--	union all
+--(select P.* from ThreeTokenPerson3 P);
+
+-- Longer Person Candidate 1
+create view LongPersonCandidate1 as
+select CombineSpans(CP1.name, CP2.name) as name
+from CapsPerson CP1,
+     CapsPerson CP2
+where FollowsTok(CP1.name, CP2.name, 0, 2)
+and Or (MatchesRegex(/\s*(((\p{Upper}\p{Lower}+)?(\s*(de|De|del|dal|wa|van|Van|el|El|al|Al)\s*)?\s+)?)\s*/, SpanBetween(CP1.name, CP2.name)),
+        MatchesRegex(/\s*([vV]an\s+de[rn]?)\s*/, SpanBetween(CP1.name, CP2.name)));
+        
+-- Longer Person Candidate 2
+create view LongPersonCandidate2 as
+select CombineSpans(I.word, CP.name) as name
+from InitialWord I,
+     CapsPerson CP
+where FollowsTok(I.word, CP.name, 0, 2)
+and Or (MatchesRegex(/\s*(((\p{Upper}\p{Lower}+)?(\s*(de|De|dal|wa|van|Van|el|El|al|Al)\s*)?\s+)?)\s*/, SpanBetween(I.word, CP.name)),
+        MatchesRegex(/\s*([vV]an\s+de[rn]?)\s*/, SpanBetween(I.word, CP.name)))
+  -- for special word like "van" and "de"
+  and Not(MatchesRegex(/[a-z]+/, I.word));
+
+
+-- Initial + CapsWord
+create view LongPersonCandidate3 as
+select CombineSpans(I.word, CP.name) as name
+from WeakInitialWord I,
+     CapsPerson CP
+where FollowsTok(I.word, CP.name, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(I.word, CP.name)));	  
+
+--CapsWord + Initial
+create view LongPersonCandidate4 as
+select CombineSpans(CP.name, I.word) as name
+from InitialWord I,
+     CapsPerson CP
+where FollowsTok(CP.name, I.word, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(CP.name, I.word)))
+   -- for special word like "van" and "de"
+  and Not(MatchesRegex(/[a-z]+/, I.word));
+
+create view LongPersonCandidate as
+	(select P.* from  LongPersonCandidate1 P)
+	union all
+	(select P.* from  LongPersonCandidate2 P)
+	union all
+	(select P.* from  LongPersonCandidate3 P)
+	union all
+	(select P.* from  LongPersonCandidate4 P);	
+	
+--output view LongPersonCandidate;	
+	
+create view LongRelaxedCapsPersonCandidate1 as
+select CombineSpans(CP1.name, CP2.name) as name, SpanBetween(CP1.name, CP2.name) as gap
+from RelaxedCapsPerson CP1,
+     RelaxedCapsPerson CP2
+where FollowsTok(CP1.name, CP2.name, 0, 2)
+and   MatchesRegex(/\s*[a-zA-Z- ]*\s*/, SpanBetween(CP1.name, CP2.name))
+and   Not(ContainsRegex(/[ ]+-[ ]+/, SpanBetween(CP1.name, CP2.name)))
+and   Not(ContainsDict('pos/conjs-list', SpanBetween(CP1.name, CP2.name)))
+and   Not(ContainsDict('pos/preps-list', SpanBetween(CP1.name, CP2.name)));
+
+create view LongRelaxedCapsPersonCandidate2 as
+select CombineSpans(I.word, CP.name) as name
+from WeakInitialWord I,
+     RelaxedCapsPerson CP
+where FollowsTok(I.word, CP.name, 0, 2)
+  and MatchesRegex(/\s*[a-zA-Z- ]*\s*/, SpanBetween(I.word, CP.name))
+  and Not(ContainsRegex(/[ ]+-[ ]+/, SpanBetween(I.word, CP.name)))
+  and Not(ContainsDict('pos/conjs-list', SpanBetween(I.word, CP.name)))
+  and Not(ContainsDict('pos/preps-list', SpanBetween(I.word, CP.name)))
+  -- for special word like "van" and "de"
+  and Not(MatchesRegex(/[a-z]+/, I.word));
+
+create view LongRelaxedPersonCandidate as
+	(select L.name as name from LongRelaxedCapsPersonCandidate1 L)
+	union all
+	(select L.name as name from LongRelaxedCapsPersonCandidate2 L);
+	
+--output view LongRelaxedCapsPersonCandidate1;
+	
+create view RelaxedPersonCandidate as
+	(select L.name as name from LongRelaxedPersonCandidate L)
+	union all
+	(select L.name as name from RelaxedCapsPerson L);
+
+create view TwoRelaxedCapsPerson as
+select CombineSpans(CP1.name, CP2.name) as name
+from CapsPerson CP1,
+	 RelaxedCapsPerson CP2
+where FollowsTok(CP1.name, CP2.name, 0, 0);
+	
+-- Two CapsPerson
+create view TwoCapsPerson as
+select CombineSpans(CP1.name, CP2.name) as name
+from CapsPerson CP1,
+	 CapsPerson CP2
+where FollowsTok(CP1.name, CP2.name, 0, 0);
+
+create view OneOrTwoCapPerson as
+	(select CP.name as name from CapsPerson CP)
+	union all
+	(select CP.name as name from TwoCapsPerson CP);
+
+-- Mixed Person Candidate
+	
+-- Yunyao: added on 03/10/2010 to capture patterns such as "German [Anke Huber]"	
+create view PersonWithNationalityClue1 as
+select CP.name as name
+from TwoCapsPerson CP,
+     Nationalities N
+where FollowsTok(N.match, CP.name, 0, 0)
+  and Not(MatchesRegex(/\W+[A-Z].*/, RightContextTok(CP.name, 2)))
+  and Not(MatchesRegex(/(a[n]?|[tT]he)\s*/, LeftContextTok(N.match, 1)));
+
+create view AllPersonCandidate as
+	(select CP.name as name from CapsPerson CP)
+	union all
+	(select CP.name as name from LongPersonCandidate CP);
+
+-- Yunyao: added on 03/30/2010 to capture patterns such as "Finland 's Juha Kankkunen"
+create view PersonWithNationalityClue2 as
+select CP.name as name
+from LongPersonCandidate CP,
+     CountryCandidate N
+where FollowsTok(N.match, CP.name, 2, 2)
+  and MatchesRegex(/[ ]*'s[ ]*/, SpanBetween(N.match, CP.name))
+--  and Not(MatchesRegex(/\W+[A-Z].*/, RightContextTok(CP.name, 2)))
+  and Not(MatchesRegex(/(a[n]?|[tT]he)\s*/, LeftContextTok(N.match, 1)))
+  and MatchesRegex(/[ ]*(\.|[a-z]+|[,;]|\d)/, RightContextTok(CP.name, 1));
+
+-- Yunyao: 04/01/2010 "Ciriaco Sforza of Switzerland"
+create view PersonWithNationalityClue3 as
+select CP.name as name
+from LongPersonCandidate CP,
+     CountryCandidate N
+where FollowsTok(CP.name, N.match, 1, 1)
+  and MatchesRegex(/[ ]*of[ ]*/, SpanBetween(CP.name, N.match))
+  and Not(MatchesRegex(/[A-Z].*/, LeftContextTok(CP.name, 1)))
+  and Not(MatchesRegex(/\s*[A-Z].*/, RightContextTok(N.match, 1)));
+ 
+--output view PersonWithNationalityClue2;
+--output view PersonWithNationalityClue3;
+  
+create view PersonWithNationalityClue as
+	(select P.* from PersonWithNationalityClue1 P)
+	union all
+	(select P.* from PersonWithNationalityClue2 P)
+	union all
+	(select P.* from PersonWithNationalityClue3 P);
+
+
+-- Yunyao: added on 04/01/2010 to capture patterns like " in Helmut Kohl 's chancellery" --"
+create view PersonHeadingOrganization as
+select CP.name as name
+from LongPersonCandidate CP
+where MatchesRegex(/in[ ]+/, LeftContextTok(CP.name, 1))
+  and MatchesRegex(/[ ]*'s[ ]+(chancellery|cabinet)/, RightContextTok(CP.name, 3)); --'
+
+--output view PersonHeadingOrganization;	
+
+-- Yunyao: added on 04/01/2010 to capture patterns like " trained by Henry Candy and ridden by Chris Rutter"
+create dictionary PersonVerbClueDict as
+(
+	'trained by', 'ridden by'
+);
+ 
+create view PersonVerbClue as
+extract
+	dictionaries 'PersonVerbClueDict'
+	on D.text
+	as clue
+from Doc D;
+ 
+create view PersonWithVerbClue as 
+select CP.name as person
+from LongPersonCandidate CP,
+	 PersonVerbClue C
+where FollowsTok(C.clue, CP.name, 0, 0);
+
+--output view PersonWithVerbClue;
+
+	
+--- find Position + Person Name
+create view Position as
+	extract
+	   dictionaries 'filterPerson_position.dict'
+	          and   'names/conll2003/sports_related_positions.dict'
+	          and   'names/conll2003/relatives.dict'
+	          and   'names/conll2003/correctPerson_clue_left.dict'
+	  on D.text   
+      as pos
+	  from Doc D
+	  having MatchesRegex(/((\p{Lu}\p{M}*){2}|((\p{Lu}\p{M}*)?\p{Lower}{1,10}\s*){1,2}.*)/, pos);
+
+
+create view OfficialCandidates1 as
+select C.name as person
+from AllPersonCandidate C,
+     Position P
+where FollowsTok(P.pos, C.name, 0, 1)
+ and  MatchesRegex(/\s*[,-]?\s*/, SpanBetween(P.pos, C.name))
+ and  Not(ContainsRegex(/[\r\n\t]/, SpanBetween(P.pos, C.name)))
+ and  Not(ContainsRegex(/[\r\n\t]/, C.name))
+ -- not matching single token names
+ and  Not(MatchesDict('stateList.dict', C.name)); 
+  
+--output view OfficialCandidates1;
+ 
+-- a more relaxed version
+create view OfficialCandidates1_1 as
+select C.name as person
+from TwoRelaxedCapsPerson C,
+     Position P
+where FollowsTok(P.pos, C.name, 0, 1)
+ and  MatchesRegex(/\s*,?\s*/, SpanBetween(P.pos, C.name))
+ and  Not(ContainsRegex(/[\r\n\t]/, SpanBetween(P.pos, C.name)))
+ and  Not(ContainsRegex(/[\r\n\t]/, C.name)); 
+ 
+--output view Position;
+--Laura: optimized
+--create view OfficialCandidates4 as
+--select CombineSpans(CP1.name, CP2.name) as person
+--from CapsPerson CP1,
+--     CapsPerson CP2
+--where FollowsTok(CP1.name, CP2.name, 0, 1)
+-- and  MatchesRegex(/\s+(\p{Upper}\p{Lower}+(\s+(de|De|dal|van|Van|el|El|al|wa|Al|st)\s+)?\s+)?/, SpanBetween(CP1.name, CP2.name))
+-- and  Not(ContainsRegex(/[\r\n\t]/, SpanBetween(CP1.name, CP2.name)))
+-- and  MatchesRegex(/.*([\r\n\t]|([.;!?]\s+))\s*/, LeftContext(CP1.name, 5))
+-- and  ContainsDict('filterPerson_position.dict', RightContext(CP2.name, 30))
+-- and  MatchesRegex(/\s*,\s*.*/, RightContext(CP2.name, 5));
+ 
+
+create view OfficialCandidates4SecondPerson as
+select CP.name as name
+from CapsPerson CP
+where ContainsDict('filterPerson_position.dict', RightContext(CP.name, 30))
+ and  MatchesRegex(/\s*,\s*.*/, RightContext(CP.name, 5));
+ 
+ 
+create view OfficialCandidates4 as
+select CombineSpans(CP1.name, CP2.name) as person
+from CapsPerson CP1,
+     OfficialCandidates4SecondPerson CP2
+where FollowsTok(CP1.name, CP2.name, 0, 1)
+  and  MatchesRegex(/\s+(\p{Upper}\p{Lower}+(\s+(de|De|dal|van|Van|el|El|al|wa|Al|st)\s+)?\s+)?/, SpanBetween(CP1.name, CP2.name))
+  and  Not(ContainsRegex(/[\r\n\t]/, SpanBetween(CP1.name, CP2.name)))
+  and  MatchesRegex(/.*([\r\n\t]|([.;!?]\s+))\s*/, LeftContext(CP1.name, 5));
+--and  ContainsDict('filterPerson_position.dict', RightContext(CP2.name, 30))
+--and  MatchesRegex(/\s*,\s*.*/, RightContext(CP2.name, 5));
+
+create view OfficialCandidates4_1 as
+select L.name as person
+from  TwoRelaxedCapsPerson L
+where Not(ContainsRegex(/[\r\n\t]/, L.name))
+ and  MatchesRegex(/.*([\r\n\t]|([.;!?]\s+))\s*/, LeftContext(L.name, 5))
+ and  ContainsDict('filterPerson_position.dict', RightContext(L.name, 30))
+ and  MatchesRegex(/\s*,\s*.*/, RightContext(L.name, 5));
+
+create view AdditionalCandidate as
+	(select P.* from OfficialCandidates4_1 P)
+	minus
+	(select P.* from OfficialCandidates4 P);
+	
+-- simple initial words in the form of A. 
+create view SimpleInitialWord as
+select R.match as word
+from RegexTok(/([\p{Upper}]\.)/, 10, Doc.text) R;
+
+create view InitialLastNamePerson as
+select CombineSpans(I.word, L.name) as person
+from SimpleInitialWord I,
+     CapsPerson L
+where FollowsTok(I.word, L.name, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(I.word, L.name)))
+  and Not(ContainsRegex(/([\p{Upper}]\.)/, LeftContext(I.word, 3)));
+
+-- Yunyao: 04/01/2010 "He ( Mind Games )"
+create view Pronoun as
+extract
+	dictionaries 'pos/pronouns-list'
+	on D.text
+	as pro
+	from Doc D;
+
+create view PersonAlternativeName as
+select L.name as person
+from LongPersonCandidate L,
+     Pronoun P
+where FollowsTok(P.pro, L.name, 1, 1)
+  and MatchesRegex(/[ ]*\([ ]*/, SpanBetween(P.pro, L.name))
+  and MatchesRegex(/[ ]*\)/, RightContextTok(L.name, 1));
+  
+--output view PersonAlternativeName;   
+
+-- identify names in a ranked list (typically found in sports report
+-- in the form of 1. PersonName (country)
+create view RankedPerson1 as
+select L.name as person
+from   LongRelaxedPersonCandidate L
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  ContainsRegex(/\.*(([\r\n\s]\d{1,2}\s*[\.-=]?\s+)|([a-zA-Z]+\)\/))/, LeftContextTok(L.name, 4))
+  and  MatchesRegex(/[ ]*\(/, RightContextTok(L.name, 1));
+
+-- in the form of 1. PersonName - PersonName (country) 
+create view RankedPerson1_1All as
+select L1.name as person1, L2.name as person2
+from LongRelaxedPersonCandidate L1,
+     LongRelaxedPersonCandidate L2
+where  Not(ContainsRegex(/[\r\n\t]/, L1.name))
+  and  Not(ContainsRegex(/[\r\n\t]/, L2.name))
+  and  FollowsTok(L1.name, L2.name, 1, 1)
+  and  MatchesRegex(/[ ]+-[ ]+/, SpanBetween(L1.name, L2.name))
+  and  ContainsRegex(/\.*(([\r\n\s]\d{1,2}\s*[\.-=]?\s+)|([a-zA-Z]+\)\/))/, LeftContext(L1.name, 10))
+  and  MatchesRegex(/\s+\(/, RightContextTok(L2.name, 1));
+
+create view RankedPerson1_1 as
+	(select L.person1 as person from RankedPerson1_1All L)
+	union all
+	(select L.person2 as person from RankedPerson1_1All L);
+	
+-- in the form of 	"2. Eveningperformance 16-1 ( Chris Rutter )"
+create view RankedPerson1_2 as
+select L.name as person
+from   RelaxedPersonCandidate L
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  MatchesRegex(/.*[\r\n]+\d{1,2}\.[ ]*/, LeftContextTok(L.name, 3))
+  and  MatchesRegex(/[ ]*\d{1,3}-\d{1,3}([ ]+[a-z]+[ ]+)?[ ]*\(.*/, RightContextTok(L.name, 5));
+
+--output view RankedPerson1_2;
+	
+-- in the form of: Person Name ( ranking) 
+create view RankedPerson2 as
+select L.name as person
+from   LongRelaxedPersonCandidate L
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  MatchesRegex(/\s+[:,-]\s+/, LeftContext(L.name, 3))
+  and  MatchesRegex(/\s+\(\s+\d{1,2}[\p{Lower}]?/, RightContext(L.name, 5));
+
+-- --output view RankedPerson2;
+  
+-- to capture names in "Ong Ewe Hock ( Malaysia ) beat"  
+create view RankedPerson3 as
+select L.name as person
+from   RelaxedPersonCandidate L
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  MatchesRegex(/(\d\s+[\-]\s+)|(.*[\r\n]+\s*)/, LeftContext(L.name, 4))
+  and  MatchesRegex(/\s+\(\s*([A-Z][a-z]*\.?\s*){1,3}\s*\)\s(beat|vs?\.?|overcome|upset\.?|lost\s*to|trounced)\s+.*/, RightContext(L.name, 25));
+ 
+-- --output view RankedPerson3; 
+ 
+-- to capture names in "beat 5/8 - Hu Zhilan ( China ) 15-2"
+create view RankedPerson4 as
+select L.name as person
+from   RelaxedPersonCandidate L
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  MatchesRegex(/.*\s+(beat|vs?\.?|overcome|upset\.?|lost\s*to|trounced)\s*(\d+(\/\d+)?)?\s*-?\s*/, LeftContext(L.name, 15))
+  and  MatchesRegex(/\s*\(\s*([A-Z][a-z]*\.?\s*){1,3}\s*\)\s*(\d+-\d+)?.*/, RightContext(L.name, 25));
+  
+  
+create view AllPersonCandidateNoNewLine as
+select A.*
+from AllPersonCandidate A
+where Not(ContainsRegex(/[\r\n]/, A.name));
+
+-- to capture names in list of entries of the form "Annett Neumann ( Germany ) beat Magali Faure ( France ) 2-0"
+create view RankedPerson4_2Candidate1 as
+select A1.name as person1, A2.name as person2
+from   AllPersonCandidateNoNewLine A1,
+       AllPersonCandidateNoNewLine A2
+where  
+  --   Not(ContainsRegex(/[\r\n]/, A1.name))
+  --and  Not(ContainsRegex(/[\r\n]/, A2.name))
+--  and  MatchesRegex(/.*[\r\n]/, LeftContext(A1.name, 2))
+      FollowsTok(A1.name, A2.name, 1, 6)
+  and  MatchesRegex(/([(]\s*([A-Z][a-z]+\s*){1,2}\s*[)]\s*)?(beat|vs\.?|overcome|upset\.?|lost\s*to|trounced)/, Chomp(SpanBetween(A1.name, A2.name)));
+  --and  MatchesRegex(/\s*([(]\s*([A-Z][a-z]+\s*){1,2}\s*[)]\s*)?\d-\d.*/, RightContextTok(A2.name, 6));
+  
+-- to capture names in list of entries of the form "Annett Neumann ( Germany ) beat French Magali Faure  2-0"
+create view RankedPerson4_2Candidate2 as
+select A1.name as person1, A2.name as person2
+from   AllPersonCandidateNoNewLine A1,
+       AllPersonCandidateNoNewLine A2,
+       Nationalities N
+where  
+-- Not(ContainsRegex(/[\r\n]/, A1.name))
+-- and  Not(ContainsRegex(/[\r\n]/, A2.name))
+	   FollowsTok(A1.name, N.match, 1, 6)
+  and  FollowsTok(N.match, A2.name, 0, 0)
+  and  MatchesRegex(/([(]\s*([A-Z][a-z]+\s*){1,2}\s*[)]\s*)?(beat|vs?\.?|overcome|upset\.?|lost\s*to|trounced)/, Chomp(SpanBetween(A1.name, N.match)));
+
+-- to capture names in list of entries of pairs "Andres Gomez / Nicolas Lapenti beat Marcelo Filippini/ Gonzalo"
+--Laura: replaced with optimized version below
+/*
+create view RankedPerson4_2Candidate3 as
+select A1.name as person1, A2.name as person2, A3.name as person3, A4.name as person4
+from   AllPersonCandidateNoNewLine A1,
+       AllPersonCandidateNoNewLine A2,
+       AllPersonCandidateNoNewLine A3,
+       AllPersonCandidateNoNewLine A4
+where  
+       FollowsTok(A1.name, A2.name, 1, 8)*/
+--  and  MatchesRegex(/\s*([(]\s*([A-Z][a-z.]+\s*){1,2}\s*[)]\s*)?(\/|and)\s*/--, SpanBetween(A1.name, A2.name))
+--  and  FollowsTok(A3.name, A4.name, 1, 8)  
+--  and  MatchesRegex(/\s*([(]\s*([A-Z][a-z.]+\s*){1,2}\s*[)]\s*)?(\/|and)\s*/, SpanBetween(A3.name, A4.name))
+--  and  FollowsTok(A2.name, A3.name, 1, 10)
+-- and  MatchesRegex(/\s*([(]\s*([A-Z][a-z.]+\s*){1,2}\s*[)]\s*)?(beat|vs?\.?|overcome|upset\.?|lost\s*to|trounced)\s*(\d\/\d\s*-\s*)?/, SpanBetween(A2.name, A3.name)); 
+  
+create view RankedPerson4_2Candidate3Pair as
+select A1.name as person1, A2.name as person2
+from   AllPersonCandidateNoNewLine A1,
+       AllPersonCandidateNoNewLine A2
+where  FollowsTok(A1.name, A2.name, 1, 8)
+  and  MatchesRegex(/([(]\s*([A-Z][a-z.]+\s*){1,2}\s*[)]\s*)?(\/|and)/, Chomp(SpanBetween(A1.name, A2.name)))
+  -- Semijoin predicate to make the view run faster
+  and  ContainsRegex(/([(]\s*([A-Z][a-z.]+\s*){1,2}\s*[)]\s*)?(\/|and)/, RightContextTok(A1.name, 8))
+;
+   
+--output view RankedPerson4_2Candidate3Pair;
+       
+create view RankedPerson4_2Candidate3 as
+select P1.person1 as person1, P1.person2 as person2, P2.person1 as person3, P2.person2 as person4
+from   RankedPerson4_2Candidate3Pair P1,
+       RankedPerson4_2Candidate3Pair P2
+where  FollowsTok(P1.person2, P2.person1, 1, 10)
+  and  MatchesRegex(/\s*([(]\s*([A-Z][a-z.]+\s*){1,2}\s*[)]\s*)?(beat|vs?\.?|overcome|upset\.?|lost\s*to|trounced)\s*(\d\/\d\s*-\s*)?/, SpanBetween(P1.person2, P2.person1)); 
+
+--output view RankedPerson4_2Candidate3;
+   
+create view RankedPerson4_2All as
+	(select R.person1 as person from RankedPerson4_2Candidate1 R)
+	union all
+	(select R.person2 as person from RankedPerson4_2Candidate1 R)
+	union all
+	(select R.person1 as person from RankedPerson4_2Candidate2 R)
+	union all
+	(select R.person2 as person from RankedPerson4_2Candidate2 R)
+	union all
+	(select R.person1 as person from RankedPerson4_2Candidate3 R)
+	union all
+	(select R.person2 as person from RankedPerson4_2Candidate3 R)
+	union all
+	(select R.person3 as person from RankedPerson4_2Candidate3 R)
+	union all
+	(select R.person4 as person from RankedPerson4_2Candidate3 R);
+	
+create view RankedPerson4_2 as 
+select R.person as person
+from RankedPerson4_2All R
+consolidate on R.person
+using 'LeftToRight';
+
+--create view RankedPerson4_1 as
+--select CP.name as person
+--from   CapsPerson CP
+--where  MatchesRegex(/.*\s+beat\s*(\d+(\/\d+)?)?\s*-?\s*/, LeftContext(CP.name, 15))
+--  and  OR (MatchesRegex(/\s*\(\s*([A-Z][a-z]*\.?\s*){1,3}\s*\)\s*\d+-\d+.*/, RightContext(CP.name, 25)),
+--  		   MatchesRegex(/\s*by?\s*walkover*/, RightContext(CP.name, 25)));
+
+-- for pattern like "6-4 6-2 winner over <name>"
+create view RankedPerson5 as
+select L.name as person
+from   LongPersonCandidate L
+where Not(ContainsRegex(/[\r\n\t]/, L.name))
+  --Laura: changed for performance
+  --and MatchesRegex(/.*\d-\d[ ]+(victory|winner|romp)[ ]+over[ ]+$/, LeftContext(L.name, 305));
+  and MatchesRegex(/\d-\d[ ]+(victory|winner|romp)[ ]+over[ ]+$/, LeftContextTok(L.name, 5));
+  
+-- --output view RankedPerson5;
+
+-- capture names from "Rocky Coppinger ( 7-5 )"
+create view RankedPerson6 as
+select L.name as person
+from   LongPersonCandidate L
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  MatchesRegex(/.*\s+\p{Lower}+\s+$/, LeftContext(L.name, 15))
+  and  MatchesRegex(/^\s+\(\s+\d{1,2}-\d{1,2}\s*\)\s+.*/, RightContext(L.name, 10));
+
+-- capture names from "Name cricket scores" such as "Alec Stewart 3 5 0 396 170 79.20"
+create view RankedPerson7 as
+select L.name as person
+from   LongPersonCandidate L
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  MatchesRegex(/[\r\n]/, LeftContext(L.name, 1))
+  and  MatchesRegex(/\s+(\d{1,3}\s+){4}(-|\d{1,3}\s+\d{1,2}\.\d{2}).*/, RightContext(L.name, 20));
+
+-- capture football teams from " Twente Enschede 1 ( Hoogma 30th, Hoogma 29th )"
+create view RankedPerson8 as
+select L.name as person
+from   LongPersonCandidate L
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  MatchesRegex(/.*[\(,:\-\r\n]\s*/, LeftContext(L.name, 2))
+  and  MatchesRegex(/\s+(\(\s*)?\d{1,2}(th|nd|st|rd)\s*(\s*\))?[,\)\s].*/, RightContext(L.name, 10));
+    
+create view RankedPerson9 as
+select CP.name as person
+from   AllPersonCandidate CP
+where  MatchesRegex(/.*[\(,]\s*/, LeftContext(CP.name, 2))
+  and  MatchesRegex(/\s+\d{1,2}(th|nd|st|rd)\s*[,\)\s].*/, RightContext(CP.name, 10));
+
+-- ranking for golfer
+create view RankedPerson10_1 as
+select L.name as person
+from   LongPersonCandidate L
+where  MatchesRegex(/.*(\d{2,3}[^\r\n]*|[,]\s*)/, LeftContext(L.name, 10))
+  and  MatchesRegex(/\s*(\(\s*([A-Z]?[a-z]*\.?\s*){1,3}\s*\))?\s*(\d{2}\s+){2,10}.*/, RightContext(L.name, 30));
+
+create view RankedPerson10_2 as
+select L.name as person
+from   LongPersonCandidate L
+where  MatchesRegex(/.*[\r\n]\s*/, LeftContext(L.name, 10))
+  and  MatchesRegex(/\s*(\(\s*([A-Z]?[a-z]*\.?\s*){1,3}\s*\))\s*(\d{2}\s+){2,10}.*/, RightContext(L.name, 30));
+
+create view RankedPerson11 as
+select CP.name as person
+from   CapsPerson CP
+where  MatchesRegex(/.*(\d{2,3}\s*|[,\r\n])\s*/, LeftContext(CP.name, 10))
+  and  MatchesRegex(/\s*(\(\s*([A-Z]?[a-z]*\.?\s*){1,3}\s*\))\s*(\d{2}\s+){2,10}.*/, RightContext(CP.name, 30));
+
+-- to identify names from football team name list in the form of
+--  "Replacements: 16-Bismarck du Plessis, 17-CJ van der Linde, 18-Andries Bekker, 19-Jean Deysel"
+create view RankedPerson12 as
+select L.name as person
+from   AllPersonCandidate L
+where  MatchesRegex(/.*[:,;]\s*\d{1,2}\s*-\s*/, LeftContext(L.name, 10))
+  and  MatchesRegex(/\s*(\(\s*([A-Z]?[a-z]*\.?\s*){1,3}\s*\))?\s*[;,.\r\n]\s*.*/, RightContext(L.name, 20));
+
+-- Cricket: to identify name from "Moin Khan b Salisbury 23"
+-- Mushtaq Ahmed c Crawley b Mullally 2 
+create view RankedPerson13 as
+	(select L.name as person
+	 from   AllPersonCandidate L
+	 where  Not(ContainsRegex(/([\r\n]|\s+[bc]\s+)/, L.name))
+	  and  MatchesRegex(/[bc]\s+/, LeftContextTok(L.name, 1)))
+	union all
+	(select L.name as person
+	 from   AllPersonCandidate L
+	 where  Not(ContainsRegex(/([\r\n]|\s+[bc]\s+)/, L.name))
+	 and  MatchesRegex(/\s+[bc]/, RightContextTok(L.name, 1)));  
+  
+--output view AllPersonCandidate;  
+  
+-- to identify name "Bowling : Lewis 23-3-112-0 , Mullally 37.1-7-97-3"
+--                   or     "Name not out"
+
+create view RankedPerson14 as
+select L.name as person
+from   AllPersonCandidate L
+where  Not(ContainsRegex(/[\r\n]/, L.name))
+  and  Or(MatchesRegex(/\s*\d{2}(\.\d)?-\d-\d{1,3}-\d[^\d]*[,\r\n].*/, RightContext(L.name, 20)),
+          MatchesRegex(/s*not\s+out\s*.*/, RightContext(L.name,10)));
+
+
+--Golf: +2 D.A. Weibring through 12
+create view RankedPerson15 as
+select L.name as person
+from   AllPersonCandidate L
+where  Not(ContainsRegex(/[\r\n]/, L.name))
+--  and  MatchesRegex(/.*[\r\n]\s*\+?\d\.?\s*/, RightContext(L.name, 5))
+  and  MatchesRegex(/\s+through\s+\d{1,3}\s*(holes)?\s*[\r\n].*/, RightContext(L.name,30));
+  
+--Cricket: Asif Mujtaba not out 1 
+create view RankedPerson16 as
+select L.name as person
+from   AllPersonCandidate L
+where  Not(ContainsRegex(/[\r\n]/, L.name))
+--  and  MatchesRegex(/.*[\r\n]\s*/, RightContext(L.name, 2))
+  and  MatchesRegex(/\s+(,\s*)?(run|not)\s+out\s+.*/, RightContext(L.name,15));
+
+-- for house riding "Eveningperformance ( 16-1 )"
+create view RankedPerson17 as
+select L.name as person
+from AllPersonCandidate L
+where  Not(ContainsRegex(/[\r\n]/, L.name))
+  and  MatchesRegex(/[ ]*\([ ]*\d{1,2}-\d{1,2}[ ]*\)/, RightContextTok(L.name, 5)); 
+ 
+--output view RankedPerson17; 
+  
+-- Tennis: seeded players
+create view PersonAsSeededPlayer as
+select L.name as person
+from AllPersonCandidate L
+where MatchesRegex(/.*((first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)|(\d{2}(st|nd|rd|th)))(-|[ ])(seed|ranked)[ ]+/, 'CASE_INSENSITIVE', LeftContextTok(L.name, 3));
+
+--output view PersonAsSeededPlayer;
+
+-- to identify names before "who **** "
+-- TODO: merge all the common patterns into views
+create view PersonBeforeWhoClause1 as
+select L.name as person
+from   LongPersonCandidate L
+where Not(ContainsRegex(/[\r\n\t]/, L.name))
+--  and  MatchesRegex(/[\r\n\.]\s*/, LeftContext(CP1.name, 2))
+  and  MatchesRegex(/^\s*,?\s*(\s+\p{Lower}+\s+)?(who|whose)\s+.+/, RightContext(L.name, 10));
+
+create view PersonBeforeWhoClause2 as
+select L.name as person
+from   RelaxedCapsPerson L
+where MatchesRegex(/.*[\r\n\.]\s*/, LeftContextTok(L.name, 1))
+  and  MatchesRegex(/\s*,\s*(\s+\p{Lower}+\s+)?(who|whose)\s+.+/, RightContext(L.name, 10));
+
+--output view PersonBeforeWhoClause2;
+ 
+-- to identify names in "<Team> 's <Player>"
+create view PersonAsPlayer1 as
+select L.name as person
+from   LongPersonCandidate L,
+	   CapsPerson C
+where  FollowsTok(C.name, L.name, 2, 2)
+  and  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  MatchesRegex(/[ ]+'[ ]*s[ ]+/, SpanBetween(C.name, L.name))
+  and  Not(MatchesRegex(/^\s*[A-Z].*/, RightContext(L.name,5)));
+  
+-- --output view PersonAsPlayer1;
+ 
+--- to identify names in "said *** " or with age "40-years-old"
+create view PersonAsSpeaker as
+select L.name as person
+from   LongPersonCandidate L
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  MatchesRegex(/.*\s*(([\s,]\s*said)|[^an]\s*\d{1,2}\s*-?\s*years?\s*-?\s*old)\s+/, LeftContext(L.name, 15))
+  and  MatchesRegex(/\s+,?\s*\p{Lower}{2}\s*.*/, RightContext(L.name, 10))
+  -- avoid matching "the 47-year-old Frenchman"
+  and Not(ContainsDict('nationality.dict', L.name));
+  
+----output view PersonAsSpeaker;
+
+--- to identify names in " ,***, said"
+create view PersonAsSpeaker2 as
+select L.name as person
+from   LongPersonCandidate L
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  MatchesRegex(/.*[,.]\s*/, LeftContext(L.name, 2))
+  and  MatchesRegex(/\s*[\s,]\s*(said|told)\s+.*/, RightContext(L.name, 10));
+
+-- to identify names in "***, a 40-years-old ..."
+create view PersonAsSpeaker3 as
+select L.name as person
+from   LongPersonCandidate L
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+--  and  MatchesRegex(/.*[,.]\s*/, LeftContextTok(L.name, 1))
+  and  MatchesRegex(/\s*,\s*an?\s*\d{1,2}\s*-?\s*years?\s*-?\s*old\s+.*/, RightContextTok(L.name, 10));
+
+-- to identify names in "***," ***, deputy director ..."
+create view PersonAsSpeaker4 as
+select L.name as person
+from LongPersonCandidate L,
+     Position P
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and FollowsTok(L.name, P.pos, 1, 1)
+  and MatchesRegex(/[ ]*,[ ]*/, SpanBetween(L.name, P.pos))
+  and MatchesRegex(/["][ ]*/, LeftContextTok(L.name, 1)); --"
+
+create view PersonAsSpeaker5 as
+select L.name as person
+from LongPersonCandidate L
+where MatchesRegex(/[ ]*,[ ]*\d{2}[ ]*,[ ]*[a-z]+/, RightContextTok(L.name, 4));
+
+--output view PersonAsSpeaker5;
+
+----output view PersonAsSpeaker4;
+----output view PersonAsSpeaker3;
+
+-- to identify names in the last line of each news report such as "****, London Newsroom, ..."
+create view PersonAsReporter1 as
+select L.name as person
+from   LongRelaxedPersonCandidate L
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  MatchesRegex(/.*[\r\n]--\s*/, LeftContext(L.name, 5))
+  and  MatchesRegex(/.*\s*([a-zA-Z]+-?[a-zA-Z]+\s*)+[N|n]ewsroom\s+.*/, RightContext(L.name, 30));
+
+-- to identify names in the second line of each news report
+create view PersonAsReporter2 as
+select L.name as person
+from   LongPersonCandidate L
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  MatchesRegex(/.*[\r\n]+\s*/, LeftContext(L.name, 2))
+  and  MatchesRegex(/\s*[\r\n]+\s*([a-zA-Z]+-?[a-zA-Z]+\s*){1,3}(,\s*([a-zA-Z]+\.?\s*){1,3})?\s*\d{4}\-\d{2}-\d{2}\s*[\r\n].*/, RightContextTok(L.name, 20));
+
+ 
+create view PersonAsVictims as
+select L.name as person
+from   LongPersonCandidate L
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  MatchesRegex(/.*\s*(((death|killing)\s*of)|victim\s*was)\s*/, LeftContext(L.name, 20))
+  and  MatchesRegex(/\s*[,.\r\n].*/, RightContext(L.name, 5));
+
+-- in the format of Regula Susana Siegfried , 50 , and Nicola Fleuchaus , 25 ,
+create view PersonAsSubject as
+select L.name as person
+from   LongPersonCandidate L
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  MatchesRegex(/\s*[,]\s*\d{1,2}\s*[,]\s*.*/, RightContext(L.name, 10));
+
+-- to identify group of football players by groups
+create dictionary FootballPlayerGroupClueDict as
+(
+    'Goalkeepers', 'Defenders', 'Midfielders', 'Strikers', 'Team', 'Teams', 'Scorers', 'Replacements',
+    'Unused replacements','Referee', 
+    -- for cricket but basically the same usage pattern
+    'Squad', 'Bowling', 'Umpires', 'To bat',
+    -- for soccer
+    'Border','Postponed', 
+    -- for Rugby
+    'Chiefs'
+);
+
+create view FootballPlayerGroupClueCandidates as
+	(extract
+		dictionaries 'FootballPlayerGroupClueDict'
+		on D.text   
+        as clue
+		from Doc D
+		having MatchesRegex(/[A-Z].*/, clue))
+	union all
+	(extract
+		dictionaries 'country.dict'
+		on D.text   
+        as clue
+		from Doc D
+		having MatchesRegex(/\s*(:|-)/, RightContextTok(clue, 1))
+	);
+
+
+		
+-- find out the boundry for each list
+create view FootballPlayerGroup1 as
+select SpanBetween(C1.clue, C2.clue) as list
+from   FootballPlayerGroupClueCandidates C1,
+	   FootballPlayerGroupClueCandidates C2
+where  FollowsTok(C1.clue, C2.clue, 3, 500)
+  and  Not(ContainsDict('FootballPlayerGroupClueDict', SpanBetween(C1.clue, C2.clue)))
+  and  MatchesRegex(/.*[\r\n]\s*/, LeftContext(C1.clue, 2)) 
+  and  MatchesRegex(/\s*[:\-]\s*.*/, RightContext(C1.clue, 5)) 
+  and  MatchesRegex(/.*[\r\n]\s*/, LeftContext(C2.clue, 2))
+  and  MatchesRegex(/\s*[:\-]\s*.*/, RightContext(C2.clue, 5));  
+
+-- the last group
+create view FootballPlayerGroup2 as
+select RightContext(C.clue, 500) as list
+from   FootballPlayerGroupClueCandidates C
+where  Not(ContainsDict('FootballPlayerGroupClueDict', RightContext(C.clue, 500)))
+  and  MatchesRegex(/.*[\r\n]\s*/, LeftContext(C.clue, 2));
+--  and  MatchesRegex(/\s*[a-z]+(:|-)/, RightContextTok(C.clue, 2)); 
+
+create view FootballPlayerGroup as
+	(select G.* from FootballPlayerGroup1 G)
+	union all
+	(select G.* from FootballPlayerGroup2 G);
+	
+--output view FootballPlayerGroup1;
+--output view FootballPlayerGroup2;
+--output view FootballPlayerGroup;
+
+create view FootballPlayerCandidate as
+select AP.name as person
+from   AllPersonCandidate AP,
+       FootballPlayerGroup G
+where  Contains(G.list, AP.name)
+  and  MatchesRegex(/.*\s*[:;,\-)]\s*/, LeftContext(AP.name, 3))
+  and  Not(ContainsDict('FootballPlayerGroupClueDict', AP.name))
+  and  Or(MatchesRegex(/\s+(\(\s*([^\s]+\s*){1,3}\s*\)?)?\s*[,.\r\n]\s*.*/, RightContext(AP.name, 25)),
+  	      MatchesRegex(/\s+\d{1,3}\s*.*/, RightContext(AP.name, 10)));
+
+--output view FootballPlayerCandidate;
+
+-- to identify groups of players in soccer
+create dictionary SoccerPlayerGroupClueDict as
+(
+	'Scorers', 'Probable teams'
+);
+
+create view SoccerPlayerGroupClueCandidates as
+	extract
+		dictionaries 'SoccerPlayerGroupClueDict'
+		on D.text   
+        as clue
+		from Doc D;		
+		
+create view SoccerPlayerGrupClueCandidateRC as
+select CombineSpans(C.clue, RightContextTok(C.clue, 8)) as context
+from  SoccerPlayerGroupClueCandidates C;
+
+-- clue based on dictionary matching
+create view SoccerPlayerGroupClue1 as
+extract regex /.+\s*:\s+([\p{Upper}](\p{Alpha}|[-])+\s*){1,4}(-|:)/ 
+    on between 4 and 9 tokens in C.context 
+    return 
+        group 0 as clue
+from SoccerPlayerGrupClueCandidateRC C;
+
+-- clue based on regex matching
+create view SoccerPlayerGroupClue2 as
+extract regex /[\r\n][1-9]\d?\s*-\s*/
+	on D.text
+	return 
+		group 0 as clue
+from Doc D;	
+
+-- clue based on regex matching for Golf
+create view GolfPlayerGroupClue as
+extract regex /([\r\n][1-9]\d)[ ]+\p{Lu}\p{M}*/
+	on D.text
+	return 
+		group 1 as clue
+from Doc D;	
+
+--output view GolfPlayerGroupClue;
+
+create view GolfPlayerGroup1 as
+extract blocks
+    with count 2
+    and separation between 0 and 500 characters
+    on C.clue as list
+from GolfPlayerGroupClue C;
+
+create view GolfPlayerGroup2 as
+select RightContext(C.clue, 500) as list
+from   GolfPlayerGroupClue C
+where  Not(ContainsRegex(/[\r\n][1-9]\d[ ]+/, RightContext(C.clue, 500))); 
+
+create view GolfPlayerGroup as
+    (select G.* from GolfPlayerGroup1 G)
+	union all
+	(select G.* from GolfPlayerGroup2 G);
+
+create view GolfPlayerCandidate as
+select AP.name as person
+from   RelaxedPersonCandidate AP,
+       GolfPlayerGroup G
+where  Contains(G.list, AP.name)
+   and MatchesRegex(/[ ]*[\r\n(,;.].*/, RightContext(AP.name, 2))
+   and MatchesRegex(/[,)\d]+\s*/, LeftContextTok(AP.name, 1));
+
+
+create view GolfPlayerCandidateConsolidated as
+select SP.person as person
+from GolfPlayerCandidate SP
+consolidate on SP.person;
+
+--output view GolfPlayerCandidateConsolidated;
+
+create view SoccerPlayerGroupClue as
+	(select S.clue as clue from SoccerPlayerGroupClue1 S)
+	union all
+	(select S.clue as clue from SoccerPlayerGroupClue2 S);
+	
+-- find out the boundry for each list
+create view SoccerPlayerGroup1 as
+select SpanBetween(C1.clue, C2.clue) as list
+from   SoccerPlayerGroupClue C1,
+	   SoccerPlayerGroupClue C2
+where  FollowsTok(C1.clue, C2.clue, 3, 500)
+  and  Not(ContainsDict('SoccerPlayerGroupClueDict', SpanBetween(C1.clue, C2.clue)));
+  
+-- the last group
+create view SoccerPlayerGroup2 as
+select RightContext(C.clue, 500) as list
+from   SoccerPlayerGroupClue C
+where  Not(ContainsDict('SoccerPlayerGroupClueDict', RightContext(C.clue, 500)))
+  and  MatchesRegex(/.*[\r\n]\s*/, LeftContext(C.clue, 2)); 
+
+create view SoccerPlayerGroup as
+	(select G.* from SoccerPlayerGroup1 G)
+	union all
+	(select G.* from SoccerPlayerGroup2 G);
+	
+--output view SoccerPlayerGroup;
+			   
+create view SoccerPlayerCandidate as
+select AP.name as person
+from   AllPersonCandidate AP,
+       SoccerPlayerGroup G
+where  Contains(G.list, AP.name)
+  --and  MatchesRegex(/.*\s*[:;,\-)]\s*/, LeftContext(AP.name, 3))
+  --and  Or (MatchesRegex(/\s*[(]\s*(o.g.|penalty(\s*,)?)?\s*\d{1,3}(st|nd|rd|th|\s*\)).*/, RightContext(AP.name, 10)),
+    and  Or (MatchesRegex(/\s*[(]\s*[a-z0-9]+.*/, RightContext(AP.name, 10)),
+  		     MatchesRegex(/\s*[,;.].*/, RightContext(AP.name, 5)));
+
+create view SoccerPlayerCandidateConsolidated as
+select SP.person as person
+from SoccerPlayerCandidate SP
+consolidate on SP.person;
+
+-- athletes groups 
+-- 4. Greece ( Dimitrios Georgalis , Georgios Chimonetos , Lampros Vasilopoulos ) 46.538
+create view TeamClue as
+	extract
+		dictionaries 'FootballPlayerGroupClueDict'
+		and 'country.dict'
+		on D.text   
+        as clue
+		from Doc D
+		having MatchesRegex(/.*[\r\n]\d[. ]\s*/, LeftContext(clue, 5));
+
+create view TeamClueRightContext  as
+select RightContext(T.clue, 500) as context
+from   TeamClue T;
+
+create view Team as
+select R.match as team
+from Regex(/^\s*[(]\s*[^)]{10,}[)]/, TeamClueRightContext.context) R;
+
+create view TeamMember as
+select AP.name as person
+from   AllPersonCandidate AP,
+       Team G
+where  Contains(G.team, AP.name)
+  and  MatchesRegex(/.*\s*[,(]\s*/, LeftContext(AP.name, 3))
+  and  MatchesRegex(/.*\s*[,)]\s*/, RightContext(AP.name, 3));
+
+-- tennis: Women 's doubles/Men's Single, etc
+create dictionary GroupClueDict as
+(
+    'Women', 'Men', 'Group'
+);
+
+create view GroupClue as
+  extract
+		dictionaries 'GroupClueDict'
+		on D.text   
+        as clue
+		from Doc D
+		having MatchesRegex(/.*[\r\n]\s*/, LeftContext(clue, 2))
+		   and MatchesRegex(/\s*('s)?\s*[a-zA-Z]+\s*[\r\n].*/, RightContext(clue, 25));
+
+--output view GroupClue;
+
+create view Group1 as
+select SpanBetween(G1.clue, G2.clue) as list
+from   GroupClue G1,
+	   GroupClue G2
+where  FollowsTok(G1.clue, G2.clue, 0, 250)
+  and  Not(ContainsDict('GroupClueDict', SpanBetween(G1.clue, G2.clue)));
+  
+-- for Golf players's list "129 Robert Karlsson ( Sweden ) 67 62"
+create view GolfGroupClue as
+extract
+	regex /[\r\n]\d{3}[ ]/
+	on D.text
+	as clue
+	from Doc D;
+
+create view Group2_1 as
+select SpanBetween(G1.clue, G2.clue) as list
+from   GolfGroupClue G1,
+	   GolfGroupClue G2
+where FollowsTok(G1.clue, G2.clue, 0, 500)
+  and Not(ContainsRegex(/[\r\n]\d{3}[ ]/, SpanBetween(G1.clue, G2.clue)));	
+
+create view Group2_2 as
+select RightContext(G.clue, 500) as list
+from   GolfGroupClue G
+where Not(ContainsRegex(/[\r\n]\d{3}[ ]/, RightContext(G.clue, 500)));	
+
+--output view Group2_1;
+--output view Group2_2;
+
+create view Group as
+	(select G.list as list from Group1 G)
+	union all
+	(select G.list as list from Group2_1 G)
+	union all
+	(select G.list as list from Group2_2 G)
+	union all
+	(select G.list as list from FootballPlayerGroup1 G);
+
+create view GroupPlayer as
+select P.name as person
+from   RelaxedPersonCandidate P,
+       Group G
+where  Contains(G.list, P.name)
+  and  Not(MatchesRegex(/.*[(]\s*/, LeftContext(P.name, 2)))
+  and  Not(MatchesRegex(/\s*[)].*/, RightContext(P.name, 2)));
+ 
+--output view RelaxedPersonCandidate; 
+--output view GroupPlayer;
+------------------------------------------------------------------ 
+
+create view PersonStrongWithNewLine as
+	(select P.person as person from Person1 P)
+union all  
+    (select P.person as person from Person1a_more P)
+union all  
+    (select P.person as person from Person3 P)
+union all  
+    (select P.person as person from Person4 P)
+union all
+	(select P.person as person from Person3P1 P)
+union all
+	(select P.person as person from ChineseFullName P)
+union all
+	(select P.person as person from ThreeTokenPerson P)
+union all
+	(select P.person as person from RankedPerson1 P)
+union all
+	(select P.person as person from RankedPerson1_1 P)
+union all
+	(select P.person as person from RankedPerson1_2 P)	
+union all
+	(select P.person as person from RankedPerson2 P)
+union all
+	(select P.person as person from RankedPerson3 P)
+union all
+	(select P.person as person from RankedPerson4 P)
+--union all
+--	(select P.person as person from RankedPerson4_1 P)
+union all
+	(select P.person as person from RankedPerson4_2 P)
+union all
+	(select P.person as person from RankedPerson5 P)
+union all
+	(select P.person as person from RankedPerson6 P)
+union all
+	(select P.person as person from RankedPerson7 P)
+union all
+	(select P.person as person from RankedPerson8 P)
+union all
+	(select P.person as person from RankedPerson9 P)
+union all
+	(select P.person as person from RankedPerson10_1 P)
+union all
+	(select P.person as person from RankedPerson10_2 P)
+union all
+	(select P.person as person from RankedPerson11 P)
+union all
+	(select P.person as person from RankedPerson12 P)
+union all
+	(select P.person as person from RankedPerson13 P)
+union all
+	(select P.person as person from RankedPerson14 P)
+union all
+	(select P.person as person from RankedPerson15 P)
+union all
+	(select P.person as person from RankedPerson16 P)
+union all
+	(select P.person as person from RankedPerson17 P)
+union all
+	(select P.person as person from OfficialCandidates1 P)
+union all
+	(select P.person as person from OfficialCandidates1_1 P)
+--union all
+--	(select P.person as person from OfficialCandidates2 P)
+--union all
+--	(select P.person as person from OfficialCandidates3 P)
+union all
+	(select P.person as person from OfficialCandidates4 P)
+union all
+	(select P.person as person from OfficialCandidates4_1 P)
+union all
+	(select P.person as person from PersonBeforeWhoClause1 P)
+union all
+	(select P.person as person from PersonBeforeWhoClause2 P)
+union all
+	(select P.person as person from PersonAsPlayer1 P)
+union all
+	(select P.person as person from PersonAsSpeaker P)
+union all
+	(select P.person as person from PersonAsSpeaker2 P)
+union all
+	(select P.person as person from PersonAsSpeaker3 P)
+union all
+	(select P.person as person from PersonAsSpeaker4 P)
+union all
+	(select P.person as person from PersonAsSpeaker5 P)
+union all
+	(select P.person as person from PersonAsReporter1 P)
+union all
+	(select P.person as person from PersonAsReporter2 P)
+union all
+	(select P.person as person from PersonAsVictims P)
+union all
+	(select P.person as person from PersonAsSubject P)
+union all
+	(select P.person as person from FootballPlayerCandidate P)
+union all
+	(select P.person as person from SoccerPlayerCandidateConsolidated P)
+union all
+ 	(select P.* from GolfPlayerCandidateConsolidated P)
+union all
+	(select P.person as person from TeamMember P)
+union all
+	(select P.name as person from PersonWithNationalityClue P)
+union all
+	(select P.name as person from PersonHeadingOrganization P)
+union all
+	(select P.* from PersonAlternativeName P)
+union all
+	(select P.* from PersonWithVerbClue P);
+
+--output view RankedPerson1;
+--output view RankedPerson1_1;
+--output view RankedPerson2;
+--output view RankedPerson3;
+--output view RankedPerson4;
+--output view RankedPerson4_2;
+--output view RankedPerson5;
+--output view RankedPerson6;
+--output view RankedPerson7;
+--output view RankedPerson8;
+--output view RankedPerson9;
+--output view RankedPerson10_1;
+--output view RankedPerson10_2;
+--output view RankedPerson11;
+--output view RankedPerson12;
+--output view RankedPerson13;
+--output view RankedPerson14;
+--output view RankedPerson15;
+--output view RankedPerson16;
+--output view OfficialCandidates1;
+--output view OfficialCandidates1_1;
+--output view OfficialCandidates4;
+--output view OfficialCandidates4_1;
+--output view PersonBeforeWhoClause1;
+--output view PersonAsPlayer1;
+--output view PersonAsSpeaker;
+--output view PersonAsSpeaker2;
+--output view PersonAsSpeaker3;
+--output view PersonAsSpeaker4;
+--output view PersonAsReporter1;
+--output view PersonAsReporter2;
+--output view PersonAsVictims;
+--output view PersonAsSubject;
+--output view FootballPlayerCandidate;
+--output view SoccerPlayerCandidateConsolidated;
+--output view TeamMember;
+--output view PersonWithNationalityClue;
+
+
+create view PersonStrongSingleTokenOnly as  
+    (select P.person as person from Person5 P)
+union all  
+    (select P.person as person from Person6 P)
+union all
+    (select P.firstname as person from FirstName P)
+union all
+    (select P.lastname as person from LastName P)
+union all  
+    (select P.person as person from Person1a P);
+    
+--output view PersonStrongSingleTokenOnly;
+--output view Person5;
+--output view Person6;
+--output view FirstName;
+--output view LastName;
+--output view Person1a;
+
+-- Yunyao: added 05/09/2008 to expand person names with suffix
+create view PersonStrongSingleTokenOnlyExpanded1 as
+select CombineSpans(P.person,S.suffix) as person
+from
+	PersonStrongSingleTokenOnly P,
+	PersonSuffix S
+where 
+	FollowsTok(P.person, S.suffix, 0, 0);	
+
+-- Yunyao: added 04/14/2009 to expand single token person name with a single initial	
+-- extend single token person with a single initial
+create view PersonStrongSingleTokenOnlyExpanded2 as
+	select Chomp(CombineSpans(R.person, RightContext(R.person,3))) as person
+	from PersonStrongSingleTokenOnly R
+	--Laura 09/24/2009: added to match names like Kathy S.
+	--where MatchesRegex(/ +[\p{Upper}]\b\s*/, RightContext(R.person,3));
+	where MatchesRegex(/ +[\p{Upper}]\b\.?\s*/, RightContext(R.person,3));
+
+	
+create view PersonStrongSingleToken as
+	(select P.person as person from PersonStrongSingleTokenOnly P)
+	union all 
+	(select P.person as person from PersonStrongSingleTokenOnlyExpanded1 P)
+	union all 
+	(select P.person as person from PersonStrongSingleTokenOnlyExpanded2 P)
+	-------------------------------------------------------------
+	union all
+	(select P.person as person from InitialLastNamePerson P)
+	union all
+	(select P.person as person from MissingSingleTokenPersonCoNLL2003 P);
+	-------------------------------------------------------------
+
+--output view PersonStrongSingleToken;
+	
+/**
+ * Union all matches found by weak rules
+ */
+create view PersonWeak1WithNewLine as  
+	(select P.person as person from Person3r1 P)
+union all  
+    (select P.person as person from Person3r2 P)
+union all
+	(select P.person as person from Person4r1 P)
+union all  
+    (select P.person as person from Person4r2 P)
+union all  
+	(select P.person as person from Person2 P)
+union all  
+    (select P.person as person from Person2a P)
+union all
+	(select P.person as person from Person3P2 P)
+union all
+	(select P.person as person from Person3P3 P);
+	
+-- weak rules that identify (LastName, FirstName)
+create view PersonWeak2WithNewLineBasic as
+    (select P.person as person from Person4a P)
+union all 
+    (select P.person as person from Person4ar1 P)
+union all
+    (select P.person as person from Person4ar2 P);
+        
+-- Laura 09/24/2009: added to identify (LastName, FirstName Initial.)
+create view PersonWeak2WithNewLineExpanded as
+select CombineSpans(P.person, IW.word) as person
+from PersonWeak2WithNewLineBasic P, InitialWord IW
+where FollowsTok(P.person, IW.word, 0, 0);
+
+--(LastName, FirstName) unioned with (LastName, FirstName Initial.)
+create view PersonWeak2WithNewLine as
+    (select P.person as person from PersonWeak2WithNewLineBasic P)
+union all 
+    (select P.person as person from PersonWeak2WithNewLineExpanded P);
+
+
+
+-- Laura: 07/16/2009: moved the rest of the annotator into separate files
+-- Person-FilterNewLineSingle(Double).aql and Person-Filter.aql
+-- in order to support domain-specific handling of new lines  
+    
+--output view Person1;
+--output view Person1a1;
+--output view Person1a2;
+--output view Person1a;
+--output view Person1a_more;
+--output view Person2;
+--output view Person2a;
+--output view Person3;
+--output view Person3r1;
+--output view Person3r2;
+--output view Person3P1;
+--output view Person3P2;
+--output view Person3P3;
+--output view Person4;
+--output view Person4a;
+--output view Person4ar1;
+--output view Person4ar2;
+--output view Person4r1;
+--output view Person4r2;
+--output view Person5;
+--output view Person6;
+
+

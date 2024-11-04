@@ -1,0 +1,46 @@
+module PhoneNumber;
+
+
+create view PhoneNumber_ as
+  (select  Op.phone as phone,
+            Op.type as type,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__0 Op)
+  union all
+  (select  Op.phone as phone,
+            Op.type as type,
+            Op.reference as reference,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__11__TempOp__1 Op);
+
+output view PhoneNumber_;
+
+create view __Union__11__TempOp__0 as
+  select  P.num as phone,
+          '' as type,
+          P.num as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PhoneNumOnly_____sep_____P____id
+  from  PhoneNumOnly P
+  where Not(ContainsRegex(/[\n\r]{2,}/, P.num));
+
+output view __Union__11__TempOp__0;
+
+create view __Union__11__TempOp__1 as
+  select  P.num as phone,
+          'fax' as type,
+          P.num as reference,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as NonPhoneNum_____sep_____P____id
+  from  NonPhoneNum P
+  where Not(ContainsRegex(/[\n\r]{2,}/, P.num));
+
+output view __Union__11__TempOp__1;
+

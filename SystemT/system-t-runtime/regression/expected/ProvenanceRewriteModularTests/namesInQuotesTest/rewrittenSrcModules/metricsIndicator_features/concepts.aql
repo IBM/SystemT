@@ -1,0 +1,94 @@
+module metricsIndicator_features;
+
+
+import dictionary amount_negativeClues from module metricsIndicator_dictionaries as AmountNegativeClueDict
+;
+
+
+create view AmountAbsolute as
+  select  Op.match as match,
+          AutoID() as __auto__id
+  from  __Base__metricsIndicator_features__AmountAbsolute__Temp Op;
+
+output view AmountAbsolute;
+
+create view AmountPercent as
+  select  Op.match as match,
+          AutoID() as __auto__id
+  from  __Base__metricsIndicator_features__AmountPercent__Temp Op;
+
+output view AmountPercent;
+
+create view AmountCandidate as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__1__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__1__TempOp__1 Op);
+
+output view AmountCandidate;
+
+create view Amount as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as AmountCandidate_____sep_____R____id
+  from  AmountCandidate R
+  where Not(MatchesDict('AmountNegativeClueDict', LeftContextTok(R.match, 1)));
+
+output view Amount;
+
+create view IndicatorCandidate as
+  select  M.match as metric,
+          A.match as amount,
+          CombineSpans(M.match, A.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          M.__auto__id as Metric_____sep_____M____id,
+          A.__auto__id as Amount_____sep_____A____id
+  from  Metric M,
+        Amount A
+  where FollowsTok(M.match, A.match, 0, 10);
+
+output view IndicatorCandidate;
+
+create view __Base__metricsIndicator_features__AmountAbsolute__Temp as
+  extract pattern     /\$/ <N.match> <U.match>?
+  return group 0 as match
+  from  Number N,
+        Unit U
+  consolidate on match using 'ContainedWithin';
+
+output view __Base__metricsIndicator_features__AmountAbsolute__Temp;
+
+create view __Base__metricsIndicator_features__AmountPercent__Temp as
+  extract pattern <N.match> 'percent'
+  return group 0 as match
+  from  Number N;
+
+output view __Base__metricsIndicator_features__AmountPercent__Temp;
+
+create view __Union__1__TempOp__0 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as AmountAbsolute_____sep_____R____id
+  from  AmountAbsolute R;
+
+output view __Union__1__TempOp__0;
+
+create view __Union__1__TempOp__1 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as AmountPercent_____sep_____R____id
+  from  AmountPercent R;
+
+output view __Union__1__TempOp__1;
+

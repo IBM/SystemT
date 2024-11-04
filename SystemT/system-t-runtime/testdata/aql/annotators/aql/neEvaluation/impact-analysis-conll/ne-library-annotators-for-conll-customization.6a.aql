@@ -1,0 +1,354 @@
+---------------------------------------
+-- Document Preprocessing
+---------------------------------------
+include 'detag.aql';
+
+---------------------------------------
+-- UDFs Declarations
+---------------------------------------
+create function getAbbreviation(span Span)
+return String
+external_name 'NamedEntityUDFs.jar:com.ibm.avatar.udf.NamedEntityUDFs!getAbbreviation'
+language java
+deterministic
+return null on null input;
+
+create function toUpperCase(span Span)
+return String
+external_name 'NamedEntityUDFs.jar:com.ibm.avatar.udf.NamedEntityUDFs!toUpperCase'
+language java
+deterministic
+return null on null input;
+
+create function normalize(span Span)
+return String
+external_name 'NamedEntityUDFs.jar:com.ibm.avatar.udf.NamedEntityUDFs!normalize'
+language java
+deterministic
+return null on null input;
+
+----------------------------------------
+-- Basic Named Entity Annotators
+----------------------------------------
+
+--------------------------------------------------------------------------------
+-- First, include the server side version of certain dictionaries
+include 'GenericNE/serverSideSpecific/AdditionalDictsForAddress.aql';
+include 'GenericNE/serverSideSpecific/AdditionalDictsForOrganization.aql';
+--------------------------------------------------------------------------------
+
+include 'GenericNE/DictsForAddress.aql';
+include 'GenericNE/Sentence.aql';
+include 'GenericNE/MacrosForTimeDates.aql';
+include 'GenericNE/Date.aql';
+include 'GenericNE/Time.aql';
+include 'GenericNE/PhoneNumber.aql';
+include 'GenericNE/Address.aql';
+include 'GenericNE/CityStateCountry.aql';
+include 'GenericNE/County.aql';
+include 'GenericNE/StockExchangeAndTicker.aql';
+include 'GenericNE/URL.aql';
+include 'GenericNE/EmailAddress.aql';
+include 'GenericNE/NotesEmailAddress.aql';
+include 'GenericNE/Organization.aql';
+include 'GenericNE/Organization-FilterSingleNewLineTab.aql';
+include 'GenericNE/Organization-Sentence.aql';
+include 'GenericNE/Person.aql';
+include 'GenericNE/Person-FilterSingleNewLineTab.aql';
+include 'GenericNE/Person-Filter.aql';
+include 'GenericNE/Region.aql';
+include 'GenericNE/Facility.aql';
+include 'GenericNE/Address-consolidation.aql';
+include 'GenericNE/OrgWithinNotesEmail.aql';
+include 'GenericNE/Organization-FilterAddress.aql';
+include 'GenericNE/Organization-consolidation.aql';
+include 'GenericNE/Person-consolidation.aql';
+include 'GenericNE/DateTime-consolidation.aql';
+include 'GenericNE/StateStrongAbbrev.aql';
+
+----------------------------------------------
+-- Consolidation:
+-- For now, we just remove annotations that are completely
+-- contained within other annotations.
+----------------------------------------------
+create view StateOrCountry as
+	(select S.match as match from StateStrongAll S)
+	union all
+	(select C.match as match from CountryCandidate C);
+
+-- only keep cities that do not have the same name as a country or state
+create view CityConsolidatedFiltered as
+	(select C.match as match from CityConsolidated C)
+	minus 
+	(select SC.match as match from StateOrCountry SC);
+	
+create view CityCountry as
+select CC.match as match, 'city' as subtype, CC.match as city, '' as county, '' as state, C.match as country, '' as continent, CombineSpans(CC.match, C.match) as reference
+from CityConsolidatedFiltered CC,
+	 CountryCandidate C
+where FollowsTok(CC.match, C.match, 0, 1)
+  and MatchesRegex(/\s*[,]?\s*/, SpanBetween(CC.match, C.match))
+  and Not(ContainsRegex(/[\n\r]/, SpanBetween(CC.match, C.match)));
+  
+create view AllCityStateCountryZipcode as
+	(select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.match as reference from AllCityStateCountry C)
+	union all
+	(select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityCountry C);
+
+create view CityStateCountryInvalid1 as
+select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference
+from   AllCityStateCountryZipcode C,
+	   PersonFinalAllWithoutDots P
+where  Contains(P.person, C.match)
+  and  Not(Equals(P.person, C.match));      
+
+create view CityStateCountryInvalid2 as
+select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference
+from   AllCityStateCountryZipcode C,
+	   FinalOrgConsolidatedWithoutDots O 
+where  Contains(O.org, C.match)
+  and  Not(Equals(O.org, C.match));   
+
+create view CityStateCountryInvalid3 as
+select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference
+from   AllCityStateCountryZipcode C,
+	   FinalOrgConsolidatedWithoutDots O 
+where  Overlaps(O.org, C.match)
+  and  Not(Contains(O.org, C.match));  
+ 
+
+create view CityStateCountryInvalid as
+	(select C.match as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityStateCountryInvalid1 C)
+	union all
+	(select C.match as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityStateCountryInvalid2 C)
+	union all
+	(select C.match as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityStateCountryInvalid3 C);
+
+create view CityStateCountryValid as
+	(select C.match as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from AllCityStateCountryZipcode C)
+	minus
+	(select C.loc as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityStateCountryInvalid C);
+	
+create view CityConsolidatedInvalid as
+select C.match as match
+from   CityStateCountryInvalid CI,
+	   CityConsolidated C
+where  Equals(CI.loc, C.match);   
+	
+create view CityConsolidatedValid as
+	(select C.match as match from CityConsolidated C)
+	 minus 
+	(select C.match as match from CityConsolidatedInvalid C);
+	
+create view StateCandidateInvalid as
+select S.match as match
+from   StateCandidate S,
+	   FinalOrgConsolidatedWithoutDots O 
+where  Overlaps(O.org, S.match); 
+
+create view StateCandidateValid as
+	(select S.match as match from StateCandidate S)
+	minus
+	(select S.match as match from StateCandidateInvalid S); 
+
+create view CountryCandidateInvalid as
+select C.match as match
+from   CountryCandidate C,
+	   FinalOrgConsolidatedWithoutDots O 
+where  Overlaps(O.org, C.match); 
+
+create view CountryCandidateValid as
+	(select C.match as match from CountryCandidate C)
+	minus
+	(select C.match as match from CountryCandidateInvalid C);
+	
+create view CountyInvalid as
+select C.match as match
+from FinalOrgConsolidatedWithoutDots O,
+	 CountyConsolidated C
+where Contains(O.org, C.match);
+
+create view CountyValid as
+	(select C.match as match from CountyConsolidated C)
+	minus
+	(select C.match as match from CountyInvalid C);
+
+create view RegionInvalid1 as
+select R.match as match
+from   RegionCandidate R,
+	   PersonFinalAllWithoutDots P
+where  Contains(P.person, R.match)
+  and  Not(Equals(P.person, R.match));      
+
+create view RegionInvalid2 as
+select R.match as match
+from   RegionCandidate R,
+	   FinalOrgConsolidatedWithoutDots O 
+where  Contains(O.org, R.match)
+  and  Not(Equals(O.org, R.match));   
+
+create view RegionInvalid3 as
+select R.match as match
+from   RegionCandidate R,
+	   FinalOrgConsolidatedWithoutDots O 
+where  Overlaps(O.org, R.match)
+  and  Not(Contains(O.org, R.match));  
+ 
+create view RegionInvalid4 as
+select R.match as match
+from   RegionCandidate R,
+	   CityStateCountryValid O 
+where  Contains(O.loc, R.match);
+
+create view RegionInvalid as
+	(select R.match as match from RegionInvalid1 R)
+	union all 
+	(select R.match as match from RegionInvalid2 R)
+	union all 
+	(select R.match as match from RegionInvalid3 R)
+	union all
+	(select R.match as match from RegionInvalid4 R);
+
+create view RegionValid as
+	(select R.match as match from RegionCandidate R)
+	minus
+	(select R.match as match from RegionInvalid R);
+	
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Assign attributes for output section <<<<<<<<<<<<<<<<
+-- ===========================================================================
+include 'GenericNE/OrganizationTypes.aql';
+include 'GenericNE/AttributesAssigner.aql';
+include 'GenericNE/AttributesAssigner-Person.aql';
+
+
+create view Person as
+select P.person as name, P.person as person
+--, P.first as first, P.middle as middle, P.last as last, P.reference as reference
+from PersonWithAttrAllValid P
+order by P.person;
+
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Output section <<<<<<<<<<<<<<<<
+-- ===========================================================================		
+
+--4.8 MapLocation
+--output view MapLocation;
+
+-----------------------------------------------------
+
+-- create individual locations based on the definition of the standard datasets (i.e. do not merge "state, country" etc)
+create view LocationAll as
+	(select A.address as loc from MapLocation A)
+	union all
+	(select C.city as loc from MapLocation C)
+	union all
+	(select C.county as loc from MapLocation C)
+	 union all
+	(select C.stateorprovince as loc from MapLocation C)
+	union all
+	(select C.country as loc from MapLocation C)
+	 union all
+	(select C.continent as loc from MapLocation C)
+	union all
+	(select C.match as loc from RegionValid  C);
+
+-------------------------------------------------------------------
+-- Customization
+
+
+
+
+-------------------------------------------------------------------
+
+create view Location as
+select C.loc as loc
+from LocationAll C
+consolidate on C.loc
+using 'LeftToRight';
+
+output view Location;
+
+--4.12 Person
+output view Person;
+
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Perform Value-Based Join for Organization <<<<<<<<<<<<<<<<
+-- ===========================================================================
+
+include 'GenericNE/Organization-ValueBasedJoin.aql';
+
+---******************************************************** 
+--- Pattern 1: Capture All Caps newspaper names in PRESS DIGEST headers
+--  Strong pattern - no need to filter
+---********************************************************
+ 
+create dictionary PressDigestNegClue as(
+	'Business pages', 'Front Page'
+);
+
+
+create dictionary PressDigestClue as(
+	'PRESS DIGEST'
+);
+
+create view PressDigestDoc as
+select D.text as text
+from Doc D
+where MatchesDict('PressDigestClue', SubSpanTok(D.text, 0, 2));
+
+create view OrgPattern1 as
+select Chomp(O.org) as org
+from
+(
+extract regex /^[ ]*\p{Lu}\p{M}*[\p{Lu}\p{M}-'\d ]+$/ --'
+	with flags 'MULTILINE'
+	on D.text 
+	as org
+from PressDigestDoc D
+having Not(ContainsDict('PressDigestNegClue', org))
+   and Not(ContainsRegex(/\d{4}-\d{2}-\d{2}/, org))
+   and Not(ContainsRegex(/--/, org))
+) O;
+
+
+--4.13 Organization
+create view  OrganizationUnsorted as
+(select O.organization as organization, O.type as type, O.reference as reference from OrganizationFull O )
+union all
+(select O.organization as organization, '' as type, O.organization as reference from OrganizationVBJ O)
+union all
+(select O.org as organization, '' as type, O.org as reference from OrgPattern1 O);
+
+create view Organization as
+select * from OrganizationUnsorted O order by O.organization;
+
+output view Organization;
+
+
+
+
+-- Additional annotators for ACL2010 paper experiments
+/*
+--4.4 Address
+select *
+into Address
+from AddressFinal;
+
+
+--4.9 Email Address
+output view EmailAddress;
+
+--4.11 PhoneNumber
+output view PhoneNumber;
+
+--4.14 DateTime
+output view DateTime;
+
+--4.15 URL
+output view URL;
+*/
+
+

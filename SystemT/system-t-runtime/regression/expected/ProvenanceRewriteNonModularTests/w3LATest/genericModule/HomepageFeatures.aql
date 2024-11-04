@@ -1,0 +1,1204 @@
+module genericModule;
+
+
+create view TitleSegSkip as
+  select  S.elem as elem,
+          S.id as id,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as SegWithID_____sep_____S____id
+  from  SegWithID S
+  where Not(MatchesDict('homepage/skipTail.dict', S.elem))
+     and Not(MatchesDict('homepage/skipHead.dict', S.elem));
+
+output view TitleSegSkip;
+
+create view TitleSegSkipHead as
+  select  S.elem as elem,
+          S.id as id,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as SegWithID_____sep_____S____id
+  from  SegWithID S
+  where Not(MatchesDict('homepage/skipHead.dict', S.elem));
+
+output view TitleSegSkipHead;
+
+create view TitleSegSkipTail as
+  select  S.elem as elem,
+          S.id as id,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as SegWithID_____sep_____S____id
+  from  SegWithID S
+  where Not(MatchesDict('homepage/skipTail.dict', S.elem));
+
+output view TitleSegSkipTail;
+
+create view FirstSeg as
+  select  Op.elem as elem,
+          Op.id as id,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__106__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__106__TempOp__1 Op,
+        __Minus__106__Temp __t
+  where Equals(Op.elem, __t.elem)
+     and Equals(Op.id, __t.id);
+
+output view FirstSeg;
+
+create view LastSeg as
+  select  Op.elem as elem,
+          Op.id as id,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__107__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__107__TempOp__1 Op,
+        __Minus__107__Temp __t
+  where Equals(Op.elem, __t.elem)
+     and Equals(Op.id, __t.id);
+
+output view LastSeg;
+
+create view TitleSegCount as
+  select  Op.num as num,
+          Op.id as id,
+          AutoID() as __auto__id
+  from  __Base__TitleSegCount__Temp Op;
+
+output view TitleSegCount;
+
+create view TitleSegSingle as
+  select  S.id as id,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as TitleSegCount_____sep_____S____id
+  from  TitleSegCount S
+  where Equals(S.num, 1);
+
+output view TitleSegSingle;
+
+create view TitleSegMultiple as
+  select  S.id as id,
+          S.num as num,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as TitleSegCount_____sep_____S____id
+  from  TitleSegCount S
+  where GreaterThan(S.num, 1);
+
+output view TitleSegMultiple;
+
+create view BeforeLastSeg as
+  select  SS.elem as elem,
+          SS.id as id,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          LS.__auto__id as LastSeg_____sep_____LS____id,
+          SS.__auto__id as TitleSegSkip_____sep_____SS____id
+  from  LastSeg LS,
+        TitleSegSkip SS
+  where FollowsTok(SS.elem, LS.elem, 0, 1)
+     and Equals(SS.id, LS.id);
+
+output view BeforeLastSeg;
+
+create view FirstSegSkip as
+  select  Op.elem as elem,
+          Op.id as id,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__108__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__108__TempOp__1 Op,
+        __Minus__108__Temp __t
+  where Equals(Op.elem, __t.elem)
+     and Equals(Op.id, __t.id);
+
+output view FirstSegSkip;
+
+create view LastSegSkip as
+  select  Op.elem as elem,
+          Op.id as id,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__109__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__109__TempOp__1 Op,
+        __Minus__109__Temp __t
+  where Equals(Op.elem, __t.elem)
+     and Equals(Op.id, __t.id);
+
+output view LastSegSkip;
+
+create dictionary "AuthorizationDict"
+with case insensitive
+as (
+  'authorization'
+);
+
+
+create view CheckSingleSegAuthorization as
+  select  Chomp(CombineSpans(LeftContext(FS.elem, 0), E.match)) as elem,
+          FS.id as id,
+          'inplace' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          E.__auto__id as __Subquery__110__Temp_____sep_____E____id,
+          FS.__auto__id as FirstSeg_____sep_____FS____id,
+          TSS.__auto__id as TitleSegSingle_____sep_____TSS____id
+  from  __Subquery__110__Temp E,
+        FirstSeg FS,
+        TitleSegSingle TSS
+  where Equals(FS.id, TSS.id)
+     and Contains(FS.elem, E.match)
+     and Equals(GetEnd(E.match), GetEnd(FS.elem));
+
+output view CheckSingleSegAuthorization;
+
+create dictionary "SiteDict"
+with case insensitive
+as (
+  'site'
+);
+
+
+create view CheckSingleSegSiteExtract as
+  select  FS.elem as elem,
+          FS.id as id,
+          D.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          FS.__auto__id as FirstSeg_____sep_____FS____id,
+          D.__auto__id as __Subquery__111__Temp_____sep_____D____id
+  from  FirstSeg FS,
+        __Subquery__111__Temp D
+  where Equals(GetEnd(D.match), GetEnd(FS.elem))
+     and Contains(FS.elem, D.match);
+
+output view CheckSingleSegSiteExtract;
+
+create view CheckSingleSegSite as
+  select  S.elem as elem,
+          S.id as id,
+          'inplace' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as __Subquery__112__Temp_____sep_____S____id,
+          TSS.__auto__id as TitleSegSingle_____sep_____TSS____id
+  from  __Subquery__112__Temp S,
+        TitleSegSingle TSS
+  where Not(ContainsRegex(/\s/, S.elem))
+     and Equals(S.id, TSS.id);
+
+output view CheckSingleSegSite;
+
+create view CheckSingleSeg as
+  (select  Op.name as name,
+            Op.id as id,
+            Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__113__TempOp__0 Op)
+  union all
+  (select  Op.name as name,
+            Op.id as id,
+            Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__113__TempOp__1 Op);
+
+output view CheckSingleSeg;
+
+create view CheckLastSegRegex as
+  select  LS.elem as elem,
+          LS.id as id,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          LS.__auto__id as LastSeg_____sep_____LS____id
+  from  LastSeg LS
+  where MatchesRegex(/\A\s*((?:main|home|top|launch|launcher|resource)\s*(?:page|menu)?)\s*\Z/, 'CASE_INSENSITIVE', LS.elem);
+
+output view CheckLastSegRegex;
+
+create view CheckLastSegRegexSingle as
+  select  LS.elem as elem,
+          LS.id as id,
+          'last_seg' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          LS.__auto__id as CheckLastSegRegex_____sep_____LS____id,
+          TSS.__auto__id as TitleSegSingle_____sep_____TSS____id
+  from  CheckLastSegRegex LS,
+        TitleSegSingle TSS
+  where Equals(LS.id, TSS.id);
+
+output view CheckLastSegRegexSingle;
+
+create view CheckLastSegRegexMultiple as
+  select  BLS.elem as elem,
+          BLS.id as id,
+          'last_seg' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          BLS.__auto__id as BeforeLastSeg_____sep_____BLS____id,
+          LS.__auto__id as CheckLastSegRegex_____sep_____LS____id,
+          TSM.__auto__id as TitleSegMultiple_____sep_____TSM____id
+  from  BeforeLastSeg BLS,
+        CheckLastSegRegex LS,
+        TitleSegMultiple TSM
+  where Equals(BLS.id, LS.id)
+     and Equals(LS.id, TSM.id);
+
+output view CheckLastSegRegexMultiple;
+
+create view CheckLastSegRegexFinal as
+  (select  Op.name as name,
+            Op.id as id,
+            Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__114__TempOp__0 Op)
+  union all
+  (select  Op.name as name,
+            Op.id as id,
+            Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__114__TempOp__1 Op);
+
+output view CheckLastSegRegexFinal;
+
+create view CheckLastSegDict as
+  select  LS.elem as elem,
+          LS.id as id,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          LS.__auto__id as LastSeg_____sep_____LS____id
+  from  LastSeg LS
+  where MatchesDict('LastSegStringsDict', 'Exact', LS.elem);
+
+output view CheckLastSegDict;
+
+create view CheckLastSegDictTrue as
+  select  LS.elem as elem,
+          LS.id as id,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          LS.__auto__id as LastSeg_____sep_____LS____id
+  from  LastSeg LS
+  where MatchesDict('LastSegStringsBackwardsDict', 'Exact', LS.elem);
+
+output view CheckLastSegDictTrue;
+
+create view CheckLastSegDictSingle as
+  select  LS.elem as elem,
+          LS.id as id,
+          '' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          LS.__auto__id as LastSeg_____sep_____LS____id,
+          LSD.__auto__id as CheckLastSegDict_____sep_____LSD____id,
+          TSS.__auto__id as TitleSegSingle_____sep_____TSS____id
+  from  LastSeg LS,
+        CheckLastSegDict LSD,
+        TitleSegSingle TSS
+  where Equals(LS.id, LSD.id)
+     and Equals(LSD.id, TSS.id);
+
+output view CheckLastSegDictSingle;
+
+create view CheckLastSegDictMultiple as
+  select  BLS.elem as elem,
+          BLS.id as id,
+          '' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          BLS.__auto__id as BeforeLastSeg_____sep_____BLS____id,
+          LSD.__auto__id as CheckLastSegDict_____sep_____LSD____id,
+          TSM.__auto__id as TitleSegMultiple_____sep_____TSM____id
+  from  BeforeLastSeg BLS,
+        CheckLastSegDict LSD,
+        TitleSegMultiple TSM
+  where Equals(BLS.id, LSD.id)
+     and Equals(LSD.id, TSM.id);
+
+output view CheckLastSegDictMultiple;
+
+create view CheckLastSegDictMultipleTrue as
+  select  FSS.elem as elem,
+          FSS.id as id,
+          '' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          FSS.__auto__id as FirstSegSkip_____sep_____FSS____id,
+          LSDT.__auto__id as CheckLastSegDictTrue_____sep_____LSDT____id,
+          TSM.__auto__id as TitleSegMultiple_____sep_____TSM____id
+  from  FirstSegSkip FSS,
+        CheckLastSegDictTrue LSDT,
+        TitleSegMultiple TSM
+  where Equals(FSS.id, LSDT.id)
+     and Equals(LSDT.id, TSM.id);
+
+output view CheckLastSegDictMultipleTrue;
+
+create view CheckLastSegDictFinal as
+  (select  Op.name as name,
+            Op.id as id,
+            Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__115__TempOp__0 Op)
+  union all
+  (select  Op.name as name,
+            Op.id as id,
+            Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__115__TempOp__1 Op)
+  union all
+  (select  Op.name as name,
+            Op.id as id,
+            Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__115__TempOp__2 Op);
+
+output view CheckLastSegDictFinal;
+
+create view CheckFirstSegDict as
+  select  FS.elem as elem,
+          FS.id as id,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          FS.__auto__id as FirstSeg_____sep_____FS____id
+  from  FirstSeg FS
+  where MatchesDict('FirstSegStringsDict', 'Exact', FS.elem);
+
+output view CheckFirstSegDict;
+
+create view CheckFirstSegDictSingle as
+  select  FS.elem as elem,
+          FS.id as id,
+          '' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          FS.__auto__id as FirstSeg_____sep_____FS____id,
+          FSD.__auto__id as CheckFirstSegDict_____sep_____FSD____id,
+          TSS.__auto__id as TitleSegSingle_____sep_____TSS____id
+  from  FirstSeg FS,
+        CheckFirstSegDict FSD,
+        TitleSegSingle TSS
+  where Equals(FS.id, FSD.id)
+     and Equals(FSD.id, TSS.id);
+
+output view CheckFirstSegDictSingle;
+
+create view CheckFirstSegDictMultiple as
+  select  LSS.elem as elem,
+          LSS.id as id,
+          '' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          LSS.__auto__id as LastSegSkip_____sep_____LSS____id,
+          FSD.__auto__id as CheckFirstSegDict_____sep_____FSD____id,
+          TSM.__auto__id as TitleSegMultiple_____sep_____TSM____id
+  from  LastSegSkip LSS,
+        CheckFirstSegDict FSD,
+        TitleSegMultiple TSM
+  where Equals(LSS.id, FSD.id)
+     and Equals(FSD.id, TSM.id);
+
+output view CheckFirstSegDictMultiple;
+
+create view CheckFirstSegDictFinal as
+  (select  Op.name as name,
+            Op.id as id,
+            Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__116__TempOp__0 Op)
+  union all
+  (select  Op.name as name,
+            Op.id as id,
+            Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__116__TempOp__1 Op);
+
+output view CheckFirstSegDictFinal;
+
+create view CheckFirstSegRegex as
+  select  LSS.elem as name,
+          LSS.id as id,
+          'first_seg' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          LSS.__auto__id as LastSegSkip_____sep_____LSS____id,
+          FS.__auto__id as FirstSeg_____sep_____FS____id
+  from  LastSegSkip LSS,
+        FirstSeg FS
+  where MatchesRegex(/^\s*(Main Page|MainPage)\s*$/, 'CASE_INSENSITIVE', FS.elem)
+     and Equals(LSS.id, FS.id);
+
+output view CheckFirstSegRegex;
+
+create view CheckFirstSegHRRegex as
+  select  E.name as name,
+          FS.id as id,
+          '' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          FS.__auto__id as FirstSeg_____sep_____FS____id,
+          E.__auto__id as __Subquery__117__Temp_____sep_____E____id
+  from  FirstSeg FS,
+        __Subquery__117__Temp E
+  where Contains(FS.elem, E.name);
+
+output view CheckFirstSegHRRegex;
+
+create view CheckFirstSegLQ as
+  select  LSS.elem as name,
+          LSS.id as id,
+          'LQ' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          LSS.__auto__id as LastSegSkip_____sep_____LSS____id,
+          FS.__auto__id as FirstSeg_____sep_____FS____id,
+          TSM.__auto__id as TitleSegMultiple_____sep_____TSM____id
+  from  LastSegSkip LSS,
+        FirstSeg FS,
+        TitleSegMultiple TSM
+  where Not(ContainsRegex(/\s+/, FS.elem))
+     and Equals(LSS.id, FS.id)
+     and Equals(FS.id, TSM.id);
+
+output view CheckFirstSegLQ;
+
+create dictionary "UserProfileDict"
+with case insensitive
+as (
+  'user profile'
+);
+
+
+create view CheckEachSegUserProfile as
+  select  TS.elem as elem,
+          TS.id as id,
+          'is_person' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          TS.__auto__id as SegWithID_____sep_____TS____id
+  from  SegWithID TS
+  where MatchesDict('UserProfileDict', TS.elem);
+
+output view CheckEachSegUserProfile;
+
+create view CheckEachSegInplaceRegex1 as
+  select  LSS.elem as elem,
+          LSS.id as id,
+          'inplace' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          LSS.__auto__id as LastSegSkip_____sep_____LSS____id,
+          TS.__auto__id as SegWithID_____sep_____TS____id,
+          LS.__auto__id as LastSeg_____sep_____LS____id
+  from  LastSegSkip LSS,
+        SegWithID TS,
+        LastSeg LS
+  where MatchesRegex(/\b(?:Welcome to)\s+\b(.{2,}(?<!'s?))(?:'s?)? (?:Intranet\s*(?:Home(?:\s*Page)?|(?:Info|Web|Information)\s*(?:Site|Page)|(?:Portal|login)\s*(?:Site|Page)?|Resource page)?|(?:w3\s+|Intranet\s+)?(?:Home(?:\s*Page)?|(?:Info|Web|Intranet|Information)\s*(?:Site|Page)|(?:Portal|login)\s*(?:Site|Page)?|Resource page|Information Center)|Public Files|User Profile)\W*\Z/, 'CASE_INSENSITIVE', TS.elem)
+     and Not(Equals(TS.elem, LS.elem))
+     and Equals(LSS.id, TS.id)
+     and Equals(TS.id, LS.id);
+
+output view CheckEachSegInplaceRegex1;
+
+create view CheckEachSegInplaceRegex2 as
+  select  LSS.elem as elem,
+          LSS.id as id,
+          'inplace' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          LSS.__auto__id as LastSegSkip_____sep_____LSS____id,
+          TS.__auto__id as SegWithID_____sep_____TS____id,
+          LS.__auto__id as LastSeg_____sep_____LS____id
+  from  LastSegSkip LSS,
+        SegWithID TS,
+        LastSeg LS
+  where MatchesRegex(/\b((?:Getting Started(?: (?:with|using|on))?)|(?:(?:Intranet\s*(?:Home(?:\s*Page)?|(?:Info|Web|Information)\s*(?:Site|Page)|(?:Portal|login)\s*(?:Site|Page)?|Resource page)?|(?:w3\s+|Intranet\s+)?(?:Home(?:\s*Page)?|(?:Info|Web|Intranet|Information)\s*(?:Site|Page)|(?:Portal|login)\s*(?:Site|Page)?|Resource page|Information Center)|Public Files|User Profile) (?:of|for)|Welcome to|Launch))\s+\b(.{2,}(?<!\W))[\W\d]*\Z/, 'CASE_INSENSITIVE', TS.elem)
+     and Not(Equals(TS.elem, LS.elem))
+     and Equals(LSS.id, TS.id)
+     and Equals(TS.id, LS.id);
+
+output view CheckEachSegInplaceRegex2;
+
+create view CheckEachSegInplaceRegex3 as
+  select  LSS.elem as elem,
+          LSS.id as id,
+          'inplace' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          LSS.__auto__id as LastSegSkip_____sep_____LSS____id,
+          TS.__auto__id as SegWithID_____sep_____TS____id,
+          LS.__auto__id as LastSeg_____sep_____LS____id
+  from  LastSegSkip LSS,
+        SegWithID TS,
+        LastSeg LS
+  where MatchesRegex(/\A\W*(.{2,}(?<!'s?|w3|intranet))(?:'s?)? (?:Intranet\s*(?:Home(?:\s*Page)?|(?:Info|Web|Information)\s*(?:Site|Page)|(?:Portal|login)\s*(?:Site|Page)?|Resource page)?|(?:w3\s+|Intranet\s+)?(?:Home(?:\s*Page)?|(?:Info|Web|Intranet|Information)\s*(?:Site|Page)|(?:Portal|login)\s*(?:Site|Page)?|Resource page|Information Center)|Public Files|User Profile)\W*\Z/, 'CASE_INSENSITIVE', TS.elem)
+     and Not(Equals(TS.elem, LS.elem))
+     and Equals(LSS.id, TS.id)
+     and Equals(TS.id, LS.id);
+
+output view CheckEachSegInplaceRegex3;
+
+create view CheckEachSegment as
+  (select  Op.elem as elem,
+            Op.id as id,
+            Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__118__TempOp__0 Op)
+  union all
+  (select  Op.elem as elem,
+            Op.id as id,
+            Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__118__TempOp__1 Op)
+  union all
+  (select  Op.elem as elem,
+            Op.id as id,
+            Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__118__TempOp__2 Op);
+
+output view CheckEachSegment;
+
+create view CheckEachSegmentLastSeg as
+  select  TS.elem as elem,
+          TS.id as id,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          TS.__auto__id as SegWithID_____sep_____TS____id,
+          LS.__auto__id as LastSeg_____sep_____LS____id
+  from  SegWithID TS,
+        LastSeg LS
+  where Equals(TS.elem, LS.elem)
+     and Equals(TS.id, LS.id);
+
+output view CheckEachSegmentLastSeg;
+
+create view CheckEachSegmentinplacepattern1 as
+  select  S.name as elem,
+          CESLS.id as id,
+          'inplace' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as __Subquery__119__Temp_____sep_____S____id,
+          CESLS.__auto__id as CheckEachSegmentLastSeg_____sep_____CESLS____id
+  from  __Subquery__119__Temp S,
+        CheckEachSegmentLastSeg CESLS
+  where Contains(CESLS.elem, S.name);
+
+output view CheckEachSegmentinplacepattern1;
+
+create view CheckEachSegmentinplacepattern2 as
+  select  S.name as elem,
+          CESLS.id as id,
+          'inplace' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as __Subquery__120__Temp_____sep_____S____id,
+          CESLS.__auto__id as CheckEachSegmentLastSeg_____sep_____CESLS____id
+  from  __Subquery__120__Temp S,
+        CheckEachSegmentLastSeg CESLS
+  where Contains(CESLS.elem, S.name);
+
+output view CheckEachSegmentinplacepattern2;
+
+create view CheckEachSegmentinplacepattern3 as
+  select  S.name as elem,
+          CESLS.id as id,
+          'inplace' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as __Subquery__121__Temp_____sep_____S____id,
+          CESLS.__auto__id as CheckEachSegmentLastSeg_____sep_____CESLS____id
+  from  __Subquery__121__Temp S,
+        CheckEachSegmentLastSeg CESLS
+  where Contains(CESLS.elem, S.name);
+
+output view CheckEachSegmentinplacepattern3;
+
+create view CheckEachSegmentPattern as
+  (select  Op.elem as elem,
+            Op.id as id,
+            Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__122__TempOp__0 Op)
+  union all
+  (select  Op.elem as elem,
+            Op.id as id,
+            Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__122__TempOp__1 Op)
+  union all
+  (select  Op.elem as elem,
+            Op.id as id,
+            Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__122__TempOp__2 Op)
+  union all
+  (select  Op.elem as elem,
+            Op.id as id,
+            Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__122__TempOp__3 Op);
+
+output view CheckEachSegmentPattern;
+
+create view CheckEachSegFinalAll as
+  (select  Op.elem as elem,
+            Op.id as id,
+            Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__123__TempOp__0 Op)
+  union all
+  (select  Op.elem as elem,
+            Op.id as id,
+            Op.label as label,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__123__TempOp__1 Op);
+
+output view CheckEachSegFinalAll;
+
+create view CheckEachSegFinal as
+  select  Op.name as name,
+          Op.id as id,
+          Op.label as label,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__124__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__124__TempOp__1 Op,
+        __Minus__124__Temp __t
+  where Equals(Op.name, __t.name)
+     and Equals(Op.id, __t.id)
+     and Equals(Op.label, __t.label);
+
+output view CheckEachSegFinal;
+
+create view __Base__TitleSegCount__Temp as
+  select  Count(S.elem) as num,
+          S.id as id
+  from  SegWithID S
+  group by S.id;
+
+output view __Base__TitleSegCount__Temp;
+
+create view __Minus__106__Temp as
+  select  __t.elem as elem,
+          __t.id as id
+  from  
+    ((select  Op.elem as elem,
+              Op.id as id
+      from  __Minus__106__TempOp__1 Op)
+    minus
+    (select  Op.elem as elem,
+              Op.id as id
+      from  __Minus__106__TempOp__2 Op)
+    ) __t
+  group by __t.elem, __t.id;
+
+output view __Minus__106__Temp;
+
+create view __Minus__106__TempOp__1 as
+  select  S.elem as elem,
+          S.id as id,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as SegWithID_____sep_____S____id
+  from  SegWithID S;
+
+output view __Minus__106__TempOp__1;
+
+create view __Minus__106__TempOp__2 as
+  select  S2.elem as elem,
+          S2.id as id,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S1.__auto__id as SegWithID_____sep_____S1____id,
+          S2.__auto__id as SegWithID_____sep_____S2____id
+  from  SegWithID S1,
+        SegWithID S2
+  where FollowsTok(S1.elem, S2.elem, 1, 20)
+     and Equals(S1.id, S2.id);
+
+output view __Minus__106__TempOp__2;
+
+create view __Minus__107__Temp as
+  select  __t.elem as elem,
+          __t.id as id
+  from  
+    ((select  Op.elem as elem,
+              Op.id as id
+      from  __Minus__107__TempOp__1 Op)
+    minus
+    (select  Op.elem as elem,
+              Op.id as id
+      from  __Minus__107__TempOp__2 Op)
+    ) __t
+  group by __t.elem, __t.id;
+
+output view __Minus__107__Temp;
+
+create view __Minus__107__TempOp__1 as
+  select  S.elem as elem,
+          S.id as id,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as SegWithID_____sep_____S____id
+  from  SegWithID S;
+
+output view __Minus__107__TempOp__1;
+
+create view __Minus__107__TempOp__2 as
+  select  S1.elem as elem,
+          S1.id as id,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S1.__auto__id as SegWithID_____sep_____S1____id,
+          S2.__auto__id as SegWithID_____sep_____S2____id
+  from  SegWithID S1,
+        SegWithID S2
+  where FollowsTok(S1.elem, S2.elem, 1, 20)
+     and Equals(S1.id, S2.id);
+
+output view __Minus__107__TempOp__2;
+
+create view __Minus__108__Temp as
+  select  __t.elem as elem,
+          __t.id as id
+  from  
+    ((select  Op.elem as elem,
+              Op.id as id
+      from  __Minus__108__TempOp__1 Op)
+    minus
+    (select  Op.elem as elem,
+              Op.id as id
+      from  __Minus__108__TempOp__2 Op)
+    ) __t
+  group by __t.elem, __t.id;
+
+output view __Minus__108__Temp;
+
+create view __Minus__108__TempOp__1 as
+  select  S.elem as elem,
+          S.id as id,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as TitleSegSkipHead_____sep_____S____id
+  from  TitleSegSkipHead S;
+
+output view __Minus__108__TempOp__1;
+
+create view __Minus__108__TempOp__2 as
+  select  S2.elem as elem,
+          S2.id as id,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S1.__auto__id as TitleSegSkipHead_____sep_____S1____id,
+          S2.__auto__id as TitleSegSkipHead_____sep_____S2____id
+  from  TitleSegSkipHead S1,
+        TitleSegSkipHead S2
+  where FollowsTok(S1.elem, S2.elem, 1, 20)
+     and Equals(S1.id, S2.id);
+
+output view __Minus__108__TempOp__2;
+
+create view __Minus__109__Temp as
+  select  __t.elem as elem,
+          __t.id as id
+  from  
+    ((select  Op.elem as elem,
+              Op.id as id
+      from  __Minus__109__TempOp__1 Op)
+    minus
+    (select  Op.elem as elem,
+              Op.id as id
+      from  __Minus__109__TempOp__2 Op)
+    ) __t
+  group by __t.elem, __t.id;
+
+output view __Minus__109__Temp;
+
+create view __Minus__109__TempOp__1 as
+  select  S.elem as elem,
+          S.id as id,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as TitleSegSkipTail_____sep_____S____id
+  from  TitleSegSkipTail S;
+
+output view __Minus__109__TempOp__1;
+
+create view __Minus__109__TempOp__2 as
+  select  S1.elem as elem,
+          S1.id as id,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S1.__auto__id as TitleSegSkipTail_____sep_____S1____id,
+          S2.__auto__id as TitleSegSkipTail_____sep_____S2____id
+  from  TitleSegSkipTail S1,
+        TitleSegSkipTail S2
+  where FollowsTok(S1.elem, S2.elem, 1, 20)
+     and Equals(S1.id, S2.id);
+
+output view __Minus__109__TempOp__2;
+
+create view __Minus__124__Temp as
+  select  __t.name as name,
+          __t.id as id,
+          __t.label as label
+  from  
+    ((select  Op.name as name,
+              Op.id as id,
+              Op.label as label
+      from  __Minus__124__TempOp__1 Op)
+    minus
+    (select  Op.name as name,
+              Op.id as id,
+              Op.label as label
+      from  __Minus__124__TempOp__2 Op)
+    ) __t
+  group by __t.name, __t.id, __t.label;
+
+output view __Minus__124__Temp;
+
+create view __Minus__124__TempOp__1 as
+  select  S.elem as name,
+          S.id as id,
+          S.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as CheckEachSegFinalAll_____sep_____S____id
+  from  CheckEachSegFinalAll S;
+
+output view __Minus__124__TempOp__1;
+
+create view __Minus__124__TempOp__2 as
+  select  S2.elem as name,
+          S2.id as id,
+          S2.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S1.__auto__id as CheckEachSegFinalAll_____sep_____S1____id,
+          S2.__auto__id as CheckEachSegFinalAll_____sep_____S2____id
+  from  CheckEachSegFinalAll S1,
+        CheckEachSegFinalAll S2
+  where FollowsTok(S1.elem, S2.elem, 1, 20)
+     and Equals(S1.id, S2.id);
+
+output view __Minus__124__TempOp__2;
+
+create view __Subquery__110__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    FS.__auto__id as FirstSeg_____sep_____FS____id,
+    dictionary 'AuthorizationDict'
+    with flags 'IgnoreCase'
+    on FS.elem as match
+  from FirstSeg FS;
+
+output view __Subquery__110__Temp;
+
+create view __Subquery__111__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    FS.__auto__id as FirstSeg_____sep_____FS____id,
+    dictionary 'SiteDict'
+    with flags 'IgnoreCase'
+    on FS.elem as match
+  from FirstSeg FS;
+
+output view __Subquery__111__Temp;
+
+create view __Subquery__112__Temp as
+  select  Chomp(CombineSpans(LeftContext(S.elem, 0), S.match)) as elem,
+          S.id as id,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as CheckSingleSegSiteExtract_____sep_____S____id
+  from  CheckSingleSegSiteExtract S;
+
+output view __Subquery__112__Temp;
+
+create view __Subquery__117__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    FS.__auto__id as FirstSeg_____sep_____FS____id,
+    regex /You and IBM (\w+.*)/
+    with flags 'DOTALL'
+    on FS.elem
+    return group 1 as name
+  from FirstSeg FS;
+
+output view __Subquery__117__Temp;
+
+create view __Subquery__119__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    S.__auto__id as CheckEachSegmentLastSeg_____sep_____S____id,
+    regex /\b(?:Welcome to)\s+\b(.{2,}(?<!'s?))(?:'s?)? (?:Intranet\s*(?:Home(?:\s*Page)?|(?:Info|Web|Information)\s*(?:Site|Page)|(?:Portal|login)\s*(?:Site|Page)?|Resource page)?|(?:w3\s+|Intranet\s+)?(?:Home(?:\s*Page)?|(?:Info|Web|Intranet|Information)\s*(?:Site|Page)|(?:Portal|login)\s*(?:Site|Page)?|Resource page|Information Center)|Public Files|User Profile)\W*\Z/
+    with flags 'CASE_INSENSITIVE'
+    on S.elem
+    return group 1 as name
+  from CheckEachSegmentLastSeg S;
+
+output view __Subquery__119__Temp;
+
+create view __Subquery__120__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    S.__auto__id as CheckEachSegmentLastSeg_____sep_____S____id,
+    regex /\b(?:(?:Getting Started(?: (?:with|using|on))?)|(?:(?:Intranet\s*(?:Home(?:\s*Page)?|(?:Info|Web|Information)\s*(?:Site|Page)|(?:Portal|login)\s*(?:Site|Page)?|Resource page)?|(?:w3\s+|Intranet\s+)?(?:Home(?:\s*Page)?|(?:Info|Web|Intranet|Information)\s*(?:Site|Page)|(?:Portal|login)\s*(?:Site|Page)?|Resource page|Information Center)|Public Files|User Profile) (?:of|for)|Welcome to|Launch))\s+\b(.{2,}(?<!\W))[\W\d]*\Z/
+    with flags 'CASE_INSENSITIVE'
+    on S.elem
+    return group 1 as name
+  from CheckEachSegmentLastSeg S;
+
+output view __Subquery__120__Temp;
+
+create view __Subquery__121__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    CESLS.__auto__id as CheckEachSegmentLastSeg_____sep_____CESLS____id,
+    regex /\A\W*(.{2,}(?<!'s?|w3|intranet))(?:'s?)? (?:Intranet\s*(?:Home(?:\s*Page)?|(?:Info|Web|Information)\s*(?:Site|Page)|(?:Portal|login)\s*(?:Site|Page)?|Resource page)?|(?:w3\s+|Intranet\s+)?(?:Home(?:\s*Page)?|(?:Info|Web|Intranet|Information)\s*(?:Site|Page)|(?:Portal|login)\s*(?:Site|Page)?|Resource page|Information Center)|Public Files|User Profile)\W*\Z/
+    with flags 'CASE_INSENSITIVE'
+    on CESLS.elem
+    return group 1 as name
+  from CheckEachSegmentLastSeg CESLS;
+
+output view __Subquery__121__Temp;
+
+create view __Union__113__TempOp__0 as
+  select  S.elem as name,
+          S.id as id,
+          S.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as CheckSingleSegAuthorization_____sep_____S____id
+  from  CheckSingleSegAuthorization S;
+
+output view __Union__113__TempOp__0;
+
+create view __Union__113__TempOp__1 as
+  select  S.elem as name,
+          S.id as id,
+          S.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as CheckSingleSegSite_____sep_____S____id
+  from  CheckSingleSegSite S;
+
+output view __Union__113__TempOp__1;
+
+create view __Union__114__TempOp__0 as
+  select  S.elem as name,
+          S.id as id,
+          S.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as CheckLastSegRegexSingle_____sep_____S____id
+  from  CheckLastSegRegexSingle S;
+
+output view __Union__114__TempOp__0;
+
+create view __Union__114__TempOp__1 as
+  select  S.elem as name,
+          S.id as id,
+          S.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as CheckLastSegRegexMultiple_____sep_____S____id
+  from  CheckLastSegRegexMultiple S;
+
+output view __Union__114__TempOp__1;
+
+create view __Union__115__TempOp__0 as
+  select  S.elem as name,
+          S.id as id,
+          S.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as CheckLastSegDictSingle_____sep_____S____id
+  from  CheckLastSegDictSingle S;
+
+output view __Union__115__TempOp__0;
+
+create view __Union__115__TempOp__1 as
+  select  S.elem as name,
+          S.id as id,
+          S.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as CheckLastSegDictMultiple_____sep_____S____id
+  from  CheckLastSegDictMultiple S;
+
+output view __Union__115__TempOp__1;
+
+create view __Union__115__TempOp__2 as
+  select  S.elem as name,
+          S.id as id,
+          S.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as CheckLastSegDictMultipleTrue_____sep_____S____id
+  from  CheckLastSegDictMultipleTrue S;
+
+output view __Union__115__TempOp__2;
+
+create view __Union__116__TempOp__0 as
+  select  S.elem as name,
+          S.id as id,
+          S.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as CheckFirstSegDictSingle_____sep_____S____id
+  from  CheckFirstSegDictSingle S;
+
+output view __Union__116__TempOp__0;
+
+create view __Union__116__TempOp__1 as
+  select  S.elem as name,
+          S.id as id,
+          S.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as CheckFirstSegDictMultiple_____sep_____S____id
+  from  CheckFirstSegDictMultiple S;
+
+output view __Union__116__TempOp__1;
+
+create view __Union__118__TempOp__0 as
+  select  S.elem as elem,
+          S.id as id,
+          'inplace' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as CheckEachSegInplaceRegex1_____sep_____S____id
+  from  CheckEachSegInplaceRegex1 S;
+
+output view __Union__118__TempOp__0;
+
+create view __Union__118__TempOp__1 as
+  select  S.elem as elem,
+          S.id as id,
+          'inplace' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as CheckEachSegInplaceRegex2_____sep_____S____id
+  from  CheckEachSegInplaceRegex2 S;
+
+output view __Union__118__TempOp__1;
+
+create view __Union__118__TempOp__2 as
+  select  S.elem as elem,
+          S.id as id,
+          'inplace' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as CheckEachSegInplaceRegex3_____sep_____S____id
+  from  CheckEachSegInplaceRegex3 S;
+
+output view __Union__118__TempOp__2;
+
+create view __Union__122__TempOp__0 as
+  select  S.elem as elem,
+          S.id as id,
+          'person' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as CheckEachSegUserProfile_____sep_____S____id
+  from  CheckEachSegUserProfile S;
+
+output view __Union__122__TempOp__0;
+
+create view __Union__122__TempOp__1 as
+  select  S.elem as elem,
+          S.id as id,
+          'inplace' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as CheckEachSegmentinplacepattern1_____sep_____S____id
+  from  CheckEachSegmentinplacepattern1 S;
+
+output view __Union__122__TempOp__1;
+
+create view __Union__122__TempOp__2 as
+  select  S.elem as elem,
+          S.id as id,
+          'inplace' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as CheckEachSegmentinplacepattern2_____sep_____S____id
+  from  CheckEachSegmentinplacepattern2 S;
+
+output view __Union__122__TempOp__2;
+
+create view __Union__122__TempOp__3 as
+  select  S.elem as elem,
+          S.id as id,
+          'inplace' as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as CheckEachSegmentinplacepattern3_____sep_____S____id
+  from  CheckEachSegmentinplacepattern3 S;
+
+output view __Union__122__TempOp__3;
+
+create view __Union__123__TempOp__0 as
+  select  CheckEachSegment.elem as elem,
+          CheckEachSegment.id as id,
+          CheckEachSegment.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CheckEachSegment.__auto__id as CheckEachSegment_____sep_____CheckEachSegment____id
+  from  CheckEachSegment CheckEachSegment;
+
+output view __Union__123__TempOp__0;
+
+create view __Union__123__TempOp__1 as
+  select  CheckEachSegmentPattern.elem as elem,
+          CheckEachSegmentPattern.id as id,
+          CheckEachSegmentPattern.label as label,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CheckEachSegmentPattern.__auto__id as CheckEachSegmentPattern_____sep_____CheckEachSegmentPattern____id
+  from  CheckEachSegmentPattern CheckEachSegmentPattern;
+
+output view __Union__123__TempOp__1;
+

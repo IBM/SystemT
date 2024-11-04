@@ -1,0 +1,25 @@
+-----------------------------------------------------------------------------
+-- lookupTest.aql
+--
+-- AQL side of ICD9Tests.lookupTest()
+-----------------------------------------------------------------------------
+
+-- Read in the lookup table from a shared external file.
+include 'codeTable.aql';
+
+-- Create a dictionary from the lookup table.
+create dictionary ICD9PhraseDict from table ICD9
+with entries from phrase;
+
+-- Find all matches of the dictionary.
+create view ICD9Phrase as
+extract dictionary ICD9PhraseDict on D.text as phrase
+from Document D;
+
+-- Map matches back to their ICD9 codes.
+create view ICD9Code as
+select I.code as code, P.phrase as phrase
+from ICD9Phrase P, ICD9 I
+where Equals(ToLowerCase(P.phrase), ToLowerCase(I.phrase));
+
+output view ICD9Code;

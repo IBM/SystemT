@@ -1,0 +1,86 @@
+require document with columns text Text;
+
+------------------------------------------------------------------------------
+-- Tests of the ORDER BY clause.
+------------------------------------------------------------------------------
+
+-- Note that we capture some two-word phrases, to make things more interesting.
+create dictionary CommonWords as (
+	'a', 'the', 'of', 'of a', 'of the'
+);
+
+-- Find pairs of common words within 20 tokens of each other.
+create view WordPairs_Unsorted as
+select D1.match as first, D2.match as second, 
+	CombineSpans(D1.match, D2.match) as annot
+from Dictionary('CommonWords', Document.text) D1,
+	Dictionary('CommonWords', Document.text) D2
+where FollowsTok(D1.match, D2.match, 0, 20);
+
+
+-- Sort by begin of first span
+select W.first as first, W.second as second, W.annot as annot
+into SortedByFirstBegin
+from WordPairs_Unsorted W
+order by GetBegin(W.first);
+
+-- Sort by end of second span
+select W.first as first, W.second as second, W.annot as annot
+into SortedBySecondEnd
+from WordPairs_Unsorted W
+order by GetEnd(W.second);
+
+-- Sort by end of first span
+select W.first as first, W.second as second, W.annot as annot
+into SortedByFirstEnd
+from WordPairs_Unsorted W
+order by GetEnd(W.first);
+
+-- Sort lexicographically
+create view SortedByFirst as
+select W.first as first
+from WordPairs_Unsorted W
+order by GetText(W.first);
+
+-- Sort by begin and end to get consistent output across JVMs.
+create view WordPairs as
+select W.first as first, W.second as second, W.annot as annot
+from 
+(
+	select W.first as first, W.second as second, W.annot as annot
+	from WordPairs_Unsorted W
+	order by GetBegin(W.second), GetEnd(W.second)
+) W
+order by GetBegin(W.first), GetEnd(W.first);
+
+-- Sort by first and second spans
+create view WordPairs2 as
+select W.first as first, W.second as second, W.annot as annot
+from WordPairs_Unsorted W
+order by GetBegin(W.first), GetBegin(W.second);
+
+
+-- Sort lexicographically by first and second spans
+create view WordPairs3 as
+select W.first as first, W.second as second, W.annot as annot
+from WordPairs_Unsorted W
+order by GetText(W.first), GetText(W.second);
+
+
+-- More sort by first and second spans
+create view WordPairs4 as
+select W.first as first, W.second as second, W.annot as annot
+from
+(
+	( select W.first as first, W.second as second, W.annot as annot from WordPairs_Unsorted W )
+	union all
+	( select W.first as first, W.second as second, W.annot as annot from WordPairs_Unsorted W )
+) W
+order by W.first, W.second;
+
+
+
+output view WordPairs;
+output view WordPairs2;
+output view WordPairs3;
+output view WordPairs4;

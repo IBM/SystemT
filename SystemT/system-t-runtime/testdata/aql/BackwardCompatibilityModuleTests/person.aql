@@ -1,0 +1,163 @@
+create dictionary SalutationDict as  
+(
+  'rev.', 'col.', 'reverend', 'prof.', 'professor',
+  'lady', 'miss.', 'mrs.', 'mrs', 'mr.', 'pt.', 'ms.',
+  'messrs.', 'dr.', 'master.', 'marquis', 'monsieur',
+  'ds', 'di','herr', 'Fraeulein', 'Doktor', 'Herr Doktor',
+  'Frau Doktor','Herr Professor', 'Frau professor', 'Baron', 'graf'
+);
+
+-- Find dictionary matches for all title initials
+create view Salutation as
+---select D.match as salutation
+extract dictionary 'SalutationDict'
+on D.text as salutation
+from Document D;
+
+-- Find capitalized words that look like person names
+create dictionary GreetingDict as
+(
+  'regards', 'regds', 'hello', 'hi', 'thanks', 'best', 'subj', 'to', 'from'
+);
+
+
+
+-- Find capitalized words that look like person names 
+create view CapsPerson as
+extract regex /\b\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}\b/ --'
+          on between 1 and 10 tokens in D.text as word
+from Document D
+having Not(MatchesDict('GreetingDict', word));
+
+
+-- Find initial words
+create view InitialWord as
+extract regex /\b([\p{Upper}]\.\s*){1,5}\b/
+            on between 1 and 10 tokens in D.text as word
+from Document D;
+ 
+-- Find dictionary matches for all last names
+create view LastName as
+extract dictionary 'strictLast.dict'
+on D.text as last 
+from Document D
+having MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, last);
+
+-- Find dictionary matches for all first names
+-- Mostly US first names
+create view FirstName as
+extract dictionary 'strictFirst.dict'
+on D.text as first
+from Document D
+having MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, first);
+ 
+-- Rule R1 <FirstName><LastName>
+create view FirstLast as
+select CombineSpans(FN.first, LN.last) as name
+from FirstName FN, LastName LN
+where FollowsTok(FN.first, LN.last,0,0);
+
+-- Rule R2 <CapsPerson><LastName>
+create view CapsLast as
+select CombineSpans(CP.word, LN.last) as name
+from CapsPerson CP, LastName LN
+where FollowsTok(CP.word, LN.last,0,0);
+
+-- Rule R3 <FirstName><CapsPerson>
+create view FirstCaps as
+select CombineSpans(FN.first, CP.word) as name
+from FirstName FN, CapsPerson CP
+where FollowsTok(FN.first, CP.word,0,0);
+
+-- Rule R4 <LastName>,<FirstName>
+create view LastCommaFirst as
+select CombineSpans(LN.last,FN.first) as name
+from FirstName FN, LastName LN
+where FollowsTok(LN.last,FN.first,0,1) and ContainsRegex(/,/,SpanBetween(LN.last, FN.first));
+
+-- Rule R5 <CapsPerson>,<FirstName>
+create view CapsCommaFirst as
+select CombineSpans(CP.word,FN.first) as name
+from CapsPerson CP, FirstName FN
+where FollowsTok(CP.word,FN.first,0,1) and ContainsRegex(/,/,SpanBetween(CP.word, FN.first));
+
+-- Rule R6 <LastName>,<CapsPerson>
+create view LastCommaCaps as
+select CombineSpans(LN.last,CP.word) as name
+from LastName LN, CapsPerson CP
+where FollowsTok(LN.last,CP.word,0,1) and ContainsRegex(/,/,SpanBetween(LN.last, CP.word));
+
+
+-- Rule R7 <Salutation><CapsPerson>
+create view SalCaps as
+--select CP.word as name
+select CP.word as name
+from Salutation S, CapsPerson CP
+where FollowsTok(S.salutation,CP.word,0,0);
+  
+  
+-- Rule R8 <Salutation><CapsPerson><CapsPerson>
+create view SalCapsCaps as
+select CombineSpans(CP1.word,CP2.word) as name
+from Salutation S, CapsPerson CP1,CapsPerson CP2
+where FollowsTok(S.salutation,CP1.word,0,0) and
+      FollowsTok(CP1.word,CP2.word,0,0);
+ 
+-- Rule R9 <InitialWord><LastName>
+create view InitialLast as
+select CombineSpans(IW.word, LN.last) as name
+from InitialWord IW, LastName LN
+where FollowsTok(IW.word, LN.last,0,0);
+
+-- Rule R10 <InitialWord><FirstName>
+create view InitialFirst as
+select CombineSpans(IW.word, FN.first) as name
+from InitialWord IW, FirstName FN
+where FollowsTok(IW.word, FN.first,0,0);
+
+-- Rule R11 <FirstName><InitialWord><LastName>
+create view FirstInitialLast as
+select CombineSpans(FN.first,LN.last) as name
+from FirstName FN, InitialWord IW, LastName LN
+where FollowsTok(FN.first,IW.word,0,0) and FollowsTok(IW.word, LN.last,0,0);
+
+-- Rule R12 <CapsPerson><InitialWord><CapsPerson>
+create view CapsInitialCaps as
+select CombineSpans(CP1.word,CP2.word) as name
+from CapsPerson CP1, InitialWord IW, CapsPerson CP2
+where FollowsTok(CP1.word,IW.word,0,0) and FollowsTok(IW.word, CP2.word,0,0);
+
+create view PersonCand as
+(select P.first as person from FirstName P)
+union all
+(select P.last as person from LastName P)
+union all
+(select P.name as person from FirstLast P)
+union all
+(select P.name as person from CapsLast P)
+union all
+(select P.name as person from FirstCaps P)
+union all
+(select P.name as person from SalCaps P)
+union all
+(select P.name as person from SalCapsCaps P)
+union all
+(select P.name as person from InitialLast P)
+union all
+(select P.name as person from InitialFirst P)
+union all
+(select P.name as person from FirstInitialLast  P)
+union all
+(select P.name as person from CapsInitialCaps  P)
+;
+ 
+create view Person as
+select P.person as person from PersonCand P
+consolidate on P.person using 'LeftToRight';
+ 
+
+--create view Person as
+--select CombineSpans(P2.person, RightContextTok(P2.person,1)) as person
+--from Person2 P2;
+
+

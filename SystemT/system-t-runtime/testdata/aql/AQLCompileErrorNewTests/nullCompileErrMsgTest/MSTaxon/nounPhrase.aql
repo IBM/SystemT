@@ -1,0 +1,31 @@
+module MSTaxon;
+
+-------------------------------------------------------------------------------
+-- Extract noun phrases from the record subject field and the sentiment object
+-------------------------------------------------------------------------------
+
+-- NounPhrases in Subject Field
+create view NounPhraseInSubject as
+select N.text as npText, N.head as npHead, N.headNormalForm as npHeadNormalForm
+from NounPhrases N, Field_Subject S
+where Contains(S.value, N.text);
+
+-- Noun phrases in Subject field consolidated
+create view NounPhraseInSubject_Consolidated as
+select NC.text as npTextLong, NS.*
+from NounPhrases_Consolidated NC, NounPhraseInSubject NS
+where Contains(NC.text, NS.npText);
+
+-- Noun phrase in Sentiment object
+create view NounPhraseInSentimentObject as
+select S.*, N.text as npText, N.head as npHead, N.headNormalForm as npHeadNormalForm
+from NounPhrases N, Sentiment_withTags S
+where Contains(S.Object, N.text);
+
+-- Noun phrases in Sentiment object consolidated
+create view NounPhraseInSentimentObject_Consolidated as
+select NO.*, NC.text as npTextLong
+from NounPhrases_Consolidated NC, NounPhraseInSentimentObject NO
+where Contains(NC.text, NO.npText);
+
+  

@@ -1,0 +1,319 @@
+/*******************************************************************************
+	EMAILSTRUCTURE.AQL
+	The rules in this file find the structural parts of (forwarded) e-mails
+	as defined in EMSA_typesystem.xml
+	Author: Annemarie Friedrich, March 2010
+*********************************************************************************
+	Dependencies:
+********************************************************************************/
+
+--------------------------------------------------------------------------------
+-- NOTE: The following lines were modified to put the included files inside
+-- the directory testdata/aql/speedTests/emailstructure
+include 'emailstructure/MacrosForTimeDates.aql';
+include 'emailstructure/Date.aql';
+include 'emailstructure/Time.aql';
+include 'emailstructure/Email.aql';
+-- END MODIFICATION
+--------------------------------------------------------------------------------
+
+
+-- 1) Find possible "fields" that might belong to a header,
+-- 		e.g. 	"To: Thilo W Goetz/Germany/IBM@IBMDE",
+--				"Subject: Email structure annotator".
+include 'emailstructure/HeaderFields.aql';
+
+-- 2) Combine those fields into Header blocks and add other (specific) header blocks.
+include 'emailstructure/HeaderBlocks.aql';
+	
+
+		
+/*******************************************************
+	Find EMAIL SEGMENTS by splitting at Headers.
+*******************************************************/
+-- Find a segment which represents one Email. --    
+create view EmailSegment_1 as
+    extract 
+    split using B.boundary 
+        retain left split point
+        on B.text as match
+    from (select
+				H.match as boundary,
+				D.text
+				from Header H, Document D) B;
+
+-- On larger documents the split will create unwanted extra spans.
+-- We need to find and remove all segments that don't have headers.
+-- Add a span over the whole document for the case when are no splits returned.
+create view EmailSegment as
+	select E.match as match from (
+		(select ES.match as match from EmailSegment_1 ES)
+		union all
+		(select D.text as match from Document D)) E
+	consolidate on E.match using 'NotContainedWithin';
+	
+create view SystemTConversationSegmentAnnotation as select ES.match as match
+from EmailSegment ES;
+
+output view SystemTConversationSegmentAnnotation as 'com.ibm.systemT.ConversationSegmentAnnotation';    
+	
+
+/***************************************************************************
+	Get information from parts of the header blocks
+	--> to fill UIMA Annotation Types FromHeaderContent, CcHeaderContent,...
+****************************************************************************/
+
+----- FROM HEADER CONTENT --------------------------------------------------------------
+create view FromHeaderContent_1 as
+	(select CombineSpans(RightContext(F.match, 0), RightContext(H.match, 0)) as match,
+		HF.match as headerfield
+	from FromLine F, HeaderField HF, Header H
+	where Contains(H.match, F.match) and Contains(H.match, HF.match))
+	union all
+	(select F.match as match, F.match as headerfield from FromLineLotusNotes F)
+	union all
+	(select C.sender as match, C.sender as headerfield from CompactHeader C);
+
+-- Only use those FromHeaderContentLines that are actually contained within a header. --
+-- Throw away false matches. --
+create view FromHeaderContent as
+	select F.match as match,
+		'FROM' as type,
+		F.headerfield as headerfield,
+		H.match as header
+	from FromHeaderContent_1 F, Header H
+	where Contains(H.match, F.match)
+	consolidate on F.match using 'ContainedWithin';
+	
+create view SystemTFromHeaderContent as select F.match as match
+from FromHeaderContent F;
+
+output view SystemTFromHeaderContent as 'com.ibm.systemT.FromHeaderContent';
+
+----- TO HEADER CONTENT ----------------------------------------------------------------
+create view ToHeaderContent as
+	select CombineSpans(RightContext(T.match, 0), RightContext(HF.match, 0)) as match,
+	'TO' as type,
+	HF.match as headerfield,
+	H.match as header
+	from ToLine T, HeaderField HF, Header H
+	where Contains(HF.match, T.match) and Contains(H.match, HF.match);
+	
+create view SystemTToHeaderContent as select T.match as match
+from ToHeaderContent T;
+
+output view SystemTToHeaderContent as 'com.ibm.systemT.ToHeaderContent';
+
+----- CC HEADER CONTENT ----------------------------------------------------------------
+create view CcHeaderContent as
+	select CombineSpans(RightContext(C.match, 0), RightContext(HF.match, 0)) as match,
+		'CC' as type,
+		HF.match as headerfield,
+		H.match as header
+	from CcLine C, HeaderField HF, Header H
+	where Contains(HF.match, C.match) and Contains(H.match, HF.match);
+	
+create view SystemTCCHeaderContent as select C.match as match
+from CcHeaderContent C;
+
+output view SystemTCCHeaderContent as 'com.ibm.systemT.CcHeaderContent';
+
+
+----- SUBJECT LINE CONTENT ----------------------------------------------------------------
+create view SubjectContentLine as
+	select CombineSpans(RightContext(S.match, 0), RightContext(HF.match, 0)) as match,
+		'SUBJECT' as type,
+		HF.match as headerfield,
+		H.match as header
+	from SubjectLine S, HeaderField HF, Header H
+	where Contains(HF.match, S.match) and Contains(H.match, HF.match);
+	
+create view SystemTSubjectLine as select S.match as match
+from SubjectContentLine S;
+
+output view SystemTSubjectLine as 'com.ibm.systemT.SubjectLine';
+
+create view HeaderFieldWithType as
+	(select C.* from CcHeaderContent C)
+	union all
+	(select S.* from SubjectContentLine S)
+	union all
+	(select T.* from ToHeaderContent T)
+	union all
+	(select F.* from FromHeaderContent F);
+	
+
+/************************************************************************
+	Convenience View: Email Segments and their structure information.
+************************************************************************/
+create view FieldsOfHeader as
+	select
+		H.header as header,
+		H.headerfield as headerfield,
+		H.type as headfieldtype,
+		H.match as content
+	from HeaderFieldWithType H;
+	
+create view EmailSegmentWithStructureInfo as
+	select
+		E.match as match,
+		H.match as header,
+		CombineSpans(RightContext(H.match, 1), RightContext(E.match,0)) as body
+	from
+		EmailSegment E,
+		Header H
+	where
+		Contains(E.match, H.match);
+		
+/***
+HOW TO USE THE VIEWS:
+- Header
+	- match: 	Span containing the header area
+	- type:		REPLY / FORWARD
+- FieldsOfHeader
+	- There is one tuple per HeaderField, there may be multiple tuples per Header.
+	- header:		Span of the header which contains this HeaderField
+	- headerfield:	Span containing the headerfield
+	- headerfieldtype:	FROM / TO / CC / SUBJECT
+	- content:		The Content of the Headerfield as specified in EMSA_typesystem.xml
+- EmailSegmentWithStructureInfo
+	- match:	Span containing the EmailSegment.
+	- header:	Span containing the header of the EmailSegment.
+***/
+
+
+/******************************************************
+	REPLY CONTENT
+	= Appended (or embedded) replied email segment.
+*******************************************************/
+create view ReplyContent as
+	select E.match as match
+	from EmailSegmentWithStructureInfo E, Header H
+	where Equals(E.header, H.match) and
+		Equals(GetText(H.type), 'REPLY');
+		
+create view SystemTReplyContent as select R.match as match
+from ReplyContent R;
+
+output view SystemTReplyContent as 'com.ibm.systemT.ReplyContent';
+		
+/******************************************************
+	FORWARDED CONTENT
+	= Appended (or embedded) forwarded email segment.
+*******************************************************/
+create view ForwardedContent as
+	select E.match as match
+	from EmailSegmentWithStructureInfo E, Header H
+	where Equals(E.header, H.match) and
+		Equals(GetText(H.type), 'FORWARDED');
+
+create view SystemTForwardContent as select R.match as match
+from ForwardedContent R;
+
+output view SystemTForwardContent as 'com.ibm.systemT.ForwardedContent'; 
+
+
+/**************************************
+	NEW CONTENT
+**************************************/
+-- Find "new content" at top of the mail (first email segment)
+-- Find everything above the first header.
+create view NewContent_1 as
+	select Y.match as match from(
+	select
+		CombineSpans('IgnoreOrder', RightContext(LeftContext(D.text,1),1), LeftContext(H.match, 1)) as match
+		from Header H, Document D) Y
+	consolidate on Y.match using 'NotContainedWithin';
+
+-- add span over the whole document in case no splits are returned.
+create view NewContent as
+	select E.match as match from (
+		(select N.match as match from NewContent_1 N)
+		union all
+		(select D.text as match from Document D)) E
+	consolidate on E.match using 'NotContainedWithin';
+	
+create view SystemTNewContent as select N.match as match
+from NewContent N;
+
+output view SystemTNewContent as 'com.ibm.systemT.NewContent'; 
+
+/****************************************
+	AUTHORED CONTENT
+****************************************/
+-- An eMail segment without its header. --
+create view AuthoredContent_1 as
+	(select X.match as match from(
+	select
+		CombineSpans(RightContext(H.match, 1), LeftContext(RightContext(E.match,1),1)) as match
+		from Header H, EmailSegment E
+		where Contains(E.match, H.match)) X)
+	union all
+	(select N.match as match from NewContent N);
+
+-- Add span over the whole document in case no splits are returned
+-- and throw away spans that are matched more than once.
+create view AuthoredContent_2 as
+	select A.match as match from (
+		(select A.match as match from AuthoredContent_1 A)
+		union all
+		(select D.text as match from Document D)) A
+	consolidate on A.match using 'NotContainedWithin';
+	
+-- Add SubjectLines to AuthoredContent
+create view AuthoredContent as
+	(select A.match as match from AuthoredContent_1 A)
+	union all
+	(select S.match as match from SubjectContentLine S);
+	
+create view SystemTAuthoredContent as select A.match as match
+from AuthoredContent A;
+
+output view SystemTAuthoredContent as 'com.ibm.systemT.AuthoredContent';      
+
+/********************************
+	BODY
+********************************/
+create view Body as
+	select A.match as match from AuthoredContent_2 A;
+
+create view SystemTBody as select B.match as match
+from Body B;  
+
+output view SystemTBody as 'com.ibm.systemT.Body';
+
+/*****************************
+	CoreBody
+	TODO: remove footers.
+*****************************/
+create view SystemTCoreBody as select A.match as match
+from Body A;   
+
+output view SystemTCoreBody as 'com.ibm.systemT.CoreBody';
+      
+/****************************************************************
+	TODO: Quotations --> not used fully implements / used yet.
+	March 24th, 2010
+****************************************************************/
+
+-- We treat quotations differently from reply/forward
+-- unlike the other blocks a quotation may be embedded with another block
+-- So we just add them to mix even if a quotation is within another block
+create view QuotationLine as
+  extract
+  regex /^[ \t]?\>.*$/ with flags 'MULTILINE'
+  on D.text as match
+  from Document D;
+
+create view QuotationBlock as
+    extract blocks
+    with count between 1 and 512
+    and separation between 0 and 4 characters
+    on QL.match as match
+    from QuotationLine QL
+    consolidate on match using 'LeftToRight';
+    
+create view SystemTQuotedContent as select QB.match as match
+from QuotationBlock QB;
+
+output view SystemTQuotedContent as 'com.ibm.systemT.QuotedContent'; 

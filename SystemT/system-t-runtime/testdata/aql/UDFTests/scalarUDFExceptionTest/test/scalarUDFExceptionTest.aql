@@ -1,0 +1,18 @@
+module test;
+
+import function toUpperCase from module UDFs as toUpperCase;
+
+create dictionary TheDict 
+with language as 'en'
+as ('the');
+
+create view TheView as
+extract dictionary TheDict on D.text as match
+from Document D;
+
+create view TheViewNorm as
+	select toUpperCase(T.match) as match
+	from TheView T
+	group by toUpperCase(T.match);
+	
+output view TheViewNorm;

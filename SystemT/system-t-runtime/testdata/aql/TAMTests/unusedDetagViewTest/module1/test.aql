@@ -1,0 +1,14 @@
+module module1;
+
+create view ExpensiveView as
+select D.text, FunctionInvocationTracker('module1.ExpensiveView') as match
+from Document D;
+
+detag ExpensiveView.text as DetaggedExpensiveView
+annotate 
+	element 'b' as BoldTag;
+
+-- Neither main nor auxiliary views from above detag statement are output, the stitched plan should not 
+-- contain 'BoldTag' or 'DetaggedExpensiveView' view
+export view BoldTag;
+export view DetaggedExpensiveView;				

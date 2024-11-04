@@ -1,0 +1,75 @@
+-- nameBug.aql
+-- "Bug" that led to updated Minus semantics.
+
+require document with columns text Text;
+
+
+
+-- -----------------------------------------
+-- Person rules begin here
+-- ----------------------------------------- 
+ -- -----------------------------------------
+-- Person rules begin here
+-- ----------------------------------------- 
+  
+
+
+-- Find dictionary matches for all last names
+create view LastName as
+select D.match as lastname
+from   Dictionary('dictionaries/lotus/strictlast.dict', Document.text) D
+where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+
+-- Find dictionary matches for all first names
+create view FirstName as
+select D.match as firstname
+from   Dictionary('dictionaries/lotus/strictfirst.dict', Document.text) D
+where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+
+
+/**
+ * Translation for Rule 4
+ *
+ * This rule will find person names  like David Thomas
+ */
+ /*
+ <rule annotation=Person id=4>
+<internal>
+<token attribute={etc}PERSON:ST:FNAME{etc}>CAPSPERSON</token>
+<token attribute={etc}PERSON:ST:LNAME{etc}>CAPSPERSON</token>
+</internal>
+</rule>
+*/
+create view Person4WithNewLine as
+select 
+	FN.firstname as firstname,
+	LN.lastname as lastname,
+	CombineSpans(FN.firstname, LN.lastname) as person
+from   FirstName FN,
+       LastName LN
+where  FollowsTok(FN.firstname, LN.lastname, 0, 0);
+
+create view Person4Wrong as
+select CombineSpans(FN.firstname, LN.lastname) as person
+from   FirstName FN,
+       LastName LN
+where  FollowsTok(FN.firstname, LN.lastname, 0, 0)
+   and ContainsRegex(/[\n\r]/, SpanBetween(FN.firstname, LN.lastname))
+   and Equals(GetText(FN.firstname), GetText(LN.lastname)); 
+   
+
+select P.firstname as firstname, P.lastname as lastname,
+	P.person as person
+into tmp
+from Person4WithNewLine P;
+   
+create view Person4 as
+	(select P.person as person from Person4WithNewLine P)
+	minus
+	(select P.person as person from Person4Wrong P); 
+   
+select P.person as person
+into Person4Copy
+from Person4 P;
+
+

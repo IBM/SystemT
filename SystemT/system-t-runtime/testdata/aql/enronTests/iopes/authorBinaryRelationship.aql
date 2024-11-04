@@ -1,0 +1,119 @@
+-- include 'namedentity.aql';
+
+-----------------------------------------
+----- Authors phone
+-------------------------------------------
+create view DocBeginSpan as
+select R.match as annot 
+from Regex(/^/,Document.text) R;
+
+create view PhoneLeftContext as
+select N.num as phone, LeftContext(N.num,40) as lc
+from PhoneNumber N;
+ 
+create view AuthorPhoneCand1 as 
+select  R.match as authorphone 
+from Regex(/[Mm]y(\s)*((\b\w+\b)\s*){0,2}((#|number)|(phone|cell([-(\s)*]*phone)?)(\s)*(#|number)?)(\s)*((\b\w+\b)\s*){0,3}$/,PhoneLeftContext.lc) R;
+
+create view AuthorPhoneCand2 as 
+select  R.match as authorphone 
+from Regex(/[Gg]ive(\s)*me(\s)*a(\s)*call(\s)*((\b\w+\b)\s*){0,3}$/,PhoneLeftContext.lc) R;
+
+create view AuthorPhoneCand3 as 
+select  R.match as authorphone 
+from Regex(/I\s*can\s*be(\s)*((\b\w+\b)\s*)at\s*.?\s*$/,PhoneLeftContext.lc) R;
+
+create view AuthorPhoneCand4 as 
+select  R.match as authorphone 
+from Regex(/call\s*me.?\s*(\b\w+\b\s*){0,3}\s+(at\s*)?$/,PhoneLeftContext.lc) R;
+
+create view AuthorPhoneCand5 as 
+select  R.match as authorphone 
+from Regex(/\s+me\s*((\b\w+\b)\s+){0,2}$/,PhoneLeftContext.lc) R;
+
+create view AuthorsPhoneCandAll as
+(select R.authorphone as authorphone from AuthorPhoneCand1 R)
+union all
+(select R.authorphone as authorphone from AuthorPhoneCand2 R)
+union all
+(select R.authorphone as authorphone from AuthorPhoneCand3 R)
+union all
+(select R.authorphone as authorphone from AuthorPhoneCand4 R)
+union all
+(select R.authorphone as authorphone from AuthorPhoneCand5 R);
+
+create view AuthorsPhoneCandAllCons as
+select R.authorphone as authorphone
+from AuthorsPhoneCandAll R
+consolidate on R.authorphone;
+
+--create view AuthorsPhone as
+create view AuthorsPhoneOutput1 as
+select DBS.annot as person, N.num as phone, A.authorphone as context, CombineSpans(A.authorphone,N.num) as authorphone
+--into AuthorsPhoneOutput
+from AuthorsPhoneCandAllCons A, PhoneNumber N, DocBeginSpan DBS
+where FollowsTok(A.authorphone, N.num,0,0);
+
+-----------------------------------------
+----- Authors email address
+-------------------------------------------
+create view EmailLeftContext as
+select E.email as email, LeftContext(E.email,40) as lc
+from EmailAll E;
+ 
+create view AuthorEmailCand1 as 
+select  R.match as authoremail
+from Regex(/I\s*can\s*be(\s)*((\b\w+\b)\s*)at\s*.?\s*$/,EmailLeftContext.lc) R;
+
+create view AuthorEmailCand2 as 
+select  R.match as authoremail
+from Regex(/\s+m(e|y)\W\s*.{0,30}$/,EmailLeftContext.lc) R;
+
+create view AuthorsEmailCandAll as
+(select R.authoremail as authoremail from AuthorEmailCand1 R)
+union all
+(select R.authoremail as authoremail from AuthorEmailCand2 R);
+
+create view AuthorsEmailCandAllCons as
+select R.authoremail as authoremail
+from AuthorsEmailCandAll R
+consolidate on R.authoremail;
+
+--create view AuthorsEmail as
+create view AuthorsEmailAddressOutput1 as
+select DBS.annot as person, E.email as email, A.authoremail as context, CombineSpans(A.authoremail,E.email) as authoremail
+--into AuthorsEmailAddressOutput
+from AuthorsEmailCandAllCons A, EmailAll E, DocBeginSpan DBS
+where FollowsTok(A.authoremail, E.email,0,0);
+
+-----------------------------------------
+----- Authors address
+-------------------------------------------
+
+create view AddressLeftContext as
+select A.loc as loc, LeftContext(A.loc,40) as lc
+from Address A;
+ 
+create view AuthorAddressCand1 as 
+select  R.match as authoraddress
+from Regex(/I\s*can\s*be(\s)*((\b\w+\b)\s*)at\s*.?\s*$/,AddressLeftContext.lc) R;
+ 
+create view AuthorAddressCand2 as 
+select  R.match as authoraddress
+from Regex(/\s+m(e|y)\W\s*.{0,30}$/,AddressLeftContext.lc) R;
+             
+create view AuthorsAddressCandAll as
+(select R.authoraddress as authoraddress from AuthorAddressCand1 R)
+union all
+(select R.authoraddress as authoraddress from AuthorAddressCand2 R);
+
+create view AuthorsAddressCandAllCons as
+select R.authoraddress as authoraddress
+from AuthorsAddressCandAll R
+consolidate on R.authoraddress;
+
+create view AuthorsAddressOutput1 as
+select DBS.annot as person, Ad.loc as address, A.authoraddress as context, CombineSpans(A.authoraddress,Ad.loc) as authoraddress
+--into AuthorsAddressOutput
+from AuthorsAddressCandAllCons A, Address Ad, DocBeginSpan DBS
+where FollowsTok(A.authoraddress, Ad.loc,0,0);

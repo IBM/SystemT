@@ -1,0 +1,76 @@
+module Sentiment; 
+
+create view WayTo as
+	select NP.*, TO.nodeID as TOID
+	from ESG_NP NP, ESG_TO TO, ESG.Modifiers MODTO
+	where Equals(GetText(MODTO.nodeID),GetText(NP.nodeID)) and
+	      Equals(GetText(MODTO.modID),GetText(TO.nodeID)) and
+  		  Equals(GetText(NP.headNormalForm),'way');
+  		  
+create view DesiredActions as
+	select ADN.*
+	from AgentDoesNonagent ADN,  SentimentCustomTables.DesiredVerbObject D
+	where Equals(GetText(ADN.verbBase),GetText(D.verbBase)) and
+		  Equals(GetText(ADN.nonAgentNF),GetText(D.object));
+		  		  
+create view WayToDesired as
+	select DA.*, W.nodeID as WayID 
+	from DesiredActions DA, WayTo W, ESG.Modifiers MODTO
+	where Equals(GetText(W.TOID),GetText(MODTO.nodeID)) and 
+	      Equals(GetText(DA.rootNodeID),GetText(MODTO.modID));
+
+--output view WayTo;
+--output view DesiredActions;
+--output view ESG.Modifiers;
+--output view WayToDesired;	      
+
+create view NoWayToDesired as
+	select W.*
+	from WayToDesired W, NoDet NO, ESG.Modifiers M
+	where Equals(GetText(M.nodeID),GetText(W.WayID)) and
+	      Equals(GetText(M.modID),GetText(NO.nodeID));
+	      
+--output view NoWayToDesired;	      
+ 
+ create view NoWayToDesiredNegative as
+   (
+ 	  select ADN.*, NW.nonAgent as target,  'No way to desire' as Pattern, 'NoWayToDesired' as PatternCode 
+	  from AgentDoesNonagent ADN, NoWayToDesired NW
+	  where Contains(ADN.nonAgent,NW.verb)
+    ) 
+	union all
+	(  
+	  select ADN.*, NW.nonAgent as target,  'No way to desire' as Pattern, 'NoWayToDesired' as PatternCode 
+	  from AgentNotDoesNonagent ADN, WayToDesired NW
+	  where Contains(ADN.nonAgent,NW.verb)
+	);
+	
+--output view AgentNotDoesNonagent;	
+--output view NoWayToDesiredNegative;	
+
+
+--------------------------
+-- Actions with negative adverbs
+--------------------------
+create view ActionsWithNegativeAdverbs as
+	select A.*, N.text as target, 'Action w/ negative adverb' as Pattern, 'ActionWNegAdv' as PatternCode
+	from Actions A, Context C, ESG.Nodes N--, SentimentCustom.Target T , Roles R
+	where
+	    Equals(GetText(A.aid),GetText(C.aid)) and 
+	    --Equals(GetText(A.aid),GetText(R.aid)) and 
+	    Equals(GetText(N.nodeID),GetText(A.rootNodeID)) and
+		MatchesDict('SentimentCustom.NegativeAdverbs',C.value) and
+		MatchesDict('AdverbContextNames',C.name);
+
+--output view ActionsWithNegativeAdverbs;		 
+		 
+--output view ActionsWithNegativeAdverbs;		
+
+
+--------------------------
+-- For now, all extra-negated actions are taken as negative sentiment. Also for now, the agent is the target.
+--------------------------
+create view ExtraNegatedActionsAndAgents as
+	select N.text as target, 'Extra negated actions' as Pattern, 'ExtrNegActs' as PatternCode  
+	from  SentimentCustom.ExtraNegatedActions A, ESG.Nodes N
+	where Equals(GetText(N.nodeID),GetText(A.rootNodeID));

@@ -1,0 +1,24 @@
+module SentenceBoundary;
+
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText
+;
+
+
+require document with columns
+  text Text;
+
+
+
+create view CapsToken as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    regex /[&.?!:;,\|\/\p{Pd}\u0093\u0094\u2018\u2019\u0022\u0027\u00AB\u00BB\u201A\u201B\u201C\u201D\u201E\u301D\u301E\u301F(\p{Lu}\p{M}*)\d].*/
+    with flags 'DOTALL'
+    on between 1 and 1 tokens in D.text
+    return group 0 as match
+  from DocumentText D;
+
+output view CapsToken;
+

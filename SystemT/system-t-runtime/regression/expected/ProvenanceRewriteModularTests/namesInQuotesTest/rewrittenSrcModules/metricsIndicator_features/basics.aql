@@ -1,0 +1,60 @@
+module metricsIndicator_features;
+
+
+import dictionary metrics from module metricsIndicator_dictionaries as MetricDict
+;
+
+
+import dictionary units from module metricsIndicator_dictionaries as UnitDict
+;
+
+
+import dictionary abbreviations from module metricsIndicator_dictionaries as AbbreviationDict
+;
+
+
+create view Metric as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    dictionary 'MetricDict'
+    on D.text as match
+  from Document D;
+
+output view Metric;
+
+create view Number as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____R____id,
+    regex /\d+(\.\d+)?/
+    with flags 'DOTALL'
+    on R.text
+    return group 0 as match
+  from Document R;
+
+output view Number;
+
+create view Unit as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_DICT' as __stmt__type,
+    -1 as Document_____sep_____R____id,
+    dictionary 'UnitDict'
+    on R.text as match
+  from Document R;
+
+output view Unit;
+
+create view SentenceBoundary as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /(\n\s*\n)|([\.\?!]+\s)/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as match
+  from Document D
+  having Not(ContainsDict('AbbreviationDict', CombineSpans(LeftContextTok(match, 1), match)));
+
+output view SentenceBoundary;
+

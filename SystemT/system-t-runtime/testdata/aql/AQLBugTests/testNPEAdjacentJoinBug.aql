@@ -1,0 +1,44 @@
+
+require document with columns text Text;
+
+
+--------------------------------------------
+-- Extract names and nulls from the document
+create view _Name as
+  extract regex 
+    /!(\w+)?,(\w+)?,(\w+)?/
+  on D.text
+  return 
+    group 1 as firstname
+    and group 2 as middlename
+    and group 3 as lastname
+  from Document D;
+  
+output view _Name;
+
+
+-------------------------------------------
+-- Extract ages and nulls from the document
+create view _Age as 
+  extract regex 
+    /(\d+)?@/
+  on D.text
+  return
+    group 1 as age
+  from Document D;
+  
+output view _Age;
+
+
+-- ADJACENT JOIN
+-- Find all last name spans adjacent in tokens to ages in this document
+
+create view NullAdjacentJoinTest as
+select
+       N.lastname as match1,
+       A.age as match2
+from _Name N, _Age A
+where FollowsTok(N.lastname, A.age, 0, 1);
+
+output view NullAdjacentJoinTest;
+

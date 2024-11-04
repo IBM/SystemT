@@ -1,0 +1,25 @@
+/* 
+- Goal
+Assert expected behavior when detagging non-breaking space characters in input HTML.
+
+- Context
+A non-breaking space character can either be represented as: 
+1. a valid HTML entity such as &nbsp; or &#160; or &#0160; 
+2. or, a unicode codepoint \u00A0
+
+- Expected behavior
+Each such character is normalized into a single whitespace character ' '.
+*/
+
+detag Document.text into detaggedDoc
+annotate element 'td' as TableCell;
+
+create view TableCells as
+select
+	T.match as detaggedTitle,
+	Chomp(T.match) as chompedDetaggedTitle,
+	Remap(T.match) as originalTitle,
+	Chomp(Remap(T.match)) as chompedOriginalTitle
+from TableCell T;
+
+output view TableCells;

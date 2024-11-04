@@ -1,0 +1,48 @@
+module module1;
+
+create dictionary CompanyNames as
+('IBM', 'BigCorp', 'Initech');
+
+-- Create a table that maps company names to locations of 
+-- corporate headquarters.
+create table NameToLocation (name Text, location Text) as
+values 
+	('IBM', 'USA'), 
+	('BigCorp', 'Apex'), 
+	('Initech', 'Dallas'),
+	('Acme Fake Company Names', 'Somewhere');
+	
+-- Find all matches of the company names dictionary.
+create view Company as
+extract
+	dictionary 'CompanyNames' on D.text as company
+from Document D;
+
+
+create function toUpperCase(span Span)
+return String
+external_name 'NamedEntityUDFs.jar:com.ibm.avatar.udf.NamedEntityUDFs!toUpperCase'
+language java
+deterministic
+return null on null input;
+
+detag Document.text as DetagView2
+annotate 
+	element 'title' as titles2,
+	element 'a' as Anchor2
+		with attribute 'href' as href2;
+
+
+
+-- output views created in a.aql
+output view CompanyLoc;
+output view DetagView1;
+output view Anchor1;
+
+-- export views created in a.aql
+export view CompanyLoc;
+export view DetagView1;
+export view titles1;
+
+
+

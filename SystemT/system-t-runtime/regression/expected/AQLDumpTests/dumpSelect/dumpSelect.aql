@@ -1,0 +1,32 @@
+require document with columns
+  text Text and
+  label Text;
+
+create view FullPersonName1 as
+  select  'Barack' as firstName,
+          'Obama' as lastName,
+          CombineSpans(firstName, lastName) as fullName,
+          '555-6789' as personPhone
+  from  Document D;
+
+create view PhoneNumber as
+  select  '555-6789' as phoneNumber,
+          F.lastName as name
+  from  Document D,
+        FullPersonName1 F;
+
+output view PhoneNumber;
+
+create view FullPersonName_InternalIEWT_1 as
+  select  F2.fullName,
+          F2.firstName,
+          F2.lastName,
+          F2.personPhone
+  from  FullPersonName1 F2,
+        PhoneNumber P
+  where FollowsTok(F2.fullName, P.phoneNumber, 0, 4)
+  consolidate on CombineSpans(F2.firstName, F2.lastName) using 'NotContainedWithin'
+     with priority from F2.personPhone using 'ascending';
+
+output view FullPersonName_InternalIEWT_1;
+

@@ -1,0 +1,55 @@
+------------------------------------------------------------
+--subqueryNodeWildCardExpansionBug.aql
+
+--defect# 13094: Error in wildcard select when used with nested query
+------------------------------------------------------------
+
+require document with columns text Text;
+
+create view PhoneNum as
+select P.* 
+from                    
+	--nested query to select items from the subquery inside
+	(
+		extract 'Phone' as phone,
+		    regex /[0-9]{3}-[0-9]{4}/
+		        on D.text as number
+		from Document D
+	) P;
+
+create view PhoneNum1 as
+select P.* 
+from                    
+--nested query to select items from the subquery inside
+(
+	select P.* 
+	from                    
+	--nested query to select items from the subquery inside
+	(
+		extract 'Phone' as phone,
+		    regex /[0-9]{3}-[0-9]{4}/
+		        on D.text as number
+		from Document D
+	) P
+) P;
+
+create view PhoneNum2 as
+extract regex /[0-9]{3}-[0-9]{4}/
+		on P.number as newphone 
+from                    
+--nested query to select items from the subquery inside
+(
+	select P.* 
+	from                    
+	--nested query to select items from the subquery inside
+	(
+		extract 'Phone' as phone,
+		    regex /[0-9]{3}-[0-9]{4}/
+		        on D.text as number
+		from Document D
+	) P
+) P;
+
+output view PhoneNum;
+output view PhoneNum1;
+output view PhoneNum2;

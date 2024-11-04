@@ -1,0 +1,65 @@
+module nullValues;
+
+--- This is AQL that IEWT will need to handle correctly
+
+require document with columns text Text;
+
+-- Extract John from the document
+create view View1 as
+extract regex /John/
+on D.text as match
+from Document D;
+
+-- Extract Doe from the document
+create view View2 as
+extract regex /Doe/
+on D.text as match
+from Document D;
+
+-- Now find the span intersection of the matches of above 2 views. Result should be "null"
+--This will generate 2 tuples with "null" as spanIntersect (as expected)
+create view CheckIntersection as
+select V1.match as match1, V2.match as match2, SpanIntersection(V1.match, V2.match) as spanIntersect
+from View1 V1, View2 V2;
+
+output view CheckIntersection;
+
+-----------------------------------START OF NULL INPUTS TO AGGREGATES, PREDICATES, SCALARS--------------------------------------------
+
+--This will generate 2 tuples with "null" for both spanIntersect and spanIntersect_Text
+create view CheckIntersection_Text as
+select C.match1, C.match2, C.spanIntersect, Chomp(C.spanIntersect) as chompVal, GetText(C.spanIntersect) as spanIntersect_Text -- null span input to scalar
+from CheckIntersection C;
+
+output view CheckIntersection_Text;
+
+-- Apply an aggregate function on a column that has null values only
+create view CheckMax as
+select Max(C.spanIntersect) as max  -- null span input to aggregate
+from CheckIntersection_Text C;
+
+output view CheckMax;
+
+--This will generate 0 tuples (comparison of a string "null" value in Equals predicate doesn't fail)
+create view PredicateOnIntersection_Text as
+select C.match1, C.match2, C.spanIntersect, C.spanIntersect_Text
+from CheckIntersection_Text C
+where Equals(C.spanIntersect_Text, 'o');  -- null text input to predicate
+
+output view PredicateOnIntersection_Text;
+
+-- This should also generate 0 tuples
+create view PredicateOnIntersection_Spans as
+select C.match1, C.match2, C.spanIntersect, C.spanIntersect_Text
+from CheckIntersection_Text C
+where Overlaps(C.spanIntersect, C.match2);  -- null span input to predicate
+
+output view PredicateOnIntersection_Spans;
+
+-- ensure group-by works with nulls
+create view CheckGroupBy as
+select C.spanIntersect
+from CheckIntersection_Text C
+group by C.spanIntersect;  -- this column has null values
+
+output view CheckGroupBy;

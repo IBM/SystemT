@@ -1,0 +1,32 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- tokenRangeTest.aql
+--
+-- Test cases for queries that use the ContainsText predicate
+
+
+-- Test 1:
+-- Test case for ContainsText
+
+create view FirstNames as
+extract dictionary 'dictionaries/first.dict' on D.text as first
+from Document D;
+
+create view LastNames as
+extract dictionary 'dictionaries/last.dict' on D.text as last
+from Document D;
+
+create view Person as
+select F.first as first, L.last as last, 
+	   CombineSpans(F.first, L.last) as person
+from FirstNames F, LastNames L
+where FollowsTok(F.first, L.last, 0, 0);
+
+create view PersonContainsFirst as
+select P1.first as first,
+       P2.person as person
+from Person P1, Person P2
+where ContainsText(P2.person, P1.first);
+
+output view PersonContainsFirst;

@@ -1,0 +1,36 @@
+create view StrictFirstName_ro as
+extract dictionaries 'person/strictFirstNames-ro.dict' and 'person/strictFirstNames-ro-NoD.dict'
+on D.text as firstname
+from Doc D
+-- Sudarshan regex : 10/13/2011 - backreference on line 6
+having MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, firstname);
+
+
+-- union all the dictionary matches for first names
+create view StrictFirstNameAll as
+(
+	(select S.firstname as firstname from StrictFirstName1 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName2 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName3 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName4 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName5 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName6 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName7 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName8 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName9 S)
+	union all
+	(select S.firstname as firstname from StrictFirstName_ro S)
+)
+minus
+(
+	select S.name as firstname from InvalidNames_ro S
+);
+	

@@ -1,0 +1,23 @@
+   module syslog;
+
+   
+create view SyslogMsgExtended as 
+    select RightContext(D.annot_span, 1000) as msg_extent
+    from SyslogProcessInterim D;
+        
+    
+create view SyslogMsg as 
+    extract regex /^\:([^\r\n]+)/ on D.msg_extent 
+    return group 1 as match
+    from SyslogMsgExtended D;
+    
+create view SyslogMsgInterim as 
+    select D.match as annot_span, GetString(D.match) as annot_text
+    from SyslogMsg D;
+
+create view MsgSyslogOutput as 
+    select D.annot_span as span, D.annot_text as text, GetString('MsgSyslog') as field_type
+    from SyslogMsgInterim D;
+    
+export view MsgSyslogOutput;
+

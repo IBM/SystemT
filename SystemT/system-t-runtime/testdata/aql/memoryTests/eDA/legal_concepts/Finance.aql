@@ -1,0 +1,95 @@
+-- Paste your AQL spec here.
+-- Example:
+
+create view Number as
+select
+R.match as match
+from
+Regex(/\d[\d,]+(.[\d]+)?/,Document.text) R;
+
+create view CurrencyDic as
+select
+D.match as match
+from
+Dictionary('legal_concepts/dictionaries/finance/currency.dict', Document.text) D;
+
+create view FinanceDic as
+select
+D.match as match
+from
+Dictionary('legal_concepts/dictionaries/finance/finance.dict', Document.text) D;
+
+create view CountDic as
+select
+D.match as match
+from
+Dictionary('legal_concepts/dictionaries/finance/count.dict', Document.text) D;
+
+create view UnitDic as
+select
+D.match as match
+from
+Dictionary('legal_concepts/dictionaries/finance/unit.dict', Document.text) D;
+
+
+
+create view Amount1 as
+select
+ CombineSpans(num.match, curr.match) as match
+from
+ Number num,
+ CurrencyDic curr
+where
+ FollowsTok(num.match, curr.match, 0, 0);
+
+
+create view TempAmount2 as
+select
+ CombineSpans(num.match, unit.match) as match
+from
+ Number num,
+ UnitDic unit
+where
+ FollowsTok(num.match, unit.match, 0, 0);
+
+
+create view Amount2 as
+select
+ CombineSpans(nuit.match, curr.match) as match
+from
+ TempAmount2 nuit,
+ CurrencyDic curr
+where
+ FollowsTok(nuit.match, curr.match, 0, 0);
+
+create view Amount3 as
+select
+ CombineSpans(curr.match, num.match) as match
+from
+ Number num,
+ CurrencyDic curr
+where
+ FollowsTok(curr.match, num.match, 0, 0);
+
+
+create view Amount4 as
+select
+ CombineSpans(curr.match, nuit.match) as match
+from
+ TempAmount2 nuit,
+ CurrencyDic curr
+where
+ FollowsTok(curr.match, nuit.match, 0, 0);
+
+create view FinanceAll as
+(select R.match as match from FinanceDic R)
+union all
+(select R.match as match from Amount1 R)
+union all
+(select R.match as match from Amount2 R)
+union all
+(select R.match as match from Amount3 R)
+union all
+(select R.match as match from Amount4 R);
+
+

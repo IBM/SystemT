@@ -1,0 +1,39 @@
+module webaccess;
+
+
+create view Username_base as 
+select 
+	R.match 
+from 
+	Regex(/[\w\_.]+/, Document.text) R;  
+    	
+create view Username_interim as 
+    select C.match 
+    from Username_base C
+     where Not(MatchesRegex(/\./, LeftContext(C.match, 1)))
+    and Not(MatchesRegex(/\./, RightContext(C.match, 1)));
+
+create view Username as
+select 
+	usernameI.match as username
+from 
+	Logname lognameF,
+	Username_interim usernameI
+where 
+	FollowsTok(lognameF.logname, usernameI.match, 0, 0);	
+
+create view UsernameOutputInterim as 
+select D.username as username_Span, GetText(D.username) as username_Text
+from Username D;
+
+create view UsernameOutput as
+select
+	U.username_Span as span,
+	U.username_Text as text,
+	GetString('Username') as field_type
+from
+	UsernameOutputInterim U;
+
+export view UsernameOutput;
+
+	

@@ -1,0 +1,38 @@
+module nullValues;
+
+-- This tests to ensure that order-by clause is functioning correctly with nulls
+
+require document with columns text Text;
+
+------------------------------------------------------------------------------
+-- Test of the ORDER BY clause 
+------------------------------------------------------------------------------
+
+-- AllNames contains some nulls
+
+create view AllNames as
+  (
+    select
+      F.match as firstName, null as middleName, null as lastName, F.length as length  -- null span for last name
+    from
+      FirstNameWithLength F
+  )
+  union all
+  (
+    select
+      null as firstName, null as middleName, L.match as lastName, null as length -- null span for first name and length
+    from
+     LastName L
+  );
+  
+-- Testing order by clause 
+create view OrderedNames as
+select 
+	A.length as length,
+	A.firstName as firstName,
+	A.lastName as lastName,
+	A.middleName as middleName
+from AllNames A
+order by A.length, A.firstName, A.lastName, A.middleName;
+
+output view OrderedNames;

@@ -1,0 +1,372 @@
+module PersonCandidates;
+
+
+create view PersonStrong as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonStrongWithNewLine_____sep_____P____id
+  from  PersonStrongWithNewLine P
+  where Not(ContainsRegex(/((\r\n|\t){2,}|(\r|\t){2,}|(\n|\t){2,})/, P.person));
+
+output view PersonStrong;
+
+create view PersonWeak1 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonWeak1WithNewLine_____sep_____P____id
+  from  PersonWeak1WithNewLine P
+  where Not(ContainsRegex(/((\r\n|\t){2,}|(\r|\t){2,}|(\n|\t){2,})/, P.person));
+
+output view PersonWeak1;
+
+create view PersonWeak2NoNewLine as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonWeak2WithNewLine_____sep_____P____id
+  from  PersonWeak2WithNewLine P
+  where Not(ContainsRegex(/[\n\r\t]/, P.person));
+
+output view PersonWeak2NoNewLine;
+
+create view PersonWeak2 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonWeak2NoNewLine_____sep_____P____id
+  from  PersonWeak2NoNewLine P
+  where Not(MatchesRegex(/(.|\n|\r)*,[ \t]*(\p{Lu}\p{M}*(\p{L}\p{M}*|[-'.])*[ \t]*){0,2}/, LeftContext(P.person, 50)))
+     and Not(MatchesRegex(/[ \t]*(\p{Lu}\p{M}*(\p{L}\p{M}*|[-'.])*[ \t]*){0,2}([,&]|(\b(and)[ \t]+))(.|\s)*/, RightContext(P.person, 50)))
+     and Not(ContainsDict('Greetings', LeftContext(P.person, 15)));
+
+output view PersonWeak2;
+
+create view PersonFirstNameLastName as
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__345__TempOp__0 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__345__TempOp__1 Op);
+
+output view PersonFirstNameLastName;
+
+create view InvalidPersonWeak2 as
+  select  P2.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P2.__auto__id as PersonWeak2_____sep_____P2____id,
+          P1.__auto__id as PersonFirstNameLastName_____sep_____P1____id
+  from  PersonWeak2 P2,
+        PersonFirstNameLastName P1
+  where Overlaps(P1.person, P2.person)
+     and Not(ContainsRegex(/[\n\r\t]/, P1.person));
+
+output view InvalidPersonWeak2;
+
+create view ValidPersonWeak2 as
+  select  Op.person as person,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__346__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__346__TempOp__1 Op,
+        __Minus__346__Temp __t
+  where Equals(Op.person, __t.person);
+
+output view ValidPersonWeak2;
+
+create view PersonWeakWithoutNewLine as
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__347__TempOp__0 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__347__TempOp__1 Op);
+
+output view PersonWeakWithoutNewLine;
+
+create view PersonWeakOverlap as
+  select  P1.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P1.__auto__id as PersonWeakWithoutNewLine_____sep_____P1____id,
+          P2.__auto__id as PersonStrong_____sep_____P2____id
+  from  PersonWeakWithoutNewLine P1,
+        PersonStrong P2
+  where Overlaps(P1.person, P2.person)
+     and Not(Contains(P1.person, P2.person));
+
+output view PersonWeakOverlap;
+
+create view PersonWeakOnly as
+  select  Op.person as person,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__348__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__348__TempOp__1 Op,
+        __Minus__348__Temp __t
+  where Equals(Op.person, __t.person);
+
+output view PersonWeakOnly;
+
+create view PersonAll as
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__349__TempOp__0 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__349__TempOp__1 Op);
+
+output view PersonAll;
+
+create view PersonCorrect as
+  select  PA.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          PA.__auto__id as PersonAll_____sep_____PA____id
+  from  PersonAll PA
+  where Not(MatchesRegex(/((\p{L}\p{M}*)+\s)?(\p{Lu}\p{M}*){2}((\p{Lu}\p{M}*)|-)+[,\s]+((\p{L}\p{M}*)+\s)?\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*.*/, PA.person))
+     and Not(MatchesRegex(/((\p{L}\p{M}*)+\s)?\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*.*[,\s]+((\p{L}\p{M}*)+\s)?((\p{Lu}\p{M}*)|-)+/, PA.person))
+     and Not(MatchesRegex(/U\.\s*S\.\s*.+/, PA.person))
+     and Not(MatchesRegex(/[ ]*['�][^sld]+/, RightContextTok(PA.person, 2)));
+
+output view PersonCorrect;
+
+create view PersonCorrectExpanded as
+  select  CombineSpans(P.person, S.suffix) as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonCorrect_____sep_____P____id,
+          S.__auto__id as PersonSuffix_____sep_____S____id
+  from  PersonCorrect P,
+        PersonSuffix S
+  where FollowsTok(P.person, S.suffix, 0, 0);
+
+output view PersonCorrectExpanded;
+
+create view PersonCorrectAll as
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__350__TempOp__0 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__350__TempOp__1 Op)
+  union all
+  (select  Op.person as person,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__350__TempOp__2 Op);
+
+output view PersonCorrectAll;
+
+create view PersonSentence as
+  select  Op.person as person,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__351__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__351__TempOp__1 Op,
+        __Minus__351__Temp __t
+  where Equals(Op.person, __t.person);
+
+output view PersonSentence;
+
+create view __Minus__346__Temp as
+  select  __t.person as person
+  from  
+    ((select  Op.person as person
+      from  __Minus__346__TempOp__1 Op)
+    minus
+    (select  Op.person as person
+      from  __Minus__346__TempOp__2 Op)
+    ) __t
+  group by __t.person;
+
+output view __Minus__346__Temp;
+
+create view __Minus__346__TempOp__1 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonWeak2_____sep_____P____id
+  from  PersonWeak2 P;
+
+output view __Minus__346__TempOp__1;
+
+create view __Minus__346__TempOp__2 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as InvalidPersonWeak2_____sep_____P____id
+  from  InvalidPersonWeak2 P;
+
+output view __Minus__346__TempOp__2;
+
+create view __Minus__348__Temp as
+  select  __t.person as person
+  from  
+    ((select  Op.person as person
+      from  __Minus__348__TempOp__1 Op)
+    minus
+    (select  Op.person as person
+      from  __Minus__348__TempOp__2 Op)
+    ) __t
+  group by __t.person;
+
+output view __Minus__348__Temp;
+
+create view __Minus__348__TempOp__1 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonWeakWithoutNewLine_____sep_____P____id
+  from  PersonWeakWithoutNewLine P;
+
+output view __Minus__348__TempOp__1;
+
+create view __Minus__348__TempOp__2 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonWeakOverlap_____sep_____P____id
+  from  PersonWeakOverlap P;
+
+output view __Minus__348__TempOp__2;
+
+create view __Minus__351__Temp as
+  select  __t.person as person
+  from  
+    ((select  Op.person as person
+      from  __Minus__351__TempOp__1 Op)
+    minus
+    (select  Op.person as person
+      from  __Minus__351__TempOp__2 Op)
+    ) __t
+  group by __t.person;
+
+output view __Minus__351__Temp;
+
+create view __Minus__351__TempOp__1 as
+  select  PA.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          PA.__auto__id as PersonCorrectAll_____sep_____PA____id
+  from  PersonCorrectAll PA;
+
+output view __Minus__351__TempOp__1;
+
+create view __Minus__351__TempOp__2 as
+  select  PA.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          PA.__auto__id as PersonCorrectAll_____sep_____PA____id,
+          S.__auto__id as SentenceBoundary_____sep_____S____id
+  from  PersonCorrectAll PA,
+        SentenceBoundary S
+  where Contains(PA.person, S.boundary);
+
+output view __Minus__351__TempOp__2;
+
+create view __Union__345__TempOp__0 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonStrong_____sep_____P____id
+  from  PersonStrong P;
+
+output view __Union__345__TempOp__0;
+
+create view __Union__345__TempOp__1 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonWeak1_____sep_____P____id
+  from  PersonWeak1 P;
+
+output view __Union__345__TempOp__1;
+
+create view __Union__347__TempOp__0 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonWeak1_____sep_____P____id
+  from  PersonWeak1 P;
+
+output view __Union__347__TempOp__0;
+
+create view __Union__347__TempOp__1 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as ValidPersonWeak2_____sep_____P____id
+  from  ValidPersonWeak2 P;
+
+output view __Union__347__TempOp__1;
+
+create view __Union__349__TempOp__0 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonWeakOnly_____sep_____P____id
+  from  PersonWeakOnly P;
+
+output view __Union__349__TempOp__0;
+
+create view __Union__349__TempOp__1 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonStrong_____sep_____P____id
+  from  PersonStrong P;
+
+output view __Union__349__TempOp__1;
+
+create view __Union__350__TempOp__0 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonCorrect_____sep_____P____id
+  from  PersonCorrect P;
+
+output view __Union__350__TempOp__0;
+
+create view __Union__350__TempOp__1 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonCorrectExpanded_____sep_____P____id
+  from  PersonCorrectExpanded P;
+
+output view __Union__350__TempOp__1;
+
+create view __Union__350__TempOp__2 as
+  select  P.person as person,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          P.__auto__id as PersonStrongSingleToken_____sep_____P____id
+  from  PersonStrongSingleToken P;
+
+output view __Union__350__TempOp__2;
+

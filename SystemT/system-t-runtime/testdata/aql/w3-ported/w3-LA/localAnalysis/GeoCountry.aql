@@ -1,0 +1,471 @@
+-------------------------------------------------------------------------------
+-- GeoCountry.aql
+--
+-- Collect geography annotations from the features extracted from HTML files
+--
+-- Depends on HTML.aql, URL.aql, GeoPreprocessing.aql
+--
+-- This file produces the contents of the following local analysis result
+-- tables:
+--		a. Country
+--
+-- Based on Huiayu's original Java implementation.
+-- Author: Laura Chiticariu <chiti@us.ibm.com>
+-------------------------------------------------------------------------------
+
+
+
+
+-- ****************************************************************************
+-- ***               Phase 2: Filter based on geo dictionaries             ****
+-- ****************************************************************************
+-------------------------------------------------------------------------------
+-- This phase is based on the following flow from 
+-- w3resources\configs\local\subannotators.txt
+
+-- geo_SCRr: Title/_content_ # FirstMainHead/_content_ # MetaDescription/content # URLHost/text # URLPath/text # Seg1/matched # Seg2/matched
+-- geo_CRr: H1/_content_ # H2/_content_ # MetaKeywords/content
+-- geo_c: URLPath/text_3seg # URLHost/content_2lett # MetaLanguage/content_2lett # MetaCountry/content_2lett
+
+-- Seg1/matched : geo_SCRr 
+-- Seg2/matched: geo_SCRr 
+-- FirstMainHead/_content_: geo_SCRr  
+-- Title/_content_: geo_SCRr 
+-- H1/_content_ : geo_CRr: 
+-- H2/_content_ : geo_CRr: 
+-- MetaCountry/content_2lett: geo_c
+-- MetaLanguage/content_2lett : geo_c
+-- URLPath/text_3seg: geo_c
+-- URLPath/text : geo_SCRr 
+-- MetaKeywords/content: geo_CRr: 
+-- MetaDescription/content: geo_SCRr  
+-- URLHost/text : geo_SCRr 
+-- URLHost/content_2lett : geo_c
+
+
+
+
+
+
+-- ***********************************************************************
+-- ***                          COUNTRY                               ****
+-- ***********************************************************************
+
+
+-- Seg1/matched : geo_C
+-- Seg2/matched: geo_C
+-- FirstMainHead/_content_: geo_C  
+-- Title/_content_: geo_C 
+-- H1/_content_ : geo_C: 
+-- H2/_content_ : geo_C: 
+-- MetaCountry/content_2lett: geo_c
+-- MetaLanguage/content_2lett : geo_c
+-- URLPath/text_3seg: geo_c
+-- URLPath/text : geo_C 
+-- MetaKeywords/content: geo_C: 
+-- MetaDescription/content: geo_C  
+-- URLHost/text : geo_C 
+-- URLHost/content_2lett : geo_c
+
+-- High-quality country annotation
+create view Country_HQURLPath_All as
+select GetText(G.country) as match, ConstructEvidence('HQURLPath', GetString(G.country)) as evidence
+from GeoHQ G
+where Not(Equals('', GetText(G.country)));
+
+
+-- Restrict to maximum 6 items
+create view Country_HQURLPath as
+select R.* 
+from Country_HQURLPath_All R, (select Count(*) as cnt from Country_HQURLPath_All) C
+where Not(GreaterThan(C.cnt,6));
+
+
+create view Country_Seg1_All as
+select GetText(T.match) as match, ConstructEvidence(GetString('Seg1'), GetString(T.match)) as evidence
+from (extract dictionary 'GeoCountryNameDict' on T.seg as match from Seg1 T having Not(MatchesDict('GeoCountryNameInvalid', match)) consolidate on match) T;
+
+-- Restrict to maximum 6 items
+create view Country_Seg1 as
+select R.* 
+from Country_Seg1_All R, (select Count(*) as cnt from Country_Seg1_All) C
+where Not(GreaterThan(C.cnt,6));
+
+
+create view Country_Seg2_FirstMain_All as
+(
+	select GetText(T.match) as match, ConstructEvidence(GetString('Seg2'), GetString(T.match)) as evidence
+	from (extract dictionary 'GeoCountryNameDict' on T.seg as match from Seg2 T having Not(MatchesDict('GeoCountryNameInvalid', match)) consolidate on match) T
+)
+union all
+(
+	select GetText(FM.match) as match, ConstructEvidence(GetString('FirstMainHead'), GetString(FM.match)) as evidence
+	from (extract dictionary 'GeoCountryNameDict' on FM.content as match from FirstMainFinal FM having Not(MatchesDict('GeoCountryNameInvalid', match)) consolidate on match) FM
+);
+
+-- Restrict to maximum 6 items
+create view Country_Seg2_FirstMain as
+select R.* 
+from Country_Seg2_FirstMain_All R, (select Count(*) as cnt from Country_Seg2_FirstMain_All) C
+where Not(GreaterThan(C.cnt,6));
+
+
+create view Country_Title_H1_All as
+(
+	select GetText(T.match) as match, ConstructEvidence(GetString('Title'), GetString(T.match)) as evidence
+	from (extract dictionary 'GeoCountryNameDict' on T.content as match from TitleFinal T having Not(MatchesDict('GeoCountryNameInvalid', match)) consolidate on match) T
+)
+union all
+(
+	select GetText(H.match) as match, ConstructEvidence(GetString('H1'), GetString(H.match)) as evidence
+	from (extract dictionary 'GeoCountryNameDict' on H.match as match from H1 H having Not(MatchesDict('GeoCountryNameInvalid', match)) consolidate on match) H
+);
+
+-- Restrict to maximum 6 items
+create view Country_Title_H1 as
+select R.* 
+from Country_Title_H1_All R, (select Count(*) as cnt from Country_Title_H1_All) C
+where Not(GreaterThan(C.cnt,6));
+
+
+create view Country_H2_All as
+	select GetText(H.match) as match, ConstructEvidence(GetString('H2'), GetString(H.match)) as evidence
+	from (extract dictionary 'GeoCountryNameDict' on H.match as match from H2 H having Not(MatchesDict('GeoCountryNameInvalid', match)) consolidate on match) H;
+
+-- Restrict to maximum 6 items
+create view Country_H2 as
+select R.* 
+from Country_H2_All R, (select Count(*) as cnt from Country_H2_All) C
+where Not(GreaterThan(C.cnt,6));
+
+	
+create view Country_MetaCountry_All as
+	select GetText(MC.match) as match, ConstructEvidence(GetString('MetaCountry'), GetString(MC.match)) as evidence
+	from Country_MetaCountry_2letters MC;
+
+	-- Restrict to maximum 6 items
+create view Country_MetaCountry as
+select R.* 
+from Country_MetaCountry_All R, (select Count(*) as cnt from Country_MetaCountry_All) C
+where Not(GreaterThan(C.cnt,10));
+
+
+create view Country_MetaLanguage_All as
+	select GetText(ML.match) as match, ConstructEvidence(GetString('MetaLanguage'), GetString(ML.match)) as evidence
+	from Country_MetaLanguage_2letters ML;
+
+-- Restrict to maximum 6 items
+create view Country_MetaLanguage as
+select R.* 
+from Country_MetaLanguage_All R, (select Count(*) as cnt from Country_MetaLanguage_All) C
+where Not(GreaterThan(C.cnt,6));
+
+
+create view Country_URLPath_All as
+(
+	select GetText(U.match) as match, ConstructEvidence(GetString('URLPath'), GetString(U.match)) as evidence
+	from ( extract dictionary 'GeoCountryNameDict' on U.actualPath as match from PageURL U having Not(MatchesDict('GeoCountryNameInvalid', match)) consolidate on match) U
+)
+union all
+(
+	select GetText(U.match) as match, ConstructEvidence(GetString('URLPath'), GetString(U.match)) as evidence
+	from ( extract dictionary 'GeoCountryCodeDict' on P.seg as match from URLPathFirst3Seg P consolidate on match) U
+);
+
+-- Restrict to maximum 6 items
+create view Country_URLPath as
+select R.* 
+from Country_URLPath_All R, (select Count(*) as cnt from Country_URLPath_All) C
+where Not(GreaterThan(C.cnt,6));
+
+
+create view Country_MetaKeywords_MetaDescription_All as
+(
+	select GetText(D.match) as match, ConstructEvidence(GetString('MetaDescription'), GetString(D.match)) as evidence
+	from (extract dictionary 'GeoCountryNameDict' on D.content as match from MetaDescription D having Not(MatchesDict('GeoCountryNameInvalid', match)) consolidate on match) D
+)
+union all
+(
+	select GetText(K.match) as match, ConstructEvidence(GetString('MetaKeywords'), GetString(K.match)) as evidence
+	from (extract dictionary 'GeoCountryNameDict' on K.content as match from MetaKeywords K having Not(MatchesDict('GeoCountryNameInvalid', match)) consolidate on match) K
+);
+
+-- Restrict to maximum 6 items
+create view Country_MetaKeywords_MetaDescription as
+select R.* 
+from Country_MetaKeywords_MetaDescription_All R, (select Count(*) as cnt from Country_MetaKeywords_MetaDescription_All) C
+where Not(GreaterThan(C.cnt,6));
+
+
+create view Country_URLHost_All as
+(
+	select GetText(U.match) as match, ConstructEvidence(GetString('URLHost'), GetString(U.match)) as evidence
+	from (extract dictionary 'GeoCountryNameDict' on U.host as match from PageURL U having Not(MatchesDict('GeoCountryNameInvalid', match)) consolidate on match) U
+)
+union all
+(
+	select GetText(U.match) as match, ConstructEvidence(GetString('URLHost'), GetString(U.match)) as evidence
+	from Country_URLHost_2letters U
+);
+
+-- Restrict to maximum 6 items
+create view Country_URLHost as
+select R.* 
+from Country_URLHost_All R, (select Count(*) as cnt from Country_URLHost_All) C
+where Not(GreaterThan(C.cnt,6));
+
+
+
+-- ***********************************************************************
+-- ***             COUNTRY - priority rules                           ****
+-- ***********************************************************************
+
+-- Country0 = HQURLPath > Seg1 > Seg2_FirstMain > Title_H1 > H2 > MetaCountry > MetaLanguage > URLPath > MetaKeyword_MetaDescription > URLHost
+create view Country0_ as
+select R2.*
+from Country_Seg1 R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Country_HQURLPath) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Country0 as (select * from Country_HQURLPath) union all (select * from Country0_);
+
+
+-- Country1 = HQURLPath > Seg1 > Seg2_FirstMain
+create view Country1_ as
+select R2.*
+from Country_Seg2_FirstMain R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Country0) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Country1 as (select * from Country0) union all (select * from Country1_);
+
+-- Country2 = HQURLPath > Seg1 > Seg2_FirstMain > Title_H1
+create view Country2_ as
+select R2.*
+from Country_Title_H1 R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Country1) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Country2 as (select * from Country1) union all (select * from Country2_);
+
+
+-- Country3 = HQURLPath > Seg1 > Seg2_FirstMain > Title_H1 > H2
+create view Country3_ as
+select R2.*
+from Country_H2 R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Country2) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Country3 as (select * from Country2) union all (select * from Country3_); 
+
+
+-- Country4 = HQURLPath > Seg1 > Seg2_FirstMain > Title_H1 > H2 > MetaCountry
+create view Country4_ as
+select R2.*
+from Country_MetaCountry R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Country3) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Country4 as (select * from Country3) union all (select * from Country4_);
+
+
+-- Country5 = HQURLPath > Seg1 > Seg2_FirstMain > Title_H1 > H2 > MetaCountry > MetaLanguage
+create view Country5_ as
+select R2.*
+from Country_MetaLanguage R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Country4) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Country5 as (select * from Country4) union all (select * from Country5_);
+
+
+-- Country6 = HQURLPath > Seg1 > Seg2_FirstMain > Title_H1 > H2 > MetaCountry > MetaLanguage > URLPath
+create view Country6_ as
+select R2.*
+from Country_URLPath R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Country5) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Country6 as (select * from Country5) union all (select * from Country6_);
+
+
+-- Country7 = HQURLPath > Seg1 > Seg2_FirstMain > Title_H1 > H2 > MetaCountry > MetaLanguage > URLPath > MetaKeyword_MetaDescription
+create view Country7_ as
+select R2.*
+from Country_MetaKeywords_MetaDescription R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Country6) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Country7 as (select * from Country6) union all (select * from Country7_);
+
+
+-- Country8 = HQURLPath > Seg1 > Seg2_FirstMain > Title_H1 > H2 > MetaCountry > MetaLanguage > URLPath > MetaKeyword_MetaDescription > URLHost
+create view Country8_ as
+select R2.*
+from Country_URLHost R2,
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from Country7) S
+	) R1
+where Equals(R1.xsists, 0);
+
+create view Country8 as (select * from Country7) union all (select * from Country8_);
+
+
+-- Implement a postprocessing filter step:
+-- Filter country annotations that are 'CA' if the URL is 'siteserve'
+-- if (siteserv_pattern.matcher(url).find()) {
+--			String countries = geography.get_str("countries") and split on semicolon
+--			Remove "CA" from the split values, and if the result is empty, put in "N/A"
+--			geography.add_str("countries", countries join on semicolon);
+
+create dictionary IgnoreCADict as('CA');
+
+create view Country8Invalid as
+select C.match as match, C.evidence as evidence
+from Country8 C, PageURL U
+where ContainsRegex(/\/siteserv\//, U.url)
+  and MatchesDict('IgnoreCADict', C.match);
+  
+create view Country8Valid as
+(select * from Country8 C)
+minus
+(select * from Country8Invalid C);
+
+-- Deduplicate countryannotations and their evidence
+create view CountryFinal as
+select GetText(C.match) as match, GetText(C.evidence) as evidence
+from
+(
+	select toUpperCase(C.match) as match, C.evidence as evidence
+	from Country8Valid C
+) C
+group by GetText(C.match), GetText(C.evidence);
+
+-- Normalize country annotations
+create view CountryWithCode as
+select C.match as match, M.code as code
+from CountryFinal C, CountryMapping M
+where Equals(GetText(C.match), GetText(M.name));
+
+-- Some country annotations might not have a corresponding code
+create view CountryNoCode as
+(select C.match as match from CountryFinal C)
+minus
+(select C.match as match from CountryWithCode C);
+
+-- all country annotations with code or without code
+create view CountryNormalized as
+(select C.code as match from CountryWithCode C)
+union all
+(select C.match as match from CountryNoCode C);
+
+-- ***********************************************************************
+-- ***             COUNTRY - final output                             ****
+-- ***********************************************************************
+
+-- All the evidence for Country
+create view CountryEvidenceAll as
+select C.id as id, GetText(C.evidence) as evidence
+from
+(
+	(select 1 as id, C.evidence as evidence from Country_HQURLPath C)
+	union all
+	(select 1 as id, C.evidence as evidence from Country_Seg1 C)
+	union all
+	(select 1 as id, C.evidence as evidence from Country_Seg2_FirstMain C)
+	union all
+	(select 1 as id, C.evidence as evidence from Country_Title_H1 C)
+	union all
+	(select 1 as id, C.evidence as evidence from Country_H2 C)
+	union all
+	(select 1 as id, C.evidence as evidence from Country_MetaCountry C)
+	union all
+	(select 1 as id, C.evidence as evidence from Country_MetaLanguage C)
+	union all
+	(select 1 as id, C.evidence as evidence from Country_URLPath C)
+	union all
+	(select 1 as id, C.evidence as evidence from Country_MetaKeywords_MetaDescription C)
+	union all
+	(select 1 as id, C.evidence as evidence from Country_URLHost C)
+) C
+--remove duplicates and sort evidence
+group by C.id, GetText(C.evidence)
+order by GetText(C.evidence);
+
+-- Aggregate all the evidence
+create view CountryEvidence as
+select ListJoin(C.evidence, ';') as evidence
+from
+(
+	select C.id, List(C.evidence) as evidence 
+	from CountryEvidenceAll C
+	group by C.id
+) C;
+
+
+-- Aggregate all country annotations
+create view CountryAgg as 
+select ListJoin(C.match, ';') as country
+from
+(
+	select C.id, List(C.match) as match 
+	from (select 1 as id, GetText(C.match) as match from CountryNormalized C group by GetText(C.match)) C
+	group by C.id
+) C;
+
+create dictionary InvalidCountryFromURLHostDict as ('URLHost:DE');
+
+-- Attach the evidence 
+create view CountryWithEvidence as 
+select 
+		-- Postprocessing step: if country evidence = "URLHost:DE", overwrite attribute "countries" with "N/A";
+		case when MatchesDict('InvalidCountryFromURLHostDict', E.evidence) 
+			then 'N/A' 
+			else toUpperCase(C.country) 
+	    as country, 
+	    E.evidence as evidence
+from CountryAgg C, CountryEvidence E;
+
+
+-- Create some dumb values for pages with no country annotations
+create view CountryMissing as
+select 'N/A' as country, '' as evidence
+from 
+	(
+		select case when GreaterThan(S.cnt,0) then 1 else 0 as xsists
+		from (select Count(*) as cnt from CountryWithEvidence) S
+	) R1
+where Equals(R1.xsists, 0);
+
+-- Final output contains country annotations with evidence, 
+-- or empty strings when no country annots have been discovered
+
+create view GeoCountry as 
+(select * from CountryWithEvidence)
+union all
+(select * from CountryMissing);

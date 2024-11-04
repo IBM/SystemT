@@ -1,0 +1,55 @@
+module common;
+
+
+create view M_PercentageNumber as 
+   -- extract regex /\d+(\.\d+)?\\%/ on D.line_span as match
+   extract regex /\d+(\.\d+)?\s?\%/ on D.text as match
+  --  from LinesOutput_TL D;
+  from Document D;
+    
+    
+create view MeasurementExtent as 
+    select CombineSpans(LeftContext(D.match, 30), RightContext(D.match, 20)) as extent
+    from   M_PercentageNumber D;
+    
+create view MeasurementGrouped as 
+    select D.extent
+    from MeasurementExtent D
+    group by D.extent ;
+
+
+create dictionary Units_Dict as 
+('sec','seconds','min','minutes','hours','days','day','hour','minute','second','seconds','milliseconds','microseconds','bytes','KB','MB','GB','KBps','KB/s','MBps','MB/s','GBps','GB/s','MHz','GHz','gigaHertz','megaHertz','V','processes','users');
+   
+create view GeneralUnits as 
+    extract dictionary 'Units_Dict' on D.text as unit
+    from Document D
+    consolidate on unit
+    using 'ContainedWithin';
+
+create view GeneralUnitsContext as 
+    select D.unit as unit,  LeftContextTok(D.unit, 3) as l_context
+    from GeneralUnits D;
+       
+create view GeneralMeasure as 
+    extract D.unit as measure_type, regex /\b\d+(\.\d+)?/ on D.l_context as measure
+    from GeneralUnitsContext D;
+    
+create view GeneralMeasureInterim as 
+    select  CombineSpans(D.measure, D.measure_type) as measure_span, D.measure as measure, D.measure_type as measure_type
+    from GeneralMeasure D
+    where MatchesRegex(/\s*/, SpanBetween(D.measure, D.measure_type));
+
+
+create view GeneralMeasureOutput as
+select D.measure as span, GetString(D.measure) as text, GetString('GeneralMeasure') as field_type
+from GeneralMeasureInterim D;
+
+export view GeneralMeasureOutput;
+
+ create view PercentageOutput as
+    select D.match as span, GetString(D.match) as text, GetString('Percentage') as field_type
+    from M_PercentageNumber D;     
+
+export view PercentageOutput;
+

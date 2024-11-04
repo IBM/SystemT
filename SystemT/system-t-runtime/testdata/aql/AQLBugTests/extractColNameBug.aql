@@ -1,0 +1,45 @@
+-----------------------------------------------------------------------------
+-- extractColNameBug.aql
+--
+-- Test case for a bug involving column name collisions when compiling
+-- EXTRACT statements.
+-----------------------------------------------------------------------------
+require document with columns text Text;
+
+-- Input and output column names are the same
+create view Test1 as
+extract regex /[A-Z][a-z]+/
+	on 1 token in D.text
+	as text
+from Document D;
+
+-- Overlap between input column and a passthrough column.
+create view Test2 as
+extract D.text as text,
+	regex /[A-Z][a-z]+/ on 1 token in D.text as word
+from Document D;
+
+-- Combination of the first two test cases.
+create view Test3 as
+extract D.text as origtext,
+	regex /[A-Z][a-z]+/ on 1 token in D.text as text
+from Document D;
+
+-- Use lookahead to prevent RSR.
+create view Test4 as
+extract D.text as origtext,
+	regex /\b[A-Z][a-z]+\b/ on 1 token in D.text as text
+from Document D;
+
+-- Use a dictionary to test the "non-shared" code path.
+create dictionary TestDict as ('Test');
+create view Test5 as
+extract dictionary TestDict on D.text as text
+from Document D;
+
+output view Test1;
+output view Test2;
+output view Test3;
+output view Test4;
+output view Test5;
+

@@ -1,0 +1,292 @@
+---------------------------------------
+-- Document Preprocessing
+---------------------------------------
+include 'detag.aql';
+
+---------------------------------------
+-- UDFs Declarations
+---------------------------------------
+create function getAbbreviation(span Span)
+return String
+external_name 'NamedEntityUDFs.jar:com.ibm.avatar.udf.NamedEntityUDFs!getAbbreviation'
+language java
+deterministic
+return null on null input;
+
+create function toUpperCase(span Span)
+return String
+external_name 'NamedEntityUDFs.jar:com.ibm.avatar.udf.NamedEntityUDFs!toUpperCase'
+language java
+deterministic
+return null on null input;
+
+create function normalize(span Span)
+return String
+external_name 'NamedEntityUDFs.jar:com.ibm.avatar.udf.NamedEntityUDFs!normalize'
+language java
+deterministic
+return null on null input;
+
+  
+
+----------------------------------------
+-- Basic Named Entity Annotators
+----------------------------------------
+
+--------------------------------------------------------------------------------
+-- First, include the server side version of certain dictionaries
+include 'GenericNE/serverSideSpecific/AdditionalDictsForAddress.aql';
+include 'GenericNE/serverSideSpecific/AdditionalDictsForOrganization.aql';
+--------------------------------------------------------------------------------
+
+include 'GenericNE/DictsForAddress.aql';
+include 'GenericNE/Sentence.aql';
+include 'GenericNE/MacrosForTimeDates.aql';
+include 'GenericNE/Date.aql';
+include 'GenericNE/Time.aql';
+include 'GenericNE/PhoneNumber.aql';
+include 'GenericNE/Address.aql';
+include 'specific-for-CoNLL2003/CityStateCountry-for-CoNLL2003.aql';
+include 'specific-for-CoNLL2003/County-CoNLL2003.aql';
+include 'GenericNE/Town.aql';
+include 'GenericNE/Region.aql';
+include 'specific-for-CoNLL2003/Location-Context-Based-for-CoNLL2003.aql';
+include 'GenericNE/URL.aql';
+include 'GenericNE/EmailAddress.aql';
+include 'GenericNE/NotesEmailAddress.aql';
+include 'GenericNE/StockExchangeAndTicker.aql';
+include 'specific-for-CoNLL2003/Organization-for-CoNLL2003.aql';
+include 'GenericNE/Organization-FilterDoubleNewLineTab.aql';
+include 'GenericNE/Organization-Sentence.aql';
+include 'specific-for-CoNLL2003/Person-for-CoNLL2003.aql';
+include 'GenericNE/Person-FilterMultiNewLineTab.aql';
+include 'specific-for-CoNLL2003/Person-Filter-for-CoNLL2003.aql';
+include 'specific-for-CoNLL2003/Facility-CoNLL2003.aql';
+include 'GenericNE/Road.aql';
+include 'GenericNE/StateStrongAbbrev.aql';
+include 'GenericNE/WaterBody.aql';
+include 'GenericNE/GeoLand.aql';
+include 'GenericNE/Address-consolidation.aql';
+include 'GenericNE/OrgWithinNotesEmail.aql';
+include 'GenericNE/Organization-FilterAddress.aql';
+--include 'GenericNE/Organization-FilterURLInternetNotesEmailAddress.aql';
+include 'specific-for-CoNLL2003/Organization-SportsTeam-for-CoNLL2003.aql';
+include 'specific-for-CoNLL2003/Organization-Weak-for-CoNLL2003.aql';
+include 'specific-for-CoNLL2003/Organization-Pattern-Based-for-CoNLL2003.aql';
+include 'specific-for-CoNLL2003/AdditionalOrganization-for-CoNLL2003.aql';
+include 'specific-for-CoNLL2003/Organization-consolidation-for-CoNLL2003.aql';
+include 'specific-for-CoNLL2003/Person-consolidation-for-CoNLL2003.aql';
+include 'GenericNE/DateTime-consolidation.aql';
+include 'specific-for-CoNLL2003/Location-consolidation-for-CoNLL2003.aql';
+include 'specific-for-CoNLL2003/AdditionalLocation-for-CoNLL2003.aql';
+	
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Assign attributes for output section <<<<<<<<<<<<<<<<
+-- ===========================================================================
+include 'GenericNE/OrganizationTypes.aql';
+include 'GenericNE/AttributesAssigner.aql';
+include 'GenericNE/AttributesAssigner-Person.aql';
+
+include 'specific-for-CoNLL2003/Location-Aggregate-for-CoNLL2003.aql';
+include 'specific-for-CoNLL2003/AdditionalPerson-for-CoNLL2003.aql';
+
+-----------------------------------------------------
+-- customization for CoNLL2003
+-----------------------------------------------------
+
+--4.8 MapLocation
+----output view MapLocation;
+
+-----------------------------------------------------
+-- customization for CoNBLL2003
+-----------------------------------------------------
+
+
+--4.12 Person
+----output view Person;
+
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Output section <<<<<<<<<<<<<<<<
+-- ===========================================================================		
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Perform Value-Based Join for Organization <<<<<<<<<<<<<<<<
+-- ===========================================================================
+include 'specific-for-CoNLL2003/Organization-ValueBasedJoin-for-CoNLL2003.aql';
+
+include 'specific-for-CoNLL2003/Organization-Aggregate-for-CoNLL2003.aql';
+
+----output view Organization;
+
+
+
+
+
+create view PersonFinalOverlapsOrg1 as
+select P.person as person
+from PersonBeforeFinalOrgFilter P, OrganizationMixed O
+where Overlaps(O.organization, P.person)
+  and Not(Contains(P.person, O.organization))
+  -- Yunyao: 04/01/2010 to avoid removing "Helmut Kohl" due to "Kohl 's"
+  and Not(Contains(O.organization, P.person))
+  and Not(MatchesRegex(/.*'s/, O.organization)); --'
+
+create view PersonFinalOverlapsOrg2 as
+select P.person as person
+from PersonBeforeFinalOrgFilter P, OrganizationMixed O
+where Contains(O.organization, P.person)
+  and Not(Equals(O.organization, P.person));
+
+create view PersonFinalOverlapsOrg3All as
+select P.person as person
+from PersonBeforeFinalOrgFilter P, OrganizationMixed O
+where Equals(O.organization, P.person);
+  
+-- Yunyao: 04/11/2010
+-- since ORG is not as precise as PER
+-- for ORG with the wrong context, avoid deleting PER based on them
+create dictionary PersonOverOrgClueDict as
+(
+    'says', 'said', 'told', 'left'
+);
+
+create view PossibleWrongOrg as
+select P.person as person
+from PersonBeforeFinalOrgFilter P, OrganizationMixed O
+where Equals(O.organization, P.person)
+  and Not(ContainsRegex(/\s/, O.organization))
+  and Or (ContainsDict('PersonOverOrgClueDict', LeftContextTok(O.organization, 1)), 
+          ContainsDict('PersonOverOrgClueDict', RightContextTok(O.organization, 1)));
+
+create view WrongOrgCandidates as
+select CW.organization as organization
+from 
+(select toUpperCase(WP.person) as personNormalized from PossibleWrongOrg WP) WP,
+(select CW.organization as organization, toUpperCase(CW.organization) as orgNormalized from OrganizationMixed CW) CW
+where Equals(GetText(WP.personNormalized), GetText(CW.orgNormalized));
+
+create view PersonFinalOverlapsOrg3 as
+	(select P.* from PersonFinalOverlapsOrg3All P)
+	minus
+	(select O.organization as person from WrongOrgCandidates O);
+   
+create view PersonFinalOverlapsOrg as
+	(select P.* from PersonFinalOverlapsOrg1 P)
+	union all
+	(select P.* from PersonFinalOverlapsOrg2 P)
+	union all
+	(select P.* from PersonFinalOverlapsOrg3 P);
+--	union all
+--	(select P.* from PersonFinalOverlapsOrg4 P);
+
+create view PersonMixed as
+(select * from PersonBeforeFinalOrgFilter)
+minus
+(select * from PersonFinalOverlapsOrg);
+
+----output view Person;
+
+
+--------------------------------------------------------
+
+-- remove candidate that has already been identified as organization
+create view LocationTokenCandidatesConsolidatedInvalid as
+select L.loc as loc
+from OrganizationMixed O,
+     LocationTokenCandidatesConsolidated L
+where Contains(O.organization, L.loc);
+
+create view LocationTokenCandidatesConsolidatedValid as
+	(select L.* from LocationTokenCandidatesConsolidated L)
+	minus
+	(select L.* from LocationTokenCandidatesConsolidatedInvalid L);
+
+
+create view LocationExtendedValidAreOrg as
+select L.*
+from LocationExtendedValidAll L,
+     OrganizationMixed O
+where Contains(O.organization, L.loc);
+     
+create view LocationExtendedValidAllFiltered as
+	(select L.* from LocationExtendedValidAll L)
+	minus 
+	(select L.* from LocationExtendedValidAreOrg L);     
+
+create view LocationValidAll as
+	(select L.loc as loc from LocationExtendedValidAllFiltered L)
+	union all
+	(select L.loc as loc from LocationTokenCandidatesConsolidatedValid L)
+	union all
+	(select W.loc as loc from WhiteHouse W);
+
+--output view LocationValidAll;
+
+create view CombinedLocation4 as
+select CombineSpans(C1.loc, C2.loc) as loc
+from   LocationValidAll C1,
+       LocationValidAll C2
+where  FollowsTok(C1.loc, C2.loc, 0, 1)
+  and  MatchesRegex(/\.?[ ]+/, SpanBetween(C1.loc, C2.loc))
+  and  MatchesRegex(/([^\s\w]|(\p{Ll}\p{M}*)+|[\r\n]*)\s*/, LeftContextTok(C1.loc, 1))
+  and  MatchesRegex(/\s*((\p{Ll}\p{M}*)+|[^\s\w])/, RightContextTok(C2.loc, 1));
+
+--output view CombinedLocation4;
+
+create view LocationValidAllExtended as
+	(select L.* from LocationValidAll L)
+	union all
+	(select L.* from CombinedLocation4 L);
+	
+create view LocationExtendedValidConsolidated as
+select L.loc as loc
+from LocationValidAllExtended L
+consolidate on L.loc
+using 'LeftToRight';
+
+--output view LocationExtendedValidConsolidated;
+
+create view LocationFinal as
+select C.loc as loc
+from LocationExtendedValidConsolidated C
+consolidate on C.loc;
+
+-- to remove tailing dot
+create view LocationFinalDeDot as
+	extract
+		regex /(.+[^.\s])(\s*.)?/
+		on D.loc 
+		return group 1 as loc
+from LocationFinal D;
+
+--output view LocationFinalDeDot;
+
+create view LocationFinalRemovedTailingLowerCase as
+	extract
+		regex /^(.*)(\s+[a-z]+)$/
+		on D.loc
+		return group 0 as loc
+		   and group 1 as actualLoc
+from LocationFinalDeDot D; 
+
+create view LocationFinalDeDotFiltered as
+	(select L.* from LocationFinalDeDot L)
+	minus
+	(select L.loc as loc from LocationFinalRemovedTailingLowerCase L);
+
+create view LocationFinalCandidate as
+	(select L.* from LocationFinalDeDotFiltered L)
+	union all
+	(select L.actualLoc as loc from LocationFinalRemovedTailingLowerCase L);
+		
+create view LocationMixed as
+select C.loc as loc
+from LocationFinalCandidate C
+order by C.loc;
+
+
+include 'specific-for-CoNLL2003/Disambiguation-for-CoNLL2003.aql';
+output view Person;
+output view Organization;
+output view Location;

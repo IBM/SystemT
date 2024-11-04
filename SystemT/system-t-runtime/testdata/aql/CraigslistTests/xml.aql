@@ -1,0 +1,42 @@
+-----------------------------------------------------------------------------
+-- xml.aql
+--
+-- XML tag handling routines for the Craigslist annotators.
+-----------------------------------------------------------------------------
+
+-- Detagging of the top-level XML: strip out tags, but retain information 
+-- about selected tags.
+detag Document.text as DetaggedDoc
+	annotate 
+		element 'br' as BR,
+		element 'description' as Description,
+	
+		-- Header items
+		element 'title' as Title,
+		element 'link' as Link,
+		
+		-- Footer items	
+		element 'dc:date' as Date,
+		element 'dc:language' as Language,
+		element 'dc:rights' as Copyright,
+		element 'dc:source' as Source,
+		element 'dc:title' as Title_Footer,
+		element 'dc:type' as Type,
+		element 'dcterms:issued' as Issued;
+		
+-- Group together the header and footer items for filtering purposes.
+create view Headers as
+(select * from Title) union all (select * from Link);
+
+create view Footers as
+(select * from Date)
+union all (select * from Language)
+union all (select * from Copyright)
+union all (select * from Source)
+union all (select * from Title_Footer)
+union all (select * from Type)
+union all (select * from Issued);
+		
+create view HeadersAndFooters as
+(select * from Headers) union all (select * from Footers);
+

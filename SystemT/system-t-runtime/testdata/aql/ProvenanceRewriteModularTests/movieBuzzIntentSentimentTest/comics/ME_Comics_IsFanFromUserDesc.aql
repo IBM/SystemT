@@ -1,0 +1,145 @@
+module comics;
+
+-- @purpose: Is this user's description comic-relevant ? If so, ain't the user a comic fan-boy/girl ?
+
+-- View 'UserDescription' represents the user's description being sent into this module for some checks.
+-- When passing a 'userDesc' to this module from elsewhere, the following view needs to be enabled (un-commented) *and*
+-- the views 'UserDescriptionSplits' and 'UserDescription' inside 'isComicFanFromUserDescription.aql' be disabled (or, commented out) accordingly.
+
+-- The required dictionary references are already defined in the other .aql file.
+
+create view UserDescription as
+	select
+		D.text as userDescText
+	from Document D;
+
+/*
+-- Views 'userDescriptionSplits' and 'userDescription' to be used only when dealing with a large data-set filtered from the Twitter's source as .del files. 
+-- Expected input is a large set of 'comma-delimited' (.del) files
+
+-- Split input data into individual records as coming in from Twitter
+-- Ex : "0", "1534835894598", "@RT .... some how... "
+
+create view UserDescriptionSplits as
+	extract 
+    	split using B.boundary 
+        	retain left split point
+        	on B.text as userDesc
+	from 
+	(
+    	extract 
+        	D.text as text,
+        	regex /0,/ on D.text as boundary
+        from Document D
+	) B;
+
+-- Split out the ID and text parts from the corresponding user description
+-- Ex: 1534835894598 - tweetId, @RT .... some how...  - userDescText
+
+create view UserDescription as
+	extract
+		regex /0,"(\d*)","(.*)/ on T.userDesc 
+		return 
+			group 1 as tweetId and group 2 as userDescText
+	from UserDescriptionSplits T;
+*/	
+	
+-- Identify user description(s) containing comics-related keywords in it
+-- Ex: I wish to be one of the @Transformers someday! sigh!!
+
+create view RelevantComicsUserDescs as
+	select 
+		T.userDescText as userDescText
+	from UserDescription T
+	where Not(ContainsDict('ME_Comics_NegativeClues', T.userDescText)) 
+	consolidate on T.userDescText;
+	
+-- Identify hash tags from each user description
+-- Ex: #ILoveBatman #WSDM12
+
+create view HashTagsFromUserDesc as
+	extract
+		C.userDescText as userDescText,
+		regex /#([^\s]+)/
+			on C.userDescText 
+			return group 1 as match 
+	from RelevantComicsUserDescs C
+	having ContainsDict('ME_Comics_Keywords_English_Short', match);
+
+-- Identify mentions from each user description
+-- Ex: @Official_Batman @josh123
+
+create view MentionsFromUserDesc as
+	extract
+		C.userDescText as userDescText,
+		regex /@([^\s]+)/
+			on C.userDescText 
+			return group 1 as match 
+	from RelevantComicsUserDescs C
+	having ContainsDict('ME_Comics_Keywords_English_Short', match);
+
+-- Identify user description(s) with 'tokens' in them that are comics-relevant
+-- Ex: 15273476324 as userDescId, cerebro as match
+
+create view ComicsBasedTokensFromUserDesc as
+	extract
+		C.userDescText as userDescText,
+		dictionary 'ME_Comics_Keywords_English_Short'
+			on C.userDescText as match 
+	from RelevantComicsUserDescs C;
+
+-- Get a unique list of such comic-relevant user descriptions as identified above
+-- This combines various facets of this user description identified as comic relevant above
+-- with the user description itself to provide a contextual view for those views inheriting it going forward.
+-- Facets such as mentions, hashtags and comic-relevant tokens in the user description otherwise
+
+create view ComicsuserDescCandidates as
+	(
+		select 
+			C.userDescText as userDescText, 
+			C.match as match 
+		from ComicsBasedTokensFromUserDesc C
+	)
+	union all
+	(
+		select 
+			M.userDescText as userDescText,
+			M.match as match
+		from MentionsFromUserDesc M 
+	)
+	union all
+	(
+		select 
+			H.userDescText as userDescText, 
+			H.match as match 
+		from HashTagsFromUserDesc H 
+	);
+	
+create view ComicsUserDescs as
+	select
+		C.match as match,
+		C.userDescText as userDescText
+	from ComicsuserDescCandidates C;
+	--consolidate on C.userDescText;
+
+-- Decide whether the corresponding user is a comic fan from his/her description
+-- If there is more than one tuple from previous view corresponding to this userDesc,
+-- then the user who userDesced this is a comic fan.
+
+create view isComicFanUserDesc as
+	select
+		C.userDescText as userDescText,
+		List(GetText(C.match)) as comicMatches,
+		Count(C.userDescText) as userDescCount
+	from ComicsUserDescs C
+	group by C.userDescText;
+
+create view isComicFanFromUserDesc as
+	select 
+		I.comicMatches as comicMatches,
+		--GetText(I.userDescText) as userDescText,
+		'true' as isFan
+	from isComicFanUserDesc I
+	where GreaterThan(I.userDescCount, 0);
+
+output view isComicFanFromUserDesc;

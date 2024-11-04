@@ -1,0 +1,31 @@
+-------------------------------------------------------------------------------
+-- Test case for validating that the parser enforces for create function nodes 
+-- the specification of "like" when the return type is ScalarList.
+-------------------------------------------------------------------------------
+
+-- Function with a ScalarList return type, but no "like" specification
+-- Will throw exception: For ScalarList return types the parameter based on which the scalar list type is built needs to be specified using the LIKE clause
+create function FunctionWithoutLikeSpec(str String, L ScalarList)
+return ScalarList
+external_name 'udfjars/listUDFs.jar:com.ibm.test.udfs.UDFTests!GenerateNames'
+language java
+deterministic
+return null on null input;
+
+-- Function with a ScalarList return type and a non-ScalarList type for the "like
+-- Will throw exception: Return scalar list specified on input param L that is not of scalar list type.
+create function FunctionWithWrongLikeTypeSpec(str String, L String)
+return ScalarList like L
+external_name 'udfjars/listUDFs.jar:com.ibm.test.udfs.UDFTests!GenerateNames'
+language java
+deterministic
+return null on null input;
+
+-- Function with a ScalarList return type and a non-ScalarList type for the "like
+-- Will throw exception: Return scalar list specified on input param L that does not exist.
+create function FunctionWithWrongLikeTypeSpec(str String, M ScalarList)
+return ScalarList like L
+external_name 'udfjars/listUDFs.jar:com.ibm.test.udfs.UDFTests!GenerateNames'
+language java
+deterministic
+return null on null input;

@@ -1,0 +1,54 @@
+/*
+ * Both module1 and module2 perform regex on Document.text, so we expect unionized SRM nodes
+ */
+module module2;
+
+import view MyView from module module0;
+
+-- create an SRM node in plan.aog by creating two views that perform regex on the same field Document.text
+create view View1 as 
+    extract regex /(1|2|3|4|5)\d\d/ on 1 token in D.text as match
+    from Document D;
+    
+output view View1;
+
+create view View2 as 
+    extract regex /(1|2|3|4|5)\d\d/ on 1 token in D.text as match
+    from Document D;
+    
+output view View2;
+
+---------------------------------------------------------------------
+
+-- Create a DocCopy view
+create view DocCopy as
+	select D.label as label, D.text as text
+		from Document D;
+		
+-- Create an SRM node in plan.aog by creating two views that perform regex on the same field DocCopy.text
+create view View3 as 
+    extract regex /(1|2|3|4|5)\d\d/ on 1 token in D.text as match
+    from DocCopy D;
+    
+output view View3;
+
+create view View4 as 
+    extract regex /(1|2|3|4|5)\d\d/ on 1 token in D.text as match
+    from DocCopy D;
+    
+output view View4;
+
+---------------------------------------------------------------------
+
+-- Create an SRM node in plan.aog by creating two views that perform regex on the same field module0.MyView.text
+create view View5 as
+    extract regex /(1|2|3|4|5)\d\d/ on 1 token in M.text as match
+    from module0.MyView M;
+
+output view View5;
+
+create view View6 as
+    extract regex /(1|2|3|4|5)\d\d/ on 1 token in M.text as match
+    from module0.MyView M;
+    
+output view View6;

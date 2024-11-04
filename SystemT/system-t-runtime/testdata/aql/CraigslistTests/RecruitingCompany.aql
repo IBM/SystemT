@@ -1,0 +1,108 @@
+create view CapsOrg as
+select R.match as match
+from   RegexTok(/\p{Lu}\p{M}*([\p{Ll}\p{Lo}]\p{M}*|[\&\.'\-\,])+\b/, 6, DetaggedDoc.text) R;
+ 
+create view AllCapsOrg as
+select R.match as match
+from   RegexTok(/\b(\p{Lu}\p{M}*){1,2}((\s*&\s*)?(\p{Lu}\p{M}*)+|([\p{Ll}\p{Lo}]\p{M}*)+((\p{Lu}\p{M}*)([\p{Ll}\p{Lo}]\p{M}*)+){1,2})/, 3, DetaggedDoc.text) R;
+	
+create dictionary OfDict as ('of');
+
+create view Of as
+select D.match as match
+from   Dictionary('OfDict', DetaggedDoc.text) D;
+
+create view OrgWord as
+	(select O.match as match from CapsOrg O)
+	union all
+	(select O.match as match from AllCapsOrg O);
+	
+create view RelaxedCoonetotwo as
+select B.block as match
+from BlockTok(0, 1, 2, OrgWord.match) B
+where Not(ContainsRegex(/[\n\r]/, B.block));
+
+create view RelaxedCoonetothree as
+select B.block as match
+from BlockTok(0, 1, 3, OrgWord.match) B
+where Not(ContainsRegex(/[\n\r]/, B.block));
+
+create view RelaxedCoExpanded as
+select CombineSpans(R1.match, R2.match) as match
+from RelaxedCoonetothree R1,
+	 RelaxedCoonetothree R2,
+	 Of O
+where FollowsTok(R1.match, O.match, 0, 0) and
+ 	  FollowsTok(O.match, R2.match, 0, 0) and
+ 	  Not(ContainsRegex(/[\n\r]/, CombineSpans(R1.match, R2.match)));
+
+create view RelaxedCoonetothreeAll as
+	(select C.match as match from RelaxedCoonetotwo C)
+	union all
+	(select C.match as match from RelaxedCoonetothree C)
+	union all
+	(select C.match as match from RelaxedCoExpanded C);
+--	union all
+--	(select O.organization as match from Organization O);
+	
+create view RelaxedCoonetothreeAllConsolidated as
+select C.match as match
+from RelaxedCoonetothreeAll C
+consolidate on C.match;
+--using 'LeftToRight';
+
+create dictionary OrgStrongClueAfterDict as (
+'is a', 'is an', 'is the',  'is currently looking for', 'is seeking', 'is looking for', 'is headquartered in', 'is based in', 'provides', 'is located'
+);
+
+create dictionary OrgStrongClueBeforeDict as (
+'needed by', 'needed at'
+);
+
+create dictionary RelaxedOrgFilterDict as (
+'it', 'this', 'what'
+);
+
+create view OrgStrongClueAfter as
+select D.match as match
+from   Dictionary('OrgStrongClueAfterDict', DetaggedDoc.text) D;
+
+create view OrgStrongClueBefore as
+select D.match as match
+from   Dictionary('OrgStrongClueBeforeDict', DetaggedDoc.text) D;
+
+create view RelaxedOrganization1 as 
+select O.match as match 
+from RelaxedCoonetothreeAllConsolidated O,
+	 OrgStrongClueAfter C
+where FollowsTok(O.match, C.match, 0, 0) and
+	  Not(ContainsDict('RelaxedOrgFilterDict', O.match)) and
+	  ContainsRegex(/[\.\n\r]/, LeftContext(O.match,10));
+	  
+create view AuxilaryInfo as
+select I.match as match
+from RegexTok(/\([^\)]+\)/, 5, DetaggedDoc.text) I;
+
+create view RelaxedOrganization2 as
+select O.match as match
+from RelaxedCoonetothreeAllConsolidated O,
+	 AuxilaryInfo A,
+	 OrgStrongClueAfter C
+where FollowsTok(O.match, A.match, 0, 0) and
+      FollowsTok(A.match, C.match, 0, 0) and 
+      Not(ContainsDict('RelaxedOrgFilterDict', O.match)); 
+      --and
+	  --ContainsRegex(/[\.\n\r]/, LeftContext(O.match,10));
+
+create view RelaxedOrganization3 as
+select O.match as match
+from RelaxedCoonetothreeAllConsolidated O,
+	 OrgStrongClueBefore C
+where FollowsTok(C.match, O.match, 0, 0);
+	  
+create view RecruitingCompany as
+	(select O.match as match from RelaxedOrganization1 O)
+	union all
+	(select O.match as match from RelaxedOrganization2 O)
+	union all
+	(select O.match as match from RelaxedOrganization3 O);

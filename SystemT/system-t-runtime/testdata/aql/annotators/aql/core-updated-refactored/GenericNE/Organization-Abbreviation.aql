@@ -1,0 +1,95 @@
+-- Union together strong orgs and Orgs identified using formal text clues
+create view FinalOrgConsolidatedWithFormal as
+(select * from FinalOrgConsolidated)
+union all
+(select * from OrgFormal);
+
+
+-- Obtain additional candidates for abbreviation by stripping off org suffixes
+create view OrgWithoutSuffix as
+select R.org as org, SpanBetween(LeftContext(R.org,0), R.suffix) as match
+from
+(
+	extract R.org as org,
+			--dictionary 'organization_suffix.dict' on R.org as suffix
+			dictionary 'org_global_group_suffix_case_mixed.dict' on R.org as suffix
+	from FinalOrgConsolidatedWithFormal R
+	having Equals(GetEnd(org), GetEnd(suffix))
+) R;
+
+create view OrgCandForAbbreviation as
+(select O.match as org from OrgWithoutSuffix O)
+union all
+(select O.org as org from FinalOrgConsolidatedWithFormal O);
+
+create view OrgAbbrvCand as
+select O.org, getAbbreviation(O.org) as abbreviation 
+from OrgCandForAbbreviation O;
+
+
+create view OrgAbbrvCandNotNull as
+select *
+from OrgAbbrvCand A
+where NotNull(A.abbreviation);
+
+-- retain only abbreviations of length two or more
+-- do a group by to simulate "select distinct" for performance reasons
+create view OrgAbbrv as
+select --GetText(A.org) as org, 
+		GetText(A.abbreviation) as abbreviation
+from OrgAbbrvCandNotNull A
+where GreaterThan(GetLength(A.abbreviation), 1)
+group by --GetText(A.org), 
+		GetText(A.abbreviation);
+
+create view OrgAbbrvMatch as
+select --A.org as origin, 
+		CW.match as org
+from AnyCapsOrg CW, OrgAbbrv A
+where Equals(GetText(CW.match), GetText(A.abbreviation));
+
+create view OrgAbbrvFilter as
+(select O.org from OrgAbbrvMatch O, UrlEmailPlace UEP where Contains (UEP.match, O.org))
+union all
+--(select O.org from OrgAbbrvMatch O where MatchesDict('abbrvFilter.dict', 'Exact', O.org))
+(select O.org from OrgAbbrvMatch O where MatchesDict('filter_org_general_abbrev_case_en.dict', 'Exact', O.org))
+union all
+--(select O.org from OrgAbbrvMatch O where MatchesDict('degree.dict', 'Exact', O.org) and MatchesDict('degreeRC.dict', RightContextTok(O.org, 1)))
+(select O.org from OrgAbbrvMatch O where MatchesDict('misc_edu_qualfn_case_en.dict', 'Exact', O.org) and MatchesDict('misc_edu_qualfn_posClue_ctxtRight_en.dict', RightContextTok(O.org, 1)))
+-- Laura 09/02/09: might decide to replace the following by filtering on FinalLocation at the end
+union all
+--(select O.org from OrgAbbrvMatch O where MatchesDict('stateListAbbrev.dict', 'Exact', O.org))
+(select O.org from OrgAbbrvMatch O where MatchesDict('loc_usa_states_abbrev_case_en.dict', 'Exact', O.org))
+;
+
+
+create view FinalOrgAbbrv as
+(select O.org from OrgAbbrvMatch O)
+minus
+(select O.org from OrgAbbrvFilter O);
+
+
+--output view OrgAbbrvMatch;
+--output view FinalOrgAbbrv;
+
+create view FinalOrgConsolidatedWithoutDots as
+(select O.org as org from FinalOrgConsolidatedWithFormal O)
+union all
+(select O.org as org from FinalOrgAbbrv O);
+
+
+create view UrlEmailPlaceOrg as 
+     --Laura 05/05/2009: globally replaced Place with AddressFinal
+     (select R.reference as match from AddressFinal R)
+     union all
+     (select R.org as match from FinalOrgConsolidatedWithoutDots R)
+     union all
+     (select R.match as match from CitiesAll R)
+     union all
+     (select F.facility as match from Facility F);
+     
+create view OrganizationConsolidated as
+select O.org as organization, '' as type, O.org as reference
+from FinalOrgConsolidatedWithoutDots O
+consolidate on O.org
+using 'LeftToRight';

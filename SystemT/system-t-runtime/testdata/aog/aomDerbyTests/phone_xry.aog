@@ -1,0 +1,49 @@
+###############################################################################
+# phone_xry.aog
+#
+# ("aog" stands for Avatar Operator Graph.)
+#
+# A version of personphone_xry.aog that reads the "Person" annotations with
+# an ReadAnnotations operator.
+###############################################################################
+
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+
+# "Person" and "SentenceScan" annotations have been precomputed.
+
+# Since we'll be using XrY(), we define Phone separately.
+$Phone = Project(("phone" => "phone"),
+			Union(
+				Regex(/\+?\([1-9]\d{2}\)\d{3}-\d{4}/, (0 => "phone"), 
+					"text", $Document),
+				Regex(/\+?[Xx]\.?\d{4,5}/, (0 => "phone"), "text", $Document)
+			)
+		);
+			
+# Now we can define PersonPhone using the XrY() macro.
+# This macro no longer exists.
+#$PersonPhoneXrY = XrY(/\z/, /\A/, /\A/, Scan("Person"), $Phone,
+#					Scan("SentenceScan"));
+
+# For reference, write down the (old) expansion of the XrY() macro, too.
+$PersonPhoneXrY =  
+	Project(("personphone" => "personphone"),
+		Select(Not(ContainsSentenceBoundary("personphone")),
+			ApplyFunc(CombineSpans("person", "phone") => "personphone",
+				Select(ContainsRegex(/./, "between"),
+					ApplyFunc(SpanBetween("person", "phone") => "between",
+						CrossProduct(Scan("Person"), $Phone)
+					)			
+				)
+			)
+		)
+	);
+			
+# Specify the output.  Yes, we're running the annotator twice here.
+Output: $PersonPhoneXrY;
+

@@ -1,0 +1,19 @@
+create view StockExchanges as
+  extract dictionary 'stockmarket/exchanges.dict' with flags 'Exact'
+  on D.text as match
+  from Doc D;
+
+create view StockIndex as
+  extract dictionary 'stockmarket/stockMarketIndex.dict' with flags 'Exact'
+  on D.text as match
+  from Doc D;
+  
+create view StockExchangeContext as 
+  select LeftContext(R.match,50) as lc, RightContext(R.match,10) as rc, R.match as match
+  from StockExchanges R;
+
+create view StockExchangeAndTicker as
+  extract R.match as exchange, R.lc as lc,
+        regex /[ ]?:[ ]?((\p{Lu}\p{M}*)+)/ on R.rc
+       return group 1 as ticker
+  from StockExchangeContext R;

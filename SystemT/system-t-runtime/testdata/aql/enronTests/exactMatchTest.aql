@@ -1,0 +1,24 @@
+
+-------------------------------------------------------------------------------
+-- exactMatch.aql
+--
+-- Tests of the "ExactMatch" consolidation method.
+
+create view ThreeCom as
+select S.match as match
+from (extract dictionary 'dictionaries/3com.dict'
+        with flags 'IgnoreCase'
+        on D.text as match
+      from Document D) S
+consolidate on S.match using 'ExactMatch';
+output view ThreeCom;
+
+create view OrgFull as
+select S.match as match
+from (extract dictionary 'dictionaries/sekar/organization_full_nocase.dict'
+        with flags 'IgnoreCase'
+        on D.text as match
+      from Document D) S
+consolidate on S.match using 'ExactMatch'
+;
+output view OrgFull;

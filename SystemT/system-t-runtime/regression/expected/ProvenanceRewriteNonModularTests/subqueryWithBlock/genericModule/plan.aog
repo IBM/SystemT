@@ -1,0 +1,98 @@
+$Document = DocScan(
+  (
+    "text" => "Text",
+    "label" => "Text"
+  )
+);
+$CapsToken =
+Project(
+  (
+    "@@genericModule@@CapsToken@@__auto__id" => "__auto__id",
+    "@@genericModule@@CapsToken@@__stmt__type" => "__stmt__type",
+    "@@genericModule@@CapsToken@@Document_____sep_____D____id" => "Document_____sep_____D____id",
+    "match" => "match"
+  ),
+  ApplyFunc(
+    IntConst(
+      -1
+    ) => "@@genericModule@@CapsToken@@Document_____sep_____D____id",
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_EXTRACT_REGEX"
+      ) => "@@genericModule@@CapsToken@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@CapsToken@@__auto__id",
+        FastRegexTok(/\p{Lu}\p{Ll}+/, (0 => "match"), "DOTALL", 1, 1,"D.text",
+          Project(
+            (
+              "text" => "D.text"
+            ),
+            $Document
+          )
+        )
+      )
+    )
+  )
+);
+
+$__Base__1__Temp =
+Project(
+  (
+    "noun" => "noun"
+  ),
+  BlockTok(0, 1, 3, "N.match", "noun",
+    Project(
+      (
+        "match" => "N.match"
+      ),
+      $CapsToken
+    )
+  )
+);
+
+$__Subquery__2__Temp =
+Project(
+  (
+    "Op.noun" => "noun",
+    "@@genericModule@@__Subquery__2__Temp@@__auto__id" => "__auto__id"
+  ),
+  ApplyFunc(
+    AutoID()
+ => "@@genericModule@@__Subquery__2__Temp@@__auto__id",
+    Project(
+      (
+        "noun" => "Op.noun"
+      ),
+      $__Base__1__Temp
+    )
+  )
+);
+
+$CompoundNoun =
+Project(
+  (
+    "N.noun" => "noun",
+    "@@genericModule@@CompoundNoun@@__auto__id" => "__auto__id",
+    "@@genericModule@@CompoundNoun@@__stmt__type" => "__stmt__type",
+    "N.__auto__id" => "__Subquery__2__Temp_____sep_____N____id"
+  ),
+  ApplyFunc(
+    StringConst(
+      "STMT_TYPE_SELECT"
+    ) => "@@genericModule@@CompoundNoun@@__stmt__type",
+    ApplyFunc(
+      AutoID()
+ => "@@genericModule@@CompoundNoun@@__auto__id",
+      Project(
+        (
+          "__auto__id" => "N.__auto__id",
+          "noun" => "N.noun"
+        ),
+        $__Subquery__2__Temp
+      )
+    )
+  )
+);
+
+Output: $CapsToken, $CompoundNoun, $__Base__1__Temp, $__Subquery__2__Temp;

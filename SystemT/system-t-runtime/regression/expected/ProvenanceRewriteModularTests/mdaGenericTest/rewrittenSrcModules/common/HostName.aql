@@ -1,0 +1,83 @@
+module common;
+
+
+create view HostNameFilter as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /((([a-zA-Z0-9]{1,1}[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]{0,1}[.]{1,1})+)([a-zA-Z0-9]{1,1}[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]{0,1}))/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as match
+  from Document D;
+
+output view HostNameFilter;
+
+create view HostNameBuildingBlock as
+  select  H.hname as hostname,
+          H.tldname as top_level_domain,
+          H.dname as low_level_domain_name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          H.__auto__id as __Subquery__16__Temp_____sep_____H____id
+  from  __Subquery__16__Temp H;
+
+output view HostNameBuildingBlock;
+
+create view hostname as
+  select  hbb.hostname as hostname,
+          hbb.top_level_domain as top_level_domain,
+          hbb.low_level_domain_name as low_level_domain_name,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          hbb.__auto__id as HostNameBuildingBlock_____sep_____hbb____id
+  from  HostNameBuildingBlock hbb;
+
+output view hostname;
+
+export view common.hostname;
+
+
+create view hostnameDetailsInterim as
+  select  hbb.hostname as hostname_span,
+          GetText(hbb.hostname) as hostname_text,
+          hbb.top_level_domain as top_level_domainSpan,
+          GetText(hbb.top_level_domain) as top_level_domainText,
+          hbb.low_level_domain_name as low_level_domain_nameSpan,
+          GetText(hbb.low_level_domain_name) as low_level_domain_nameText,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          hbb.__auto__id as HostNameBuildingBlock_____sep_____hbb____id
+  from  HostNameBuildingBlock hbb;
+
+output view hostnameDetailsInterim;
+
+create view HostnameOutput as
+  select  D.hostname_span as Hostname_span,
+          D.hostname_text as Hostname_text,
+          GetString('Hostname') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as hostnameDetailsInterim_____sep_____D____id
+  from  hostnameDetailsInterim D;
+
+output view HostnameOutput;
+
+export view common.HostnameOutput;
+
+
+create view __Subquery__16__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    F.__auto__id as HostNameFilter_____sep_____F____id,
+    regex /((([a-zA-Z0-9]{1,1}[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]{0,1}[.]{1,1})+)([a-zA-Z0-9]{1,1}[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]{0,1}))/
+    with flags 'DOTALL'
+    on F.match
+    return group 1 as hname
+       and group 2 as dname
+       and group 4 as tldname
+  from HostNameFilter F
+  having ContainsDict('dicts/tlds-alpha-by-domain.dict', tldname);
+
+output view __Subquery__16__Temp;
+

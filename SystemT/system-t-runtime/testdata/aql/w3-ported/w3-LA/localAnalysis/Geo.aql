@@ -1,0 +1,71 @@
+-------------------------------------------------------------------------------
+-- GeoSummary.aql
+--
+-- Collect geography annotations from the features extracted from HTML files
+--
+-- Depends on HTML.aql, URL.aql
+--
+-- This file produces the contents of the following local analysis result
+-- tables:
+--		a. Country
+--		b. Region
+--		c. Sites
+--
+-- Based on Huiayu's original Java implementation.
+-- Author: Laura Chiticariu <chiti@us.ibm.com>
+-------------------------------------------------------------------------------
+
+-- ***********************************************************************
+-- ***                        UDF declarations                        ****
+-- ***********************************************************************
+create function ConstructEvidence(srcType String, srcContent String)
+return String
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.GeoUDF!ConstructEvidence'
+language java
+deterministic
+return null on null input;
+
+create function MapRegion(regions String, countries String)
+return String
+external_name 'LocalAnalysisUDFs.jar:com.ibm.gumshoe.la.udf.GeoUDF!MapRegion'
+language java
+deterministic
+return null on null input;
+
+
+-- ********************************************************
+-- ***  Preprocess mapping tables                      ****
+-- ********************************************************
+include 'localAnalysis/dicts/geo/countryMapping_EN.aql';
+include 'localAnalysis/dicts/geo/regionMapping_EN.aql';
+include 'localAnalysis/dicts/geo/siteMapping_EN.aql';
+include 'localAnalysis/GeoMappingPreprocess.aql';
+
+
+-- ********************************************************
+-- ***  Perform dictionary match on various features   ****
+-- ********************************************************
+include 'localAnalysis/GeoPreprocess.aql';
+include 'localAnalysis/GeoCountry.aql';
+include 'localAnalysis/GeoRegionGlobal.aql';
+include 'localAnalysis/GeoRegion.aql';
+include 'localAnalysis/GeoSite.aql';
+
+
+-- ***********************************************************************
+-- ***                   Final W3Geography output                     ****
+-- ***********************************************************************
+
+create view W3GeographyCand as
+select C.evidence as countryevidence, C.country as countries,
+       R.evidence as regionevidence, R.region as regions,
+       S.evidence as siteevidence, S.site as sites
+from GeoCountry C, GeoRegion R, GeoSite S;
+
+create view W3Geography as
+select W.countryevidence as countryevidence, W.countries as countries,
+       W.regionevidence as regionevidence, W.regions as regions,
+       --MapRegion(GetString(W.regions), GetString(W.countries)) as regions,
+       W.siteevidence as siteevidence, W.sites as sites
+from W3GeographyCand W;
+

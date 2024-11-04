@@ -1,0 +1,14 @@
+module copyright;
+
+create view TestCopyrightWorks as
+extract regex /[\u00a9]/ on D.text as match
+from Document D;
+
+-- Defect 64903: this view did not detect copyright symbol
+-- With the fix, this view works correctly
+create view TestCopyrightDoesntWork as
+extract regex /\u00a9/ on D.text as match
+from Document D;
+
+output view TestCopyrightWorks;
+output view TestCopyrightDoesntWork;

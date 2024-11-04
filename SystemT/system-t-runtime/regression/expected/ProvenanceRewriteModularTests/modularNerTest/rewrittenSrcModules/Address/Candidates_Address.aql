@@ -1,0 +1,1362 @@
+module Address;
+
+
+import view Zipcode from module CommonFeatures as Zipcode
+;
+
+
+import view StateStrongAbbrev from module CommonFeatures as StateStrongAbbrev
+;
+
+
+import view StateStrongAll from module CommonFeatures as StateStrongAll
+;
+
+
+import view StateWeakAll from module CommonFeatures as StateWeakAll
+;
+
+
+import view USCity from module CommonFeatures as USCity
+;
+
+
+import view GermanCities from module CommonFeatures as GermanCities
+;
+
+
+import view CapsPlaceOnetoTwo from module Linguistics as CapsPlaceOnetoTwo
+;
+
+
+create view StreetSuffix as
+  select  S.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StreetSuffixNoCase_____sep_____S____id
+  from  StreetSuffixNoCase S
+  where MatchesRegex(/^\p{Lu}\p{M}*([\p{Ll}\&]\p{M}*){1,20}.?/, S.match);
+
+output view StreetSuffix;
+
+create view StreetSuffixWeak as
+  select  S.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StreetSuffixWeakNoCase_____sep_____S____id
+  from  StreetSuffixWeakNoCase S
+  where MatchesRegex(/^\p{Lu}\p{M}*([\p{Ll}\&]\p{M}*){1,20}/, S.match);
+
+output view StreetSuffixWeak;
+
+create view StreetSuffixAllWithDuplicates as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__137__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__137__TempOp__1 Op);
+
+output view StreetSuffixAllWithDuplicates;
+
+create view StreetSuffixAll as
+  select  __t2.match as match,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__138__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__138__Temp__1 __t1,
+        __Consolidate__138__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.match;
+
+output view StreetSuffixAll;
+
+create view SecondaryUnit as
+  select  S.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as SecondaryUnitNoCase_____sep_____S____id
+  from  SecondaryUnitNoCase S
+  where MatchesRegex(/(\#)|(\p{Lu}\p{M}*([\p{Ll}\&]\p{M}*){1,20})/, S.match);
+
+output view SecondaryUnit;
+
+create view StreetAddressAllCandidates as
+  select  nc.match as number,
+          CombineSpans(SpanBetween(nc.match, ssw.match), ssw.match) as streetname,
+          CombineSpans(nc.match, ssw.match) as matchedText,
+          RightContext(CombineSpans(nc.match, ssw.match), 10) as rc,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          nc.__auto__id as NumCP_____sep_____nc____id,
+          ssw.__auto__id as StreetSuffixAll_____sep_____ssw____id
+  from  NumCP nc,
+        StreetSuffixAll ssw
+  where FollowsTok(nc.match, ssw.match, 1, 7)
+     and MatchesRegex(/\s*((\p{Lu}\p{M}*\.?\s*){1,2})?(\p{Lu}\p{M}*([\p{Ll}\&]\p{M}*){1,20}|\p{Nd}{1,3}(st|nd|rd|th))\s*(\p{Lu}\p{M}*([\p{Ll}\&]\p{M}*)+\s*){0,3}/, SpanBetween(nc.match, ssw.match))
+     and Not(ContainsRegex(/[\n\r]/, CombineSpans(nc.match, ssw.match)));
+
+output view StreetAddressAllCandidates;
+
+create view StreetAddressExpansion as
+  select  R.match as expansion,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__139__Temp_____sep_____R____id
+  from  __Subquery__139__Temp R;
+
+output view StreetAddressExpansion;
+
+create view StreetAddressAllCandidatesWithExpansion as
+  select  S.number as number,
+          CombineSpans(S.streetname, SAE.expansion) as streetname,
+          CombineSpans(S.matchedText, SAE.expansion) as matchedText,
+          S.streetname as oldstreetname,
+          S.matchedText as oldmatch,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StreetAddressAllCandidates_____sep_____S____id,
+          SAE.__auto__id as StreetAddressExpansion_____sep_____SAE____id
+  from  StreetAddressAllCandidates S,
+        StreetAddressExpansion SAE
+  where FollowsTok(S.matchedText, SAE.expansion, 0, 0);
+
+output view StreetAddressAllCandidatesWithExpansion;
+
+create view StreetAddressAllCandidatesWithoutExpansion as
+  select  Op.number as number,
+          Op.streetname as streetname,
+          Op.matchedText as matchedText,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__140__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__140__TempOp__1 Op,
+        __Minus__140__Temp __t
+  where Equals(Op.number, __t.number)
+     and Equals(Op.streetname, __t.streetname)
+     and Equals(Op.matchedText, __t.matchedText);
+
+output view StreetAddressAllCandidatesWithoutExpansion;
+
+create view StreetAddressAll as
+  (select  Op.number as number,
+            Op.streetname as streetname,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__141__TempOp__0 Op)
+  union all
+  (select  Op.number as number,
+            Op.streetname as streetname,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__141__TempOp__1 Op);
+
+output view StreetAddressAll;
+
+create view HighwayStateDictionary as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__142__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__142__TempOp__1 Op);
+
+output view HighwayStateDictionary;
+
+create view HighwayAddressPart as
+  select  nc.match as number,
+          CombineSpans(SpanBetween(nc.match, rs.match), rs.match) as highwayname,
+          CombineSpans(nc.match, rs.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          nc.__auto__id as NumForHighwayAddress_____sep_____nc____id,
+          rs.__auto__id as HighwayStateDictionary_____sep_____rs____id
+  from  NumForHighwayAddress nc,
+        HighwayStateDictionary rs
+  where FollowsTok(nc.match, rs.match, 0, 2)
+     and MatchesRegex(/\W+((N|S|E|W)\W+)?/, SpanBetween(nc.match, rs.match))
+     and Not(ContainsRegex(/[\n\r]/, CombineSpans(nc.match, rs.match)));
+
+output view HighwayAddressPart;
+
+create view HighwayAddress as
+  select  ra.number as number,
+          ra.highwayname as highwayname,
+          CombineSpans(ra.match, hn.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          ra.__auto__id as HighwayAddressPart_____sep_____ra____id,
+          hn.__auto__id as HighwayNum_____sep_____hn____id
+  from  HighwayAddressPart ra,
+        HighwayNum hn
+  where FollowsTok(ra.match, hn.match, 0, 1)
+     and MatchesRegex(/\W+/, SpanBetween(ra.match, hn.match))
+     and Not(ContainsRegex(/[\n\r]/, CombineSpans(ra.match, hn.match)));
+
+output view HighwayAddress;
+
+create view StreetHighwayAddressAll as
+  (select  Op.number as number,
+            Op.streetname as streetname,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__143__TempOp__0 Op)
+  union all
+  (select  Op.number as number,
+            Op.streetname as streetname,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__143__TempOp__1 Op);
+
+output view StreetHighwayAddressAll;
+
+create view StreetAddressUnit as
+  select  S.number as number,
+          S.streetname as streetname,
+          Su.match as secondaryUnit,
+          CombineSpans(S.match, Su.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StreetHighwayAddressAll_____sep_____S____id,
+          Su.__auto__id as SecondaryUnit_____sep_____Su____id
+  from  StreetHighwayAddressAll S,
+        SecondaryUnit Su
+  where FollowsTok(S.match, Su.match, 0, 2)
+     and MatchesRegex(/\s*\p{Nd}*\s*,?\s*$/, SpanBetween(S.match, Su.match));
+
+output view StreetAddressUnit;
+
+create view StreetAddressUnitWithGap as
+  select  S.number as number,
+          S.streetname as streetname,
+          Su.match as secondaryUnit,
+          CombineSpans(S.match, Su.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StreetHighwayAddressAll_____sep_____S____id,
+          G.__auto__id as OptionalGapBlock_____sep_____G____id,
+          Su.__auto__id as SecondaryUnit_____sep_____Su____id
+  from  StreetHighwayAddressAll S,
+        OptionalGapBlock G,
+        SecondaryUnit Su
+  where FollowsTok(S.match, G.match, 0, 0)
+     and FollowsTok(G.match, Su.match, 0, 0);
+
+output view StreetAddressUnitWithGap;
+
+create view StreetAddressOptionalUnitCandidates as
+  (select  Op.number as number,
+            Op.streetname as streetname,
+            Op.secondaryUnit as secondaryUnit,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__144__TempOp__0 Op)
+  union all
+  (select  Op.number as number,
+            Op.streetname as streetname,
+            Op.secondaryUnit as secondaryUnit,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__144__TempOp__1 Op)
+  union all
+  (select  Op.number as number,
+            Op.streetname as streetname,
+            Op.secondaryUnit as secondaryUnit,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__144__TempOp__2 Op);
+
+output view StreetAddressOptionalUnitCandidates;
+
+create view StreetAddressOptionalUnit as
+  select  __t2.number as number,
+          __t2.streetname as streetname,
+          __t2.secondaryUnit as secondaryUnit,
+          __t2.match as match,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__145__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__145__Temp__1 __t1,
+        __Consolidate__145__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.number, __t2.streetname, __t2.secondaryUnit, __t2.match;
+
+output view StreetAddressOptionalUnit;
+
+create view StreetAddressWithCityNoGap as
+  select  S.number as number,
+          S.streetname as streetname,
+          CombineSpans(S.secondaryUnit, SpanBetween(S.secondaryUnit, cp.match)) as secondaryUnit,
+          cp.match as city,
+          CombineSpans(S.match, cp.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StreetAddressOptionalUnit_____sep_____S____id,
+          cp.__auto__id as CapsPlaceOnetoTwo_____sep_____cp____id
+  from  StreetAddressOptionalUnit S,
+        CapsPlaceOnetoTwo cp
+  where FollowsTok(S.match, cp.match, 0, 5);
+
+output view StreetAddressWithCityNoGap;
+
+create view StreetAddressWithCityWithGap as
+  select  S.number as number,
+          S.streetname as streetname,
+          CombineSpans(S.secondaryUnit, SpanBetween(S.secondaryUnit, G.match)) as secondaryUnit,
+          cp.match as city,
+          CombineSpans(S.match, cp.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StreetAddressOptionalUnit_____sep_____S____id,
+          G.__auto__id as OptionalGapBlock_____sep_____G____id,
+          cp.__auto__id as CapsPlaceOnetoTwo_____sep_____cp____id
+  from  StreetAddressOptionalUnit S,
+        OptionalGapBlock G,
+        CapsPlaceOnetoTwo cp
+  where FollowsTok(S.match, G.match, 0, 5)
+     and FollowsTok(G.match, cp.match, 0, 0);
+
+output view StreetAddressWithCityWithGap;
+
+create view StreetAddressWithCity as
+  (select  Op.number as number,
+            Op.streetname as streetname,
+            Op.secondaryUnit as secondaryUnit,
+            Op.city as city,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__146__TempOp__0 Op)
+  union all
+  (select  Op.number as number,
+            Op.streetname as streetname,
+            Op.secondaryUnit as secondaryUnit,
+            Op.city as city,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__146__TempOp__1 Op);
+
+output view StreetAddressWithCity;
+
+create view StreetAddressWithCityStrongState as
+  select  Sawc.number as number,
+          Sawc.streetname as streetname,
+          Sawc.secondaryUnit as secondaryUnit,
+          Sawc.city as city,
+          Sa.match as state,
+          CombineSpans(Sawc.match, Sa.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          Sawc.__auto__id as StreetAddressWithCity_____sep_____Sawc____id,
+          Sa.__auto__id as StateStrongAll_____sep_____Sa____id
+  from  StreetAddressWithCity Sawc,
+        StateStrongAll Sa
+  where FollowsTok(Sawc.match, Sa.match, 0, 1)
+     and MatchesRegex(/\s*,?\s*/, SpanBetween(Sawc.match, Sa.match));
+
+output view StreetAddressWithCityStrongState;
+
+create view StreetAddressWithCityWeakState as
+  select  Sawc.number as number,
+          Sawc.streetname as streetname,
+          Sawc.secondaryUnit as secondaryUnit,
+          Sawc.city as city,
+          Sa.match as state,
+          CombineSpans(Sawc.match, Sa.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          Sawc.__auto__id as StreetAddressWithCity_____sep_____Sawc____id,
+          Sa.__auto__id as StateWeakAll_____sep_____Sa____id
+  from  StreetAddressWithCity Sawc,
+        StateWeakAll Sa
+  where FollowsTok(Sawc.match, Sa.match, 0, 1)
+     and MatchesRegex(/\s*,?\s*/, SpanBetween(Sawc.match, Sa.match));
+
+output view StreetAddressWithCityWeakState;
+
+create view StreetAddressWithCityOptionalWeakStateCandidates as
+  (select  Op.number as number,
+            Op.streetname as streetname,
+            Op.secondaryUnit as secondaryUnit,
+            Op.city as city,
+            Op.state as state,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__147__TempOp__0 Op)
+  union all
+  (select  Op.number as number,
+            Op.streetname as streetname,
+            Op.secondaryUnit as secondaryUnit,
+            Op.city as city,
+            Op.state as state,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__147__TempOp__1 Op);
+
+output view StreetAddressWithCityOptionalWeakStateCandidates;
+
+create view StreetAddressWithCityOptionalWeakState as
+  select  __t2.number as number,
+          __t2.streetname as streetname,
+          __t2.secondaryUnit as secondaryUnit,
+          __t2.city as city,
+          __t2.state as state,
+          __t2.match as match,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__148__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__148__Temp__1 __t1,
+        __Consolidate__148__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.number, __t2.streetname, __t2.secondaryUnit, __t2.city, __t2.state, __t2.match;
+
+output view StreetAddressWithCityOptionalWeakState;
+
+create view StreetAddressWithCityOptionalStateZipcodeCandidate as
+  select  Sawcos.number as number,
+          Sawcos.streetname as streetname,
+          Sawcos.secondaryUnit as secondaryUnit,
+          Sawcos.city as city,
+          Sawcos.state as state,
+          z.match as zipcode,
+          CombineSpans(Sawcos.match, z.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          Sawcos.__auto__id as StreetAddressWithCityOptionalWeakState_____sep_____Sawcos____id,
+          z.__auto__id as Zipcode_____sep_____z____id
+  from  StreetAddressWithCityOptionalWeakState Sawcos,
+        Zipcode z
+  where FollowsTok(Sawcos.match, z.match, 0, 1)
+     and ContainsRegex(/^\s*[,\.]?\s*$/, SpanBetween(Sawcos.match, z.match));
+
+output view StreetAddressWithCityOptionalStateZipcodeCandidate;
+
+create view StreetAddressWithCityStateZipcode as
+  select  Sawcs.number as number,
+          Sawcs.streetname as streetname,
+          Sawcs.secondaryUnit as secondaryUnit,
+          Sawcs.city as city,
+          Sawcs.state as state,
+          z.match as zipcode,
+          CombineSpans(Sawcs.match, z.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          Sawcs.__auto__id as StreetAddressWithCityStrongState_____sep_____Sawcs____id,
+          z.__auto__id as Zipcode_____sep_____z____id
+  from  StreetAddressWithCityStrongState Sawcs,
+        Zipcode z
+  where FollowsTok(Sawcs.match, z.match, 0, 1)
+     and ContainsRegex(/^\s*[,\.]?\s*$/, SpanBetween(Sawcs.match, z.match));
+
+output view StreetAddressWithCityStateZipcode;
+
+create view StreetAddressWithCityOptionalStateZipcodeOverlap as
+  select  R.number as number,
+          R.streetname as streetname,
+          R.secondaryUnit as secondaryUnit,
+          R.city as city,
+          R.state as state,
+          R.zipcode as zipcode,
+          R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as StreetAddressWithCityOptionalStateZipcodeCandidate_____sep_____R____id,
+          R1.__auto__id as StreetAddressWithCityStateZipcode_____sep_____R1____id
+  from  StreetAddressWithCityOptionalStateZipcodeCandidate R,
+        StreetAddressWithCityStateZipcode R1
+  where Overlaps(R.match, R1.match);
+
+output view StreetAddressWithCityOptionalStateZipcodeOverlap;
+
+create view StreetAddressWithCityOptionalStateZipcode as
+  select  Op.number as number,
+          Op.streetname as streetname,
+          Op.secondaryUnit as secondaryUnit,
+          Op.city as city,
+          Op.state as state,
+          Op.zipcode as zipcode,
+          Op.match as match,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__149__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__149__TempOp__1 Op,
+        __Minus__149__Temp __t
+  where Equals(Op.number, __t.number)
+     and Equals(Op.streetname, __t.streetname)
+     and Equals(Op.secondaryUnit, __t.secondaryUnit)
+     and Equals(Op.city, __t.city)
+     and Equals(Op.state, __t.state)
+     and Equals(Op.zipcode, __t.zipcode)
+     and Equals(Op.match, __t.match);
+
+output view StreetAddressWithCityOptionalStateZipcode;
+
+create view GermanCityZipcode1 as
+  select  GZ.match as zipcode,
+          GC.match as city,
+          CombineSpans(GZ.match, GC.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          GZ.__auto__id as GermanZipcode_____sep_____GZ____id,
+          GC.__auto__id as GermanCities_____sep_____GC____id
+  from  GermanZipcode GZ,
+        GermanCities GC
+  where FollowsTok(GZ.match, GC.match, 0, 2)
+     and MatchesRegex(/\s*[,\.]?\s*/, SpanBetween(GZ.match, GC.match));
+
+output view GermanCityZipcode1;
+
+create view GermanCityZipcode2 as
+  select  GZ.match as zipcode,
+          GC.match as city,
+          CombineSpans(GC.match, GZ.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          GZ.__auto__id as GermanZipcode_____sep_____GZ____id,
+          GC.__auto__id as GermanCities_____sep_____GC____id
+  from  GermanZipcode GZ,
+        GermanCities GC
+  where FollowsTok(GC.match, GZ.match, 0, 3)
+     and MatchesRegex(/\s*((am Main)|([\-\/]?\p{Lu}\p{M}*(\p{L}\p{M}*)+))?\s*,?\s*/, SpanBetween(GC.match, GZ.match));
+
+output view GermanCityZipcode2;
+
+create view GermanCityZipcode as
+  (select  Op.zipcode as zipcode,
+            Op.city as city,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__150__TempOp__0 Op)
+  union all
+  (select  Op.zipcode as zipcode,
+            Op.city as city,
+            Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__150__TempOp__1 Op);
+
+output view GermanCityZipcode;
+
+create view GermanStreetAddressSuffix as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__151__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__151__TempOp__1 Op);
+
+output view GermanStreetAddressSuffix;
+
+create view GermanCapsPlace as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__152__Temp_____sep_____R____id
+  from  __Subquery__152__Temp R;
+
+output view GermanCapsPlace;
+
+create view GermanCapsPlaceTwo as
+  select  CombineSpans(R1.match, R2.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R1.__auto__id as GermanCapsPlace_____sep_____R1____id,
+          R2.__auto__id as GermanCapsPlace_____sep_____R2____id
+  from  GermanCapsPlace R1,
+        GermanCapsPlace R2
+  where FollowsTok(R1.match, R2.match, 0, 1)
+     and MatchesRegex(/[ \t]*(\-[ \t]*)?/, SpanBetween(R1.match, R2.match));
+
+output view GermanCapsPlaceTwo;
+
+create view GermanCapsPlaceOneOrTwo as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__153__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__153__TempOp__1 Op);
+
+output view GermanCapsPlaceOneOrTwo;
+
+create view GermanStreetNameWithSuffix as
+  select  CombineSpans(R1.match, R2.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R1.__auto__id as GermanCapsPlaceOneOrTwo_____sep_____R1____id,
+          R2.__auto__id as GermanStreetAddressSuffix_____sep_____R2____id
+  from  GermanCapsPlaceOneOrTwo R1,
+        GermanStreetAddressSuffix R2
+  where FollowsTok(R1.match, R2.match, 0, 1)
+     and MatchesRegex(/[ \t]*(\-[ \t]*)?/, SpanBetween(R1.match, R2.match));
+
+output view GermanStreetNameWithSuffix;
+
+create view GermanStreetOptionalNameWithSuffix as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__154__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__154__TempOp__1 Op);
+
+output view GermanStreetOptionalNameWithSuffix;
+
+create view GermanStreetAddress1 as
+  select  __t2.match as match,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__155__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__155__Temp__1 __t1,
+        __Consolidate__155__Temp__2 __t2
+  where ContainedWithin(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.match;
+
+output view GermanStreetAddress1;
+
+create view GermanStreetAddress as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__156__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__156__TempOp__1 Op);
+
+output view GermanStreetAddress;
+
+create view USAddressCandidates as
+  (select  Op.number as number,
+            Op.streetname as streetname,
+            Op.secondaryUnit as secondaryUnit,
+            Op.city as city,
+            Op.state as state,
+            Op.zipcode as zipcode,
+            Op.loc as loc,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__157__TempOp__0 Op)
+  union all
+  (select  Op.number as number,
+            Op.streetname as streetname,
+            Op.secondaryUnit as secondaryUnit,
+            Op.city as city,
+            Op.state as state,
+            Op.zipcode as zipcode,
+            Op.loc as loc,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__157__TempOp__1 Op)
+  union all
+  (select  Op.number as number,
+            Op.streetname as streetname,
+            Op.secondaryUnit as secondaryUnit,
+            Op.city as city,
+            Op.state as state,
+            Op.zipcode as zipcode,
+            Op.loc as loc,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__157__TempOp__2 Op);
+
+output view USAddressCandidates;
+
+create view USAddressCandidateStrong as
+  select  S.number as number,
+          S.streetname as streetname,
+          S.secondaryUnit as secondaryUnit,
+          S.city as city,
+          S.state as state,
+          S.zipcode as zipcode,
+          S.loc as loc,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as USAddressCandidates_____sep_____S____id,
+          C.__auto__id as USCity_____sep_____C____id
+  from  USAddressCandidates S,
+        USCity C
+  where Equals(S.city, C.match);
+
+output view USAddressCandidateStrong;
+
+create view USAddressCandidateOverlap as
+  select  R.number as number,
+          R.streetname as streetname,
+          R.secondaryUnit as secondaryUnit,
+          R.city as city,
+          R.state as state,
+          R.zipcode as zipcode,
+          R.loc as loc,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as USAddressCandidates_____sep_____R____id,
+          R1.__auto__id as USAddressCandidateStrong_____sep_____R1____id
+  from  USAddressCandidates R,
+        USAddressCandidateStrong R1
+  where Overlaps(R.city, R1.city);
+
+output view USAddressCandidateOverlap;
+
+create view USAddressWeakCandidatesRemoved as
+  select  Op.number as number,
+          Op.streetname as streetname,
+          Op.secondaryUnit as secondaryUnit,
+          Op.city as city,
+          Op.state as state,
+          Op.zipcode as zipcode,
+          Op.loc as loc,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__158__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__158__TempOp__1 Op,
+        __Minus__158__Temp __t
+  where Equals(Op.number, __t.number)
+     and Equals(Op.streetname, __t.streetname)
+     and Equals(Op.secondaryUnit, __t.secondaryUnit)
+     and Equals(Op.city, __t.city)
+     and Equals(Op.state, __t.state)
+     and Equals(Op.zipcode, __t.zipcode)
+     and Equals(Op.loc, __t.loc);
+
+output view USAddressWeakCandidatesRemoved;
+
+create view __Consolidate__138__Temp__1 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as StreetSuffixAllWithDuplicates_____sep_____R____id,
+          R.match as __consolidate__target
+  from  StreetSuffixAllWithDuplicates R;
+
+output view __Consolidate__138__Temp__1;
+
+create view __Consolidate__138__Temp__2 as
+  select  __t1.match as match,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__138__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__138__Temp__2;
+
+create view __Consolidate__145__Temp__1 as
+  select  R.number as number,
+          R.streetname as streetname,
+          R.secondaryUnit as secondaryUnit,
+          R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as StreetAddressOptionalUnitCandidates_____sep_____R____id,
+          R.match as __consolidate__target
+  from  StreetAddressOptionalUnitCandidates R;
+
+output view __Consolidate__145__Temp__1;
+
+create view __Consolidate__145__Temp__2 as
+  select  __t1.number as number,
+          __t1.streetname as streetname,
+          __t1.secondaryUnit as secondaryUnit,
+          __t1.match as match,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__145__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__145__Temp__2;
+
+create view __Consolidate__148__Temp__1 as
+  select  S.number as number,
+          S.streetname as streetname,
+          S.secondaryUnit as secondaryUnit,
+          S.city as city,
+          S.state as state,
+          S.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StreetAddressWithCityOptionalWeakStateCandidates_____sep_____S____id,
+          S.match as __consolidate__target
+  from  StreetAddressWithCityOptionalWeakStateCandidates S;
+
+output view __Consolidate__148__Temp__1;
+
+create view __Consolidate__148__Temp__2 as
+  select  __t1.number as number,
+          __t1.streetname as streetname,
+          __t1.secondaryUnit as secondaryUnit,
+          __t1.city as city,
+          __t1.state as state,
+          __t1.match as match,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__148__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__148__Temp__2;
+
+create view __Consolidate__155__Temp__1 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as GermanStreetOptionalNameWithSuffix_____sep_____R____id,
+          R.match as __consolidate__target
+  from  GermanStreetOptionalNameWithSuffix R;
+
+output view __Consolidate__155__Temp__1;
+
+create view __Consolidate__155__Temp__2 as
+  select  __t1.match as match,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__155__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'ContainedWithin';
+
+output view __Consolidate__155__Temp__2;
+
+create view __Minus__140__Temp as
+  select  __t.number as number,
+          __t.streetname as streetname,
+          __t.matchedText as matchedText
+  from  
+    ((select  Op.number as number,
+              Op.streetname as streetname,
+              Op.matchedText as matchedText
+      from  __Minus__140__TempOp__1 Op)
+    minus
+    (select  Op.number as number,
+              Op.streetname as streetname,
+              Op.matchedText as matchedText
+      from  __Minus__140__TempOp__2 Op)
+    ) __t
+  group by __t.number, __t.streetname, __t.matchedText;
+
+output view __Minus__140__Temp;
+
+create view __Minus__140__TempOp__1 as
+  select  S.number as number,
+          S.streetname as streetname,
+          S.matchedText as matchedText,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StreetAddressAllCandidates_____sep_____S____id
+  from  StreetAddressAllCandidates S;
+
+output view __Minus__140__TempOp__1;
+
+create view __Minus__140__TempOp__2 as
+  select  S.number as number,
+          S.oldstreetname as streetname,
+          S.oldmatch as matchedText,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StreetAddressAllCandidatesWithExpansion_____sep_____S____id
+  from  StreetAddressAllCandidatesWithExpansion S;
+
+output view __Minus__140__TempOp__2;
+
+create view __Minus__149__Temp as
+  select  __t.number as number,
+          __t.streetname as streetname,
+          __t.secondaryUnit as secondaryUnit,
+          __t.city as city,
+          __t.state as state,
+          __t.zipcode as zipcode,
+          __t.match as match
+  from  
+    ((select  Op.number as number,
+              Op.streetname as streetname,
+              Op.secondaryUnit as secondaryUnit,
+              Op.city as city,
+              Op.state as state,
+              Op.zipcode as zipcode,
+              Op.match as match
+      from  __Minus__149__TempOp__1 Op)
+    minus
+    (select  Op.number as number,
+              Op.streetname as streetname,
+              Op.secondaryUnit as secondaryUnit,
+              Op.city as city,
+              Op.state as state,
+              Op.zipcode as zipcode,
+              Op.match as match
+      from  __Minus__149__TempOp__2 Op)
+    ) __t
+  group by __t.number, __t.streetname, __t.secondaryUnit, __t.city, __t.state, __t.zipcode, __t.match;
+
+output view __Minus__149__Temp;
+
+create view __Minus__149__TempOp__1 as
+  select  R.number as number,
+          R.streetname as streetname,
+          R.secondaryUnit as secondaryUnit,
+          R.city as city,
+          R.state as state,
+          R.zipcode as zipcode,
+          R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as StreetAddressWithCityOptionalStateZipcodeCandidate_____sep_____R____id
+  from  StreetAddressWithCityOptionalStateZipcodeCandidate R;
+
+output view __Minus__149__TempOp__1;
+
+create view __Minus__149__TempOp__2 as
+  select  R.number as number,
+          R.streetname as streetname,
+          R.secondaryUnit as secondaryUnit,
+          R.city as city,
+          R.state as state,
+          R.zipcode as zipcode,
+          R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as StreetAddressWithCityOptionalStateZipcodeOverlap_____sep_____R____id
+  from  StreetAddressWithCityOptionalStateZipcodeOverlap R;
+
+output view __Minus__149__TempOp__2;
+
+create view __Minus__158__Temp as
+  select  __t.number as number,
+          __t.streetname as streetname,
+          __t.secondaryUnit as secondaryUnit,
+          __t.city as city,
+          __t.state as state,
+          __t.zipcode as zipcode,
+          __t.loc as loc
+  from  
+    ((select  Op.number as number,
+              Op.streetname as streetname,
+              Op.secondaryUnit as secondaryUnit,
+              Op.city as city,
+              Op.state as state,
+              Op.zipcode as zipcode,
+              Op.loc as loc
+      from  __Minus__158__TempOp__1 Op)
+    minus
+    (select  Op.number as number,
+              Op.streetname as streetname,
+              Op.secondaryUnit as secondaryUnit,
+              Op.city as city,
+              Op.state as state,
+              Op.zipcode as zipcode,
+              Op.loc as loc
+      from  __Minus__158__TempOp__2 Op)
+    ) __t
+  group by __t.number, __t.streetname, __t.secondaryUnit, __t.city, __t.state, __t.zipcode, __t.loc;
+
+output view __Minus__158__Temp;
+
+create view __Minus__158__TempOp__1 as
+  select  R.number as number,
+          R.streetname as streetname,
+          R.secondaryUnit as secondaryUnit,
+          R.city as city,
+          R.state as state,
+          R.zipcode as zipcode,
+          R.loc as loc,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as USAddressCandidates_____sep_____R____id
+  from  USAddressCandidates R;
+
+output view __Minus__158__TempOp__1;
+
+create view __Minus__158__TempOp__2 as
+  select  R.number as number,
+          R.streetname as streetname,
+          R.secondaryUnit as secondaryUnit,
+          R.city as city,
+          R.state as state,
+          R.zipcode as zipcode,
+          R.loc as loc,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as USAddressCandidateOverlap_____sep_____R____id
+  from  USAddressCandidateOverlap R;
+
+output view __Minus__158__TempOp__2;
+
+create view __Subquery__139__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    S.__auto__id as StreetAddressAllCandidates_____sep_____S____id,
+    regex /^\W*([NSEW]\.?\s*){1,2}\b/
+    with flags 'DOTALL'
+    on S.rc
+    return group 0 as match
+  from StreetAddressAllCandidates S;
+
+output view __Subquery__139__Temp;
+
+create view __Subquery__152__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as DocumentText_____sep_____D____id,
+    regex /\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}/
+    with flags 'DOTALL'
+    on between 1 and 25 tokens in D.text
+    return group 0 as match
+  from DocumentText D;
+
+output view __Subquery__152__Temp;
+
+create view __Union__137__TempOp__0 as
+  select  S.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StreetSuffix_____sep_____S____id
+  from  StreetSuffix S;
+
+output view __Union__137__TempOp__0;
+
+create view __Union__137__TempOp__1 as
+  select  S.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StreetSuffixWeak_____sep_____S____id
+  from  StreetSuffixWeak S;
+
+output view __Union__137__TempOp__1;
+
+create view __Union__141__TempOp__0 as
+  select  S.number as number,
+          S.streetname as streetname,
+          S.matchedText as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StreetAddressAllCandidatesWithoutExpansion_____sep_____S____id
+  from  StreetAddressAllCandidatesWithoutExpansion S;
+
+output view __Union__141__TempOp__0;
+
+create view __Union__141__TempOp__1 as
+  select  S.number as number,
+          S.streetname as streetname,
+          S.matchedText as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StreetAddressAllCandidatesWithExpansion_____sep_____S____id
+  from  StreetAddressAllCandidatesWithExpansion S;
+
+output view __Union__141__TempOp__1;
+
+create view __Union__142__TempOp__0 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as HighwayDictionary_____sep_____R____id
+  from  HighwayDictionary R;
+
+output view __Union__142__TempOp__0;
+
+create view __Union__142__TempOp__1 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as StateStrongAbbrev_____sep_____R____id
+  from  StateStrongAbbrev R;
+
+output view __Union__142__TempOp__1;
+
+create view __Union__143__TempOp__0 as
+  select  S.number as number,
+          S.streetname as streetname,
+          S.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StreetAddressAll_____sep_____S____id
+  from  StreetAddressAll S;
+
+output view __Union__143__TempOp__0;
+
+create view __Union__143__TempOp__1 as
+  select  S.number as number,
+          S.highwayname as streetname,
+          S.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as HighwayAddress_____sep_____S____id
+  from  HighwayAddress S;
+
+output view __Union__143__TempOp__1;
+
+create view __Union__144__TempOp__0 as
+  select  S.number as number,
+          S.streetname as streetname,
+          RightContext(S.match, 0) as secondaryUnit,
+          S.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StreetHighwayAddressAll_____sep_____S____id
+  from  StreetHighwayAddressAll S;
+
+output view __Union__144__TempOp__0;
+
+create view __Union__144__TempOp__1 as
+  select  S.number as number,
+          S.streetname as streetname,
+          S.secondaryUnit as secondaryUnit,
+          S.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StreetAddressUnit_____sep_____S____id
+  from  StreetAddressUnit S;
+
+output view __Union__144__TempOp__1;
+
+create view __Union__144__TempOp__2 as
+  select  S.number as number,
+          S.streetname as streetname,
+          S.secondaryUnit as secondaryUnit,
+          S.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StreetAddressUnitWithGap_____sep_____S____id
+  from  StreetAddressUnitWithGap S;
+
+output view __Union__144__TempOp__2;
+
+create view __Union__146__TempOp__0 as
+  select  C.number as number,
+          C.streetname as streetname,
+          C.secondaryUnit as secondaryUnit,
+          C.city as city,
+          C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as StreetAddressWithCityNoGap_____sep_____C____id
+  from  StreetAddressWithCityNoGap C;
+
+output view __Union__146__TempOp__0;
+
+create view __Union__146__TempOp__1 as
+  select  C.number as number,
+          C.streetname as streetname,
+          C.secondaryUnit as secondaryUnit,
+          C.city as city,
+          C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as StreetAddressWithCityWithGap_____sep_____C____id
+  from  StreetAddressWithCityWithGap C;
+
+output view __Union__146__TempOp__1;
+
+create view __Union__147__TempOp__0 as
+  select  S.number as number,
+          S.streetname as streetname,
+          S.secondaryUnit as secondaryUnit,
+          S.city as city,
+          RightContext(S.match, 0) as state,
+          S.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StreetAddressWithCity_____sep_____S____id
+  from  StreetAddressWithCity S;
+
+output view __Union__147__TempOp__0;
+
+create view __Union__147__TempOp__1 as
+  select  S.number as number,
+          S.streetname as streetname,
+          S.secondaryUnit as secondaryUnit,
+          S.city as city,
+          S.state as state,
+          S.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StreetAddressWithCityWeakState_____sep_____S____id
+  from  StreetAddressWithCityWeakState S;
+
+output view __Union__147__TempOp__1;
+
+create view __Union__150__TempOp__0 as
+  select  GCZ1.zipcode as zipcode,
+          GCZ1.city as city,
+          GCZ1.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          GCZ1.__auto__id as GermanCityZipcode1_____sep_____GCZ1____id
+  from  GermanCityZipcode1 GCZ1;
+
+output view __Union__150__TempOp__0;
+
+create view __Union__150__TempOp__1 as
+  select  GCZ2.zipcode as zipcode,
+          GCZ2.city as city,
+          GCZ2.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          GCZ2.__auto__id as GermanCityZipcode2_____sep_____GCZ2____id
+  from  GermanCityZipcode2 GCZ2;
+
+output view __Union__150__TempOp__1;
+
+create view __Union__151__TempOp__0 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as GermanStreetAddressSuffix1_____sep_____R____id
+  from  GermanStreetAddressSuffix1 R;
+
+output view __Union__151__TempOp__0;
+
+create view __Union__151__TempOp__1 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as GermanStreetAddressSuffix2_____sep_____R____id
+  from  GermanStreetAddressSuffix2 R;
+
+output view __Union__151__TempOp__1;
+
+create view __Union__153__TempOp__0 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as GermanCapsPlace_____sep_____R____id
+  from  GermanCapsPlace R;
+
+output view __Union__153__TempOp__0;
+
+create view __Union__153__TempOp__1 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as GermanCapsPlaceTwo_____sep_____R____id
+  from  GermanCapsPlaceTwo R;
+
+output view __Union__153__TempOp__1;
+
+create view __Union__154__TempOp__0 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as GermanStreetNameWithSuffix_____sep_____R____id
+  from  GermanStreetNameWithSuffix R;
+
+output view __Union__154__TempOp__0;
+
+create view __Union__154__TempOp__1 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as GermanStreetAddressSuffix_____sep_____R____id
+  from  GermanStreetAddressSuffix R;
+
+output view __Union__154__TempOp__1;
+
+create view __Union__156__TempOp__0 as
+  select  GSA1.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          GSA1.__auto__id as GermanStreetAddress1_____sep_____GSA1____id
+  from  GermanStreetAddress1 GSA1;
+
+output view __Union__156__TempOp__0;
+
+create view __Union__156__TempOp__1 as
+  select  GSA2.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          GSA2.__auto__id as GermanStreetAddress2_____sep_____GSA2____id
+  from  GermanStreetAddress2 GSA2;
+
+output view __Union__156__TempOp__1;
+
+create view __Union__157__TempOp__0 as
+  select  S.number as number,
+          S.streetname as streetname,
+          S.secondaryUnit as secondaryUnit,
+          S.city as city,
+          S.state as state,
+          S.zipcode as zipcode,
+          S.match as loc,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StreetAddressWithCityStateZipcode_____sep_____S____id
+  from  StreetAddressWithCityStateZipcode S;
+
+output view __Union__157__TempOp__0;
+
+create view __Union__157__TempOp__1 as
+  select  S.number as number,
+          S.streetname as streetname,
+          S.secondaryUnit as secondaryUnit,
+          S.city as city,
+          S.state as state,
+          S.zipcode as zipcode,
+          S.match as loc,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StreetAddressWithCityOptionalStateZipcode_____sep_____S____id
+  from  StreetAddressWithCityOptionalStateZipcode S;
+
+output view __Union__157__TempOp__1;
+
+create view __Union__157__TempOp__2 as
+  select  S.number as number,
+          S.streetname as streetname,
+          S.secondaryUnit as secondaryUnit,
+          S.city as city,
+          S.state as state,
+          RightContext(S.match, 0) as zipcode,
+          S.match as loc,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          S.__auto__id as StreetAddressWithCityStrongState_____sep_____S____id
+  from  StreetAddressWithCityStrongState S;
+
+output view __Union__157__TempOp__2;
+

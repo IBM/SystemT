@@ -1,0 +1,315 @@
+-------------------------------------------------------------------------------
+-- GeoSummary.aql
+--
+-- Collect geography annotations from the features extracted from HTML files
+--
+-- Depends on HTML.aql, URL.aql
+--
+-- This file produces the contents of the following local analysis result
+-- tables:
+--		a. Country
+--		b. Region
+--		c. Sites
+--
+-- Based on Huiayu's original Java implementation.
+-- Author: Laura Chiticariu <chiti@us.ibm.com>
+-------------------------------------------------------------------------------
+
+
+
+-- ****************************************************************************
+-- ***               Phase 2: Filter based on geo dictionaries             ****
+-- ****************************************************************************
+-------------------------------------------------------------------------------
+-- This phase is based on the following flow from 
+-- es2resources/configs/flows/flow-geo-new.txt
+--
+-- geo_hq			geo_SCRr			title_segs
+-- geo_SCRr		    geo_SCRr			title description url_splits
+-- geo_CRr			geo_CRr				h1h2 keywords url_splits
+-- geo_c			geo_c				url_splits country2 language2 
+-------------------------------------------------------------------------------
+
+--              cCrRsS
+-- title_segs	
+-- title
+-- h1h2
+-- description
+-- keywords
+-- country2:	c
+-- launguage2:	c
+-- url_splits:	cCrRsS
+
+
+-------------------------------COUNTRY-----------------------------------------
+-- Country annotations come from title_segs, title, description, 
+-- url_splits h1h2, keywords, country2 language2 
+
+create view CountryAnnotsFromURL as
+(
+	select U.matched as matched, 'URLHost' as input_type
+	from (
+			extract dictionaries 'dicts/country_code_list.dict' and 'dicts/country_list.dict' 
+				on U.host as matched 
+			from URL U
+		 ) U
+)
+union all
+(
+	select U.matched as matched, 'URLPath' as input_type
+	from (
+			extract dictionaries 'dicts/country_code_list.dict' and 'dicts/country_list.dict'  
+				on U.actualPath as matched 
+			from URL U
+		 ) U
+);
+
+
+create view CountryAnnotsFromTitle as
+select T.matched as matched, 'Title' as input_type
+from (extract dictionary 'dicts/country_list.dict' on T.title as matched from Title T) T;
+
+
+create view CountryAnnotsFromTitleSegs as
+(
+	select T.matched as matched, 'Seg1' as input_type
+	from (extract dictionary 'dicts/country_list.dict' on T.seg1 as matched from TitleSegs T) T
+)
+union all
+(
+	select T.matched as matched, 'Seg2' as input_type
+	from (extract dictionary 'dicts/country_list.dict' on T.seg2 as matched from TitleSegs T) T
+);
+
+
+create view CountryAnnotsFromMeta as
+(
+	select D.matched as matched, 'MetaDescription' as input_type
+	from (extract dictionary 'dicts/country_list.dict' on D.content as matched from MetaDescription D) D
+)
+union all
+(
+	select K.matched as matched, 'MetaKeywords' as input_type
+	from (extract dictionary 'dicts/country_list.dict' on K.keyword as matched from MetaKeywords K) K
+)
+union all
+(
+	select C.matched as matched, 'MetaCountry' as input_type
+	from (extract dictionary 'dicts/country_code_list.dict' on C.content as matched from MetaCountry C) C
+)
+union all
+(
+	select L.matched as matched, 'MetaLanguage' as input_type
+	from (extract dictionary 'dicts/country_code_list.dict' on L.content as matched from MetaLanguage L) L
+);
+
+create view CountryAnnotsFromH1H2 as
+(
+	select H.matched as matched, 'H1' as input_type
+	from (extract dictionary 'dicts/country_list.dict' on H.match as matched from H1 H) H
+)
+union all
+(
+	select H.matched as matched, 'H2' as input_type
+	from (extract dictionary 'dicts/country_list.dict' on H.match as matched from H2 H) H
+);
+
+
+--output view CountryAnnotsFromURL;
+--output view CountryAnnotsFromMeta;
+--output view CountryAnnotsFromTitle;
+--output view CountryAnnotsFromTitleSegs;
+--output view CountryAnnotsFromH1H2;
+
+
+
+-------------------------------REGION-----------------------------------------
+-- Region annotations come from title_segs, title, description, url_splits, h1h2, keywords
+
+
+create view RegionAnnotsFromURL as
+(
+	select U.matched as matched, 'URLHost' as input_type
+	from (
+			extract dictionaries 'dicts/region_code_list.dict' and 'dicts/region_list.dict' 
+				on U.host as matched 
+			from URL U
+		 ) U
+	consolidate on U.matched
+)
+union all
+(
+	select U.matched as matched, 'URLPath' as input_type
+	from 
+	(
+		extract dictionaries 'dicts/region_code_list.dict' and 'dicts/region_list.dict'  
+				on U.actualPath as matched 
+		from URL U
+	) U
+	consolidate on U.matched
+);
+
+
+create view RegionAnnotsFromTitle as
+select T.matched as matched, 'Title' as input_type
+from 
+(
+	extract dictionaries 'dicts/region_list.dict' and 'dicts/region_code_list.dict'
+		on T.title as matched 
+	from Title T
+) T
+consolidate on T.matched;
+
+
+create view RegionAnnotsFromTitleSegs as
+(
+	select T.matched as matched, 'Seg1' as input_type
+	from 
+	(
+		extract dictionaries 'dicts/region_list.dict' and 'dicts/region_code_list.dict' 
+ 		  		on T.seg1 as matched 
+ 		from TitleSegs T
+ 	) T
+ 	consolidate on T.matched
+)
+union all
+(
+	select T.matched as matched, 'Seg2' as input_type
+	from 
+	(
+		extract dictionaries 'dicts/region_list.dict' and 'dicts/region_code_list.dict' 
+				on T.seg2 as matched 
+		from TitleSegs T
+	) T
+	consolidate on T.matched
+);
+
+
+create view RegionAnnotsFromMeta as
+(
+	select D.matched as matched, 'MetaDescription' as input_type
+	from (extract dictionaries 'dicts/region_list.dict' and 'dicts/region_code_list.dict'
+			on D.content as matched from MetaDescription D) D
+	consolidate on D.matched
+)
+union all
+(
+	select K.matched as matched, 'MetaKeywords' as input_type
+	from (extract dictionaries 'dicts/region_list.dict' and 'dicts/region_code_list.dict'
+			on K.keyword as matched from MetaKeywords K) K
+	consolidate on K.matched
+);
+
+
+create view RegionAnnotsFromH1H2 as
+(
+	select H.region as matched, 'H1' as input_type
+	from (extract dictionaries 'dicts/region_list.dict' and 'dicts/region_code_list.dict'
+			on H.match as region from H1 H) H
+	consolidate on H.region
+)
+union all
+(
+	select H.region as matched, 'H2' as input_type
+	from (extract dictionaries 'dicts/region_list.dict' and 'dicts/region_code_list.dict'
+			on H.match as region from H2 H) H
+	consolidate on H.region
+);
+
+
+--output view RegionAnnotsFromURL;
+--output view RegionAnnotsFromTitle;
+--output view RegionAnnotsFromTitleSegs;
+--output view RegionAnnotsFromMeta;
+--output view RegionAnnotsFromH1H2;
+
+
+
+
+
+-------------------------------SITE-------------------------------------------
+-- Site annotations come from title_segs, title, description, url_splits 
+
+
+create view SiteAnnotsFromURL as
+(
+	select U.matched as matched, 'URLHost' as input_type
+	from (
+			extract dictionaries 'dicts/site_code_list.dict' and 'dicts/site_list.dict' 
+				on U.host as matched 
+			from URL U
+		 ) U
+	consolidate on U.matched
+)
+union all
+(
+	select U.matched as matched, 'URLPath' as input_type
+	from (
+			extract dictionaries 'dicts/site_code_list.dict' and 'dicts/site_list.dict'   
+				on U.actualPath as matched 
+			from URL U
+		 ) U
+	consolidate on U.matched
+);
+
+
+create view SiteAnnotsFromTitle as
+select T.matched as matched, 'Title' as input_type
+from 
+(
+	extract dictionaries 'dicts/site_list.dict' and 'dicts/site_code_list.dict'
+			on T.title as matched 
+	from Title T
+) T
+consolidate on T.matched;
+
+
+create view SiteAnnotsFromTitleSegs as
+(
+	select T.matched as matched, 'Seg1' as input_type
+	from 
+	(
+		extract dictionaries 'dicts/site_list.dict' and 'dicts/site_code_list.dict' 
+ 		  		on T.seg1 as matched 
+ 		from TitleSegs T
+ 	) T
+ 	consolidate on T.matched
+)
+union all
+(
+	select T.matched as matched, 'Seg2' as input_type
+	from 
+	(
+		extract dictionaries 'dicts/site_list.dict' and 'dicts/site_code_list.dict' 
+				on T.seg2 as matched 
+		from TitleSegs T
+	) T
+	consolidate on T.matched
+);
+
+
+create view SiteAnnotsFromMeta as
+select D.matched as matched, 'MetaDescription' as input_type
+from (
+		extract dictionaries 'dicts/site_list.dict' and 'dicts/site_code_list.dict'
+			on D.content as matched 
+		from MetaDescription D
+	  ) D
+consolidate on D.matched;
+
+
+
+
+--output view SiteAnnotsFromURL;
+--output view SiteAnnotsFromTitle;
+--output view SiteAnnotsFromTitleSegs;
+--output view SiteAnnotsFromMeta;
+
+
+
+
+
+
+-- ****************************************************************************
+-- ***                         Phase 3: Priority Rules                     ****
+-- ****************************************************************************

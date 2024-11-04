@@ -1,0 +1,54 @@
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+
+module Time;
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText;
+
+import dictionary WorldTimeZones from module Dictionaries as WorldTimeZones;
+import dictionary DaysInAWeekFromGregorianCalendar from module Dictionaries as DaysInAWeekFromGregorianCalendar;
+
+require document with columns
+text Text;
+
+create view FourDigits as
+select
+	R.match as match
+from
+   (extract regex /((20)|(19)|(18)|(17)|(16))[\p{Nd}][\p{Nd}]/ 
+ 		on between 1 and 4 tokens in D.text 
+ 			as match 
+ 	  from DocumentText D) R;
+    
+create view TwoDigitsInterval as
+select
+	R.match as match
+from
+    (extract regex /((0)|(1)|(2)|(3))?[\d]( )*[\-]( )*((0)|(1)|(2)|(3))?[\d]/
+    	on between 1 and 5 tokens in D.text 
+    	as match from DocumentText D) R;
+
+create view TimeZoneDict as
+	select
+		D.match as match
+	from
+		(extract dictionary 'WorldTimeZones' on D.text as match from DocumentText D) D;
+		
+create view WKDay as
+	select
+		D.match as match
+	from
+		(extract dictionary 'DaysInAWeekFromGregorianCalendar' on D.text as match from DocumentText D) D;

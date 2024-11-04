@@ -1,0 +1,30 @@
+-------------------------------------------------------------------------------
+-- unicode.aql
+--
+-- Test case for regular expressions containing unicode characters.
+
+require document with columns text Text;
+
+create view Digits as
+extract
+	regex /[一二三四五六七八九〇][一二三四五六七八九〇][一二三四五六七八九〇][一二三四五六七八九〇]/
+	on D.text as match
+from Document D;
+
+output view Digits;
+	
+-- Make sure the old syntax works too.
+select 
+	R.match as match
+into DigitsOld
+from 
+	Regex(/[一二三四五六七八九〇][一二三四五六七八九〇][一二三四五六七八九〇][一二三四五六七八九〇]/,
+		Document.text) R;
+		
+-- Pass through the Document type so that we can verify that the JVM is correctly
+-- interpreting UTF-8.
+create view Doc as
+select D.text as text
+from Document D;
+
+output view Doc;

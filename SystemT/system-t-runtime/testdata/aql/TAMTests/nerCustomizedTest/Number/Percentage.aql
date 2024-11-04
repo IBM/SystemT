@@ -1,0 +1,36 @@
+module Number; 
+-------------------------------------------------------------------------------
+-- Identify Percentage candidate in both text and digital format based on NumberCandidates view
+-- Consolidate to get final Percentage view
+-------------------------------------------------------------------------------
+
+import dictionary PercentageSuffix from module Dictionaries as PercentageSuffixDict;
+
+create view PercentageSuffix_ as
+	extract dictionary 'PercentageSuffixDict' with flags 'IgnoreCase' on D.text as suffix
+		from DocumentText D;
+
+-- -1000
+create view IntegerSimple1_ as
+extract regex /([+-]?\d+)/
+		on D.text
+		return group 1 as match 
+		from DocumentText D ;
+
+create view NumberCandidates as
+	select P.match as number 
+	from
+		((select I.match as match from IntegerSimple1_ I)
+		union all
+		(select N.number as match from NumberCandidate N)) P
+	consolidate on P.match;
+				
+create view Percentage as
+	select 
+		CombineSpans(num.number, suffix.suffix) as percentage
+	from 
+		NumberCandidates num, PercentageSuffix_ suffix
+	where FollowsTok(num.number,suffix.suffix,0,1)
+	and MatchesRegex(/\s*/,SpanBetween(num.number, suffix.suffix));
+	
+export view Percentage;

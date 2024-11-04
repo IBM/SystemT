@@ -1,0 +1,27 @@
+module badConsolidateTargetTypeTest;
+
+create view WordTest as
+  extract 'num' as numText, 1 as number, 
+  regex /.*/ on 1 token in D.text as match
+  from Document D;
+  
+create view ViewFrom as 
+  select D.text, 'a' as A, Contains('a','b') as B 
+  from Document D;
+
+-- Target is of type Integer
+create view ConsolidateIntegerBadTargetTyping as
+  select W.number 
+  from WordTest W
+  consolidate on W.number;
+
+-- Target is of type Boolean
+  create view ConsolidateBoolExtractPatBadTargetType as 
+ extract 
+    IsNull(VF.A) as aBool,
+   pattern /[A-Z]/ <VF.A> as pat
+   from ViewFrom VF
+  consolidate on aBool; 
+
+output view ConsolidateIntegerBadTargetTyping;
+output view ConsolidateBoolExtractPatBadTargetType;

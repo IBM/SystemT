@@ -1,0 +1,25 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test cases for extension to sequence patterns to pass through attributes
+-- Verifies that we cannot pass through columns from under repeatable elements of the pattern expression.
+--
+-------------------------------------------------------------------------------
+
+create view CapsWord as
+extract 'CapsWord' as type,
+	regex /[A-Z].*/ on 1 token in D.text as match
+from Document D;
+
+create view LowWord as
+extract 'LowWord' as type,
+	regex /[a-z]*/ on 1 token in D.text as match
+from Document D;
+
+-- Wrong column name in having clause - will generate an exception "Invalid attribute name 'match1' in HAVING clause"
+create view ColRefAtom1 as
+extract C.type as ctype,
+	    pattern (<C.match> {1,3})
+	    return group 1 as match
+from CapsWord C;
+
+output view ColRefAtom1;

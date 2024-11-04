@@ -1,0 +1,467 @@
+/*create dictionary FilterPersonDict as
+(
+	'Travel', 'Fellow', 'Sir', 'IBMer', 'Researcher', 'All','Tell',
+	'Friends', 'Friend', 'Colleague', 'Colleagues', 'Managers','If',
+	'Customer', 'Users', 'User', 'Valued', 'Executive', 'Chairs',
+	'New', 'Owner', 'Conference', 'Please', 'Outlook', 'Lotus', 'Notes',
+	'This', 'That', 'There', 'Here', 'Subscribers', 'What', 'When', 'Where', 'Which',
+	'With', 'While', 'Thanks', 'Thanksgiving','Senator', 'Platinum', 'Perspective',
+	'Manager', 'Ambassador', 'Professor', 'Dear', 'Contact', 'Cheers', 'Athelet',
+	'And', 'Act', 'But', 'Hello', 'Call', 'From', 'Center', 'The', 'Take', 'Junior',
+	'Both', 'Communities', 'Greetings', 'Hope', 'Restaurants', 'Properties',
+	'Let', 'Corp', 'Memorial', 'You', 'Your', 'Our',  'My', 'His','Her',
+	'Their','Popcorn', 'Name', 'July', 'June','Join',
+	'Business', 'Administrative', 'South', 'Members', 'Address', 'Please', 'List',
+	'Public', 'Inc', 'Parkway', 'Brother', 'Buy', 'Then', 'Services', 'Statements',
+	'President', 'Governor', 'Commissioner', 'Commitment', 'Commits', 'Hey',
+	'Director', 'End', 'Exit', 'Experiences', 'Finance', 'Elementary', 'Wednesday',
+	'Nov', 'Infrastructure', 'Inside', 'Convention',
+	'Judge', 'Lady', 'Friday',  'Project', 'Projected', 
+	'Recalls', 'Regards', 'Recently', 'Administration', 'Independence', 'Denied',
+	'Unfortunately', 'Under', 'Uncle', 'Utility', 'Unlike', 'Was', 'Were', 'Secretary',
+	'Speaker', 'Chairman', 'Consider', 'Consultant', 'County', 'Court', 'Defensive',
+	'Northwestern', 'Place', 'Hi', 'Futures', 'Athlete', 'Invitational', 'System',
+	'International', 'Main', 'Online', 'Ideally', 'State'
+	-- more entries
+	,'If','Our', 'About', 'Analyst', 'On', 'Of', 'By', 'HR', 'Mkt', 'Pre', 'Post',
+	'Condominium', 'Ice', 'Surname', 'Lastname', 'firstname', 'Name', 'familyname',
+	-- Italian greeting
+   'Ciao',
+   -- Spanish greeting
+   'Hola',
+   -- French greeting
+   'Bonjour',
+   -- new entries 
+   'Pro','Bono','Enterprises','Group','Said','Says','Assistant','Vice','Warden','Contribution',
+   'Research', 'Development', 'Product', 'Sales', 'Support', 'Manager', 'Telephone', 'Phone', 'Contact', 'Information',
+   'Electronics','Managed','West','East','North','South', 
+   'Teaches','Ministry', 'Church', 'Association', 'Laboratories', 'Living', 'Community', 'Visiting',
+   'Officer', 'After', 'Pls', 'FYI', 'Only', 'Additionally', 'Adding', 'Acquire', 'Addition', 'America',
+   -- short phrases that are likely to be at the start of a sentence
+   'Yes', 'No', 'Ja', 'Nein','Kein', 'Keine', 'Gegenstimme',
+   -- TODO: to be double checked
+   'Another', 'Anyway','Associate', 'At', 'Athletes', 'It', 'Enron', 'EnronXGate', 'Have', 'However',
+   'Company', 'Companies', 'IBM','Annual', 
+   -- common verbs appear with person names in financial reports
+   -- ideally we want to have a general comprehensive verb list to use as a filter dictionary
+   'Joins', 'Downgrades', 'Upgrades', 'Reports', 'Sees', 
+   'Warns', 'Announces', 'Reviews',
+   -- Laura 06/02/2009: new filter dict for title for SEC domain in filterPerson_title.dict
+   -- Laura 07/22/09: to avoid false positives in SEC filings
+   'To', 'Total', 'Selected', 'Registrant', 'Be', 'For', 'Loans', 'Shares', 'Transition',
+   -- Yunyao: added for CoNLL2003
+   'Agreement','Consumer','Disease','REUTER','BEAT','Keeps','As', 'In', 'Law','Internet','Startup', 'results'
+   ,'Cup','WORKS','first','open','WORLD', 'Market', 'Stocks','Instead', 'During', 'Although', 'Neither',
+   'Both', 'Affairs', 'Children', 'SIGN', 'Out', 'Rare', 'Like','Stock', 'Exchange', 'Last','Up', 'English',
+   'Championship','Latest','Relay','Before', 'After', 'Earlier', 'Recall','Service','Investors','Olympic',
+   'League','TRIO', 'WINS', 'GETS', 'Year', 'Player', 'Federation', 'Prix', 'Islamist', 'Parrots',
+   'Football', 'Confederation','Republic', 'Extras', 'Aggregate', 'Qualifier', 'Globo', 'Moslems', 'Moslem','Retired',
+   -- Yunyao: 03/31/2010 added for NYT
+   'Music',
+   -- Yunyao: 04/29/2010 added for GoogleNews
+   'Wants', 'Age', 'Coverage', 'Manage', 'More', 'Wanted', 'Has', 'Spends', 'CBC', 'She', 'Published', 'Awards', 'Award', 'Education',
+   'Chief', 'Rights', 'Analysts', 'Assurances'
+);*/
+
+/*create dictionary GreetingsDict as
+( 
+   'Hey', 'Hi', 'Hello', 'Dear',
+   -- German greetings
+   'Liebe', 'Lieber', 'Herr', 'Frau', 'Hallo', 
+   -- Italian
+   'Ciao',
+   -- Spanish
+   'Hola',
+   -- French
+   'Bonjour'
+);*/
+
+
+-- Yunyao: 04/28/2010
+--         Replaced using more general dictionaries
+-- Find dictionary matches for all title initials
+--create view Initial as
+--select D.match as initial
+--from   Dictionary('InitialDict', Doc.text) D;
+
+
+
+
+create view CapsPerson as
+select C.name as name
+from CapsPersonCandidate C
+-- Sudarshan regex : 10/12/2011 : backreference on lines 94, 95 and 103
+where Not(MatchesRegex(/(\p{Lu}\p{M}*)+-.*([\p{Ll}\p{Lo}]\p{M}*).*/, C.name))
+  and Not(MatchesRegex(/.*([\p{Ll}\p{Lo}]\p{M}*).*-(\p{Lu}\p{M}*)+/, C.name))
+  -- Yunyao: added on 03/31/2010 to avoid matches in "Don't"
+  --Laura: 04/30/2010: replaced \p{Pi} and \p{Pf} (begin/end quotation marks) with individual unicodes, for Java 5 compatibility
+   --and Not(MatchesRegex(/[ ]*(\p{Pi}|\p{Pf})\p{M}*[^sld]/, RightContextTok(C.name, 2)))
+   and Not(MatchesRegex(/[ ]*[\u0093\u0094\u2018\u2019\u0022\u0027\u00AB\u00BB\u201A\u201B\u201C\u201D\u201E\u301D\u301E\u301F]\p{M}*[^sld]/, RightContextTok(C.name, 2)))
+  -- Yunyao: added on 04/29/2010 to avoid matches in the format "FOXNews"
+   -- Sudarshan regex : added 10/12/2011 : extend \p{Ll} to \p{Ll}\p{M}*
+   --and Not(MatchesRegex(/(\p{Lu}\p{M}*){2,}\p{Ll}.*/, C.name));
+   and Not(MatchesRegex(/(\p{Lu}\p{M}*){2,}\p{Ll}\p{M}*.*/, C.name));
+-- Laura 12/16/2009: for Toro: avoid matches that contain chinese characters
+-- e.g., Matthew Barrie的
+-- and Not(ContainsRegex(/[\u2F00-\u2FDF\u4E00-\u9FAF\u3400-\u4DBF]/, C.name));
+
+-- Two CapsPerson
+create view TwoCapsPerson as
+select CombineSpans(CP1.name, CP2.name) as name
+from CapsPerson CP1,
+	 CapsPerson CP2
+where FollowsTok(CP1.name, CP2.name, 0, 0);
+
+create view OneOrTwoCapPerson as
+	(select CP.name as name from CapsPerson CP)
+	union all
+	(select CP.name as name from TwoCapsPerson CP);
+
+ -- Find strict capitalized words with two letter or more  (relaxed version of StrictCapsPerson)
+
+--============================================================
+--TODO: need to think through how to deal with hypened name 
+-- one way to do so is to run Regex(pattern, CP.name) and enforce CP.name does not contain '
+-- need more testing before confirming the change
+
+create view CapsPersonNoP as
+  select CP.name as name
+  from CapsPerson CP
+where
+--Laura: 04/30/2010: replaced \p{Pi} and \p{Pf} (begin/end quotation marks) with individual unicodes, for Java 5 compatibility
+--Not(ContainsRegex(/(\p{Pi}|\p{Pf})\p{M}*/, CP.name));
+  Not(ContainsRegex(/[\u0093\u0094\u2018\u2019\u0022\u0027\u00AB\u00BB\u201A\u201B\u201C\u201D\u201E\u301D\u301E\u301F]\p{M}*/, CP.name));
+
+
+create view StrictCapsPersonR as
+select R.match as name
+--from Regex(/\b\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}\b/, CapsPersonNoP.name) R;
+-- Sudarshan regex : 10/12/2011 : backreference on line 140
+--from RegexTok(/\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}/, 1, CapsPersonNoP.name) R;
+from (extract regex /\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}/
+			on 1 token in D.text
+			as match from Doc D) R;
+
+
+--============================================================
+		
+-- Find strict capitalized words
+--create view StrictCapsPerson as
+create view StrictCapsPerson as
+select R.name as name
+from StrictCapsPersonR R
+-- Sudarshan regex : 10/12/2011 : backreference on every regex from line 151 - 208. (same regex pasted for multiple aql queries)
+where MatchesRegex(/\b\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){1,20}\b/, R.name);
+
+-- Find dictionary matches for all last names
+create view StrictLastName1 as
+select D.match as lastname
+--from   Dictionary('strictLast.dict', Doc.text) D
+from (extract dictionary 'per_name_last_world_en.dict' on D.text as match from Doc D) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+-- changed to enable unicode match
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+create view StrictLastName2 as
+select D.match as lastname
+--from   Dictionary('strictLast_german.dict', Doc.text) D
+from (extract dictionary 'per_name_last_germany_de_long.dict' on D.text as match from Doc D) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+--where  MatchesRegex(/\p{Upper}.{1,20}/, D.match);
+-- changed to enable unicode match
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+create view StrictLastName3 as
+select D.match as lastname
+--from   Dictionary('strictLast_german_bluePages.dict', Doc.text) D
+from (extract dictionary 'per_name_last_germany_de_short.dict' on D.text as match from Doc D) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+--where  MatchesRegex(/\p{Upper}.{1,20}/, D.match);
+-- changed to enable unicode match
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);
+
+create view StrictLastName4 as
+select D.match as lastname
+--from   Dictionary('uniqMostCommonSurname.dict', Doc.text) D
+from (extract dictionary 'per_name_last_world_uniq_en.dict' on D.text as match from Doc D) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+--where  MatchesRegex(/\p{Upper}.{1,20}/, D.match);
+-- changed to enable unicode match
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);
+
+create view StrictLastName5 as
+select D.match as lastname
+--from   Dictionary('names/strictLast_italy.dict', Doc.text) D
+from (extract dictionary 'names/per_name_last_italy_it.dict' on D.text as match from Doc D) D
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);
+
+create view StrictLastName6 as
+select D.match as lastname
+--from   Dictionary('names/strictLast_france.dict', Doc.text) D
+from (extract dictionary 'names/per_name_last_france_fr.dict' on D.text as match from Doc D) D
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);
+
+create view StrictLastName7 as
+select D.match as lastname
+--from   Dictionary('names/strictLast_spain.dict', Doc.text) D
+from (extract dictionary 'names/per_name_last_spain_es.dict' on D.text as match from Doc D) D
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);
+
+create view StrictLastName8 as
+select D.match as lastname
+--from   Dictionary('names/strictLast_india.partial.dict', Doc.text) D
+from (extract dictionary 'names/per_name_last_india_en.dict' on D.text as match from Doc D) D
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);
+
+create view StrictLastName9 as
+select D.match as lastname
+--from   Dictionary('names/strictLast_israel.dict', Doc.text) D
+from (extract dictionary 'names/per_name_last_israel_en.dict' on D.text as match from Doc D) D
+where  MatchesRegex(/((\p{L}\p{M}*)+\s+)?\p{Lu}\p{M}*.{1,20}/, D.match);
+
+include 'StrictLastName-union.aql';
+
+-- Yunyao: added on 03/31/2010 to avoid matches in "Don't"
+create view StrictLastName as
+select S.*
+from  StrictLastNameAll S
+where
+   --Laura: 04/30/2010: replaced \p{Pi} and \p{Pf} (begin/end quotation marks) with individual unicodes, for Java 5 compatibility
+   --Not(MatchesRegex(/[ ]*(\p{Pi}|\p{Pf})\p{M}*[^sld]/, RightContextTok(S.lastname, 2)));
+	 Not(MatchesRegex(/[ ]*[\u0093\u0094\u2018\u2019\u0022\u0027\u00AB\u00BB\u201A\u201B\u201C\u201D\u201E\u301D\u301E\u301F]\p{M}*[^sld]/, RightContextTok(S.lastname, 2)));
+
+-- Relaxed version of last name
+create view RelaxedLastName1 as
+select CombineSpans(SL.lastname, CP.name) as lastname
+from StrictLastName SL,
+     StrictCapsPerson CP
+where FollowsTok(SL.lastname, CP.name, 1, 1)
+  and MatchesRegex(/\-/, SpanBetween(SL.lastname, CP.name));
+
+create view RelaxedLastName2 as
+select CombineSpans(CP.name, SL.lastname) as lastname
+from StrictLastName SL,
+     StrictCapsPerson CP
+where FollowsTok(CP.name, SL.lastname, 1, 1)
+  and MatchesRegex(/\-/, SpanBetween(CP.name, SL.lastname));
+
+-- all the last names
+create view LastNameAll as
+	(select N.lastname as lastname from StrictLastName N)
+	union all
+	(select N.lastname as lastname from RelaxedLastName1 N)
+	union all
+	(select N.lastname as lastname from RelaxedLastName2 N);
+
+-- Yunyao: added on 05/10/2010 to avoid matching last name with a lower case word before and a upper case word after 	
+create view WrongLastNameAll as
+select L.*
+from LastNameAll L
+where MatchesRegex(/\p{Ll}\p{M}*.*[ ]*/, LeftContextTok(L.lastname, 1))
+  and MatchesRegex(/[ ]+\p{Lu}\p{M}*.*/, RightContextTok(L.lastname, 1));
+  
+--output view WrongLastNameAll;
+
+create view ValidLastNameAll as
+select N.lastname as lastname
+from LastNameAll N
+-- do not allow partially all capitalized words
+-- Sudarshan regex : 10/12/2011 : backreference on lines 258 and 259
+where Not(MatchesRegex(/(\p{Lu}\p{M}*)+-.*([\p{Ll}\p{Lo}]\p{M}*).*/, N.lastname))
+  and Not(MatchesRegex(/.*([\p{Ll}\p{Lo}]\p{M}*).*-(\p{Lu}\p{M}*)+/, N.lastname));
+	
+create view LastName as
+select C.lastname as lastname
+--from Consolidate(ValidLastNameAll.lastname) C;
+from ValidLastNameAll C
+consolidate on C.lastname;
+
+-- Find dictionary matches for all first names
+-- Mostly US first names
+create view StrictFirstName1 as
+select D.match as firstname
+--from   Dictionary('strictFirst.dict', Doc.text) D
+from (extract dictionary 'per_name_first_world_mixed.dict' on D.text as match from Doc D) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+-- changed to enable unicode match
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+-- German first names
+create view StrictFirstName2 as
+select D.match as firstname
+--from   Dictionary('strictFirst_german.dict', Doc.text) D
+--from (extract dictionary 'strictFirst_german.dict' on D.text as match from Doc D) D
+from (extract dictionary 'per_name_first_germany_de_long.dict' on D.text as match from Doc D) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+--where  MatchesRegex(/\p{Upper}.{1,20}/, D.match);
+-- changed to enable unicode match
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+-- nick names for US first names
+create view StrictFirstName3 as
+select D.match as firstname
+--from   Dictionary('strictNickName.dict', Doc.text) D
+from (extract dictionary 'per_name_nick_world_en.dict' on D.text as match from Doc D) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+--where  MatchesRegex(/\p{Upper}.{1,20}/, D.match);
+-- changed to enable unicode match
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);
+
+-- german first name from blue page
+create view StrictFirstName4 as
+select D.match as firstname
+--from   Dictionary('strictFirst_german_bluePages.dict', Doc.text) D
+from (extract dictionary 'per_name_first_germany_de_short.dict' on D.text as match from Doc D) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+--where  MatchesRegex(/\p{Upper}.{1,20}/, D.match);
+-- changed to enable unicode match
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+-- Italy first name from blue pages
+create view StrictFirstName5 as
+select D.match as firstname
+--from   Dictionary('names/strictFirst_italy.dict', Doc.text) D
+from (extract dictionary 'names/per_name_first_italy_it.dict' on D.text as match from Doc D) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+-- France first name from blue pages
+create view StrictFirstName6 as
+select D.match as firstname
+--from   Dictionary('names/strictFirst_france.dict', Doc.text) D
+from (extract dictionary 'names/per_name_first_france_fr.dict' on D.text as match from Doc D) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+-- Spain first name from blue pages
+create view StrictFirstName7 as
+select D.match as firstname
+--from   Dictionary('names/strictFirst_spain.dict', Doc.text) D
+from (extract dictionary 'names/per_name_first_spain_es.dict' on D.text as match from Doc D) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+-- Indian first name from blue pages
+-- TODO: still need to clean up the remaining entries
+create view StrictFirstName8 as
+select D.match as firstname
+--from   Dictionary('names/strictFirst_india.partial.dict', Doc.text) D
+from (extract dictionary 'names/per_name_first_india_en.dict' on D.text as match from Doc D) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+-- Israel first name from blue pages
+create view StrictFirstName9 as
+select D.match as firstname
+--from   Dictionary('names/strictFirst_israel.dict', Doc.text) D
+from (extract dictionary 'names/per_name_first_israel_en.dict' on D.text as match from Doc D) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+
+include 'StrictFirstName-union.aql';
+
+-- Yunyao: added on 03/31/2010 to avoid matches in "Don't"
+create view StrictFirstNameOrig as
+select S.*
+from  StrictFirstNameAll S
+where 
+  --Laura: 04/30/2010: replaced \p{Pi} and \p{Pf} (begin/end quotation marks) with individual unicodes, for Java 5 compatibility
+  --Not(MatchesRegex(/[ ]*(\p{Pi}|\p{Pf})\p{M}*[^sld]/, RightContextTok(S.firstname, 2)));
+  Not(MatchesRegex(/[ ]*[\u0093\u0094\u2018\u2019\u0022\u0027\u00AB\u00BB\u201A\u201B\u201C\u201D\u201E\u301D\u301E\u301F]\p{M}*[^sld]/, RightContextTok(S.firstname, 2)));
+
+--Yunyao: to allow patterns like "O'"
+create view StrictFirstNameExtended as
+select CombineSpans(LeftContext(S.firstname, 2), S.firstname) as firstname
+from  StrictFirstNameAll S
+where MatchesRegex(/O'/, LeftContext(S.firstname, 2)); --'
+
+create view StrictFirstNameCandidate as
+	(select F.* from StrictFirstNameOrig F)
+	union all
+	(select F.* from StrictFirstNameExtended F);
+
+create view StrictFirstName as
+select F.*
+from StrictFirstNameCandidate F
+consolidate on F.firstname;
+
+-- Relaxed versions of first name
+create view RelaxedFirstName1 as
+select CombineSpans(S.firstname, CP.name) as firstname
+from StrictFirstName S,
+     StrictCapsPerson CP
+where FollowsTok(S.firstname, CP.name, 1, 1)
+  and MatchesRegex(/\-/, SpanBetween(S.firstname, CP.name));
+
+create view RelaxedFirstName2 as
+select CombineSpans(CP.name, S.firstname) as firstname
+from StrictFirstName S,
+     StrictCapsPerson CP
+where FollowsTok(CP.name, S.firstname, 1, 1)
+  and MatchesRegex(/\-/, SpanBetween(CP.name, S.firstname));
+  
+-- all the first names
+create view FirstNameAll as
+	(select N.firstname as firstname from StrictFirstName N)
+	union all
+	(select N.firstname as firstname from RelaxedFirstName1 N)
+	union all
+	(select N.firstname as firstname from RelaxedFirstName2 N);
+
+create view ValidFirstNameAll as
+select N.firstname as firstname
+from FirstNameAll N
+-- Sudarshan regex : 10/12/2011 : backreference on lines 389 and 390
+where Not(MatchesRegex(/(\p{Lu}\p{M}*)+-.*([\p{Ll}\p{Lo}]\p{M}*).*/, N.firstname))
+  and Not(MatchesRegex(/.*([\p{Ll}\p{Lo}]\p{M}*).*-(\p{Lu}\p{M}*)+/, N.firstname));
+	
+create view FirstName as
+select C.firstname as firstname
+--from Consolidate(ValidFirstNameAll.firstname) C;
+from ValidFirstNameAll C
+consolidate on C.firstname;
+
+-- Combine all dictionary matches for both last names and first names
+create view NameDict as
+select D.match as name
+--from   Dictionary('name.dict', Doc.text) D
+from (extract dictionary 'per_name_world_mixed.dict' on D.text as match from Doc D) D
+--where  MatchesRegex(/\p{Upper}\p{Lower}[\p{Alpha}]{0,20}/, D.match);	
+--where  MatchesRegex(/\p{Upper}.{1,20}/, D.match);	
+-- changed to enable unicode match
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+create view NameDict1 as
+select D.match as name
+--from   Dictionary('names/name_italy.dict', Doc.text) D
+from (extract dictionary 'names/per_name_italy_it.dict' on D.text as match from Doc D) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+create view NameDict2 as
+select D.match as name
+--from   Dictionary('names/name_france.dict', Doc.text) D
+from (extract dictionary 'names/per_name_france_mixed.dict' on D.text as match from Doc D) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+create view NameDict3 as
+select D.match as name
+--from   Dictionary('names/name_spain.dict', Doc.text) D
+from (extract dictionary 'names/per_name_spain_mixed.dict' on D.text as match from Doc D) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);	
+
+create view NameDict4 as
+select D.match as name
+--from   Dictionary('names/name_israel.dict', Doc.text) D
+from (extract dictionary 'names/per_name_israel_en.dict' on D.text as match from Doc D) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);
+
+-----------------------------------------------------
+-- customization for CoNLL2003
+-----------------------------------------------------
+create view NameDict5 as
+select D.match as name
+--from   Dictionary('names/popularBabyName.dict', Doc.text) D
+from (extract dictionary 'names/per_name_baby_top_en.dict' on D.text as match from Doc D) D
+where  MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, D.match);
+
+
+
+
+	
+

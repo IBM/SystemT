@@ -1,0 +1,92 @@
+/*
+ * Test to verify that views, dictionaries, tables and functions can not have a dot in their names
+ */
+
+module module1;
+
+---------------------------------------------------------------------------------------
+---------- View
+---------------------------------------------------------------------------------------
+create view "My.View" as
+	select D.label as label, D.text as text
+	from Document D;
+
+output view "My.View";
+export view "My.View";
+
+---------------------------------------------------------------------------------------
+---------- Inline dict
+---------------------------------------------------------------------------------------
+create dictionary "Salutation.Dict" as  
+(
+  'rev.', 'col.', 'reverend', 'prof.', 'professor',
+  'lady', 'miss.', 'mrs.', 'mrs', 'mr.', 'pt.', 'ms.',
+  'messrs.', 'dr.', 'master.', 'marquis', 'monsieur',
+  'ds', 'di','herr', 'Fraeulein', 'Doktor', 'Herr Doktor',
+  'Frau Doktor','Herr Professor', 'Frau professor', 'Baron', 'graf'
+);
+
+export dictionary "Salutation.Dict";
+
+---------------------------------------------------------------------------------------
+---------- On disk dictionary
+---------------------------------------------------------------------------------------
+create dictionary "FirstNames.Dict"
+from file 'dict/strictFirst.dict';
+
+export dictionary "FirstNames.Dict";
+
+---------------------------------------------------------------------------------------
+---------- Table
+---------------------------------------------------------------------------------------
+create table "NameTo.Location" (name Text, location Text) as
+values 
+	('IBM', 'USA'), 
+	('Enron', 'Hell'), 
+	('Yahoo', 'Santa Clara'),
+	('Acme Fake Company Names', 'Somewhere');
+	
+export table "NameTo.Location";
+
+---------------------------------------------------------------------------------------
+------  Function
+---------------------------------------------------------------------------------------
+
+create function "my.ToUpperCase"(inputText String)
+return String
+external_name 'StringUtil.jar:com.ibm.udf.test.StringUtil!toUpperCase'
+language java
+deterministic
+return null on null input;
+
+export function "my.ToUpperCase";
+
+---------------------------------------------------------------------------------------
+------  External view
+---------------------------------------------------------------------------------------
+create external view "External.View"(match Text, id Float) 
+external_name 'ExternalViewFromJson1';
+
+export view "External.View";
+
+---------------------------------------------------------------------------------------
+------  External table
+---------------------------------------------------------------------------------------
+create external table "External.Table"
+(
+  id Integer,
+  text Text
+)
+allow_empty true;
+
+export table "External.Table";
+
+---------------------------------------------------------------------------------------
+------  External dictionary
+---------------------------------------------------------------------------------------
+create external dictionary "External.Dict"
+allow_empty true
+with case insensitive
+;
+
+export dictionary "External.Dict";

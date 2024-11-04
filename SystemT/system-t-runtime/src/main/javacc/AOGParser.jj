@@ -1,0 +1,1944 @@
+// Parser for .aog (Avatar Object Graph) files
+//    javacc -STATIC=false AOGParser.jj
+// from this directory.
+  
+options {
+	STATIC = false;	
+//	JDK_VERSION = "5.0";
+	UNICODE_INPUT = true;
+} 
+ 
+PARSER_BEGIN(AOGParser)
+/*******************************************************************************
+* Copyright IBM
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*******************************************************************************/
+package com.ibm.avatar.aog;
+
+import java.io.*;
+import java.util.*;
+import java.util.regex.Pattern;
+import com.ibm.avatar.algebra.datamodel.*;
+import com.ibm.systemt.util.regex.*;
+import com.ibm.avatar.algebra.util.data.*;
+import com.ibm.avatar.algebra.util.dict.*;
+import com.ibm.avatar.algebra.util.udf.*;
+import com.ibm.avatar.aql.RegexNode;
+import com.ibm.avatar.aql.catalog.*;
+import com.ibm.avatar.algebra.util.string.StringUtils;
+import javax.xml.bind.DatatypeConverter;
+
+/**
+ * Main entry point for the Avatar Operator Graph file parser.
+ * 
+ * NOTE: This file is GENERATED from AOGParser.jj!!!
+ */
+@SuppressWarnings("all")
+public class AOGParser extends AOGParserBase {
+	
+	/** Pointer to the AOG parser's catalog. */
+	private Catalog catalog = new Catalog();
+	
+	public Catalog getCatalog() {
+		return catalog;
+	}
+
+
+	/**
+	* Construct an instance of parser, to parse AOG string.  
+	*
+	* @param s string containing AOG.
+	* @param compiledDictionaries map of dictionary name vs compiled dictionary object.
+	* @param externalTables map of all the loaded external tables.
+	*/
+	public AOGParser(String moduleName, String s, Map<String, CompiledDictionary> compiledDictionaries, Map<String, ArrayList<ArrayList<String>>> externalTables)throws IOException {
+		this(new StringReader(s));
+		setCompiledDictionaries(compiledDictionaries);
+		setExternalTables(externalTables);
+
+		//set the moduleName
+		this.moduleName = moduleName;		
+	}	
+	
+	/**
+	* Construct an instance of parser, to parse AOG file.
+	* 
+	* @param f file containing AOG.
+	* @param compiledDictionaries map of dictionary name vs compiled dictionary object.
+	*/
+	public AOGParser(String moduleName, File f, Map<String, CompiledDictionary> compiledDictionaries)throws IOException {
+		this(moduleName, f, "UTF-8",compiledDictionaries);
+	}
+
+	/**
+	* Construct an instance of parser, to parse AOG file.
+	* 
+	* @param f file containing AOG.
+	* @param encodingName byte encoding of aqlFile.
+	* @param compiledDictionaries map of dictionary name vs compiled dictionary object.
+	*/	
+	public AOGParser(String moduleName, File f, String encodingName, Map<String, CompiledDictionary> compiledDictionaries)throws IOException {
+		this(
+			new BufferedReader(
+				new InputStreamReader(
+					new FileInputStream(f), encodingName
+				)
+			)
+		);
+		setCompiledDictionaries(compiledDictionaries);
+
+		//set the moduleName
+		this.moduleName = moduleName;
+	}
+
+	public AOGParser(String moduleName, InputStream in, String encodingName, Map<String, CompiledDictionary> compiledDictionaries, Map<String, ArrayList<ArrayList<String>>> externalTables)throws IOException {
+ 		this(in, encodingName);
+		setCompiledDictionaries(compiledDictionaries);
+		setExternalTables(externalTables);
+
+		//set the moduleName
+		this.moduleName = moduleName;
+	}
+
+	/**
+	* Constructor to be called only when OperatorGraph.validateOG() is invoked. This method will turn off validation of external artifacts.
+	*/
+	public AOGParser(String moduleName, InputStream in, String encodingName, Map<String, CompiledDictionary> compiledDictionaries) throws IOException
+	{
+		this(moduleName, in, encodingName, compiledDictionaries, null);
+		super.validateExternalArtifacts = false;
+	}
+	
+	
+	/**
+	 * Remove quotes from a quoted string returned by the lexer.  Also de-escapes
+	 * any escaped quotes inside the string.
+	 * 
+	 * @param quotechar
+	 *            character (e.g. " or /) used to indicate start/end quotation
+	 * @param string
+	 *            string to be dequoted
+	 * @return string with quotes removed
+	 * @throws ParseException
+	 */
+	private String dequoteStr(char quotechar, Token quotedString)
+			throws ParseException {
+		String str = quotedString.image;
+		if (str.charAt(0) != quotechar
+				|| str.charAt(str.length() - 1) != quotechar) {
+			throw new AOGConversionException(quotedString, "Can't dequote string '" + str + "'");
+		}
+
+		// Start by stripping off the starting and ending quotes.
+		String stripped = str.substring(1, str.length() - 1);
+		
+		// Now remove any escaping of embedded quotes.
+		stripped = stripped.replace("\\\"", "\"");
+		
+		// Also remove any escaped backslashes.
+		stripped = stripped.replace("\\\\", "\\");
+
+		System.err.printf("/%s/ becomes /%s/\n", str.substring(1, str.length() - 1), stripped);
+		
+		return stripped;
+	}
+
+}
+
+PARSER_END(AOGParser)
+
+//
+// LEXER
+//
+SKIP :
+{
+  " "
+| "\t"
+| "\n"
+| "\r"
+}
+
+
+// COMMENTS
+// JavaCC's lexer handles comments (and other ambiguous tokens) differently
+// from normal tokens.
+MORE :
+{
+	"#" : IN_SINGLE_LINE_COMMENT
+}  
+
+<IN_SINGLE_LINE_COMMENT>
+SPECIAL_TOKEN :
+{
+	<SINGLE_LINE_COMMENT : "\n" | "\r" | "\r\n" > : DEFAULT
+}
+
+<IN_SINGLE_LINE_COMMENT>
+MORE :
+{
+	< ~[] >
+}
+
+TOKEN :
+{
+	//////////////////////////////////////////////////////////////////////
+	// OPERATOR NAMES
+	
+	<DICTIONARY_OPNAME : "Dictionary">
+	| <LWDICTIONARY_OPNAME : "LWDictionary">
+	| <SELECT_OPNAME : "Select">
+	| <GROUP_OPNAME : "GroupBy">
+	| <UNION_OPNAME : "Union">
+	| <REGEX_OPNAME : "Regex">
+	| <FAST_REGEX_OPNAME : "FastRegex">
+	| <PROJECT_OPNAME : "Project">
+	| <CROSSPROD_OPNAME : "CrossProduct">
+	| <CONSOLIDATE_OPNAME : "Consolidate">
+	| <DICTS_OPNAME : "Dicts">
+	| <PARTOFSPEECH_OPNAME : "PartOfSpeech">
+	| <BLOCK_OPNAME : "Block">
+	| <BLOCKTOK_OPNAME : "BlockTok">
+	| <SORT_OPNAME : "Sort">
+	| <RENAMECOLS_OPNAME : "RenameCols">
+	| <DIFFERENCE_OPNAME : "Difference">
+	| <APPLYFUNC_OPNAME : "ApplyFunc">
+	| <NLJOIN_OPNAME : "NLJoin">
+	| <UIMA_OPNAME : "UIMA">
+	| <SORTMERGEJOIN_OPNAME : "SortMergeJoin">
+	| <REGEXTOK_OPNAME : "RegexTok">
+	| <FASTREGEXTOK_OPNAME : "FastRegexTok">
+	| <RSEJOIN_OPNAME : "RSEJoin">
+	| <REGEXESTOK_OPNAME : "RegexesTok">
+	| <SPLIT_OPNAME : "Split">
+	| <TABLESCAN_OPNAME : "TableScan">
+	| <EXTERNALVIEWSCAN_OPNAME: "ExternalViewScan">
+	| <ADJACENTJOIN_OPNAME : "AdjacentJoin">
+	| <LIMIT_OPNAME : "Limit">
+	| <HASHJOIN_OPNAME : "HashJoin">
+	//////////////////////////////////////////////////////////////////////
+	// NOTE: Yunyao: added on 02/18/2008 to support HTML Detagger operator
+	//////////////////////////////////////////////////////////////////////
+	| <DETAG_OPNAME : "Detag">
+	| <DOCSCAN_OPNAME : "DocScan">
+    | <TABFUNC_OPNAME : "ApplyTableFunc">
+	
+	//////////////////////////////////////////////////////////////////////
+	// DATA STRUCTURE DECLARATIONS
+	| <CREATE_TABLE : "CreateTable">
+	| <CREATE_DICT : "CreateDict">
+	| <CREATE_EXTERNAL_VIEW : "CreateExternalView">
+	
+	//////////////////////////////////////////////////////////////////////	
+	// For UDFS
+	| <CREATE_FUNCTION : "CreateFunction">
+	| <JAR : "Jar">
+	
+	//////////////////////////////////////////////////////////////////////
+	// CONSTANT SCALAR FUNCTIONS
+	
+	| <INTCONST_FNAME : "IntConst">
+	| <FLOATCONST_FNAME : "FloatConst">
+	| <BOOLCONST_FNAME : "BoolConst">
+	| <STRINGCONST_FNAME : "StringConst">
+	| <REGEXCONST_FNAME : "RegexConst">
+	| <GETCOL_FNAME : "GetCol">
+		
+	//////////////////////////////////////////////////////////////////////
+	// OTHER RESERVED WORDS
+	
+	// The "Output" string.
+	| <OUTPUT : "Output">
+	
+	// The "number" infinity.
+	| <INFINITY : "infinity">
+
+	// Boolean
+	| < FALSE : "false" >
+	| < TRUE : "true" >		
+
+	// Potential scalar function name.
+	// Make sure that this guy comes after the other tokens, so that it 
+	// does not override them.
+	| <SCALAR_FUNC_NAME : ["a"-"z","A"-"Z"](["a"-"z","A"-"Z","0"-"9","_","."])*>
+	
+	//////////////////////////////////////////////////////////////////////
+	// LITERALS
+	
+	
+	// The name of an optree or an existing annotation type.
+	// Note that the lexer has a funny regex syntax.  See:
+	// http://www.cs.utsa.edu/~danlo/teaching/cs4713/lecture/node12.html
+	| <NICKNAME : "$" ["a"-"z","A"-"Z","_"](["a"-"z","A"-"Z","0"-"9","_"])* >
+	
+	
+	
+	// A natural number
+	|	<INTEGER : ("-")? (["0"-"9"])+>
+	
+	// A float number
+	|	<FLOAT : ("-")? (["0"-"9"])+ "." (["0"-"9"])+>
+	
+	// A string literal (Based on JavaCC.jj)
+	|	<STRING_LITERAL :
+		"\""
+	      (   (~["\"","\\","\n","\r"])
+	        | ("\\"
+	            ( ["n","t","b","r","f","\\","'","\""]
+	            | ["0"-"7"] ( ["0"-"7"] )?
+	            | ["0"-"3"] ["0"-"7"] ["0"-"7"]
+	            // Java-style Unicode escapes (e.g. \u1234)
+	            | "u" ["0"-"3"] ["0"-"7"] ["0"-"7"]
+	            )
+	          )
+	      )*
+	      "\""
+	  	>
+
+	// A multi-line string literal \n and \r allowed
+	|	<STRING_LITERAL_ML :
+		"\""
+	      (   (~["\"","\\"])
+	        | ("\\"
+	            ( ["n","t","b","r","f","\\","'","\""]
+	            | ["0"-"7"] ( ["0"-"7"] )?
+	            | ["0"-"3"] ["0"-"7"] ["0"-"7"]
+	            // Java-style Unicode escapes (e.g. \u1234)
+	            | "u" ["0"-"3"] ["0"-"7"] ["0"-"7"]
+	            )
+	          )
+	      )*
+	      "\""
+	  	>
+	
+	
+	// A regular expression in the form /expr/
+	|	<REGEX_LITERAL : 
+		"/"
+	      ( 
+	      	(~["/","\n","\r"]) 
+	        | ("\\" "/")
+	      )*
+	     "/">
+	
+}
+
+//
+// PARSER
+// 
+
+// The file consists of some subtree expressions, followed by an "Output" line.
+AOGParseTree Input() :
+{
+	parseTree = new AOGParseTree();
+	AOGParseTreeNode expr;
+	AOGOutputExpr out;
+	CompiledDictionary dict;
+	Table table;
+	ExternalView externalView;
+	UDFunction func;
+}
+{
+	(
+		expr = NamedSubtree() { parseTree.addSubtree(expr); }
+		| expr = MultiNamedSubtree() { parseTree.addSubtree(expr); }
+		| out = OutputExpr() { parseTree.addOutputs(out); }
+		| table = CreateTable() { parseTree.getSymTab().addTable(table); }
+		| externalView = CreateExternalView() { parseTree.getSymTab().addExternalView(externalView); }
+		| dict = CreateDict(parseTree.getSymTab()) { parseTree.getSymTab().addDict(dict); }
+		| func = CreateFunction() { catalog.addFunctionAOG(func.getName(), func.getParams()); }
+		| JarFile(catalog)
+	)*	
+	<EOF>
+	{ 
+		parseTree.setCatalog(catalog);
+		return parseTree; 
+	}
+}
+
+// An inline lookup table creation
+Table CreateTable() :
+{
+	Token t;
+	String tableName;
+	StringPairList schema;
+	ArrayList<ArrayList<String>> tuples = new ArrayList<ArrayList<String>>();
+	ArrayList<String> tup;
+	StringPairList attributePairString;
+	boolean isExternal = false;
+	Boolean allowEmpty = null;
+	Boolean required = null;
+}
+{
+	t = <CREATE_TABLE>
+	"("
+		// Table name
+		tableName = StringLiteral() ","
+
+		// Table attribute
+		attributePairString = StringStringPairs() ","
+		
+		// Table schema
+		schema = StringStringPairs() 
+		
+		// Tuples (zero tuples is OK too)
+		(
+			"," 
+			// Column values are represented in AOG as strings, regardless
+			// of type.
+			tup = StringList2()
+			{ tuples.add(tup); }
+		)*
+	")" ";"
+	{
+	    // first populate table attributes
+	    for (Pair<String, String> elem : attributePairString) {
+	      String attribName = elem.first;
+	      String attribVal = elem.second;
+	
+	      if ("isExternal".equals (attribName)) {
+	        isExternal = Boolean.valueOf (attribVal);
+	      }
+	      else if ("allowEmpty".equals (attribName)) {
+	        allowEmpty = Boolean.valueOf (attribVal);
+	      }
+	      else if ("required".equals (attribName)) {			required = Boolean.valueOf (attribVal);
+		  }	
+	      else {
+	        throw new ParseException (String.format ("In compiled module '%s', attribute name '%s' is not understood.", moduleName, attribName));
+	      }
+	    }
+	    
+	    // Entries for external table come from loader, when parser not in ValidateOG mode( validateExternalArtifacts == false)
+	  	if ( isExternal && true == validateExternalArtifacts ) {
+	  	  // This validation is required for clients, who take backdoor entry to parser and do not come through the usual OperatorGraph route.
+	  	  // Note: OperatorGraph performs all these validations before reaching parser.
+	  	  if ( null != externalTables.get(tableName) ) {
+	  	  	tuples = externalTables.get(tableName);
+	  	  	if ( allowEmpty == Boolean.FALSE && tuples.size() == 0 ) {
+	  	  		throw new ParseException(String.format ("In compiled module '%s', external table '%s' cannot be empty. This table is declared with allow_empty false.", moduleName, tableName));
+	  	    }
+	  	 } else {
+	  	   if ( allowEmpty == Boolean.FALSE )
+	  	   {
+	  	   		throw new ParseException(String.format ("In compiled module '%s', external table '%s' cannot be empty. This table is declared with allow_empty false.", moduleName, tableName));
+	  	   }
+	  	   if ( required == Boolean.TRUE )
+	  	   {	  	        throw new ParseException(String.format ("In compiled module '%s', external table '%s' must be associated with a URI.  This table is declared with required true.", moduleName, tableName));
+	  	   }
+	  	 }
+	  }
+		return new Table(tableName, schema, tuples, isExternal, allowEmpty, required);
+	}
+}
+
+// An external view creation
+ExternalView CreateExternalView() :
+{
+	Token t;
+	String viewName, externalViewName;
+	StringPairList schema;
+}
+{
+	t = <CREATE_EXTERNAL_VIEW>
+	"("
+		// View name
+		viewName = StringLiteral() ","
+
+		// View external name
+		externalViewName = StringLiteral() ","
+		
+		// View schema
+		schema = StringStringPairs() 
+
+	")" ";"
+	{
+		return new ExternalView(viewName, externalViewName, schema);
+	}
+}
+
+// Definition of a dictionary (internal or external)
+CompiledDictionary CreateDict(SymbolTable symtab) :
+{
+	Token t;
+	StringPairList params;
+	CompiledDictionary compiledDict;
+}
+{
+	t = <CREATE_DICT>
+	params = StringStringPairs()
+	";"
+	{
+	  DictParams dictParam = new DictParams(params);
+	  
+	  // fetch compiled dictionary instance for the dictionary in hand 
+	  compiledDict = compiledDictionaries.get(dictParam.getDictName());
+	  
+ 	  // For optional external dictionary, if entries not provided thru external type info object;
+ 	  // pass in an empty compiled dictionary instance to operator graph 
+	  if ( null == compiledDict && dictParam.getIsExternal () && ((dictParam.isAllowEmpty() == Boolean.TRUE) || (dictParam.isRequired() == Boolean.FALSE)) )
+	  {
+	    compiledDict = CompiledDictionary.createEmptyCompiledDictionary(dictParam.getDictName(),null);
+	  }
+
+	  //if here, then we are dealing with an unknown dictionary
+	  if ( null == compiledDict)
+	  {
+	    if ( true == validateExternalArtifacts)
+	    {
+			throw new ParseException (String.format("In compiled module '%s', encountered an unknown dictionary declaration '%s' at line %d.", moduleName, dictParam.getDictName(), t.beginLine));
+		} else
+		{ // Creating empty dictionary for required external dictionaries - when in ValidateOG mode
+		  compiledDict = CompiledDictionary.createEmptyCompiledDictionary(dictParam.getDictName(),null);
+		}
+	  }  
+	  return compiledDict;
+	}
+}
+
+// Definition of a user defined function
+UDFunction CreateFunction() :
+{
+	Token t;
+	StringPairList params;
+}
+{
+	t = <CREATE_FUNCTION>
+	params = StringStringPairs()
+	";"
+	{ 
+        try {
+            return new UDFunction(null, new UDFParams(params)); 
+        } catch (com.ibm.avatar.aql.ParseException e) {
+            throw new ParseException("Error parsing create function args", e);
+        } 
+    }
+}
+
+// Serialized contents of a jar file.
+// This production of the grammar should be removed when we stop supporting jar
+// files that are serialized inside of AOG.
+void JarFile(Catalog catalog) :
+{
+	Token t;
+	String jarName;
+	String tmpJarName;
+	String jarContents;
+	byte[] jarBytes;
+}
+{
+	t = <JAR>
+	"("
+   	jarName = StringLiteral() ","
+   	jarContents = StringLiteralML() 
+   	")" ";"
+	{	
+		try {
+		  // We used to use the Apache Commons Codec to do this conversion
+          //jarBytes = Base64.decodeBase64(jarContents.getBytes("UTF-8"));
+          jarBytes = DatatypeConverter.parseBase64Binary(jarContents);
+          //symtab.setJarFile(jarName, jarBytes);
+          catalog.addJarFileAOG(jarName, jarBytes);
+
+        }
+		catch (Exception e) {
+			throw new ParseException(String.format(
+					"At line %d of compiled module %s,"
+							+ " not able to load jar file, error '%s' "
+							, t.beginLine, moduleName, e.toString()));
+		}
+	}
+}
+
+// The "Output" line; specifies which subtrees should have outputs attached 
+// to them.
+AOGOutputExpr OutputExpr() :
+{
+	String nick;
+	Token t;
+	AOGOutputExpr ret = new AOGOutputExpr();
+}
+{
+	<OUTPUT> ":" 
+	(
+		nick = NickLiteral() { ret.addOutput(nick); }
+	)
+	(
+		","
+		( 
+			nick = NickLiteral() { ret.addOutput(nick); }
+		)
+	) *
+	";"
+	
+	{ return ret; }
+}
+
+
+// Expression that creates a named subtree
+AOGOpTree NamedSubtree() :
+{
+	String nick;
+	//Token t;
+	AOGOpTree ret;
+}
+{
+	nick = NickLiteral() "=" 
+	ret = OpTreeExpr() ";"
+	
+	{ 
+		ret.setNickname(nick);
+	  	return ret;
+	}
+}
+
+// Expression for a subtree with multiple nicknames 
+// (expressed using Perl array initializer syntax)
+AOGMultiOpTree MultiNamedSubtree() :
+{
+	String nick;
+	//Token t;
+	ArrayList<String> nicks = new ArrayList<String>();	
+	AOGMultiOpTree tree;
+}
+{
+	"("
+		nick = NickLiteral() { nicks.add(nick); }
+		(
+			"," nick = NickLiteral() { nicks.add(nick); }
+		)*
+	")"	"="
+	tree = MultiOpTreeExpr() ";"
+	{
+		tree.setNicknames(nicks);
+		return tree;
+	}
+}
+
+AOGMultiOpTree MultiOpTreeExpr() :
+{
+	AOGMultiOpTree ret;
+}
+{
+	(
+		ret = Dictionaries()
+		| ret = HTMLDetagger()
+		| ret = RegexesTok()
+	)
+	{ return ret; }
+}
+
+// Dictionary operator that runs multiple dictionaries at once.
+AOGMultiOpTree.DictsOp Dictionaries() :
+{
+	Token t;
+	
+	ColumnRef col, outputCol;
+	AOGOpTree input;
+	ArrayList<Pair<String,String>> dictsAndModes;
+	
+	// No default match type for the multi-dict expression.
+	String matchType;
+}
+{
+	t = <DICTS_OPNAME>
+	"("
+		// Dictionary filename(s) and case-sensitivity params in Perl hash syntax
+		dictsAndModes = StringStringPairs() ","
+		
+		// Name of input column
+		col = ColRefLiteral() ","
+		
+		// Name of output column
+		outputCol = ColRefLiteral() ","
+		
+		// Input
+		input = OpTreeExpr()
+	")"
+	{ 
+		return new AOGMultiOpTree.DictsOp(moduleName, t, dictsAndModes,
+				col, outputCol, input);
+	}
+}
+
+// RegexTok operator that runs multiple SimpleRegex-compatible regexes at once
+AOGMultiOpTree.RegexesTokOp RegexesTok() :
+{
+	Token t;
+	
+	ArrayList<RegexesTokParams> regexes;
+	
+	ColumnRef col;
+	AOGOpTree input;
+	ArrayList<Pair<String,String>> dictsAndModes;
+	
+	// No default match type for the multi-dict expression.
+	String matchType;
+}
+{
+	t = <REGEXESTOK_OPNAME>
+	"("
+		// List of regexes to evaluate, corresponding flags, and min/max token counts
+		regexes = RegexesTokArgs() ","
+		
+		// Name of input column
+		col = ColRefLiteral() ","
+		
+		// Input
+		input = OpTreeExpr()
+	")"
+	{ 
+		return new AOGMultiOpTree.RegexesTokOp(moduleName, t, regexes, col, input);
+	}
+}
+
+// Expressions and parameters for a RegexesTok operator.
+// These are supposed to be as a list of 4-element lists
+ArrayList<RegexesTokParams> RegexesTokArgs() :
+{
+	RegexNode regex;
+	String flagsStr;
+	int minTok, maxTok;
+	ColumnRef outputCol;
+	
+	ArrayList<RegexesTokParams> ret 
+		= new ArrayList<RegexesTokParams>();
+}
+{
+	"("
+	(
+		(
+			"("
+			regex = RegexLiteral() ","
+			flagsStr = StringLiteral() ","
+			minTok = IntLiteral() ","
+			maxTok = IntLiteral()
+			")" "=>" outputCol = ColRefLiteral() (",")?
+			{
+				if ("".equals(flagsStr)) {
+					flagsStr = FlagsString.DEFAULT_FLAGS;
+				}
+				ret.add(new RegexesTokParams(
+				regex, outputCol, flagsStr, minTok, maxTok)); 
+			}
+		)*
+		
+	)
+	")"	
+	{ 
+		return ret;
+	}
+}
+
+// HTML detagger, which has multiple outputs.
+AOGMultiOpTree.DeTagOp HTMLDetagger() :
+{
+	Token t;
+	
+	ArrayList<Pair<String,StringPairList>> tagSpec =
+		new ArrayList<Pair<String,StringPairList>>();
+	
+	String tag;
+	StringPairList attrs;
+	ColumnRef col;
+	String docTypeName;
+	AOGOpTree input;
+	String checkForHTMLStr;
+	boolean checkForHTML;
+	
+	// No default match type for the multi-dict expression.
+	String matchType;
+}
+{
+	t = <DETAG_OPNAME>
+	"("
+		(	
+			"("
+				// HTML tag to extract
+				tag = StringLiteral() ","
+				// Attribute --> column name mapping in Perl hash syntax
+				attrs = StringStringPairs()
+			")" ","
+			{ tagSpec.add(new Pair<String,StringPairList>(tag, attrs)); }
+		)*
+		// Input column name
+		col = ColRefLiteral() ","
+		
+		// Name of the output document type
+		docTypeName = StringLiteral() ","
+		
+		// TRUE to check whether the content is HTML; FALSE otherwise
+		checkForHTMLStr = StringLiteral() ","
+		{
+			if ("true".equalsIgnoreCase(checkForHTMLStr)) {
+				checkForHTML = true;
+			} else if ("false".equalsIgnoreCase(checkForHTMLStr)) {
+				checkForHTML = false;
+			} else { 
+				throw new ParseException(String.format(
+				 	"In compiled module '%s', encountered an invalid Detag() at line %d", moduleName, t.beginLine));
+			}
+		}
+		
+		// Input
+		input = OpTreeExpr()
+	")"
+	{ 
+		return new AOGMultiOpTree.DeTagOp(moduleName, t, tagSpec, col, docTypeName,
+				checkForHTML, input);
+	}
+}
+
+
+// Perl-style "hash" initializer with strings for keys and values.
+// Returns a list of pairs, where each pair is a two-element array.
+StringPairList StringStringPairs() :
+{
+	String key;
+	String val;
+	StringPairList ret = new StringPairList();
+}
+{
+	"("
+	(
+		(
+			key = StringLiteral() "=>" val = StringLiteral()
+			{ ret.add(new Pair<String,String>(key, val)); }
+			( LOOKAHEAD(3)
+				","
+				key = StringLiteral() "=>" val = StringLiteral()
+				{ ret.add(new Pair<String,String>(key, val)); }
+			)*
+			
+		)
+		// Also accept empty list
+		?
+		// Allow extra commas at end of list, as Perl does.
+		(",")?
+	)
+	")"
+	{ 
+		return ret;
+	}
+}
+
+// Perl-style "hash" initializer with strings for keys and double values.
+// Returns a list of triples.
+StringTripleList StringTriples() :
+{
+	String key;
+	String val1;
+	String val2;
+	StringTripleList ret = new StringTripleList();
+}
+{
+	"(" 
+	(
+		(
+			key = StringLiteral() "=>" 
+			"(" val1 = StringLiteral() "," 
+				val2 = StringLiteral() ")"
+			{ ret.add(new Triple<String,String,String>(key, val1, val2)); }
+			(
+				","
+				key = StringLiteral() "=>" 
+				"(" val1 = StringLiteral() "," 
+				val2 = StringLiteral() ")"
+				{ ret.add(new Triple<String,String,String>(key, val1, val2)); }
+			)*
+			
+		)
+		// Also accept empty list
+		?
+	)
+	")"
+	{ 
+		return ret;
+	}
+}
+
+
+// Perl-style "hash" initializer with ints for keys and strings for 
+// values.
+// Returns a list of pairs, where each pair is a two-element array.
+ArrayList<Pair<Integer,String>> IntStringPairs() :
+{
+	int key;
+	String val;
+	ArrayList<Pair<Integer,String>> ret = new ArrayList<Pair<Integer,String>>();
+}
+{
+	"("
+	(
+		(
+			key = IntLiteral() "=>" val = StringLiteral()
+			{ ret.add(new Pair<Integer,String>(key,val)); }
+			(
+				","
+				key = IntLiteral() "=>" val = StringLiteral()
+				{ ret.add(new Pair<Integer,String>(key,val)); }
+			)*
+			
+		)
+		// Also accept empty list
+		?
+	)
+	")"
+	{ 
+		return ret;
+	}
+}
+
+// Perl-style "list" initializer for a list of strings in Perl syntax.
+ArrayList<String> StringList() :
+{
+	String val;
+	ArrayList<String> ret = new ArrayList<String>();
+}
+{
+	"("
+	(
+		(
+			val = StringLiteral()
+			{ ret.add(val); }
+			(
+				","
+				 val = StringLiteral()
+				{ ret.add(val); }
+			)*
+		)
+		// Also accept empty list
+		?
+	)
+	")"
+	{ 
+		return ret;
+	}
+}
+
+// version of stringList() that does not update the string table
+ArrayList<String> StringList2() :
+{
+	String val;
+	ArrayList<String> ret = new ArrayList<String>();
+}
+{
+	"("
+	(
+		(
+			val = StringLiteral2()
+			{ ret.add(val); }
+			(
+				","
+				 val = StringLiteral2()
+				{ ret.add(val); }
+			)*
+		)
+		// Also accept empty list
+		?
+	)
+	")"
+	{ 
+		return ret;
+	}
+}
+
+
+
+
+
+
+
+AOGOpTree OpTreeExpr() :
+{
+	AOGOpTree ret;
+}
+{
+	(
+		ret = Dictionary()
+		| ret = OneInputConsolidate()
+		| ret = Select()
+		| ret = Union()
+		| ret = Regex()
+		| ret = Project()
+		| ret = CrossProd()
+		| ret = Nickname()
+		| ret = DocScan()
+		| ret = Block()
+		| ret = BlockTok()
+		| ret = Group()
+		| ret = Sort()
+		| ret = Difference()
+		| ret = ApplyFunc()
+		| ret = NLJoin()
+		| ret = SortMergeJoin()
+		| ret = HashJoin()
+		| ret = RegexTok()
+		| ret = RSEJoin()
+		| ret = Split()
+		| ret = TableScan()
+		| ret = ExternalViewScan()
+		| ret = PartOfSpeech()
+		| ret = AdjacentJoin()
+		| ret = Limit()
+        | ret = TabFuncCall()
+	)
+	{ return ret; }
+}
+
+// Nickname for either an operator tree or a precomputed annotation.
+AOGOpTree.Nickname Nickname() :
+{
+	//Token t;
+	String nick;
+}
+{
+	nick = NickLiteral()
+	{
+	  return new AOGOpTree.Nickname(moduleName, nick);
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// OPERATORS GO HERE
+
+
+AOGOpTree.TabFuncCallOp TabFuncCall() :
+{
+	Token t;
+    String funcName;
+    AOGFuncNode funcArg;
+    ArrayList<AOGFuncNode> args = new ArrayList<AOGFuncNode>();
+    ArrayList<AOGOpTree.Nickname> inputs = new ArrayList<AOGOpTree.Nickname>();
+    AOGOpTree.Nickname input;
+}
+{
+	t = <TABFUNC_OPNAME>
+	"("
+        // First argument is a representation of the function call.
+        // We quote this argument, in case it overlaps with a token.
+        funcName = StringLiteral()
+        "("
+                funcArg = ScalarFunc() { args.add(funcArg); }
+            (
+                ","
+                    funcArg = ScalarFunc()  { args.add(funcArg); }
+            )*
+        ")"
+
+        // Remaining arguments, if present, are references to the views/tables
+        // that produce any required locator arguments.
+        (
+            ","
+            input = Nickname() { inputs.add(input); }
+        )*
+    ")"
+	{ 
+		return new AOGOpTree.TabFuncCallOp(moduleName, t, funcName, args, inputs);
+	}
+}
+
+
+AOGOpTree.SplitOp Split() :
+{
+	Token t;
+	ColumnRef targetCol;
+	ColumnRef splitCol;
+	String outputCol;
+	int flags;
+	AOGOpTree input;
+}
+{
+	t = <SPLIT_OPNAME>
+	"("
+		// What span to split
+		targetCol = ColRefLiteral() ","
+		splitCol = ColRefLiteral() ","
+		
+		// Flags that control the endpoints of each output span
+		flags = IntLiteral() ","
+		
+		outputCol = StringLiteral() ","
+		
+		
+		input = OpTreeExpr()
+	")"
+	{ 
+		return new AOGOpTree.SplitOp(moduleName, t, targetCol,
+			splitCol, outputCol, flags, input);
+	}
+}
+
+// Scan a lookup table
+AOGOpTree.TableScanOp TableScan() :
+{
+	Token t;
+	String tabName;
+}
+{
+	t = <TABLESCAN_OPNAME>
+	"("
+		tabName = StringLiteral()
+	")"
+	{ 
+		return new AOGOpTree.TableScanOp(moduleName, t, tabName);
+	}
+}
+
+// Scan an external view
+AOGOpTree.ExternalViewScanOp ExternalViewScan() :
+{
+	Token t;
+	String viewName;
+}
+{
+	t = <EXTERNALVIEWSCAN_OPNAME>
+	"("
+		viewName = StringLiteral()
+	")"
+	{ 
+		return new AOGOpTree.ExternalViewScanOp(moduleName, t, viewName);
+	}
+}
+
+AOGOpTree.DictionaryOp Dictionary() :
+{
+	Token t;
+	String dictfile;
+	ColumnRef col;
+	AOGOpTree input;
+	String outputCol = "match";
+	
+	// Default match type is "ignore case".
+	String matchType = AOGOpTree.DictionaryOp.IGNORE_CASE_STR;
+}
+{
+	t = <DICTIONARY_OPNAME>
+	"("
+		// Dictionary filename
+		dictfile = StringLiteral()
+		// (Optional) match type
+		( "=>" matchType = StringLiteral() )?
+		","
+		// Index of input
+		col = ColRefLiteral() ","
+		// (Optional) output column name
+		( outputCol = StringLiteral()  "," )?
+		// Input
+		input = OpTreeExpr()
+	")"
+	{ 
+		return new AOGOpTree.DictionaryOp(moduleName, t, dictfile, matchType, 
+				col, outputCol, input);
+	}
+}
+
+
+
+
+AOGOpTree.OneInputConsolidateOp OneInputConsolidate() :
+{
+	Token t;
+	String partialOrderName;
+	ScalarFuncNode target;
+	ScalarFuncNode priorityTarget = null;
+	String priorityDirection = null;
+	AOGOpTree input;
+	
+}
+{
+	t = <CONSOLIDATE_OPNAME>
+	"("
+		partialOrderName = StringLiteral() ","
+		target = ScalarFunc() ","
+		( LOOKAHEAD(2) priorityTarget = ScalarFunc() ","
+		priorityDirection = StringLiteral()",")?
+		input = OpTreeExpr()
+	")"
+	{ 
+		return new AOGOpTree.OneInputConsolidateOp(moduleName, t, partialOrderName, 
+			target, priorityTarget, priorityDirection, input);
+	}
+}
+
+AOGOpTree.ApplyFuncOp ApplyFunc() :
+{
+	Token t;
+	String outputName;
+	ScalarFuncNode func;
+	AOGOpTree input;
+}
+{
+	t = <APPLYFUNC_OPNAME>
+	"("
+		func = ScalarFunc() "=>" outputName = StringLiteral() ","
+		input = OpTreeExpr() 
+	")"
+	{ 
+		return new AOGOpTree.ApplyFuncOp(moduleName, t, func, outputName, input);
+	}
+}
+
+AOGOpTree.LimitOp Limit() :
+{
+	Token t;
+	int maxtup;
+	AOGOpTree input;
+}
+{
+	t = <LIMIT_OPNAME>
+	"("
+		maxtup = IntLiteral() ","
+		input = OpTreeExpr()
+	")"
+	{ 
+		return new AOGOpTree.LimitOp(moduleName, t, maxtup, input);
+	}
+}
+
+AOGOpTree.SelectOp Select() :
+{
+	ScalarFuncNode pred;
+	AOGOpTree input;
+}
+{
+	<SELECT_OPNAME>
+	"("
+		// Selection predicate
+		pred = ScalarFunc() ","
+		// Input
+		input = OpTreeExpr()
+	")"
+	{
+		return new AOGOpTree.SelectOp(moduleName, pred, input);
+	}
+}
+
+AOGOpTree.UnionOp Union() :
+{
+	AOGOpTree.UnionOp ret;
+	AOGOpTree input;
+}
+{
+	<UNION_OPNAME>
+	{ ret = new AOGOpTree.UnionOp(moduleName); }
+	"("
+		input = OpTreeExpr()
+		{ ret.addInput(input); }
+		( "," input = OpTreeExpr() { ret.addInput(input); } )*
+	")"
+	{  return ret;	}
+}
+
+// Regular expression or fast (DFA-based) regular expression
+AOGOpTree.RegexOp Regex() :
+{
+	boolean fast;
+	RegexNode regex;
+	String flag = FlagsString.DEFAULT_FLAGS;
+	ColumnRef col;
+	AOGOpTree input;
+	// Set of capturing groups
+	ArrayList<Pair<Integer,String>> groups;
+}
+{
+	(
+		<REGEX_OPNAME> { fast = false; }
+		| <FAST_REGEX_OPNAME> { fast = true; }
+	)
+	"("
+		// Regular expression
+		regex = RegexLiteral() ","
+		// Set of capturing groups, with their corresponding names.
+		groups = IntStringPairs() ","
+		// Yunyao: added 10/05/2007 to support Java RegEx engine flags
+		// Begin
+		// (Optional) regular expression match specification
+		( LOOKAHEAD(StringLiteral() "," ColRefLiteral())  flag = StringLiteral() ",")?
+		// Index of input
+		col = ColRefLiteral() ","
+		// Input
+		input = OpTreeExpr()
+	")"
+	{ 
+		return new AOGOpTree.RegexOp(
+			moduleName, fast, flag, regex.getRegexStr(), groups, col, input);
+	}
+}
+
+// Regular expression on token boundaries
+AOGOpTree.RegexTokOp RegexTok() :
+{
+	RegexNode regex;
+	String regexStr;
+	String flag = FlagsString.DEFAULT_FLAGS;
+	ColumnRef col;
+	int minTok = 1, maxTok;
+	AOGOpTree input;
+	// Set of capturing groups
+	ArrayList<Pair<Integer,String>> groups;
+	// Should we use a lightweight regex?
+	boolean fast;
+}
+{
+	(
+		<REGEXTOK_OPNAME> { fast = false; }
+		| <FASTREGEXTOK_OPNAME> { fast = true; }
+	) 
+	"("
+		// Regular expression
+		regex = RegexLiteral() ","
+		// Set of capturing groups, with their corresponding names.
+		groups = IntStringPairs() ","
+		// Yunyao: added 10/05/2007 to support Java RegEx engine flags
+		// Begin
+		// (Optional) regular expression match specification
+		( flag = StringLiteral() "," )?
+		( LOOKAHEAD(IntLiteral() "," IntLiteral() ) minTok = IntLiteral() "," )?
+		// Maximum number of tokens to match
+		maxTok = IntLiteral() ","
+		// Index of input
+		col = ColRefLiteral() ","
+		// Input
+		input = OpTreeExpr()
+	")"
+	{ 
+		return new AOGOpTree.RegexTokOp(moduleName, fast,
+			flag, regex.getRegexStr(), groups, minTok, maxTok, col, input);
+	}
+}
+
+
+// Part of speech extraction operator
+AOGOpTree.PartOfSpeechOp PartOfSpeech() :
+{
+	Token t;
+	
+	ColumnRef inputCol, outputCol;
+	String langStr, posStr;
+	
+	AOGOpTree input;
+}
+{
+	t = <PARTOFSPEECH_OPNAME> 
+	"("
+		// Input column name
+		inputCol = ColRefLiteral() ","
+		
+		// Language code
+		langStr = StringLiteral() ","
+		
+		// Part(s) of speech to extract (comma-delimited list of tags)
+		posStr = StringLiteral() ","
+		
+		// Output column name
+		outputCol = ColRefLiteral() ","
+		
+		// Input
+		input = OpTreeExpr()
+	")"
+	{ 
+		return new AOGOpTree.PartOfSpeechOp(moduleName, inputCol, langStr, posStr, outputCol, input);
+	}
+}
+
+
+AOGOpTree.ProjectOp Project() :
+{
+	ColumnRef col;
+	String outputTypeName = "NULL";
+	StringPairList namePairs;
+	AOGOpTree input;
+}
+{
+	<PROJECT_OPNAME>
+	"("
+		// Optional output type name
+		(
+			outputTypeName = StringLiteral() ","
+		)?
+		// Column(s) to project, and what to call the outputs
+		namePairs = StringStringPairs() ","
+		// Input
+		input = OpTreeExpr()
+	")"
+	{
+		return new AOGOpTree.ProjectOp(moduleName, outputTypeName,
+			namePairs, input);
+	}
+}
+
+
+
+AOGOpTree.CrossProdOp CrossProd() :
+{
+	AOGOpTree input1, input2;
+}
+{
+	<CROSSPROD_OPNAME>
+	"("
+		input1 = OpTreeExpr() ","
+		input2 = OpTreeExpr()
+	")"
+	{ 
+		return new AOGOpTree.CrossProdOp(moduleName, input1, input2);
+	}
+}
+
+
+
+AOGOpTree.NLJoinOp NLJoin() :
+{
+	ScalarFuncNode pred;
+	AOGOpTree outer, inner;
+}
+{
+	<NLJOIN_OPNAME>
+	"("
+		pred = ScalarFunc() ","
+		outer = OpTreeExpr() ","
+		inner = OpTreeExpr()
+	")"
+	{ 
+		return new AOGOpTree.NLJoinOp(
+			moduleName, pred, outer, inner);
+
+	}
+}
+
+AOGOpTree.RSEJoinOp RSEJoin() :
+{
+	ScalarFuncNode pred;
+	AOGOpTree outer, inner;
+}
+{
+	<RSEJOIN_OPNAME>
+	"("
+		pred = ScalarFunc() ","
+		outer = OpTreeExpr() ","
+		inner = OpTreeExpr()
+	")"
+	{ 
+		return new AOGOpTree.RSEJoinOp(
+			moduleName, pred, outer, inner);
+	}
+}
+
+AOGOpTree.SortMergeJoinOp SortMergeJoin() :
+{
+	ScalarFuncNode pred;
+	AOGOpTree outer, inner;
+}
+{
+	<SORTMERGEJOIN_OPNAME>
+	"("
+		pred = ScalarFunc() ","
+		outer = OpTreeExpr() ","
+		inner = OpTreeExpr()
+	")"
+	{ 
+		return new AOGOpTree.SortMergeJoinOp(
+			moduleName, pred, outer, inner);	
+	}
+}
+
+AOGOpTree.AdjacentJoinOp AdjacentJoin() :
+{
+	ScalarFuncNode pred;
+	AOGOpTree outer, inner;
+}
+{
+	<ADJACENTJOIN_OPNAME>
+	"("
+		pred = ScalarFunc() ","
+		outer = OpTreeExpr() ","
+		inner = OpTreeExpr()
+	")"
+	{ 
+		return new AOGOpTree.AdjacentJoinOp(
+			moduleName, pred, outer, inner);
+	}
+}
+
+AOGOpTree.HashJoinOp HashJoin() :
+{
+	ScalarFuncNode pred;
+	AOGOpTree outer, inner;
+}
+{
+	<HASHJOIN_OPNAME>
+	"("
+		pred = ScalarFunc() ","
+		outer = OpTreeExpr() ","
+		inner = OpTreeExpr()
+	")"
+	{ 
+		return new AOGOpTree.HashJoinOp(
+			moduleName, pred, outer, inner);
+	}
+}
+
+
+
+
+AOGOpTree.DocScanOp DocScan() :
+{
+	Token t;
+	StringPairList schema;
+}
+{
+	t = <DOCSCAN_OPNAME>
+	"("
+		schema = StringStringPairs()
+	")" 
+	{ 
+		return new AOGOpTree.DocScanOp(moduleName, t, schema);
+	}
+}
+
+
+
+
+
+AOGOpTree.BlockOp Block() :
+{
+	int charsBetween, minSize, maxSize = 1000;
+	ColumnRef col;
+	String outputCol = null;
+	AOGOpTree input;
+}
+{
+	<BLOCK_OPNAME>
+	"("
+		// Number of characters allowed between elements of the block.
+		charsBetween = IntLiteral() ","
+		// Minimum number of annotations that make up a block.
+		minSize = IntLiteral() ","
+		// Maximum number of annotations in a block..
+		maxSize = IntLiteral() ","
+		// Index of annotations used to construct the block.
+		col = ColRefLiteral() ","
+		( outputCol = StringLiteral() "," )?
+		// Input
+		input = OpTreeExpr()
+	")"
+	{ 
+		return new AOGOpTree.BlockOp(moduleName, charsBetween, minSize, 
+			maxSize, col, outputCol, input);
+	}
+}
+
+AOGOpTree.BlockTokOp BlockTok() :
+{
+	int toksBetween, minSize, maxSize;
+	ColumnRef col;
+	String outputCol = null;
+	AOGOpTree input;
+}
+{
+	<BLOCKTOK_OPNAME>
+	"("
+		// Number of tokens allowed between elements of the block.
+		toksBetween = IntLiteral() ","
+		// Minimum number of annotations that make up a block.
+		minSize = IntLiteral() ","
+		// Maximum number of annotations that make up a block.
+		maxSize = IntLiteral() ","
+		// Index of annotations used to construct block.
+		col = ColRefLiteral() ","
+		( outputCol = StringLiteral() "," )?
+		// Input
+		input = OpTreeExpr()
+	")"
+	{ 
+		return new AOGOpTree.BlockTokOp(moduleName, toksBetween, minSize, 
+			maxSize, col, outputCol, input);
+	}
+}
+
+
+
+AOGOpTree.SortOp Sort() :
+{
+	ArrayList<ScalarFuncNode> sortKeys;
+	AOGOpTree input;
+}
+{
+	<SORT_OPNAME>
+	"("
+		// A function call that returns the (currently numeric)
+		// attribute to sort on.
+		sortKeys = ScalarFuncList() ","
+		// Input
+		input = OpTreeExpr()
+	")"
+	{ 
+		return new AOGOpTree.SortOp(moduleName, sortKeys, input);
+	}
+}
+
+AOGOpTree.GroupOp Group() :
+{
+	ArrayList<ScalarFuncNode> groupByFuncs = new ArrayList<ScalarFuncNode>();
+	ArrayList<AggFuncNode> aggFuncs;
+	ArrayList<String> aggAliases = new ArrayList<String>();
+	String aggAlias;
+	AOGOpTree input;
+}
+{
+	<GROUP_OPNAME>
+	"("
+		(
+			LOOKAHEAD( ScalarFuncList() )
+			// A function call that returns the values to group by
+			( groupByFuncs = ScalarFuncList() )
+			|
+			// Or an empty list of values to group by
+			( "(" ")" )	
+		)							
+		","
+		// A function call that returns the aggregate values we compute, along with their internal names
+		aggFuncs = AggFuncList(aggAliases) 
+		","		
+		// Input
+		input = OpTreeExpr()
+	")"
+	{ 
+		return new AOGOpTree.GroupOp(moduleName, groupByFuncs, aggFuncs, aggAliases, input);
+	}
+}
+
+AOGOpTree.DifferenceOp Difference() :
+{
+	AOGOpTree first, second;
+}
+{
+	<DIFFERENCE_OPNAME>
+	"("
+		first = OpTreeExpr() ","
+		second = OpTreeExpr()
+	")"
+	{ 
+		return new AOGOpTree.DifferenceOp(moduleName, first, second);
+	}
+}
+
+
+
+//////////////////////////////////////////////////////////////////////////////
+// (possibly recursive) Scalar functions
+
+ArrayList<ScalarFuncNode> ScalarFuncList() :
+{
+	ArrayList<ScalarFuncNode> ret = new ArrayList<ScalarFuncNode>();
+	ScalarFuncNode scalarFunc;
+}
+{
+	"("
+		//First function in the list
+		scalarFunc = ScalarFunc()
+		{ ret.add(scalarFunc); }
+		
+		// The rest of the functions, if any
+		( "," scalarFunc = ScalarFunc() { ret.add(scalarFunc); } )*
+	")"
+	{
+		return ret;
+	}
+}
+
+ScalarFuncNode ScalarFunc() :
+{
+	ArrayList<Object> args = new ArrayList<Object>();
+	Token t;
+	Object arg;
+	int intVal;
+	float floatVal;
+	boolean boolVal;
+	String strVal;
+	RegexNode regexVal;
+    AOGOpTree.Nickname nickVal;
+}
+{
+	(
+	// Special case the built-in constant functions.
+		<STRINGCONST_FNAME> "(" strVal = StringLiteral() ")" { 
+			return new ConstFuncNode.Str(strVal); 
+		}
+	| 
+		<INTCONST_FNAME> "(" intVal = IntLiteral() ")" { 
+			return new ConstFuncNode.Int(intVal); 
+		}
+	| 
+		<FLOATCONST_FNAME> "(" floatVal = FloatLiteral() ")" { 
+			return new ConstFuncNode.Flt(floatVal); 
+		}
+	|
+		<BOOLCONST_FNAME> "(" boolVal = BooleanLiteral() ")" { 
+			return new ConstFuncNode.Bool(boolVal); 
+		}
+	| 
+		<REGEXCONST_FNAME> "(" regexVal = RegexLiteral() "," strVal = StringLiteral() ")" { 
+			return new ConstFuncNode.Regex(regexVal, strVal); 
+		}
+	| 
+		<GETCOL_FNAME> "(" strVal = StringLiteral() ")" { 
+			return new ConstFuncNode.Col(strVal); 
+		}	
+    |
+        // Table locator encoded as a nickname ($arg)
+        nickVal = Nickname()
+        {
+            return new TableLocatorNode(nickVal);
+        }
+
+    // Everything else is a function call
+    |
+		t = <SCALAR_FUNC_NAME>
+		"("
+			(
+				arg = ScalarFunc() {args.add(arg); }
+				( "," arg = ScalarFunc() { args.add(arg); } )*
+			)?
+		")"
+		{
+			return new ScalarFuncNode(t, args);
+		}
+	)
+}
+
+
+//////////////////////////////////////////////////////////////////////////////
+// (possibly recursive) Aggregate functions
+
+ArrayList<AggFuncNode> AggFuncList(ArrayList<String> aggAliases) :
+{
+	ArrayList<AggFuncNode> ret = new ArrayList<AggFuncNode>();
+	AggFuncNode aggFunc;
+	String aggAlias;
+}
+{
+	"("
+		(
+			//First function in the list (if any)
+			aggFunc = AggFunc() "=>" aggAlias = StringLiteral()
+			{ ret.add(aggFunc); aggAliases.add(aggAlias);}
+			
+			// The rest of the functions, if any
+			( "," aggFunc = AggFunc()  "=>" aggAlias = StringLiteral()
+			{ ret.add(aggFunc); aggAliases.add(aggAlias);} )*
+		) ?
+	")"
+	{
+		return ret;
+	}
+}
+
+AggFuncNode AggFunc() :
+{
+	Token t;
+	Object arg;
+	AggFuncNode ret;
+}
+{
+	(
+		LOOKAHEAD( <SCALAR_FUNC_NAME> "(" "*" ")" )
+		//SPECIAL CASE: Count(*) - internal validation in AggFuncNode.toFunc()
+		// will ensure that the name of the function is indeed Count
+		t = <SCALAR_FUNC_NAME> "(" "*" ")"
+		{ ret = new AggFuncNode(t, null); ret.setIsCountStar(true); return ret;}		
+		|
+		t = <SCALAR_FUNC_NAME>
+		"("
+			arg = ScalarFunc()
+		")"
+		{
+			return new AggFuncNode(t, arg);
+		}
+	)
+}
+
+
+//////////////////////////////////////////////////////////////////////////////
+// PARTIAL ORDERS
+
+//String PartialOrder() :
+//{
+//	Token t;
+//}
+//{
+////	(
+////		t = <CONTAINEDWITHIN_ORDERNAME>
+////		| t = <CONTAINSBUTNOTEQUAL_ORDERNAME>
+////	)
+//	{ return t.image; }
+//}
+
+//////////////////////////////////////////////////////////////////////////////
+// AUXILIARY PARTS OF THE GRAMMAR
+
+// Pull the quotes off string literals.
+String StringLiteral() :
+{
+	Token t;
+}
+{
+		t = <STRING_LITERAL>
+	    { 
+	    	// Laura 07/27/09: replaced with less CPU intensive version below
+	    	// Dequote the string, then de-escape any escaped double quotes.
+	    	//String str = dequoteStr('"', t);
+	    	//str = str.replace("\\\"", "\"");
+
+	    	//Laura 03/18/2010: replaced with method that dequotes and descapes at the same time
+	    	//String str = StringUtils.dequoteStr('"', t.image);
+	    	//str = StringUtils.deescapeStr(str);
+	    	String str = StringUtils.dequoteAndDeescapeStr('"', t.image);
+	    	
+	    	return parseTree.getSymTab().getStringTable().getUniqueStr(str);
+	    }
+}
+
+//version of StringLiteral() that does not update the string table
+String StringLiteral2() :
+{
+	Token t;
+}
+{
+		t = <STRING_LITERAL>
+	    { 
+	    	// Laura 07/27/09: replaced with less CPU intensive version below
+	    	// Dequote the string, then de-escape any escaped double quotes.
+	    	//String str = dequoteStr('"', t);
+	    	//str = str.replace("\\\"", "\"");
+
+	    	//Laura 03/18/2010: replaced with method that dequotes and descapes at the same time
+	    	//String str = StringUtils.dequoteStr('"', t.image);
+	    	//str = StringUtils.deescapeStr(str);
+	    	String str = StringUtils.dequoteAndDeescapeStr('"', t.image);
+	    	
+	    	return str;
+	    }
+}
+
+// Pull the quotes off multi-line string literals.
+String StringLiteralML() :
+{
+	Token t;
+}
+{
+		t = <STRING_LITERAL_ML>
+	    { 
+	    	// Laura 07/27/09: replaced with less CPU intensive version below
+	    	// Dequote the string, then de-escape any escaped double quotes.
+	    	//String str = dequoteStr('"', t);
+	    	//str = str.replace("\\\"", "\"");
+
+	    	//Laura 03/18/2010: replaced with method that dequotes and descapes at the same time
+	    	//String str = StringUtils.dequoteStr('"', t.image);
+	    	//str = StringUtils.deescapeStr(str);
+	    	String str = StringUtils.dequoteAndDeescapeStr('"', t.image);	    	
+	    	
+	    	return parseTree.getSymTab().getStringTable().getUniqueStr(str);
+	    }
+}
+
+// Pull the forward slashes off regular expression literals.
+RegexNode RegexLiteral() :
+{
+	Token t;
+}
+{
+		t = <REGEX_LITERAL>
+	   // { return dequoteStr('/', t); }
+	   {
+	     	// Laura: fix for bug #166958: Problem with deescaping in RegexLiterals
+	     	// return new RegexNode(t, dequoteStr('/', t), catalogStub);
+
+	     	// Don't need to use dequoteStr here, as it does other operations
+	     	// such as deescaping \ characters which is inappropriate here.
+	     	// Just pass through the original regex expression with the
+	     	// enclosing / characters removed. 
+	     	String regexStr = t.image;
+
+			if (regexStr.charAt(0) != '/'
+					|| regexStr.charAt(regexStr.length() - 1) != '/') {
+				throw new AOGConversionException(t, "Can't dequote regex string '" + regexStr + "'");
+			}
+
+			// Fix for defect 57504 changes RegexNode to also record number of groups per regex encountered
+			String regexString = regexStr.substring(1, regexStr.length() - 1);
+	      	return new RegexNode(regexString, Pattern.compile(regexString).matcher("").groupCount());
+	      	// Laura: end fix for bug #166958	      	
+	    }
+}
+
+// Decode integers.
+int IntLiteral() :
+{
+	Token t;
+}
+{
+	t = <INTEGER>
+	{ return Integer.valueOf(t.image); }
+}
+
+// Decode floats.
+float FloatLiteral() :
+{
+	Token t;
+}
+{
+	t = <FLOAT>
+	{ return Float.valueOf(t.image); }
+}
+
+// Decode booleans
+boolean BooleanLiteral() :
+{
+	Token t;
+}
+{
+	(	  t = < TRUE > | t = < FALSE >
+	)
+	{ return Boolean.parseBoolean(t.image); }
+}
+
+// Pull the $ off nicknames.
+String NickLiteral() :
+{
+	Token t;
+	String ret;
+}
+{
+	(
+	t = <NICKNAME>
+	{ ret = t.image.substring(1);}
+	// New alternate form of a nickname, to allow arbitrary names.
+	| "$_{" ret = StringLiteral() "}"
+	)
+	{ return ret; }
+}
+
+// Reference to a column of a schema.
+ColumnRef ColRefLiteral() :
+{
+	ColumnRef ret;
+	String name;
+}
+{
+	name = StringLiteral() { ret = new ColumnRef(name); }
+	{ return ret; }
+}
+
+

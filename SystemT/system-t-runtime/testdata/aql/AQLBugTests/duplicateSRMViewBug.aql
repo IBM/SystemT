@@ -1,0 +1,43 @@
+-- duplicateSRMView.aql
+
+-- Test for a defect# 18577
+-- Shared Regex Matching can produce duplicate outputs
+-------------------------------------------------------------------------------
+require document with columns text Text;
+
+create view TestView as
+select D.text as text1,D.text as text2,D.text as text3
+from Document D;
+
+-- Views with same dependent view and target regex column 
+-- but different pass thru columns
+
+create view SRMCandidateType11 as
+extract F.text1 as one,
+		regex /\+?\([1-9]\d{2}\)\d{3}\d{4}/
+		on between 1 and 3 tokens in F.text3 as text4
+from TestView F;
+
+create view SRMCandidateType12 as
+extract F.text1 as one,
+		regex /\+?\([1-9]\d{2}\)\d{3}\d{4}/
+		on between 1 and 5 tokens in F.text3 as text4
+from TestView F;
+
+create view SRMCandidateType21 as
+extract F.text2 as two,
+		regex /\+?[Xx]\.?\d{4,5}/
+		on between 1 and 3 tokens in F.text3 as text5
+from TestView F;
+
+create view SRMCandidateType22 as
+extract F.text2 as two,
+		regex /\+?[Xx]\.?\d{4,5}/
+		on between 1 and 5 tokens in F.text3 as text5
+from TestView F;
+
+		 
+output view SRMCandidateType11;
+output view SRMCandidateType12;
+output view SRMCandidateType21;
+output view SRMCandidateType22;

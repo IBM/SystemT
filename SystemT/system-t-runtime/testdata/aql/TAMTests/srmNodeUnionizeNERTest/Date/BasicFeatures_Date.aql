@@ -1,0 +1,25 @@
+module Date;
+
+import view DocumentDetagged from module DocumentDetagger as DocumentText;
+
+import dictionary MonthsInAYearFromGregorianCalendar from module Dictionaries as MonthsInAYearFromGregorianCalendar;
+
+create view DateNum as
+select
+	R.match as match
+from
+	(extract regex /\p{Nd}[[\p{Nd}\p{L}\-\,]\p{M}*]*(( )*\p{Nd}[[\p{Nd}\p{L}]\p{M}*]*)?/ 
+ 		on between 1 and 15 tokens in D.text 
+ 			as match 
+ 	  from DocumentText D) R;
+
+
+
+-- This rule will handle date intervals such as 10-12 October and 10-12 October 2002
+-- as also date intervals such as  April 7-8 and  October 15-18 2001
+
+create view Month as
+	select
+		D.match as match
+	from
+		(extract dictionary 'MonthsInAYearFromGregorianCalendar' on D.text as match from DocumentText D) D;

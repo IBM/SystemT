@@ -1,0 +1,45 @@
+--4.13 Organization
+create view  OrganizationUnsorted as
+(select O.organization as organization, O.type as type, O.reference as reference from OrganizationFull O )
+union all
+(select O.organization as organization, '' as type, O.organization as reference from OrganizationVBJ O)
+;
+
+
+create view OrganizationInvalid1 as
+select O.organization as organization, O.type as type 
+from OrganizationUnsorted O
+--where MatchesDict('orgInvalidExact.dict', 'Exact', O.organization);
+where MatchesDict('org_negClue_ctxt_case_en.dict', 'Exact', O.organization);
+
+-- Orgs with preposition as first token
+create view OrganizationInvalid2 as
+select O.organization as organization, O.type as type 
+from OrganizationUnsorted O
+--where MatchesDict('pos/preps-list', SubSpanTok(O.organization, 0,1));
+where MatchesDict('pos/lang_preps_en.dict', SubSpanTok(O.organization, 0,1));
+
+-- Orgs strictly contained in Person
+create view OrganizationInvalid3 as
+select O.organization as organization, O.type as type 
+from OrganizationUnsorted O, PersonBeforeFinalOrgFilter P
+where Contains(P.person, O.organization)
+  and Not(Equals(P.person, O.organization));
+
+include 'Organization-Aggregate-union.aql';
+
+
+create view OrgUnsortedFiltered as
+(select O.organization as organization, O.type as type from OrganizationUnsorted O)
+minus
+(select O.organization as organization, O.type as type from OrganizationInvalid O);
+
+-- ToDo: see whether we can add some of them into the main organization dictionary 
+-- extract dictionary 'orgs/conll2003/conll-list-of-orgs.dict'
+	
+   
+create view OrganizationMixed as
+select O.organization as organization, O.type as type 
+from OrgUnsortedFiltered O
+consolidate on O.organization
+order by O.organization;

@@ -1,0 +1,150 @@
+-------------------------------------------------------------------------------
+-- bufferBug4.aql
+--
+-- Yet *another* bug in TeeOutput buffer management.
+-------------------------------------------------------------------------------
+require document with columns text Text;
+
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Output section <<<<<<<<<<<<<<<<
+-- ===========================================================================	
+
+create view sentence as 
+select S.match as sentence
+from   Regex(/yo/, Document.text) S; 
+	
+create view StrictLastName1 as
+select D.match as lastname
+from   Dictionary('dictionaries/strictlast.dict', Document.text) D;	
+
+create view FirstName as
+select D.match as firstname
+from   Dictionary('dictionaries/strictfirst.dict', Document.text) D;	
+
+
+create view StrictLastName as
+select S.lastname as lastname 
+from StrictLastName1 S;	
+	
+create view RelaxedLastName1 as
+select SL.lastname as lastname
+from StrictLastName SL;
+
+create view RelaxedLastName2 as
+select SL.lastname as lastname
+from StrictLastName SL;
+	
+
+create view LastNameAll as
+	(select N.lastname as lastname from RelaxedLastName1 N)
+	union all
+	(select N.lastname as lastname from RelaxedLastName2 N);
+	
+create view ValidLastNameAll as
+select N.lastname as lastname
+from LastNameAll N;	
+	
+create view LastName as
+select C.lastname as lastname
+from ValidLastNameAll C;
+
+
+create view NamesAll as
+	(select P.firstname as name from FirstName P)
+	union all
+	(select P.lastname as name from LastName P);
+	
+		
+create view PersonDict as
+select C.name as name
+from NamesAll C;
+ 
+ 
+create view Person3P2 as 
+select P.name as person
+from PersonDict P;
+
+create view Person3P3 as 
+select P.name as person
+from PersonDict P;
+
+create view PersonStrongWithNewLine as
+select P.sentence as person from sentence P;
+
+create view PersonStrong as
+select P.person as person
+from PersonStrongWithNewLine P;
+    
+
+create view PersonWeak1WithNewLine as  
+(select P.sentence as person from sentence P)
+union all (select P.lastname as person from StrictLastName1 P)
+union all (select P.person as person from Person3P2 P)
+union all (select P.person as person from Person3P3 P);
+	
+create view PersonWeak1 as
+select P.person as person
+from PersonWeak1WithNewLine P;
+
+create view PersonFirstNameLastName as
+	(select P.person as person from PersonStrong P)
+	union all
+	(select P.person as person from PersonWeak1 P);
+	
+
+create view InvalidPersonWeak2 as
+select P2.firstname as person 
+from FirstName P2,
+	 PersonFirstNameLastName P1
+where Overlaps(P1.person, P2.firstname);
+
+create view ValidPersonWeak2 as
+	(select P.firstname as person from FirstName P)
+	minus
+	(select P.person as person from InvalidPersonWeak2 P);
+
+
+create view PersonWeakWithoutNewLine as
+	(select P.person as person from PersonWeak1 P)
+	union all
+	(select P.person as person from ValidPersonWeak2 P);
+
+create view PersonWeakOverlap as
+select P1.person as person
+from   PersonWeakWithoutNewLine P1,
+       PersonStrong P2
+where  Overlaps(P1.person, P2.person);
+
+	
+create view PersonWeakOnly as
+	(select P.firstname as person from FirstName P)
+	minus
+	(select P.person as person from PersonWeakOverlap P);
+  	
+	
+create view PersonAll as
+	(select P.person as person from PersonWeakOnly P)
+union all
+	(select P.person as person from PersonStrong P);
+
+create view PersonCorrect as
+select PA.person as person
+from PersonAll PA;
+ 
+create view PersonSentence as
+select PA.person as person
+from PersonCorrect PA,
+     sentence S
+where Contains(S.sentence, PA.person);  
+
+create view PersonFinalAllMatches as
+(select P.person as person from PersonSentence P)
+union all
+(select P.firstname as person from FirstName P);
+
+create view SystemTPerson as select P.person as person
+from PersonFinalAllMatches P;
+
+output view SystemTPerson as 'com.ibm.systemT.Person';
+

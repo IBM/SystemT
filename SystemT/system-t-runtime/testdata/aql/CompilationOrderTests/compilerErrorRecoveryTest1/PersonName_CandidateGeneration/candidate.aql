@@ -1,0 +1,29 @@
+module PersonName_CandidateGeneration;
+
+import view FirstName from module PersonName_BasicFeatures;
+import view LastName from module PersonName_BasicFeatures;
+
+
+
+create view FirstLast as 
+select CombineSpans(FN.first, LN.last) as name
+-- ERROR: access FirstName and LastName without moduleName qualification. Expect two errore\s in the line below.
+from FirstName FN, LastName LN
+where FollowsTok(FN.first, LN.last, 0, 0);
+
+output view FirstLast;
+
+export view FirstLast;
+
+
+create view Person as
+-- ERROR: access FirstName without moduleName qualification. Expect an error in the line below.
+	(select P.first as person from FirstName P)
+		union all
+-- ERROR: access LastName without moduleName qualification. Expect an error in the line below.
+	(select P.last as person from LastName P)
+		union all
+	(select P.name as person from FirstLast P);
+		
+export view Person;
+

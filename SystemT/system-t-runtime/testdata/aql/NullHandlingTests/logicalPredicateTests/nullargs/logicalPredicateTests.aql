@@ -1,0 +1,80 @@
+module nullargs;
+
+require document with columns text Text;
+
+-- This test suite prints out the result of the logical predicate functions
+
+-- NOT
+
+create view NotTest as
+select 'Not' as testFunc,
+       Equals(GetText(N.onlyArg),'T') as onlyArg,
+       Not(Equals(GetText(N.onlyArg),'T')) as result
+from _NullLogic N
+consolidate on N.onlyArg;
+
+output view NotTest;
+
+-- EQUALS
+
+create view EqualsTest as
+select 'Equals' as testFunc,
+       Equals(GetText(N.firstArg),'T') as firstArg,
+       Equals(GetText(N.secondArg),'T') as secondArg,
+       Equals(GetText(N.firstArg),GetText(N.secondArg)) as result
+from _NullLogic N;
+
+output view EqualsTest;
+
+
+-- AND
+
+create view AndTest as
+select 'And' as testFunc,
+       Equals(GetText(N.firstArg),'T') as firstArg,
+       Equals(GetText(N.secondArg),'T') as secondArg,
+       And(Equals(GetText(N.firstArg),'T'), Equals(GetText(N.secondArg),'T')) as result
+from _NullLogic N;
+
+output view AndTest;
+
+
+-- OR
+
+create view OrTest as
+select 'Or' as testFunc,
+       Equals(GetText(N.firstArg),'T') as firstArg,
+       Equals(GetText(N.secondArg),'T') as secondArg,
+       Or(Equals(GetText(N.firstArg),'T'), Equals(GetText(N.secondArg),'T')) as result
+from _NullLogic N;
+
+output view OrTest;
+
+
+-- UDF that throws an exception when called
+
+create function throwException(a Boolean)
+return Boolean
+    -- Path relative to module root; udfjars is inside <project root>/testdata
+external_name '../../../../udfjars/nullUDFs.jar:com.ibm.test.udfs.NullHandlingUDFs!throwException'
+language java
+deterministic;
+
+
+-- Short-Circuit AND test -- if the second argument is ever evaluated, it will throw an exception
+create view AndShortTest as
+select 'And' as testFunc,
+       And(Equals('F', 'T'), throwException(True())) as result
+from Document D;
+       
+output view AndShortTest;
+
+
+-- Short-Circuit OR test -- if the second argument is ever evaluated, it will throw an exception
+create view OrShortTest as
+select 'Or' as testFunc,
+       Or(Equals('T', 'T'), throwException(True())) as result
+from Document D;
+       
+output view OrShortTest;
+

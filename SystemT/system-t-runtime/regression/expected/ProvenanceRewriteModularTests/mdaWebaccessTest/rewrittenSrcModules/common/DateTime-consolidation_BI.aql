@@ -1,0 +1,202 @@
+module common;
+
+
+create view DateTime1 as
+  select  CombineSpans(D.match, T.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as DatesBuildingBlock_____sep_____D____id,
+          T.__auto__id as Times_____sep_____T____id
+  from  DatesBuildingBlock D,
+        Times T
+  where FollowsTok(D.match, T.match, 0, 0);
+
+output view DateTime1;
+
+create view DateTime2 as
+  select  CombineSpans(D.match, T.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as DateISOExtended_____sep_____D____id,
+          T.__auto__id as Times_____sep_____T____id
+  from  DateISOExtended D,
+        Times T
+  where FollowsTok(D.match, T.match, 0, 0);
+
+output view DateTime2;
+
+create view dateTimeOptMsTz as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____D____id,
+    regex /(-?(?:[1-9][0-9]*)?[0-9]{4})[-\.](1[0-2]|0[1-9])[-\.](3[0-1]|0[1-9]|[1-2][0-9])T(2[0-3]|[0-1][0-9]):([0-5][0-9]):([0-5][0-9])(\.[0-9]+)?(Z|[+-](?:2[0-3]|[0-1][0-9]):?[0-5][0-9])?/
+    with flags 'DOTALL'
+    on D.text
+    return group 0 as match
+  from Document D;
+
+output view dateTimeOptMsTz;
+
+create view DateTime3 as
+  select  CombineSpans(D.match, T.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as Date7a_____sep_____D____id,
+          T.__auto__id as TimeOptMsTz_a_____sep_____T____id
+  from  Date7a D,
+        TimeOptMsTz_a T
+  where Follows(D.match, T.match, 0, 0);
+
+output view DateTime3;
+
+create view DateTime4 as
+  select  CombineSpans(D.match, T.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as Date7a_____sep_____D____id,
+          T.__auto__id as TimeOptMsTz_c_____sep_____T____id
+  from  Date7a D,
+        TimeOptMsTz_c T
+  where Follows(D.match, T.match, 0, 0);
+
+output view DateTime4;
+
+create view DateTimesAll as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__6__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__6__TempOp__1 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__6__TempOp__2 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__6__TempOp__3 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__6__TempOp__4 Op);
+
+output view DateTimesAll;
+
+create view DateTimesBuildingBlock as
+  select  __t2.match as match,
+          AutoID() as __auto__id,
+          List(__t1.__auto__id) as __Consolidate__7__Temp__1_____sep_______t1____id,
+          'STMT_TYPE_CONSOLIDATE' as __stmt__type
+  from  __Consolidate__7__Temp__1 __t1,
+        __Consolidate__7__Temp__2 __t2
+  where Or(GreaterThan(GetBegin(__t1.__consolidate__target), GetBegin(__t2.__consolidate__target)), Equals(GetBegin(__t1.__consolidate__target), GetBegin(__t2.__consolidate__target)))
+     and Overlaps(__t1.__consolidate__target, __t2.__consolidate__target)
+  group by __t2.match;
+
+output view DateTimesBuildingBlock;
+
+
+
+
+
+
+
+create view DateTimesInterim as
+  select  D.match as DateTimes_Span,
+          GetText(D.match) as DateTimes_Text,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as DateTimesBuildingBlock_____sep_____D____id
+  from  DateTimesBuildingBlock D;
+
+output view DateTimesInterim;
+
+create view DateTimeOutput as
+  select  D.DateTimes_Span as span,
+          D.DateTimes_Text as text,
+          GetString('DateTime') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as DateTimesInterim_____sep_____D____id
+  from  DateTimesInterim D;
+
+output view DateTimeOutput;
+
+export view common.DateTimeOutput;
+
+
+create view __Consolidate__7__Temp__1 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as DateTimesAll_____sep_____R____id,
+          R.match as __consolidate__target
+  from  DateTimesAll R;
+
+output view __Consolidate__7__Temp__1;
+
+create view __Consolidate__7__Temp__2 as
+  select  __t1.match as match,
+          __t1.__consolidate__target as __consolidate__target
+  from  __Consolidate__7__Temp__1 __t1
+  consolidate on __t1.__consolidate__target using 'LeftToRight';
+
+output view __Consolidate__7__Temp__2;
+
+create view __Union__6__TempOp__0 as
+  select  DT.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          DT.__auto__id as DateTime1_____sep_____DT____id
+  from  DateTime1 DT;
+
+output view __Union__6__TempOp__0;
+
+create view __Union__6__TempOp__1 as
+  select  DT2.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          DT2.__auto__id as DateTime2_____sep_____DT2____id
+  from  DateTime2 DT2;
+
+output view __Union__6__TempOp__1;
+
+create view __Union__6__TempOp__2 as
+  select  Dti.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          Dti.__auto__id as dateTimeOptMsTz_____sep_____Dti____id
+  from  dateTimeOptMsTz Dti;
+
+output view __Union__6__TempOp__2;
+
+create view __Union__6__TempOp__3 as
+  select  DT3.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          DT3.__auto__id as DateTime3_____sep_____DT3____id
+  from  DateTime3 DT3;
+
+output view __Union__6__TempOp__3;
+
+create view __Union__6__TempOp__4 as
+  select  DT4.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          DT4.__auto__id as DateTime4_____sep_____DT4____id
+  from  DateTime4 DT4;
+
+output view __Union__6__TempOp__4;
+

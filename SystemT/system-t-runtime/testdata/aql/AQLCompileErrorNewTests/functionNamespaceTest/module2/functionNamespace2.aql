@@ -1,0 +1,30 @@
+-- function namespace tests
+
+module module2;
+
+-- This should obviously work fine -- setting up the subsequent statements
+import module module1;
+
+-- NO ERROR: The following line should not throw any errors, since the following import does not cause any ambiguity with the elements imported in line # 6 
+import function foo from module module1; 
+
+-- This should NOT throw an error because of the alias
+import function foo from module module1 as my_foo;
+
+-- This throws an error because my_foo is declared twice
+import function toUpperCase from module module1 as my_foo;
+
+-- This imports module1.bar as just module2.my_bar
+import function toUpperCase from module module1 as my_bar;
+
+-- unqualified toUpperCase is not visible, throw error
+create view SimpleView as
+select toUpperCase(D.text) as match from Document D;
+
+-- fully qualified version is visible
+create view SimpleView2 as
+select module1.toUpperCase(D.text) as match from Document D;
+
+-- imported version alias is visible
+create view SimpleView3 as
+select module2.my_bar(D.text) as match from Document D;

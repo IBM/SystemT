@@ -1,0 +1,156 @@
+module common;
+
+----------------------------------------------------------
+--                          XML PROCESSING
+----------------------------------------------------------
+
+--functions
+
+create function GetXMLCategory(tag String, value String)
+	return String
+	external_name 'logAAqlUDFs.jar:com.ibm.logparse.aql.Util!getCategory'
+	language java
+	deterministic
+	return null on null input;
+	
+------------------------------------ 
+--    FIND LEFT AND RIGHT TAGS -----
+
+create view XMLTag as
+extract 
+    regex /\<[^(\<|\>]*\>/ on D.text as tag
+from Document D;
+
+
+create view XMLTagAttrs as 
+    select D.tag as tagSpan
+    from XMLTag D;
+    
+create view rightTag as 
+    select D.*
+    from XMLTagAttrs D
+    where MatchesRegex(/\<\//,RightContext(LeftContext(D.tagSpan,1),2));
+    
+create view rightTagAttrs as 
+    select D.* , SpanBetween(RightContext(LeftContext(D.tagSpan,1),2), LeftContext(RightContext(D.tagSpan,1),1)) as tagText
+    from rightTag  D; 
+    
+create view leftTag as 
+    (
+    select D.tagSpan as tagSpan
+    from  XMLTagAttrs D
+    )
+    minus
+    (
+    select D.tagSpan as tagSpan
+    from  rightTag D
+    ) ;    
+ 
+------------------------------------
+---   GET THE CONTENT OF THE TAGS --
+ 
+ create view leftTagAttrs as 
+    select D.*, SpanBetween(RightContext(LeftContext(D.tagSpan,1),1), LeftContext(RightContext(D.tagSpan,1),1)) as tagText
+    from leftTag D;
+    
+ --get first token in each tag (to compare later)
+ create view leftTagAllAttrs as 
+    extract D.tagSpan as tagSpan, D.tagText as tagText,  regex /^[^\s]*/ on D.tagText as miniTag
+from leftTagAttrs D;
+ 
+ create view rightTagAllAttrs as 
+    extract D.tagSpan as tagSpan, D.tagText as tagText,  regex /^[^\s]*/ on D.tagText as miniTag
+from rightTagAttrs D; 
+
+----------------------------------
+-- FIND MATCHING TAGS ------------
+create view LeafNodesUnifiltered as
+    select Dl.tagSpan as l_tagSpan, Dl.miniTag as l_miniTag, Dl.tagText as l_tagText,
+         Dr.tagSpan as r_tagSpan, Dr.miniTag as r_miniTag, Dr.tagText as r_tagText, SpanBetween(Dl.tagSpan, Dr.tagSpan) as leafText
+    from  leftTagAllAttrs Dl,   rightTagAllAttrs Dr
+    where Equals(GetText(Dl.miniTag), GetText(Dr.miniTag))
+    and FollowsTok(Dl.tagSpan, Dr.tagSpan, 0, 1000);
+   
+   
+----------------------------------
+-- FIND LEAF NODES    ------------
+create view LeafNodes as
+    select  D.r_tagText as tag, D.leafText as value, CombineSpans(D.l_tagSpan, D.r_tagSpan) as leafSpan
+    from LeafNodesUnifiltered D
+    consolidate on D.leafText using 'NotContainedWithin';
+    
+create view XMLInterim as 
+    select D.value as leafSpan, GetString(D.value) as leafText, D.leafSpan as leafSpanWithTag
+    from LeafNodes D; 
+
+create view XMLDetailsInterim as 
+    select 
+    	D.value as leaf_Span, 
+    	GetString(D.value) as leaf_Text, 
+    	D.tag as tag_Span, 
+    	GetString(D.tag) as tag_Text, 
+    	D.leafSpan as leafSpanWithTag_Span, 
+    	GetString(D.leafSpan) as leafSpanWithTag_Text,
+    	GetXMLCategory(GetString(D.tag),GetString(D.value)) as category
+    from LeafNodes D; 
+    
+----------------------------------
+-- FIND BLOCK OF XML: BLOCK OVER CONSECUTIVE XML TAGS SEPARATED
+-- BY NO MORE THAN 10 TOKENS AND LEAF NODES  
+---------------------------------
+create view XMLBlockUnits as 
+    (
+    select X.tag as unit
+    from XMLTag X
+    )
+    union all
+    (
+    select X.leafSpanWithTag as unit
+    from XMLInterim X
+    );
+
+create view XMLBlockUnitsConsolidated as 
+   select X.unit 
+   from XMLBlockUnits X
+   consolidate on X.unit using 'ContainedWithin';
+       
+create view XMLBlockInterimUnconsolidated as 
+   extract blocks
+   with count between 2 and 100
+   and separation between 0 and 1 tokens
+   on X.unit as xblock
+   from XMLBlockUnitsConsolidated X;
+   
+create view XMLBlockOutput as
+    select X.* 
+    from  XMLBlockInterimUnconsolidated X
+    consolidate on X.xblock using 'ContainedWithin';  
+
+create view XMLOutput as
+    select
+        D.value as leaf_Span,
+        GetString(D.value) as leaf_Text,
+        D.tag as tag_Span,
+        GetString(D.tag) as tag_Text,
+        D.leafSpan as leafSpanWithTag_Span,
+        GetString(D.leafSpan) as leafSpanWithTag_Text,
+        D.leafSpan as span,
+        GetString(D.leafSpan) as text,       
+        GetXMLCategory(GetString(D.tag),
+	GetString(D.value)) as category
+    from LeafNodes D;
+     
+export view XMLOutput;
+
+/*
+output view leftTagAllAttrs;
+output view rightTagAllAttrs;
+output view LeafNodesUnifiltered;
+output view XMLBlockInterim; 
+output view XMLInterim;*/
+
+  
+   
+  
+    
+    

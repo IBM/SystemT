@@ -1,0 +1,71 @@
+module webaccess;
+
+
+create view ContentLength_base as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__42__Temp_____sep_____R____id
+  from  __Subquery__42__Temp R;
+
+output view ContentLength_base;
+
+create view ContentLength_interim as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as ContentLength_base_____sep_____C____id
+  from  ContentLength_base C
+  where Not(MatchesRegex(/\./, LeftContext(C.match, 1)))
+     and Not(MatchesRegex(/\./, RightContext(C.match, 1)));
+
+output view ContentLength_interim;
+
+create view ContentLength as
+  select  contentLengthI.match as contentLength,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          codeAndValuesF.__auto__id as CodesAndValues_____sep_____codeAndValuesF____id,
+          contentLengthI.__auto__id as ContentLength_interim_____sep_____contentLengthI____id
+  from  CodesAndValues codeAndValuesF,
+        ContentLength_interim contentLengthI
+  where FollowsTok(codeAndValuesF.match, contentLengthI.match, 0, 0);
+
+output view ContentLength;
+
+create view ContentLengthOutputInterim as
+  select  D.contentLength as contentLength_Span,
+          GetText(D.contentLength) as contentLength_Text,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as ContentLength_____sep_____D____id
+  from  ContentLength D;
+
+output view ContentLengthOutputInterim;
+
+create view ContentLengthOutput as
+  select  C.contentLength_Span as span,
+          C.contentLength_Text as text,
+          GetString('ContentLength') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as ContentLengthOutputInterim_____sep_____C____id
+  from  ContentLengthOutputInterim C;
+
+output view ContentLengthOutput;
+
+export view webaccess.ContentLengthOutput;
+
+
+create view __Subquery__42__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____Document____id,
+    regex /[\d]+/
+    with flags 'DOTALL'
+    on Document.text
+    return group 0 as match
+  from Document Document;
+
+output view __Subquery__42__Temp;
+

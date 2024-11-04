@@ -1,0 +1,146 @@
+module LocationCandidates;
+
+
+create view RegionInvalid2 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as RegionCandidate_____sep_____R____id,
+          O.__auto__id as OrganizationFull_____sep_____O____id
+  from  RegionCandidate R,
+        OrganizationFull O
+  where Contains(O.organization, R.match)
+     and Not(Equals(O.organization, R.match));
+
+output view RegionInvalid2;
+
+create view RegionInvalid3 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as RegionCandidate_____sep_____R____id,
+          O.__auto__id as OrganizationFull_____sep_____O____id
+  from  RegionCandidate R,
+        OrganizationFull O
+  where Overlaps(O.organization, R.match)
+     and Not(Contains(O.organization, R.match));
+
+output view RegionInvalid3;
+
+create view RegionInvalid4 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as RegionCandidate_____sep_____R____id,
+          O.__auto__id as CityStateCountryValid_____sep_____O____id
+  from  RegionCandidate R,
+        CityStateCountryValid O
+  where Contains(O.loc, R.match);
+
+output view RegionInvalid4;
+
+create view RegionInvalid as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__406__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__406__TempOp__1 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__406__TempOp__2 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__406__TempOp__3 Op);
+
+output view RegionInvalid;
+
+create view RegionValid as
+  select  Op.match as match,
+          AutoID() as __auto__id,
+          Op.__auto__id as __Minus__407__TempOp__1_____sep_____Op____id,
+          'STMT_TYPE_MINUS' as __stmt__type
+  from  __Minus__407__TempOp__1 Op,
+        __Minus__407__Temp __t
+  where Equals(Op.match, __t.match);
+
+output view RegionValid;
+
+create view __Minus__407__Temp as
+  select  __t.match as match
+  from  
+    ((select  Op.match as match
+      from  __Minus__407__TempOp__1 Op)
+    minus
+    (select  Op.match as match
+      from  __Minus__407__TempOp__2 Op)
+    ) __t
+  group by __t.match;
+
+output view __Minus__407__Temp;
+
+create view __Minus__407__TempOp__1 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as RegionCandidate_____sep_____R____id
+  from  RegionCandidate R;
+
+output view __Minus__407__TempOp__1;
+
+create view __Minus__407__TempOp__2 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as RegionInvalid_____sep_____R____id
+  from  RegionInvalid R;
+
+output view __Minus__407__TempOp__2;
+
+create view __Union__406__TempOp__0 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as RegionInvalid1_____sep_____R____id
+  from  RegionInvalid1 R;
+
+output view __Union__406__TempOp__0;
+
+create view __Union__406__TempOp__1 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as RegionInvalid2_____sep_____R____id
+  from  RegionInvalid2 R;
+
+output view __Union__406__TempOp__1;
+
+create view __Union__406__TempOp__2 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as RegionInvalid3_____sep_____R____id
+  from  RegionInvalid3 R;
+
+output view __Union__406__TempOp__2;
+
+create view __Union__406__TempOp__3 as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as RegionInvalid4_____sep_____R____id
+  from  RegionInvalid4 R;
+
+output view __Union__406__TempOp__3;
+

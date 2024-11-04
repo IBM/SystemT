@@ -1,0 +1,32 @@
+require document with columns text Text;
+
+------------------------------------------------------------------------------
+-- sentbound.aql
+--
+-- A sentence boundary detector in AQL.
+--
+-- Also uses the new subquery-in-from-list support.
+------------------------------------------------------------------------------
+
+-- Dictionary of tokens that, when followed by a punctuation character, are
+-- *not* to be treated as sentence boundaries.
+create dictionary NotASentenceEnding as
+(
+	'A.', 'B.', 'C.', 'D.', 'E.', 'F.', 'G.', 'H.', 'I.', 'J.', 'K.', 'L.',
+	'M.', 'O.', 'P.', 'Q.', 'R.', 'S.', 'T.', 'U.', 'V.', 'W.', 'X.', 'Y.',
+	'Z.',
+	
+	'Mr.',
+	'Mrs.',
+	'Dr.',
+	'Yahoo!'
+);
+
+select R.match as boundary
+into SentenceBoundary
+from Regex(/(([\.\?!]+\s)|(\n\s*\n))/, Document.text) R
+where
+	-- Filter the candidate boundaries.
+	Not(ContainsDict('NotASentenceEnding', 
+		CombineSpans(LeftContextTok(R.match, 1), R.match)));
+		

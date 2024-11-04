@@ -1,0 +1,32 @@
+module runtimeErrorTest2;
+
+require document with columns text Text;
+
+-- A simple test of table functions; checks that table functions error 
+-- messages limit the number of input tuples that show in the error message
+
+-- Declare a simple table function
+create function MyTableFunc(
+	firstArg table( id Text ) as locator
+)
+return table( id Text )
+external_name 
+    -- Path relative to module root; udfjars is inside <project root>/testdata
+    '../../../../udfjars/tableFnTestsUDFs.jar:com.ibm.test.udfs.TableConsumingTableFuncWithError!eval'
+language java
+deterministic
+called on null input;
+
+create table TestTable (id Text) as values
+	('one'),
+	('two'),
+	('three'),
+	('four');
+
+-- The table function's implementation always throws an exception 
+create view TabFuncOutput as
+select * from MyTableFunc(TestTable);
+
+output view TabFuncOutput;
+
+

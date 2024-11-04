@@ -1,0 +1,18 @@
+module test;
+
+require document with columns text Text;
+
+-- Sample view to have 2 columns
+create view RegexView as
+extract D.text as text, regex /document/
+on D.text as match
+from Document D;
+
+-- The target column in consolidate clause is not
+-- present in the select list 
+create view ConsolidateOnRegexView as
+select T.text
+from RegexView T
+consolidate on T.match;
+
+output view ConsolidateOnRegexView;

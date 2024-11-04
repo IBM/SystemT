@@ -1,0 +1,49 @@
+create view Matched as
+extract regex /(test)/ on E.text
+return group 0 as match
+from Document E;
+
+-- Test Contains(T,T)
+-- Expected to match documents with substring 'test'.  
+create view MatchedTT as
+select D.text as text, Contains(GetText(D.text), GetText(E.match)) as pred  from Document D, Matched E where Contains(GetText(D.text), GetText(E.match));
+
+-- Test Contains(T,S)
+-- Expected to match documents with substring 'test'. 
+create view MatchedTS as
+select D.text as text, Contains(D.text, E.match) as pred from Document D, Matched E where Contains(D.text, E.match);
+
+-- Test Contains(T,T)
+-- Expected to match document without substring 'test'.  
+create view NotMatchedTT as
+( select D.text as text from Document D )
+minus
+( select D.text as text from Document D, Matched E where Contains(GetText(D.text), GetText(E.match)));
+
+-- Test Contains(T,S)
+-- Expected to match document without substring 'test'. 
+create view NotMatchedTS as
+( select D.text as text from Document D )
+minus
+( select D.text as text from Document D, Matched E where Contains(D.text, E.match));
+
+output view Matched;
+output view MatchedTT;
+output view MatchedTS;
+output view NotMatchedTT;
+output view NotMatchedTS;
+
+
+-- Test ContainedWithin(T,T)
+-- Expected to match documents with substring 'test'.  
+create view ReversedMatchedTT as
+select D.text as text, ContainedWithin(GetText(E.match), GetText(D.text)) as pred  from Document D, Matched E where ContainedWithin(GetText(E.match), GetText(D.text));
+
+-- Test ContainedWithin(T,S)
+-- Expected to match documents with substring 'test'.
+create view ReversedMatchedTS as
+select D.text as text, ContainedWithin(E.match, D.text) as pred from Document D, Matched E where ContainedWithin(E.match, D.text);
+
+
+output view ReversedMatchedTS;
+output view ReversedMatchedTT;

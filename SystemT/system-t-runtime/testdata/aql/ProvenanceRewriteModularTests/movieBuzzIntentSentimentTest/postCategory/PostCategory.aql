@@ -1,0 +1,125 @@
+module postCategory;
+
+create view ME_Entries as 
+	select D.text as text
+	from Document D;
+
+
+/* CATEGORIZE POSTS AS 
+	 -- INTERROGATIVE
+	 -- CONDITIONAL
+	 -- PROMOTIONAL
+	 -- RETWEET
+	 -- SPAM
+	*/
+-- ENTRY POINT IS ME_ENTRIES TO BE SET IN THE AQL DRIVER
+------------------------------------ INTERROGATIVE --------------------------------------------
+create dictionary ME_InterrogativeCluesDict as 
+	('?','should I','do you','does anyone');
+
+create view ME_InterrogativePost as 
+	select E.text 
+	from ME_Entries E
+	where ContainsDict('ME_InterrogativeCluesDict', E.text)
+	consolidate on E.text;
+	
+create view ME_NonInterrogativePost as 
+	(
+	select E.text
+	from ME_Entries E
+	)
+	minus
+	(
+	select E.text
+	from ME_InterrogativePost E
+	);
+
+------------------------------------ CONDITIONAL --------------------------------------------
+create dictionary ME_ConditionalCluesDict as 
+	('wonder if','know if');
+	
+create view ME_ConditionalPost as 
+	select E.text 
+	from ME_Entries E
+	where ContainsDict('ME_ConditionalCluesDict', E.text)
+	consolidate on E.text;
+	
+create view ME_NonConditionalPost as 
+	(
+	select E.text
+	from ME_Entries E
+	)
+	minus
+	(
+	select E.text
+	from ME_ConditionalPost E
+	);	
+------------------------------------ PROMOTIONAL --------------------------------------------
+create view ME_PromotionalPost as 
+	select D.text 
+	from  ME_Entries D
+	where ContainsRegex(/(http:\/)/,D.text);
+	
+create view ME_NonPromotionalPost as 
+	(
+	select E.text
+	from ME_Entries E
+	)
+	minus
+	(
+	select E.text
+	from ME_PromotionalPost E
+	);		
+------------------------------------ SPAM --------------------------------------------
+create dictionary ME_SpamCluesDict as 
+('order','DVDscr','free','give-away','giveaway','give away','download','full movie','prize','win');
+
+create view ME_SpamPost as 
+	select E.text 
+	from ME_PromotionalPost E
+	where ContainsDict('ME_SpamCluesDict', E.text)
+	consolidate on E.text;
+	
+create view ME_PromoNonSpamPost as 
+	(
+	select E.text
+	from ME_PromotionalPost E
+	)
+	minus
+	(
+	select E.text
+	from ME_SpamPost E
+	);
+	
+------------------------------------ RETWEET --------------------------------------------
+-- outputs full span of tweet and span of retweet; strating from RT on to the end of post
+
+create view ME_RetweetPost as
+	extract D.text as text, regex /\bRT\s@(.*)/ on D.text
+	return group 1 as rt_text
+	from  ME_Entries D;
+
+create view ME_NonRetweetPost as 
+	(
+	select E.text
+	from ME_Entries E
+	)
+	minus
+	(
+	select E.text
+	from ME_RetweetPost E
+	);	
+
+/*
+----------------------------------- OUTPUT FOR DEBUGGING--------------------------------------------------
+output view ME_NonInterrogativePost;
+output view ME_NonConditionalPost;
+output view ME_NonPromotionalPost;
+output view ME_NonRetweetPost;
+output view ME_PromoNonSpamPost;
+----------------------------------- OUTPUT VIEWS ---------------------------------------------------------
+output view ME_InterrogativePost;
+output view ME_ConditionalPost;
+output view ME_PromotionalPost;
+output view ME_RetweetPost;
+output view ME_SpamPost;*/

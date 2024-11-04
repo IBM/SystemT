@@ -1,0 +1,105 @@
+module syslog;
+
+import view IDBuildingBlockConsolidated from module common;
+
+create view CodeCharNumSymBaseUnfilered as 
+    extract regex /[^\/\%]\b([a-zA-Z\d-!\^\-_]{6,20})\b/ on D.text 
+    return group 1 as match
+    from Document D;
+    
+
+create view CodeCharNumSymBase as 
+    select D.match as match
+    from CodeCharNumSymBaseUnfilered D
+    where MatchesRegex(/[a-zA-Z\d]+[a-zA-Z\d-!\^]*[\d\-_][a-zA-Z\d-!\^\-_]*[a-zA-Z\d]/, D.match);
+    
+    
+create view CodeCharNumSym as
+    select D.match 
+    from CodeCharNumSymBase D
+    where ContainsRegex(/[a-zA-Z]/,D.match);
+   -- and Not(ContainsRegex(/(http)|(com)/, D.match));
+
+create view CodeNumsFollowLetters as
+    select D.match
+    from CodeCharNumSym D
+  where MatchesRegex(/[a-zA-Z]([-!]|[a-zA-Z]){3,}(\d|[-!])+/,D.match);
+  
+ 
+
+ create view CodeBuildingBlock as 
+    (  
+    select D.match 
+    from CodeCharNumSym D
+    )
+    minus
+    (
+    select D.match
+    from CodeNumsFollowLetters D
+    );
+ 
+
+    
+
+create view CodeBuildingBlockConsolidatedUnfiltered as
+select C.match as match
+--from CodeBuildingBlock C
+from CodeCharNumSymBase C
+consolidate on C.match 
+using 'ContainedWithin';  
+
+
+-- filter out IDs
+create view CodeBuildingBlockConsolidated as
+    (
+    select D.match 
+    from CodeBuildingBlockConsolidatedUnfiltered D
+    )
+    minus
+    (
+    select D.match
+    from common.IDBuildingBlockConsolidated D
+    );
+  
+-- FINAL OUTPUTS 
+
+
+create view CodeInterim as 
+    select D.match as Code_Span, GetText(D.match) as Code_Text
+    from CodeBuildingBlockConsolidated D;
+
+create view CodeAllLowerCaseInterim as
+    select D.Code_Span, D.Code_Text 
+    from CodeInterim D
+    where Not(ContainsRegex(/[A-Z]/,D.Code_Span));
+    
+create view CodeAllUpperCaseInterim as
+    select D.Code_Span, D.Code_Text 
+    from CodeInterim D
+    where Not(ContainsRegex(/[a-z]/,D.Code_Span));    
+    
+create view CodeMixedCaseInterim as
+    select D.Code_Span, D.Code_Text 
+    from CodeInterim D
+    where ContainsRegex(/[A-Z]/,D.Code_Span)     
+    and ContainsRegex(/[a-z]/,D.Code_Span);
+
+
+create view CodeSyslogOutput as
+select D.Code_Span as span, D.Code_Text as text, GetString('CodeSyslog') as field_type
+from CodeInterim D;
+
+export view CodeSyslogOutput;
+
+create view CodeSyslogAllLowerCaseOutput as
+select D.Code_Span as span, D.Code_Text as text, GetString('CodeSyslogAllLowerCase') as field_type
+from CodeAllLowerCaseInterim D;
+
+create view CodeSyslogAllUpperCaseOutput as
+select D.Code_Span as span, D.Code_Text as text, GetString('CodeSyslogAllUpperCase') as field_type
+from CodeAllUpperCaseInterim D;
+
+create view CodeSyslogMixedCaseOutput as
+select D.Code_Span as span, D.Code_Text as text, GetString('CodeSyslogMixedCase') as field_type
+from CodeMixedCaseInterim D;
+

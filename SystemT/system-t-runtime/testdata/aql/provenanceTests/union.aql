@@ -1,0 +1,67 @@
+-------------------------------------------------------------------------------
+-- personphone_demo1.aql
+--
+-- Simple person-phone annotator for demo
+-------------------------------------------------------------------------------
+
+-- Find first names, using an exhaustive dictionary.
+create view FirstName as 
+extract 
+    dictionary 'firstnames.dict' on D.text as name
+from Document D
+having MatchesRegex(/\A[A-Z][a-z]*\Z/, name);
+
+output view FirstName;
+
+
+-- Find phone numbers, using a pair of regular expressions.
+create view PhoneNumber as
+extract 
+    regexes /\+?\([1-9]\d{2}\)\d{3}-\d{4}/ and /\+?[Xx]\.?\d{4,5}/
+    on D.text as num
+from Document D;
+
+output view PhoneNumber;
+
+
+-- Find instances of first name followed within 40 chars by phone number
+create view PersonPhoneAll as
+select name.name as person, phone.num as phone,
+       CombineSpans(name.name, phone.num) as personphone
+from FirstName name, PhoneNumber phone
+where Follows(name.name, phone.num, 0, 40);
+
+output view PersonPhoneAll;
+
+
+-- Test 1: Union with rewritten operands having compatible schemas
+create view Union1 as
+(select F.name as match from FirstName F )
+union all
+(select P.num as match from PhoneNumber P );
+
+output view Union1;
+
+
+-- Test 2: Union with rewritten operands not having compatible schemas
+create view Union2 as
+(select F.name as match from FirstName F )
+union all
+(select P.person as match from PersonPhoneAll P );
+
+output view Union2;
+
+
+-- Test 3: Union of extracts
+create view Union3 as
+(extract 
+    dictionary 'firstnames.dict' on D.text as match
+from Document D
+having MatchesRegex(/\A[A-Z][a-z]*\Z/, match))
+union all
+(extract 
+    regexes /\+?\([1-9]\d{2}\)\d{3}-\d{4}/ and /\+?[Xx]\.?\d{4,5}/
+    on D.text as match
+from Document D );
+
+output view Union3;

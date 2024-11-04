@@ -1,0 +1,23 @@
+-- Test case for bug #155177: Problem in AQL provenance rewrite 
+-- when detag statement operates on non-Document view.
+
+create view DocCopy as
+select D.text as text
+from Document D;
+
+detag DocCopy.text as DetaggedDoc
+detect content_type never
+annotate
+     element 'a' as ATag      
+     with attribute 'href' as target;
+
+create view DetaggedDocCopy as 
+select D.text as text
+from DetaggedDoc D;
+
+create view ATagCopy as
+select *
+from ATag;
+
+output view DetaggedDocCopy;
+output view ATagCopy;

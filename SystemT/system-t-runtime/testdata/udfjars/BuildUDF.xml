@@ -1,0 +1,90 @@
+<?xml version="1.0"?>
+
+<!-- Build file that compiles and creates jar files for AQL
+	 user-defined functions that are used in the test cases.
+	 
+	 Note that this build file will only work if you've 
+	 previously run build/build.xml to generate build/systemT.jar! 
+-->
+
+<project name="SystemT UDF Example" default="all">
+
+	<!-- SystemT JAR is needed to compile the example UDFs. -->
+	<!-- HACK ALERT: The systemt.jar is now built by Maven. 
+	     Of course, Maven pom.xml doesn't build the UDFs for us, and it also doesn't 
+	     put systemt.jar at the old location, so now we have to hardcode the snapshot number. -->
+	<!--property name="systemt.jar" value="../../build/systemT.jar" /-->
+	<property name="systemt.jar" value="../../target/systemT-3.12-SNAPSHOT-biginsights.jar" />
+	<!-- END HACK ALERT -->
+
+	<!-- Temporary directory for compiler output. -->
+	<property name="tmp.dir" value="./tmp" />
+
+	<target name="all" depends="udfsJar,listUdfsJar,tableFnTestsUdfsJar" />
+
+	<target name="udfsJar">
+		<antcall target="buildjar">
+			<param name="jar.file.name" value="./udfs.jar" />
+			<param name="jar.src.dir" value="./udfs_src" />
+		</antcall>
+	</target>
+
+	<target name="listUdfsJar">
+		<antcall target="buildjar">
+			<param name="jar.file.name" value="./listUDFs.jar" />
+			<param name="jar.src.dir" value="./listUDFs_src" />
+		</antcall>
+	</target>
+
+	<!-- UDFs used by the TableFnTests test harness -->
+	<target name="tableFnTestsUdfsJar">
+		<antcall target="buildjar">
+			<param name="jar.file.name" value="./tableFnTestsUDFs.jar" />
+			<param name="jar.src.dir" value="./tableFnTestsUDFs_src" />
+		</antcall>
+	</target>
+
+	<!-- UDFs used by the NullHandlingTests test harness -->
+	<target name="nullUdfsJar">
+		<antcall target="buildjar">
+			<param name="jar.file.name" value="./nullUDFs.jar" />
+			<param name="jar.src.dir" value="./nullUDFs_src" />
+		</antcall>
+	</target>
+
+
+	<!-- Generic target for building a jar file.  Takes two variables as arguments:
+	     jar.file.name: the name of the output jar file
+	     jar.src.dir: directory containing Java source files to load into the jar
+	     -->
+	<target name="buildjar">
+
+		<!-- Clear out files from previous builds -->
+		<delete dir="${tmp.dir}" />
+		<delete file="${jar.file.name}" />
+
+		<mkdir dir="${tmp.dir}" />
+
+		<!-- Compile the (single) Java file containing our UDF definitions. -->
+		<javac srcdir="." debug="true" destdir="${tmp.dir}" target="1.6">
+			<!-- Add relevant libraries to classpath -->
+			<classpath>
+				<pathelement location="${systemt.jar}" />
+			</classpath>
+		</javac>
+
+		<!-- Generate a jar with the compiled class file.
+			We'll assume that the package name for the class file starts
+			with "com"
+		 -->
+		<jar destfile="${jar.file.name}" compress="yes">
+			<fileset dir="${tmp.dir}" includes="**/*.class" />
+			<fileset dir="${jar.src.dir}" includes="**/*.properties" />
+		</jar>
+
+		<!-- Clean up temp files -->
+		<delete dir="${tmp.dir}" />
+	</target>
+
+
+</project>

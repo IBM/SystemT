@@ -1,0 +1,700 @@
+-----------------------------------------------------
+
+create view PersonNameAsCity as 
+extract
+		dictionaries 'names/conll2003/missingPerson_nameAsCity_conll2003.dict'
+		on D.text   
+        as person
+		from Doc D
+		having MatchesRegex(/\p{Lu}\p{M}*.+/, person);
+		
+------------------------------------------------------
+-- Customization for CoNLL2003
+------------------------------------------------------
+create view FamousePeople as
+	extract
+		dictionaries 'names/famous/worldLeaders03-08.dict'
+			    and  'names/famous/uspresidents.dict'
+			    and  'names/famous/greatestAmerican.dict'
+			    and  'names/famous/famousPeople.dict'
+			    and  'names/famous/leaders_russia.dict'
+	    	    and  'names/famous/leaders_china.dict'
+	       	    and  'names/famous/leaders_india.dict'
+	       	    and  'names/famous/leaders_japan.dict'
+	       	    and  'names/famous/leaders_cambodia.dict'
+	       	    and  'names/famous/leaders_un.dict'
+	       	    and  'names/famous/leaders_iran.dict'
+	       	    and  'names/famous/fifa_100.dict'	
+	       	    and  'names/famous/irhof_inductee.dict'	
+	       	    and  'names/famous/topPlayer_male_tennis.dict'	
+	       	    and  'names/famous/topPlayer_female_tennis.dict'
+	       	    and  'names/famous/topPlayer_cyclist.dict'	
+	       	    and  'names/famous/topPlayer_golfer.dict'
+	       	    and  'names/famous/topPlayer_baseball.dict'
+	       	   	and  'names/famous/goldgloveaward_winner.dict'
+	       	    and  'names/famous/allstar_baseball_player.dict'
+	       	    and  'names/famous/topPlayer_F1.dict'
+	       	    and  'names/famous/topPlayer_cricket_pakistan.dict'
+	       	    and  'names/famous/topPlayer_cricket_india.dict'
+	       	    and  'names/famous/topPlayer_cricket_australia.dict'
+	       	    and  'names/famous/topPlayer_cricket_newzealand.dict'
+	       	    and  'names/famous/topPlayer_cricket_srilanka.dict'
+	       	    and  'names/famous/topPlayer_ski.dict'
+	       	    and  'names/famous/topPlayer_soccer_100cup.dict'
+	       	    and  'names/famous/1996olympics_medalist.dict'
+	       	    and  'names/famous/2000olympics_medalist.dict'
+	       	    and  'names/famous/2002olympics_medalist.dict'
+	       	    and  'names/famous/2002olympics_icehockey_player.dict'
+	       	    and  'names/famous/champions_usopen.dict'
+	       	    and  'names/famous/football_southAfrica.dict'
+	       	    and  'names/famous/football_argentina.dict'
+	       	    and  'names/famous/football_england.dict'
+	       	    and  'names/famous/football_italy.dict'
+	       	    and  'names/famous/islamicMovement_leaders.dict'
+	       	    and  'names/famous/baseballPlayer.dict'
+	       	    and  'names/famous/cycling_uci.dict'
+	       	    and  'names/famous/1996-AFC-players.dict'
+		on D.text   
+        as person
+		from Doc D;
+
+create view MissingPersonCoNLL2003 as
+	extract
+		dictionaries 'names/conll2003/missingPerson_fullname_conll2003.dict'
+				--and 'names/conll2003/StrictPoliticalPerson.unique'
+		        --and 'names/conll2003/StrictSportsPerson.unique'
+		        and 'names/conll2003/PoliticalPersonFromCoNLL.unique'
+		        and 'names/conll2003/SportsPersonFromCoNLL.unique'		        
+		        		        
+        on D.text   
+        as person
+		from Doc D;
+		
+--output view MissingPersonCoNLL2003;
+
+create view OfficialExtraInfoPersonCoNLL2003 as
+	extract
+		dictionaries 'names/conll2003/official_extraInfo_Person_conll2003.dict'
+		on D.text   
+        as person
+		from Doc D;
+		
+		
+
+--output view OfficialExtraInfoPersonCoNLL2003;
+---------------------------------------------
+-- Union all candidates found
+---------------------------------------------
+create view StrongPersonCandidates as
+	(select P.person as person from PersonNameAsCity P)
+	--union all
+	--(select P.person as person from MissingSingleTokenPersonCoNLL2003 P)
+	union all
+	(select P.person as person from FamousePeople P)
+	union all
+    (select P.person as person from MissingPersonCoNLL2003 P where ContainsRegex(/\s/, P.person));
+   -- union all
+   -- (select P.person as person from OfficialExtraInfoPersonCoNLL2003 P);
+
+--output view PersonNameAsCity;
+--output view FamousePeople;
+
+-- remove Person candidates identified using core rules that overlap with the strong person candidates
+create view PersonWithAttrAllValidOverlap as
+select P1.person as person 
+from PersonWithAttrAllValid P1,
+	 StrongPersonCandidates P2
+where Overlaps(P1.person, P2.person)
+ and  Not(Contains(P1.person,P2.person))
+ and  Not(Equals(P1.person, P2.person));
+
+create view PersonWithAttrAllValidNonOverlap as
+	(select P.person as person from PersonWithAttrAllValid P)
+	minus
+	(select P.person as person from PersonWithAttrAllValidOverlap P);
+
+create view StrongPersonCandidatesTokens as
+	(select R.match as person from Regex(/[^\s\.]{2,}(\s+[^\s\.]{2,})?/, StrongPersonCandidates.person) R)
+	union all
+	(select R.match as person from Regex(/[^\s\.]{2,}/, StrongPersonCandidates.person) R)
+	union all
+	(select P.person as person from PersonWithAttrAllValidNonOverlap P);
+		
+create view StrongPersonCandidatesTokensDedup as
+select GetText(PT.person) as person
+from StrongPersonCandidatesTokens PT
+group by GetText(PT.person);
+
+-- Laura: replaced with optimized version below
+/*
+create view StrongPersonTokenCandidates as
+select CW.name as person
+from StrongPersonCandidatesTokensDedup SP,
+	ValidCapsPersonCandidates CW
+where equalsIgnoreCaseNormalized(SP.person, CW.name);
+--where Equals(GetText(SP.person), GetText(CW.name));
+*/
+
+create view StrongPersonTokenCandidates as
+select CW.name as person
+from 
+(select toUpperCase(SP.person) as personNormalized from StrongPersonCandidatesTokensDedup SP) SP,
+(select CW.name as name, toUpperCase(CW.name) as nameNormalized from ValidCapsPersonCandidates CW) CW
+where Equals(GetText(SP.personNormalized), GetText(CW.nameNormalized));
+
+--output view StrongPersonTokenCandidates;
+
+create view PersonCandidatesAll as
+	(select P.person as person from PersonWithAttrAllValidNonOverlap P)
+	union all
+	(select P.person as person from StrongPersonCandidates P)
+	union all
+	(select P.person as person from StrongPersonTokenCandidates P);
+
+--output view ValidCapsPersonCandidates;
+--output view PersonWithAttrAllValidNonOverlap;
+--output view StrongPersonTokenCandidates;
+--output view StrongPersonCandidates;
+---------------------------------------------------
+create view WrongPersonCoNLL2003 as
+	extract
+		dictionaries 'names/conll2003/wrongPerson_conll2003.dict'
+		and 'names/conll2003/car_name.dict'
+		with flags 'Exact'
+		on D.text   
+        as person
+		from Doc D;
+		
+-----------------------------------------------------
+-- Identify false positives due to sport team names
+----------------------------------------------------
+-- based on pattern "Player (country) team 1:54.754"
+-- or "Player (country) team "
+create view SportsTeam1 as
+select C.person as person
+from PersonCandidatesAll C
+where MatchesRegex(/.*\)\s*,?\s*/, LeftContext(C.person, 5))
+  and MatchesRegex(/,?\s*(\d:)?\d{2}\.\d{3}.*/, RightContext(C.person, 20));
+   
+ -- based on pattern "Ferrari F40 167"
+create view SportsTeam2 as
+select C.person as person
+from PersonCandidatesAll C
+where MatchesRegex(/\s*((F(I|1)\s+GTR)|(F|LM\d{1,2}|911))[ ]+\d{3}.*/, RightContext(C.person, 20));
+
+-- based on pattern: 
+-- 1. Williams 149 points 
+-- 2. Benetton 55 
+create view SportsTeam3 as
+select C.person as person
+from PersonCandidatesAll C
+where MatchesRegex(/.*[\r\n]\d{1,2}\s*\.\s*/, LeftContext(C.person, 5))
+	and MatchesRegex(/\s+\d{2,3}\s*[\r\n].*/, RightContext(C.person, 20));
+
+
+-- car name
+create view SportsTeam4 as
+select C.person as person
+from PersonCandidatesAll C
+where MatchesRegex(/.*\s+(in|driving|drove)\s+(a|an)\s+/, LeftContext(C.person, 10))
+	and MatchesRegex(/\s*(\.|and)\s*\.*/, RightContext(C.person, 5));
+
+-- Bowling : Streak
+create view SportsTeam5 as
+select C.person as person
+from PersonCandidatesAll C
+where MatchesRegex(/.*[\r\n]\s*/, LeftContext(C.person, 5))
+  and MatchesRegex(/\s*:.*/, RightContext(C.person, 5));
+
+
+--Crewe v [Watford] 
+create view SportsTeam6 as
+select C.person as person
+from PersonCandidatesAll C
+where MatchesRegex(/.*\s+(v\.?)\s+/, LeftContext(C.person, 5))
+  and MatchesRegex(/\s*[,\r\n].*/, RightContext(C.person, 5));
+  
+-- Birmingham v Barnsley , [Bradford v] 
+create view SportsTeam7 as
+select C.person as person
+from PersonCandidatesAll C
+where MatchesRegex(/.+\s+v/, C.person);
+
+-- football result: Petra Drnovice 3 1 1 1 7 5 4
+create view SportsTeam8 as
+select C.person as person
+from PersonCandidatesAll C
+where MatchesRegex(/\s*(\d\s+){7}[^\d]*/, RightContext(C.person, 15));
+
+-- Oldham 21 8 1 12 439 656 17  (at the beginning of a sentence)
+create view SportsTeam9 as
+select C.person as person
+from PersonCandidatesAll C
+where MatchesRegex(/.*[\r\n]\s*/, LeftContext(C.person,2))
+  and MatchesRegex(/\s*\d{2}\s+(\d\s+){2}\d{2}\s+(\d{3}\s+){2}\d{2}\s*[\r\n].*/, RightContext(C.person, 25))
+  and Not(ContainsRegex(/[\r\n]/, RightContext(C.person, 15)));
+
+-- Samsung 47 5 55 .463 15
+-- [Lotte] 44 6 53 .456 15 1/2
+create view SportsTeam10 as
+select C.person as person
+from PersonCandidatesAll C
+where MatchesRegex(/.*[\r\n]\s*/, LeftContext(C.person,2))
+  and MatchesRegex(/\s*\d{2}\s+\d\s+\d{2}\s+\.\d{3}\s+\d{2}(\s+\d[\/]\d)?\s*[\r\n].*/, RightContext(C.person, 25))
+  and Not(ContainsRegex(/[\r\n]/, RightContext(C.person, 15)));
+
+-- wrong person based on context clue
+create view WrongPersonLeftClue as
+	extract
+		dictionaries 'names/conll2003/wrongPerson_clue_left.dict'
+		on D.text   
+        as clue
+		from Doc D;
+
+create view WrongPersonRighttClue as
+	extract
+		dictionaries 'names/conll2003/wrongPerson_clue_right.dict'
+		and 'organization_suffix.dict'
+		and 'location/facilities/suffix-building.dict'
+		and 'location/facilities/suffix-commericalPlace.dict'
+		and 'location/facilities/suffix-structure.dict'
+		and 'location/facilities/suffix-publicPlace.dict'
+		on D.text   
+        as clue
+		from Doc D;
+
+create view WrongPerson1 as
+select P.person as person 
+from  PersonCandidatesAll P,
+	  WrongPersonLeftClue LC
+where FollowsTok(LC.clue, P.person, 0, 0)
+  and MatchesRegex(/\s*/,SpanBetween(LC.clue, P.person));
+  
+create view WrongPerson2 as
+select P.person as person 
+from  PersonCandidatesAll P,
+	  WrongPersonRighttClue RC
+where FollowsTok(P.person, RC.clue,  0, 1)
+  --and MatchesRegex(/\s*,?\s*/,SpanBetween(P.person, RC.clue));
+   and MatchesRegex(/\s*/,SpanBetween(P.person, RC.clue));
+ 
+--output view WrongPerson2;
+  
+-- remove person contained by city/state/country
+--- create view WrongPerson3 as
+--select P.person as person 
+--from PersonCandidatesAll P,
+--     CityStateCountryValid L
+--where Contains(L.reference, P.person)
+--  and Not(Equals(L.reference, P.person));
+
+-- remove person appears in quotation mark
+create view WrongPerson4 as
+select P.person as person
+from PersonCandidatesAll P
+where MatchesRegex(/.*"\s*/, LeftContextTok(P.person,2))
+  and MatchesRegex(/\s*".*/, RightContextTok(P.person,2));
+
+-- remove person appears in location
+create view WrongPerson5 as
+select P.person as person
+from PersonCandidatesAll P,
+     LocationConsolidated L
+where Contains(L.loc, P.person)
+  and Not(Equals(L.loc, P.person));
+  
+-- remove cases like  Marcos LM600
+create view WrongPerson6 as
+select P.person as person
+from PersonCandidatesAll P
+where MatchesRegex(/[ ]*[A-Z]+\d{2,}/, RightContextTok(P.person, 1));
+
+-- remove cases that is actually part of location
+create view WrongPerson7 as
+select P.person as person
+from PersonCandidatesAll P
+where MatchesRegex(/in\s*/, LeftContextTok(P.person, 1))
+  and MatchesRegex(/\s*,/, RightContextTok(P.person, 1));
+  
+-- remove cases that is organization  "TUE McCarthy YR DIV 36.8 32.0-43.0 28.0 "
+-- ToDo: to be removed when organization is improved
+create view WrongPerson8 as
+select P.person as person
+from PersonCandidatesAll P
+where MatchesRegex(/[ ]+YR[ ]+[A-Z]{2,3}/, RightContextTok(P.person, 2));
+ 
+
+-- remove person contained by organization candidate
+create view WrongPerson10 as 
+select P.person as person
+from PersonCandidatesAll P,
+	 OrganizationConsolidated O
+where Contains(O.org, P.person)
+  and Not(Equals(O.org, P.person));
+
+--output view WrongPerson10;
+
+create view WrongPerson as
+	(select P.person as person from WrongPersonCoNLL2003 P)
+	union all
+	(select P.person as person from SportsTeam1 P)
+	union all
+	(select P.person as person from SportsTeam2 P)
+	--union all
+	--(select P.person as person from SportsTeam3 P)
+	union all
+	(select P.person as person from SportsTeam4 P)
+	union all
+	(select P.person as person from SportsTeam5 P)
+	union all
+	(select P.person as person from SportsTeam6 P)
+	union all
+	(select P.person as person from SportsTeam7 P)
+	union all
+	(select P.person as person from SportsTeam8 P)
+	union all
+	(select P.person as person from SportsTeam9 P)
+	union all
+	(select P.person as person from SportsTeam10 P)
+	union all
+	(select P.pos as person from Position P)
+	union all
+	(select P.person as person from WrongPerson1 P)
+	union all
+	(select P.person as person from WrongPerson2 P)
+	union all
+--	(select P.person as person from WrongPerson3 P)
+--	union all
+	(select P.person as person from WrongPerson4 P)
+	union all
+	(select P.person as person from WrongPerson5 P)
+	union all
+	(select P.person as person from WrongPerson6 P)
+    union all
+	(select P.person as person from WrongPerson7 P)
+	 union all
+	(select P.person as person from WrongPerson8 P)
+	union all
+	(select P.person as person from WrongPerson10 P);
+--output view WrongPerson4;
+--output view WrongPerson6;
+--output view WrongPerson7;
+--output view WrongPerson8;
+	
+--output view OrganizationConsolidated;
+
+--Laura: replaced with optimized version below
+/*
+create view WrongPersonTokenCandidates as
+select CW.name as person
+from WrongPerson WP,
+	 ValidCapsPersonCandidates CW
+where equalsIgnoreCaseNormalized(WP.person, CW.name);
+*/
+
+create view WrongPersonTokenCandidates as
+select CW.name as person
+from 
+(select toUpperCase(WP.person) as personNormalized from WrongPerson WP) WP,
+(select CW.name as name, toUpperCase(CW.name) as nameNormalized from ValidCapsPersonCandidates CW) CW
+where Equals(GetText(WP.personNormalized), GetText(CW.nameNormalized));
+
+create view WrongPersonTokenAll as 
+	(select P.* from WrongPersonTokenCandidates P)
+	union all
+	(select P.* from WrongPerson P);
+	
+create view WrongPersonToken as
+select P.*
+from WrongPersonTokenAll P
+consolidate on P.person;	
+	
+--output view WrongPersonTokenCandidates;
+--output view WrongPerson;
+----------------------------------------------------
+create dictionary PersonClueDict as
+(
+    'administration ', 'family', 'congress', 'cabinet', 'scale', 'blockbuster', 'front',
+    'regime', '.', 'campaign', 'government', 'Congress'
+);
+
+create view PersonCandidatesInvalidAll as
+	(select P.person as person 
+	 from PersonCandidatesAll P,
+	      WrongPersonToken W
+	 where Contains(W.person, P.person)
+	 )
+	 --union all
+	 --(select P.person as person 
+	 --from PersonCandidatesAll P,
+	 --     WrongPersonToken W
+	 --where Contains(P.person, W.person)
+	 --)
+	 union all
+	 (select P.person as person 
+	 from PersonWithAttrAllValidNonOverlap P
+	 -- don't disgard single token candidate
+	 where ContainsDict('names/conll2003/filterPerson_strong_LCDict.dict', LeftContextTok(P.person, 1))
+	   and Not(ContainsDict('PersonClueDict', RightContextTok(P.person, 1)))
+	 );
+	 
+create view InvlidPersonCandidatesAll as
+select P.person as person 
+from PersonWithAttrAllValidNonOverlap P
+where ContainsDict('names/conll2003/filterPerson_strong_LCDict.dict', LeftContextTok(P.person, 1))
+	   and Not(ContainsDict('PersonClueDict', RightContextTok(P.person, 1)));
+	   
+--output view InvlidPersonCandidatesAll;	 
+	 
+create view PersonCandidatesValidAll as
+	(select P.person as person from PersonCandidatesAll P)
+	minus
+	(select P.* from PersonCandidatesInvalidAll P);
+	--(select P.person as person 
+	-- from PersonCandidatesAll P,
+	--      WrongPersonToken W
+	-- where Contains(W.person, P.person)
+	-- );
+
+--output view PersonCandidatesInvalidAll;
+--output view PersonCandidatesAll;
+--output view WrongPersonToken;
+--output view PersonCandidatesValidAll;	
+	
+-- find person that are in a list i
+-- 1. in between two names
+create view PersonCandidateInList1 as
+select L.name as person
+from   RelaxedPersonCandidate L,
+       PersonCandidatesValidAll P1,
+       PersonCandidatesValidAll P2
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  FollowsTok(P1.person, L.name, 1, 5)
+  and  MatchesRegex(/\s*(\(([\p{Upper}]?[\p{Lower}]*\.?\s*)+\))?\s*,(\s*\d{1,2}\s*-)?\s*/, SpanBetween(P1.person, L.name))
+  and  FollowsTok(L.name, P2.person, 1, 5)
+  and  MatchesRegex(/\s*((\(([\p{Upper}]?[\p{Lower}]*\.?\s*)+\)))|((\(([\p{Upper}]?[\p{Lower}]*\.?\s*)+\))?\s*(,|and))(\s*\d{1,2}\s*-)?\s*/, SpanBetween(L.name, P2.person));
+  
+create view PersonCandidateInList1Consolidated1 as
+select P.person as person
+from PersonCandidateInList1 P
+consolidate on P.person; 
+
+  
+--output view PersonCandidateInList1Consolidated1;  
+  
+-- 2. after two names 
+create view PersonCandidateInList2 as
+select L.name as person
+from   RelaxedPersonCandidate L,
+       PersonCandidatesValidAll P1,
+       PersonCandidatesValidAll P2
+where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+  and  FollowsTok(P1.person, P2.person, 1, 5)
+  and  MatchesRegex(/\s*(\(([\p{Upper}]?[\p{Lower}]*\.?\s*)+\))?\s*,(\s*\d{1,2}\s*-)?\s*/, SpanBetween(P1.person, P2.person))
+  and  FollowsTok(P2.person, L.name, 1, 5)
+  and  MatchesRegex(/\s*((\(([\p{Upper}]?[\p{Lower}]*\.?\s*)+\)))|((\(([\p{Upper}]?[\p{Lower}]*\.?\s*)+\))?\s*(,|and))(\s*\d{1,2}\s*-)?\s*/, SpanBetween(P2.person, L.name));
+
+--output view PersonCandidateInList2;
+
+create view PersonCandidateInList1Consolidated2 as
+select P.person as person
+from PersonCandidateInList2 P
+consolidate on P.person;  
+  
+--output view PersonCandidateInList1Consolidated2;  
+
+-- 3. before two names (this rule doesn't work): too much noise
+--create view PersonCandidateInList3 as
+--select L.name as person
+--from   AllPersonCandidate L,
+--       PersonCandidatesValidAll P1,
+--       PersonCandidatesValidAll P2
+--where  Not(ContainsRegex(/[\r\n\t]/, L.name))
+--  and  FollowsTok(L.name, P1.person, 1, 5)
+--  and  FollowsTok(P1.person, P2.person, 1, 5)
+--  and  MatchesRegex(/\s*(\(([\p{Upper}]?[\p{Lower}]*\.?\s*)+\))?\s*,(\s*\d{1,2}\s*-)?\s*/, SpanBetween(L.name, P1.person))
+--  and  MatchesRegex(/\s*((\(([\p{Upper}]?[\p{Lower}]*\.?\s*)+\)))|((\(([\p{Upper}]?[\p{Lower}]*\.?\s*)+\))?\s*(,|and))(\s*\d{1,2}\s*-)?\s*/, SpanBetween(P1.person, P2.person));
+
+--create view PersonCandidateInList1Consolidated3 as
+--select P.person as person
+--from PersonCandidateInList3 P
+--consolidate on P.person; 
+  
+--create view PersonCandidateInList2 as
+--select CombineSpans(I.word, CP.name) as person
+--from   InitialWord I,
+--       CapsPerson CP,
+--       PersonCandidatesValidAll P1,
+--       PersonCandidatesValidAll P2
+--where  FollowsTok(I.word, CP.name, 0, 2)
+--  and  MatchesRegex(/\s+([a-zA-Z]{3,}\s+){0,2}/, SpanBetween(I.word, CP.name))
+--  and  Not(ContainsRegex(/[\r\n\t]/, SpanBetween(I.word, CP.name)))
+--  and  FollowsTok(P1.person, I.word, 1, 1)
+--  and  MatchesRegex(/\s*,\s*/, SpanBetween(P1.person, I.word))
+--  and  FollowsTok(CP.name, P2.person, 1, 1)
+--  and  MatchesRegex(/\s*(,|and)\s*/, SpanBetween(CP.name, P2.person));
+
+create view PersonCandidatesValid as
+	(select P.* from PersonCandidatesValidAll P)
+	union all
+	(select P.* from PersonCandidateInList1Consolidated1 P)
+	union all
+	(select P.* from PersonCandidateInList1Consolidated2 P);
+	
+------------------------------------------------------	
+	
+create view PersonConsolidated as
+select P.* 
+from PersonCandidatesValid P
+consolidate on P.person;
+--using 'LeftToRight';
+
+-- extend in the pattern of ,<name><CapsPerson>, or ,<CapsPerson> <name>,
+create view PersonConsolidatedExtended1 as
+select CombineSpans(P.person, C.name) as person
+from PersonConsolidated P,
+     CapsPerson C
+where FollowsTok(P.person, C.name, 0, 0)
+-- don't extend in title
+  and Not(MatchesRegex(/[A-Z]+/, C.name))
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(P.person, C.name)))
+  and MatchesRegex(/\s+([^a-zA-Z\s]|[a-z]+).*/,RightContextTok(C.name, 1))
+  and MatchesRegex(/.*([\r\n,]|'s)\s*/, LeftContextTok(P.person, 2));--'
+
+-- extended single token name, for cases such as Francois-Rene ( Vicomte de ) Chateaubriand
+create view  PersonConsolidatedExtended1_1 as
+select CombineSpans(P.person, CP.name) as person
+from PersonConsolidated P,
+     CapsPerson CP
+where FollowsTok(P.person, CP.name, 3, 4)
+  and Not(ContainsRegex(/\s/, P.person))
+  and MatchesRegex(/[ ]+[("][ ]*[A-Z][a-z]+([ ]+([A-Za-z])+[ ]*)?[)"][ ]+/, SpanBetween(P.person, CP.name));
+
+--output view PersonConsolidatedExtended1_1;
+  
+create view PersonConsolidatedExtended2 as
+select CombineSpans(C.name, P.person) as person
+from CapsPerson C,
+	 PersonConsolidated P  
+where FollowsTok(C.name, P.person, 0, 0)
+-- don't extend in title
+  and Not(MatchesRegex(/[A-Z]+/, C.name))
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(C.name, P.person)))
+  and MatchesRegex(/\s+([^a-zA-Z]|and).*/,RightContextTok(P.person, 1))
+  and MatchesRegex(/.*[,]\s*/, LeftContextTok(C.name, 1));
+
+create view PersonConsolidatedExtended2_1 as
+select CombineSpans(C.name, P.person) as person
+from CapsPerson C,
+	 PersonConsolidated P     
+where FollowsTok(C.name, P.person, 0, 0)
+  -- don't extend in title
+  and Not(MatchesRegex(/[A-Z]+/, C.name))
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(C.name, P.person)))
+  -- for single token name only
+  and Not(ContainsRegex(/\s/, P.person))
+  and MatchesRegex(/((\p{Ll}\p{M}*)+|,)[ ]+/,LeftContextTok(C.name, 1))
+  and MatchesRegex(/[ ]+((\p{Ll}\p{M}*)+|,)/, RightContextTok(P.person, 1));
+
+--output view CapsPerson;
+--output view PersonConsolidatedExtended2_1;  
+--output view PersonConsolidated;
+--output view PersonConsolidatedExtended1;
+--output view PersonConsolidatedExtended2;
+
+-- combine names next to each other together
+create view PersonConsolidatedExtended3 as
+select CombineSpans(P1.person, P2.person) as person
+from PersonConsolidated P1,
+     PersonConsolidated P2
+where FollowsTok(P1.person, P2.person, 0, 0);
+
+-- extend to the right Name-lowercaseWord
+create view PersonConsolidatedRightContext as
+select RightContext(P.person, 10) as lc
+from PersonConsolidated P;
+
+create view PersonConsolidatedRightContextSelect as
+extract 
+	regex/^(-[a-z]+)\s+.*/
+	   on C.lc 
+    	return group 1 as name
+from PersonConsolidatedRightContext C;
+
+create view PersonConsolidatedExtended4 as
+select CombineSpans(P.person, C.name) as person
+from PersonConsolidated P,
+     PersonConsolidatedRightContextSelect C
+where FollowsTok(P.person, C.name, 0, 0)
+  and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(P.person, C.name)));
+
+create view PersonConsolidatedExtended5 as 
+select I.person as person
+from OfficialExtraInfoPersonCoNLL2003 I,
+	 PersonConsolidated P
+where Contains(I.person, P.person);	 
+
+-- for instances such as "5. M [Abreu-Campos] ( Portugal ) Maia"
+create view PersonConsolidatedExtended6 as
+select CombineSpans(I.word, P.person) as person
+from WeakInitialWord I,
+	 PersonConsolidated P
+where FollowsTok(I.word, P.person, 0, 0)
+  and MatchesRegex(/\W+\s*/, LeftContextTok(I.word, 1))
+  -- for special word like "van" and "de"
+  and Not(MatchesRegex(/[a-z]+/, I.word));	  
+--  and MatchesRegex(/\d{1,2}\s*([.]|-)\s*/, LeftContextTok(I.word, 2));
+
+-- find long names
+-- not very useful
+-- create view PersonConsolidatedExtended6 as 
+-- select I.person as person
+-- from OfficialExtraInfoPersonCoNLL2003 I
+-- where ContainsRegex(/[-\s]+/, I.person);	
+
+
+create view PersonConsolidatedAll as
+ 	(select P.* from PersonConsolidated P)
+ 	union all
+ 	(select P.* from PersonConsolidatedExtended1 P)
+ 	union all
+ 	(select P.* from PersonConsolidatedExtended1_1 P)
+ 	union all
+ 	(select P.* from PersonConsolidatedExtended2 P)
+ 	union all
+ 	(select P.* from PersonConsolidatedExtended2_1 P)
+ 	union all
+ 	(select P.* from PersonConsolidatedExtended3 P)
+ 	 union all
+ 	(select P.* from PersonConsolidatedExtended4 P)
+ 	 union all
+ 	(select P.* from PersonConsolidatedExtended5 P)
+ 	union all
+ 	(select P.* from PersonConsolidatedExtended6 P)
+ 	;
+
+--output view PersonConsolidatedAll;
+
+-- removed names that have a capitalized word after it
+-- Yunyao: added to CoNLL2003
+create view PersonConsolidatedAllInvalid as
+select P.* 
+from PersonConsolidatedAll P
+where MatchesRegex(/^\s+[A-Z][a-z]+\s+.*/, RightContext(P.person, 10))
+  and Not(ContainsRegex(/[\r\n]/,  RightContext(P.person, 10)));
+         
+
+create view PersonConsolidatedAllValid as
+	(select P.* from PersonConsolidatedAll P)
+	minus
+	(select P.* from PersonConsolidatedAllInvalid P);
+
+	
+--output view PersonConsolidatedAllValid;
+
+create view PersonBeforeFinalOrgFilter as
+select P.* 
+from PersonConsolidatedAllValid P
+consolidate on P.person;
+
+--output view PersonBeforeFinalOrgFilter;

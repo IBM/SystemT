@@ -1,0 +1,353 @@
+-------------------------------------------------------------------------------
+-- HTML.aql
+--
+-- HTML tag extraction for W3 local analysis.
+--
+-- Depends on SkipDocumentBeforeDetag.aql, Detag.aql
+--
+-- This file produces the contents of the following local analysis result
+-- tables:
+--      - H1: Text inside every H1 tag
+--      - H2H3: Text inside all H2 and H3 tags
+--      - FirstMainHead: The contents of the first H1 or Font tag after the "start main content" comment
+--		- MetaKeywords: Keywords drawn from META tags
+--		- MetaDescription: Page descriptions drawn from META tags
+--		- MetaCountry: Country codes drawn from META Country tags
+--		- MetaLanguage: Country codes drawn from META Language tags
+--		
+-------------------------------------------------------------------------------
+
+
+-- ***********************************************************************
+-- ***  Calculate valid content                                       ****
+-- ***  (i.e., after skipping based on TagsToSkipNoTitleConsolidated) ****
+-- ***  for tags: A, Meta, H1, H2, H3, Title, P, Font, Meta           ****
+-- ***********************************************************************
+
+-- Anchor
+create view AnchorSkip as
+select R.match as match, R.target as target
+from ATag R, TagsToSkipNoTitleConsolidated T
+where Contains(T.match, R.match);
+
+create view Anchor as
+(select R.match as match, R.target as target from ATag R)
+minus
+(select R.match as match, R.target as target from AnchorSkip R);
+
+-- H1
+create view H1Skip as
+select R.match as match
+from H1Tag R, TagsToSkipNoTitleConsolidated T
+where Contains(T.match, R.match);
+
+create view H1Cand as
+(select R.match as match from H1Tag R)
+minus
+(select R.match as match from H1Skip R);
+
+/*
+create view H1 as
+select H.match as match
+from H1Cand H
+where Not(GreaterThan(GetLength(H.match), 1000));
+*/
+
+-- Laura 8/24: Restrict to first 1000 chars to avoid Out-of-memory errors
+create view H1 as
+select SpanIntersection(H.match, RightContext(LeftContext(H.match,0),1000)) as match
+from H1Cand H;
+
+
+-- H2
+create view H2Skip as
+select R.match as match
+from H2Tag R, TagsToSkipNoTitleConsolidated T
+where Contains(T.match, R.match);
+
+create view H2Cand as
+(select R.match as match from H2Tag R)
+minus
+(select R.match as match from H2Skip R);
+
+-- Laura 8/24: Restrict to first 1000 chars to avoid Out-of-memory errors
+create view H2 as
+select SpanIntersection(H.match, RightContext(LeftContext(H.match,0),1000)) as match
+from H2Cand H;
+
+-- H3
+create view H3Skip as
+select R.match as match
+from H3Tag R, TagsToSkipNoTitleConsolidated T
+where Contains(T.match, R.match);
+
+create view H3Cand as
+(select R.match as match from H3Tag R)
+minus
+(select R.match as match from H3Skip R);
+
+-- Laura 8/24: Restrict to first 1000 chars to avoid Out-of-memory errors
+create view H3 as
+select SpanIntersection(H.match, RightContext(LeftContext(H.match,0),1000)) as match
+from H3Cand H;
+
+-- Meta
+-- Extract all meta non-null value and content attributes
+create view MetaTag as
+-- non-null content
+(select R.match as match, R.name as name, R.content as content from MetaTagAll R where NotNull(R.content))
+union all
+-- null content and non-null value
+(select R.match as match, R.name as name, R.value as content from MetaTagAll R where Not(NotNull(R.content)) and NotNull(R.value));
+
+create view MetaSkip as
+select R.match as match, R.name as name, R.content as content
+from MetaTag R, TagsToSkipNoTitleConsolidated T
+where Contains(T.match, R.match);
+
+-- Meta tags after skipping, with the original name value
+-- To be used in the rest of LA flow
+create view MetaOriginal as
+select R.name as name, R.content as content
+from
+(
+	(select R.name as name, R.content as content from MetaTag R)
+	minus
+	(select R.name as name, R.content as content from MetaSkip R)
+) R
+where NotNull(R.name);
+
+-- Final output, where punctuations in name values are replaced by spaces
+-- We need to do this only in the final output because Jaql has difficulty handling this type of values
+-- and we want to avoid breaking the meta analysis, which relies on original on meta names 
+create view Meta as
+select ToLowerCase(ReplacePunctuation(GetString(R.name), '_')) as name, R.content as content
+from MetaOriginal R;
+
+-- TITLE
+create view AllTitleSkip as
+select R.match as match
+from AllTitleTag R, TagsToSkipNoTitleConsolidated T
+where Contains(T.match, R.match);
+
+create view AllTitle as
+(select R.match as match from AllTitleTag R)
+minus
+(select R.match as match from AllTitleSkip R);
+
+-- FONT
+create view FontSkip as
+select R.match as match
+from FontTag R, TagsToSkipNoTitleConsolidated T
+where Contains(T.match, R.match);
+
+create view Font as
+(select R.match as match from FontTag R)
+minus
+(select R.match as match from FontSkip R);
+
+
+
+	
+-- ***********************************************************************
+-- ***                       H1, H2, H3                               ****
+-- ***********************************************************************
+
+-- Sort and group together the contents of the <H1> tags
+create view H1Grouped as
+select H.group_by as group_by, List(H.match) as h_list
+from (select H.match as match, 0 as group_by from H1 H order by H.match) H
+group by H.group_by;
+
+-- Merge all <H1> tags into a single String 
+create view H1s as
+select ListJoin(H.h_list, ' | ') as content
+from  H1Grouped H;
+
+-- Union the contents of the <H2> and <H3> tags
+create view H2H3 as
+(select H.match as match from H2 H)
+union all
+(select H.match as match from H3 H);
+
+-- Sort and group together the contents of the <H2> and <H3> tags
+create view H2H3Grouped as
+select H.group_by as group_by, List(H.match) as h_list
+from (select H.match as match, 0 as group_by from H2H3 H order by H.match) H
+group by H.group_by;
+
+-- Merge all <H2> and <H3> tags into a single String 
+create view H2H3Cand as
+select ListJoin(H.h_list, ' | ') as content
+from  H2H3Grouped H;
+
+-- Laura 7/8: Output H2H3s only if H1s is empty
+create view H2H3s as
+select H2H3.*
+from H2H3Cand H2H3,
+	(
+		select case when GreaterThan(H1.cnt,0) then 1 else 0 as exists
+		from (select Count(*) as cnt from H1s) H1
+	) H1
+where Equals(H1.exists, 0);
+
+
+
+
+
+-- ***********************************************************************
+-- ***                      FIRST MAIN HEAD                           ****
+-- ***********************************************************************
+
+-- Identify the "start main content" spans in the original document (not the detagged doc)
+create view StartMainContent as
+extract 
+	regex /start main content/ with flags 'CASE_INSENSITIVE' 
+		on D.text 
+		as match
+from Document D;
+
+-- Select the contents of the H1 and FONT tags
+create view H1Font as
+(select H.match as match from H1 H)
+union all
+(select F.match as match from Font F);
+
+-- Extract the contents of the first H1 or Font tag occurring after a "start main content" comment
+-- Assumption: the first match is at most 100000 tokens away from "start main comment"...
+create view FirstMainFinal as
+select HF.match as content, Remap(HF.match) as content_remap
+from H1Font HF,
+	 StartMainContent SMC
+where FollowsTok(SMC.match, Remap(HF.match), 0, 100000)
+consolidate on HF.match using 'RetainFirst';
+
+-- FInal output view according to the Jaql schema
+create view FirstMain as
+select GetText(F.content) as content_text, GetBegin(F.content_remap) as content_begin, GetEnd(F.content_remap) as content_end
+from FirstMainFinal F;
+	 
+
+
+-- ***********************************************************************
+-- ***                        META KEYWORDS                           ****
+-- ***********************************************************************
+
+create dictionary MetaKeywordsTagName as
+(
+	'Keywords'
+);
+
+
+-- Separate out the META tags containing name="keywords".
+create view MetaKeywords as
+select GetText(M.content) as content
+from MetaOriginal M
+where MatchesDict('MetaKeywordsTagName', M.name)
+   	--MatchesRegex(/keywords/, M.name)
+	and NotNull(M.content);
+--order by GetText(M.content);
+
+
+--Laura: this additional processing is not required. we simply output the keywords content
+-- Find comma-separated keywords in META tags, separate out the 
+-- individual keywords, and trim out whitespace.
+/*
+create view MetaKeywords as
+select Chomp(S.keyword) as keyword
+from
+(
+	(
+		extract
+		    split using S2.comma
+		        on S2.content
+		        as keyword
+		from 
+		(
+			-- Find commas in the content field to keywords tags
+			extract 
+				M.content as content, 
+				regex /,/ on M.content as comma 
+			from MetaKeywordsFull M
+		) S2
+	)
+	union all
+	(
+		-- Also return the keywords lists that *don't* contain
+		-- commas.
+		select M.content as keyword
+		from MetaKeywordsFull M
+		where Not(ContainsRegex(/,/, M.content))
+	)
+) S
+-- Filter out empty strings
+*/
+--where Not(MatchesRegex(/\s*/, S.keyword))
+--order by GetText(S.keyword);
+
+
+-- ***********************************************************************
+-- ***                        META DESCRIPTION                        ****
+-- ***********************************************************************
+
+create dictionary MetaDescriptionTagName as
+(
+	'Description'
+);
+
+
+-- Extract any META tags that are marked as a description of the page.
+create view MetaDescription as
+select GetText(M.content) as content
+from MetaOriginal M
+where MatchesDict('MetaDescriptionTagName', M.name)
+      --MatchesRegex(/description/, M.name);
+      and NotNull(M.content);
+
+
+-- ***********************************************************************
+-- ***                        META COUNTRY                            ****
+-- ***********************************************************************
+
+create dictionary MetaCountryTagName as
+(
+	'IBM.Country'
+);
+
+-- Select the contents of META tags with name "IBM.Country" (case ignored)
+-- An "ignore_case" flag on MatchesRegex would be useful
+create view MetaCountry as
+select M.content as content
+from MetaOriginal M
+where MatchesDict('MetaCountryTagName', M.name) 
+	and NotNull(M.content);
+
+
+-- ***********************************************************************
+-- ***                        META LANGUAGE                           ****
+-- ***********************************************************************
+
+create dictionary MetaLanguageTagName as
+(
+	'dc.language'
+);
+
+create view MetaLanguage as
+select M.content as content
+from MetaOriginal M
+where MatchesDict('MetaLanguageTagName', M.name)
+and NotNull(M.content);
+
+
+
+		
+	
+	
+	
+
+
+
+
+
+
+

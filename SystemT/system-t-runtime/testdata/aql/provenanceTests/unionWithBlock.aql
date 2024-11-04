@@ -1,0 +1,43 @@
+-------------------------------------------------------------------------------
+-- Test for defect #18186: Provenance rewrite exception on UNION ALL/MINUS 
+-- statements when one of the operands is EXTRACT BLOCKS
+-------------------------------------------------------------------------------
+
+create view CapsToken as
+extract regex /\p{Lu}\p{Ll}+/ on 1 token in D.text as match
+from Document D;
+
+create dictionary MissingNounDict as ( '$');
+
+create view CompoundNoun as 
+(
+	extract dictionaries 'MissingNounDict'
+	on D.text as noun
+	from Document D 
+)
+union all
+(
+	extract blocks
+    with count between 1 and 3
+    and separation 0 tokens
+    on N.match as noun
+	from CapsToken N
+);
+
+create view CompoundNoun1 as 
+(
+	extract blocks
+    with count between 1 and 3
+    and separation 0 tokens
+    on N.match as noun
+	from CapsToken N
+)
+union all
+(
+	extract dictionaries 'MissingNounDict'
+	on D.text as noun
+	from Document D 
+);
+ 
+output view CompoundNoun;
+output view CompoundNoun1;

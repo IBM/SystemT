@@ -1,0 +1,331 @@
+module webaccess;
+import view Error_CodesAndValuesOutput from module common;
+import view Success_CodesAndValuesOutput from module common;
+
+--  ****************************************************************************
+--	@ragunathan June 08 2011
+--	
+--  Annotator Type: 
+--	Base 
+--  
+--	Purpose: 
+--  Extract 'HTTP Method Types' from plain text. 
+--		Eg: GET, POST, etc
+--
+--	Rules:
+--  HTTP methods dictionary matching
+--
+--	References:
+--	http://www.w3.org/Protocols/HTTP/Methods.html
+-- ****************************************************************************
+
+create function concat(uri String, httpcode String)
+	return String
+	external_name 'lib/logAAqlUDFs.jar:com.ibm.logparse.aql.Concat!concat'
+	language java
+	deterministic
+	return null on null input;
+	
+-- dictionary of the various HTTP method types
+	create dictionary httpmethodtypes with case exact as 
+	(
+		'HEAD', 'GET', 'POST', 'PUT', 'DELETE', 'TRACE', 'OPTIONS', 'CONNECT', 'PATCH'
+	);
+
+-- temporary view
+	create view httpmethod as
+	extract
+		dictionary 'httpmethodtypes' on D.text as httpmethodtype
+	from Document D;
+
+-- output view	
+	create view httpmethodOutput as 
+	select 
+		D.httpmethodtype as HTTP_method_span, 
+		GetText(D.httpmethodtype) as HTTP_method_text
+	from httpmethod D;
+	
+	create view httpmethodOutputE as
+	select
+		H.HTTP_method_span as span,
+		H.HTTP_method_text as text,
+		GetString('HTTPMethod') as field_type
+	from
+		httpmethodOutput H;
+
+
+--  ****************************************************************************
+--	@ragunathan June 14 2011
+--	
+--  Annotator Type: 
+--	Base 
+--  
+--	Purpose: 
+--	Extract the HTTP protocol version from the web logs following Common Log Format(CLF)
+--		Eg: HTTP/1.0. HTTP/1.1
+--  Also the regex used will attempt to identify other possible future versions of HTTP.
+--		Eg: HTTP/1.2 HTTP/2.0 HTTP/2.0.1 and other possible major.minor versions.
+--
+--	Rules:
+--	HTTP/(major-ver-num)+.minor-ver-num
+--
+--  ****************************************************************************
+
+create view httpversion as 
+	extract 
+	regex /HTTP\/([0-9]+\.)+[0-9]+/
+    on D.text as version
+from Document D;
+
+create view httpversionOutput as 
+	select H.version as httpVersion_Span,
+	GetText(H.version) as httpVersion_Text
+	from httpversion H;
+
+create view httpversionOutputE as 
+select
+	H.httpVersion_Span as span,
+	H.httpVersion_Text as text,
+	GetString('HTTPVersion') as field_type
+from
+	httpversionOutput H;
+	
+create view uri_pathBase as 
+select 
+	R.match as match
+from 
+	Regex(/\/[\w\/\:\-\.]*/, Document.text) R;
+	
+create view uri_path as
+select 
+	uripb.match as uri_path
+from 
+	httpmethod htpm,
+	uri_pathBase uripb
+where 
+	FollowsTok(htpm.httpmethodtype, uripb.match, 0, 0);	
+
+create view uriPathConsolidated as
+select C.uri_path as uri_path
+from uri_path C
+consolidate on C.uri_path 
+using 'ContainedWithin';
+
+create view uriBase as 
+select 
+	R.match as match
+from 
+	Regex(/\/[\w\/\:\-\.\?\=\&]*/, Document.text) R;
+
+create view uri as
+select 
+	urib.match as uri
+from 
+	httpmethod htpm,
+	uriBase urib
+where 
+	FollowsTok(htpm.httpmethodtype, urib.match, 0, 0);	
+
+create view uriConsolidated as
+select C.uri as uri
+from uri C
+consolidate on C.uri 
+using 'ContainedWithin';
+
+-- Split the URI based on Question mark. 
+create view splitURI as
+extract 
+    split using V.boundary 
+        retain right split point
+        on V.uri
+        as parts
+from ( extract 
+        U.uri as uri,
+        regex /([\?])/ on U.uri as boundary
+        from uri U 
+)V;
+
+create view URIOutput as 
+	select D.uri as uri_Span, GetText(D.uri) as uri_Text
+	from uriConsolidated D;
+
+create view URIPathOutput as 
+	select D.uri_path as uripath_Span, GetText(D.uri_path) as uripath_Text
+	from uriPathConsolidated D;
+
+create view URIPathFileTypeOutput as
+select U.uripath_Span as uripath_Span, U.uripath_Text as uripath_Text, U.filetype as file_type_span, GetText(U.filetype) as file_type_text
+from
+	(
+		extract 
+			 UPO.uripath_Span as uripath_Span,
+			 UPO.uripath_Text as uripath_Text,
+			 regex /(\/[\w\/\:\-\.\?\=\&]*(\.([a-zA-Z0-9]+)))/
+			 on UPO.uripath_Span
+			 return	group 3 as filetype
+			 from URIPathOutput UPO
+			 
+	) U;
+		
+	
+--  ****************************************************************************
+--	@Nisanth Simon June 14 2011
+--	
+--  Annotator Type: Base 
+--  
+--	Purpose: 
+--  Extract URI, URIPath & URIQuery Logs
+--
+--	Refer:
+--	NCSA Common Log Format, NCSA Combined Log Format
+--  ****************************************************************************
+
+-- Test data
+--
+-- 9.30.205.34 - - [16/Jun/2010:16:45:11 -0700] "GET /Websense/cgi-bin/WsCgiLogin.exe?Page=login&UserName=nessus%22%3e%3cscript%3ealert('websense_username_xss.nasl')%3c%2fscript%3e HTTP/1.1" 401 503
+-- 9.30.205.34 - - [20/Sep/2010:17:49:37 -0700] "OPTIONS * HTTP/1.1" 403 423
+-- 9.30.205.34 - - [13/Mar/2011:08:01:13 -0700] "GET /%2e%2e\\%2e%2e\\%2e%2e\\%2e%2e\\%2e%2e\\%2e%2e\\%2e%2e\\%2e%2e\\%2e%2e\\%2e%2e\\winnt\\win.ini HTTP/1.1" 400 328
+
+create function getURICategory(uriPath String, uriQuery String)
+	return String
+	external_name 'lib/logAAqlUDFs.jar:com.ibm.logparse.aql.Util!getCategory'
+	language java
+	deterministic
+	return null on null input;
+
+-- Get the Span Between HTTP Methods and HTTP Version
+create view URI as 
+select Chomp(SpanBetween(M.HTTP_method_span, H.version)) 
+as uri from httpversion H , httpmethodOutput M;
+
+-- Split the URI based on Question mark. 
+create view SplitURI as
+extract 
+    split using V.boundary 
+        retain left split point
+        on V.uri
+        as parts
+from ( extract 
+        U.uri as uri,
+        regex /([\?])/ on U.uri as boundary
+        from URI U 
+)V;
+
+-- The First Span before question mark will form the URIPath
+create view URIPath1 as select Min(S.parts) as uripath from SplitURI S;
+
+-- There can be a scenario where there is no question mark in the URI. That is URIQuery is not there.
+-- Sample: "GET /%2e%2e\\%2e%2e\\%2e%2e\\%2e%2e\\%2e%2e\\%2e%2e\\winnt\\win.ini HTTP/1.1"
+-- Create a Span of URIPath where the URI do not contains question mark.
+create view URIPath2 as
+select S.uri as uripath from URI S where  Not ( ContainsRegex(/\?/,S.uri) ) ;
+
+
+-- Combine both URIPath1 and URIPath2 where the spans in these views are not null.
+create view URIPath as
+(select U2.uripath as uripath from URIPath2 U2 where NotNull(U2.uripath)) 
+union all  (select U1.uripath as uripath from URIPath1 U1 where NotNull(U1.uripath));
+
+-- Get the Span after question mark in URI.
+create view URIQuery1 as select Max(S.parts) as uriQuery from SplitURI S;
+
+-- Remove the question mark from the span
+create view URIQuery as 
+select SubSpanTok(U.uriQuery, 2, 150)as uriQuery from URIQuery1 U where NotNull(U.uriQuery);
+
+create view URIQueryUnion as
+(select Q1.uriQuery as uriQuery from URIQuery1 Q1)
+union all  (select Q.uriQuery as uriQuery from URIQuery Q);
+
+create function getNullQueryText(dummy Span)
+	return String
+	external_name 'lib/logAAqlUDFs.jar:com.ibm.logparse.aql.Util!getNullText'
+	language java
+	deterministic
+	return null on null input;
+ 
+create view URIDetails as 
+select 
+	GetText(U.uri) as URI_Text, 
+	U.uri as URI_Span,
+	GetText(UP.uripath) as URIpath_Text, 
+	UP.uripath as URIpath_Span, 
+	GetText(UQ.uriQuery) as URIQuery_Text, 
+	UQ.uriQuery as URIQuery_Span,
+	getURICategory(GetText(UP.uripath), 
+	GetText(UQ.uriQuery))  as category
+from URI U, URIPath UP, URIQuery UQ;
+
+create view URIDetailsWithQueryNull as 
+select
+	GetText(U.uri) as URI_Text, 
+	U.uri as URI_Span,
+	GetText(UP.uripath) as URIpath_Text, 
+	UP.uripath as URIpath_Span, 
+	getNullQueryText(UP.uripath) as URIQuery_Text,
+	UQ.uriQuery as URIQuery_Span,
+	GetText(UP.uripath) as category
+from URI U, URIPath UP, URIQueryUnion UQ
+where Not ( ContainsRegex(/\?/,U.uri) ) ;
+
+create view URIDetailsOutput as 
+	(select * from URIDetails)
+	union all
+	(select * from URIDetailsWithQueryNull);
+
+create view URIDetailsOutputE as
+select
+	U.URI_Span as span,
+	U.URI_Text as text,
+	U.URIpath_Span as URIpath_Span,
+	U.URIpath_Text as URIpath_Text,
+	U.URIQuery_Span as URIQuery_Span,
+	U.URIQuery_Text as URIQuery_Text,
+	U.category as category,
+	GetString('URI') as field_type
+from
+	URIDetailsOutput U;
+
+
+create view ErrorUriE as
+select 
+U.URIpath_Span as span,
+concat(GetString(U.URIpath_Text),GetString(E.text)) as text,
+concat(GetString(U.URIpath_Text),GetString(E.text)) as category,
+GetString('ErrorPath') as field_type
+from 
+URIDetailsOutputE U, common.Error_CodesAndValuesOutput E, httpversionOutputE H
+where 
+FollowsTok(CombineSpans(U.span,H.span),E.span,0,1);
+
+
+
+create view SuccessUriE as
+select 
+U.URIpath_Span as span,
+concat(GetString(U.URIpath_Text),GetString(E.text)) as text,
+concat(GetString(U.URIpath_Text),GetString(E.text)) as category,
+GetString('SuccessPath') as field_type
+from 
+URIDetailsOutputE U, common.Success_CodesAndValuesOutput E, httpversionOutputE H
+where 
+FollowsTok(CombineSpans(U.span,H.span),E.span,0,1);
+
+create view URI_Dimension as
+select T.Dimension as span,
+GetText(T.Dimension) as text,
+GetString('URIDimension') as field_type
+from
+(extract regex /\d+x\d+/ on U.span return group 0 as Dimension from URIDetailsOutputE U )T;
+
+export view SuccessUriE;
+export view URIDetailsOutputE;
+export view httpmethodOutputE;
+export view httpversionOutputE;
+export view ErrorUriE;
+export view URI_Dimension;
+--output view URIDetailsOutput;
+--output view URIDetailsWithQueryNullOutput;
+
+
+	

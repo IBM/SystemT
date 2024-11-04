@@ -1,0 +1,32 @@
+/*
+This module refer Object not exported in the imported module.
+*/
+module invalidReferences; 
+
+import module partialExport;
+
+-- check whether these objects are accessible from here
+create view Company as
+extract
+	dictionary partialExport.CompanyNames on D.text as company
+from Document ;
+
+create view Company1 as
+extract
+	dictionary partialExport.CompanyNamesExt on D.text as company
+from Document ;
+
+create view CompanyLoc as
+select N2C.location as loc, C.company as company
+from partialExport.Company C, partialExport.NameToLocation N2C, partialExport.NameToLocationExt extN2C
+where Equals(GetText(C.company), GetText(N2C.name));
+
+output view CompanyLoc;
+
+--  no error marker is shown here as well for the view partialExport.Company and table partialExport.NameToLocation  and no error in problems --view too
+create view CompanyLoc1 as
+select N2C.Location as loc, C.company as company
+from unknownView C, unknownTable N2C
+where Equals(GetText(C.company), GetText(N2C.Name));
+
+output view CompanyLoc1;

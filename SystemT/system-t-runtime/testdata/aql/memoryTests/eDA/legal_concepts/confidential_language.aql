@@ -1,0 +1,195 @@
+create view ConfidentialDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/confidential/email.confidential.dict', Document.text) D;	
+
+
+
+create view ConfidentialObjectDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/confidential/objects.dict', Document.text) D;	
+
+
+create view ConfidentialObjectQualifierDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/confidential/objectQualifier.dict', Document.text) D;	
+
+
+create view ConfidentialDataObjectDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/confidential/dataObjects.dict', Document.text) D;	
+
+
+create view ConfidentialDataObjectQualifierDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/confidential/dataObjectQualifier.dict', Document.text) D;	
+
+create view ConfidentialNegatedObjectDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/confidential/negatedObjects.dict', Document.text) D;	
+
+create view ConfidentialNegatedObjectQualifierDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/confidential/negatedObjectQualifier.dict', Document.text) D;	
+
+
+create view ConfidentialNegatedMWObjectDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/confidential/negatedMWObjects.dict', Document.text) D;	
+
+create view ConfidentialNegatedMWObjectQualifierDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/confidential/negatedMWObjectQualifier.dict', Document.text) D;	
+
+-- VERB FORMS: "keep confidential", "maintain confidentiality"
+create view Confidential1 as
+	select
+ 		CombineSpans(coqd.match, cod.match) as match
+	from
+		ConfidentialObjectDict cod,
+		ConfidentialObjectQualifierDict coqd
+ 	where  
+ 		FollowsTok(coqd.match, cod.match, 0, 5);
+
+
+-- VERB FORMS: "not tell anybody", "not make public", "not leak"
+create view Confidential2 as
+	select
+ 		CombineSpans(cnoqd.match, cnod.match) as match
+	from
+		ConfidentialNegatedObjectDict cnod,
+		ConfidentialNegatedObjectQualifierDict cnoqd
+ 	where  
+ 		FollowsTok(cnoqd.match, cnod.match, 0, 5);
+
+
+-- VERB FORMS: "prohibit....disclosure"
+create view Confidential2a as
+	select
+ 		CombineSpans(cnod.match,cnoqd.match) as match
+	from
+		ConfidentialNegatedObjectDict cnod,
+		ConfidentialNegatedObjectQualifierDict cnoqd
+ 	where  
+ 		FollowsTok(cnod.match, cnoqd.match, 0, 5);
+
+
+
+
+-- NOUN FORMS: "not open ..public", "never open... public"
+create view Confidential3 as
+	select
+ 		CombineSpans(cnmwoqd.match, cnmwod.match) as match
+	from
+		ConfidentialNegatedMWObjectDict cnmwod,
+		ConfidentialNegatedMWObjectQualifierDict cnmwoqd
+ 	where  
+ 		FollowsTok(cnmwoqd.match, cnmwod.match, 0, 5);
+
+
+
+-- NOUN FORMS: "public.. not open"
+create view Confidential3a as
+	select
+ 		CombineSpans(cnmwod.match,cnmwoqd.match) as match
+	from
+		ConfidentialNegatedMWObjectDict cnmwod,
+		ConfidentialNegatedMWObjectQualifierDict cnmwoqd
+ 	where  
+ 		FollowsTok(cnmwod.match, cnmwoqd.match, 0, 5);
+
+
+-- NOUN FORMS: "proprietary data", "confidential information", "privileged information", "confidentiality agreement"
+create view Confidential4 as
+	select
+ 		CombineSpans(cdoqd.match, cdod.match) as match
+	from
+		ConfidentialDataObjectDict cdod,
+		ConfidentialDataObjectQualifierDict cdoqd
+ 	where  
+ 		FollowsTok(cdoqd.match, cdod.match, 0, 5);
+
+
+-- NOUN FORMS: "agreement of confidentiality"
+create view Confidential4a as
+	select
+ 		CombineSpans(cdod.match, cdoqd.match) as match
+	from
+		ConfidentialDataObjectQualifierDict cdod,
+		PrepDict prd,
+		ConfidentialDataObjectDict cdoqd
+ 	where  
+ 		FollowsTok(cdod.match, prd.match, 0, 0) and
+ 		FollowsTok(prd.match, cdoqd.match, 0, 0);
+		
+
+
+
+create view Confidential5 as
+	select
+		R.match as match
+	from
+		Regex(/(confidential.{1,20}for.{1,20}only)/, Document.text) R;
+
+
+create view Confidential6 as
+	select
+		R.match as match
+	from
+		Regex(/(sign.{1,20}CDA)/, Document.text) R;
+
+
+
+create view Confidential7 as
+	select
+		R.match as match
+	from
+		Regex(/(disclosure.{1,20}prohibited)/, Document.text) R;
+
+-- create view Confidential8 as select COD.match as match from Signature S, ConfidentialDict COD where Contains(S.block, COD.match); 
+
+create view ConfidentialAll as 
+     (select C.match as match from ConfidentialDict C)
+     union all
+     (select C.match as match from Confidential1 C)
+     union all
+     (select C.match as match from Confidential2 C)
+     union all
+     (select C.match as match from Confidential2a C)
+     union all
+     (select C.match as match from Confidential3 C)
+     union all
+     (select C.match as match from Confidential3a C)
+     union all
+     (select C.match as match from Confidential4 C)
+     union all
+     (select C.match as match from Confidential4a C)
+     union all
+     (select C.match as match from Confidential5 C)
+     union all
+     (select C.match as match from Confidential6 C)
+     union all
+     (select C.match as match from Confidential7 C);
+
+
+
+-- Skipped: "confidential...for....only"
+-- "eat...this...letter...after....reading"
+-- "not authorized"

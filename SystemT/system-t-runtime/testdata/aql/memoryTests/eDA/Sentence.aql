@@ -1,0 +1,14 @@
+--===========================================================================
+-- Sentence annotator
+--===========================================================================
+-- Regex with the usual sentence final punctuation is used to identify the
+-- sentence boundary. The usual abbreviations, listed in the abbreviation.dict
+-- are filtered out
+
+create view SentenceBoundary as
+    select R.match as boundary
+    from Regex(/(([\.\?!]+\s)|(\n\s*\n))/, Document.text) R
+    where
+	    -- Filter the candidate boundaries.
+	    Not(ContainsDict('dictionaries/abbreviation.dict', 
+		CombineSpans(LeftContextTok(R.match, 1), R.match)));

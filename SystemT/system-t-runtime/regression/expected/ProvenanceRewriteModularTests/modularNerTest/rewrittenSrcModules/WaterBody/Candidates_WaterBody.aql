@@ -1,0 +1,163 @@
+module WaterBody;
+
+
+import view CapsPlace from module Linguistics as CapsPlace
+;
+
+
+import view CapsPlaceAndCountry from module Country as CapsPlaceAndCountry
+;
+
+
+create view WaterBodyClueBased1 as
+  select  CombineSpans(CP.match, C.match) as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CP.__auto__id as CapsPlaceAndCountry_____sep_____CP____id,
+          C.__auto__id as WaterBodyRightClue_____sep_____C____id
+  from  CapsPlaceAndCountry CP,
+        WaterBodyRightClue C
+  where FollowsTok(CP.match, C.match, 0, 2)
+     and Not(ContainsRegex(/[\r\n\t]/, SpanBetween(CP.match, C.match)))
+     and MatchesRegex(/\s*('s)?\s*/, SpanBetween(CP.match, C.match))
+     and MatchesRegex(/\p{Lu}\p{M}*.+/, C.match);
+
+output view WaterBodyClueBased1;
+
+create view WaterBodyClueBased2 as
+  select  CP.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CP.__auto__id as CapsPlace_____sep_____CP____id,
+          C.__auto__id as WaterBodyRightClue_____sep_____C____id
+  from  CapsPlace CP,
+        WaterBodyRightClue C
+  where FollowsTok(CP.match, C.match, 0, 0)
+     and MatchesRegex(/\p{Ll}\p{M}*.+/, C.match);
+
+output view WaterBodyClueBased2;
+
+create view WaterBodyClueBased3 as
+  select  CP.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CP.__auto__id as CapsPlace_____sep_____CP____id,
+          C.__auto__id as WaterBodyRightClue_____sep_____C____id
+  from  CapsPlace CP,
+        WaterBodyRightClue C
+  where FollowsTok(C.match, CP.match, 1, 1)
+     and MatchesRegex(/\s*of\s*/, SpanBetween(C.match, CP.match))
+     and MatchesRegex(/\p{Ll}\p{M}*.+/, C.match);
+
+output view WaterBodyClueBased3;
+
+create view WaterBodyClueBased as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__371__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__371__TempOp__1 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__371__TempOp__2 Op);
+
+output view WaterBodyClueBased;
+
+create view WaterBodyClueBasedExtended as
+  select  CP.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          CP.__auto__id as CapsPlace_____sep_____CP____id,
+          W.__auto__id as WaterBodyClueBased_____sep_____W____id
+  from  CapsPlace CP,
+        WaterBodyClueBased W
+  where FollowsTok(CP.match, W.match, 1, 1)
+     and MatchesRegex(/\s*and\s*/, SpanBetween(CP.match, W.match))
+     and MatchesRegex(/the\s*/, LeftContextTok(CP.match, 1));
+
+output view WaterBodyClueBasedExtended;
+
+create view WaterBody as
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__372__TempOp__0 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__372__TempOp__1 Op)
+  union all
+  (select  Op.match as match,
+            AutoID() as __auto__id,
+            'STMT_TYPE_UNION' as __stmt__type,
+            Op.__auto__id as __union_op__id
+    from  __Union__372__TempOp__2 Op);
+
+output view WaterBody;
+
+create view __Union__371__TempOp__0 as
+  select  W.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          W.__auto__id as WaterBodyClueBased1_____sep_____W____id
+  from  WaterBodyClueBased1 W;
+
+output view __Union__371__TempOp__0;
+
+create view __Union__371__TempOp__1 as
+  select  W.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          W.__auto__id as WaterBodyClueBased2_____sep_____W____id
+  from  WaterBodyClueBased2 W;
+
+output view __Union__371__TempOp__1;
+
+create view __Union__371__TempOp__2 as
+  select  W.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          W.__auto__id as WaterBodyClueBased3_____sep_____W____id
+  from  WaterBodyClueBased3 W;
+
+output view __Union__371__TempOp__2;
+
+create view __Union__372__TempOp__0 as
+  select  W.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          W.__auto__id as WaterBodyDictMatch_____sep_____W____id
+  from  WaterBodyDictMatch W;
+
+output view __Union__372__TempOp__0;
+
+create view __Union__372__TempOp__1 as
+  select  W.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          W.__auto__id as WaterBodyClueBased_____sep_____W____id
+  from  WaterBodyClueBased W;
+
+output view __Union__372__TempOp__1;
+
+create view __Union__372__TempOp__2 as
+  select  W.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          W.__auto__id as WaterBodyClueBasedExtended_____sep_____W____id
+  from  WaterBodyClueBasedExtended W;
+
+output view __Union__372__TempOp__2;
+

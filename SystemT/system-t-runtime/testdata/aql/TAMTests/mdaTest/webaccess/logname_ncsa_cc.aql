@@ -1,0 +1,40 @@
+module webaccess;
+
+import view IPAddressBuildingBlock from module common;
+
+
+create view Logname_base as 
+select 
+	R.match 
+from 
+	Regex(/[\w\.]+/, Document.text) R;  
+    	
+create view Logname_interim as 
+    select C.match 
+    from Logname_base C
+   where Not(MatchesRegex(/\./, LeftContext(C.match, 1)))
+    and Not(MatchesRegex(/\./, RightContext(C.match, 1)));
+
+
+create view Logname as
+select 
+	lognameI.match as logname
+from 
+	common.IPAddressBuildingBlock ipAddressF,
+	Logname_interim lognameI
+where 
+	FollowsTok(ipAddressF.match, lognameI.match, 0, 0);	
+
+create view LognameOutputInterim as 
+select D.logname as logname_Span, GetText(D.logname) as logname_Text
+from Logname D;
+
+create view LognameOutput as
+select
+	L.logname_Span as span,
+	L.logname_Text as text,
+	GetString('Logname') as field_type
+from
+	LognameOutputInterim L;
+
+export view LognameOutput;

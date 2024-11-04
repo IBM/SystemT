@@ -1,0 +1,58 @@
+module was;
+
+
+create view Methodid_base as
+  select  R.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          R.__auto__id as __Subquery__43__Temp_____sep_____R____id
+  from  __Subquery__43__Temp R;
+
+output view Methodid_base;
+
+create view Methodid_interim as
+  select  C.match as match,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          C.__auto__id as Methodid_base_____sep_____C____id
+  from  Methodid_base C
+  where MatchesRegex(/:/, RightContext(C.match, 1));
+
+output view Methodid_interim;
+
+create view Methodid_wsOutputInterim as
+  select  D.match as Methodid_ws_Span,
+          GetText(D.match) as Methodid_ws_Text,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as Methodid_interim_____sep_____D____id
+  from  Methodid_interim D;
+
+output view Methodid_wsOutputInterim;
+
+create view MethodidWSOutput as
+  select  D.Methodid_ws_Span as span,
+          D.Methodid_ws_Text as text,
+          GetString('MethodidWS') as field_type,
+          AutoID() as __auto__id,
+          'STMT_TYPE_SELECT' as __stmt__type,
+          D.__auto__id as Methodid_wsOutputInterim_____sep_____D____id
+  from  Methodid_wsOutputInterim D;
+
+output view MethodidWSOutput;
+
+export view was.MethodidWSOutput;
+
+
+create view __Subquery__43__Temp as
+  extract AutoID() as __auto__id,
+    'STMT_TYPE_EXTRACT_REGEX' as __stmt__type,
+    -1 as Document_____sep_____Document____id,
+    regex /((\p{Lu}|(\[:\]))?(\d{1,2}|( ))?\p{Lu}{1,5}\d{4}\p{Lu})/
+    with flags 'DOTALL'
+    on Document.text
+    return group 0 as match
+  from Document Document;
+
+output view __Subquery__43__Temp;
+

@@ -1,0 +1,586 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test cases for extension to sequence patterns to pass through attributes
+-- The test cases in this file have been copied from AQLEnronTests#sequencePatternTest()
+-- and have been modified to pass through various columns from the input.
+--
+-------------------------------------------------------------------------------
+
+-- Find phone numbers
+create view Phone as
+extract 
+	1 as no,
+	'Phone' as type,
+	regex /(\d{3})-(\d{3}-\d{4})/
+    -- Token ranges are inclusive
+    on between 4 and 5 tokens in D.text
+    return
+        group 1 as areaCode
+        and group 2 as restOfNumber
+        and group 0 as fullNumber
+from Document D;
+
+
+-- Find email addresses
+create view Email as
+extract 
+	'email' as type,
+	regex
+	/((?i)([_a-zA-Z0-9-]+(\.[_a-zA-Z0-9-]+)*@[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*\.(([0-9]{1,3})|([a-zA-Z]{2,3})|(aero|coop|info|museum|name))))/ 
+	on D.text as annot
+from Document D;
+
+
+
+-- Find occurrences of capitalized words
+create view CapsWord as
+  extract 
+  	2 as no,
+  	'Caps' as type,
+      regex /[A-Z][a-z]+/ on 1 token in D.text as match
+  from Document D;
+  
+-- Find occurrences of words
+create view Word as
+  extract
+  	3 as no,
+  	'Low' as type,
+    regex /[a-z]+/ on 1 token in D.text as match
+  from Document D;
+  
+
+ /* 
+output view Phone;
+output view Email;
+output view CapsWord;
+*/
+
+-- Sequence Pattern tests
+
+create view SP1 as
+	extract 
+		P.type as type,
+		pattern ((<P.fullNumber>))
+		return group 0 as a0  
+		   and group 2 as a2
+	from Phone P
+	limit 10;
+	
+	
+create view SP2 as
+	extract 
+		CW.type as cwtype, P.type as ptype,
+		pattern (<CW.match>)(<P.fullNumber>)
+		return group 0 as match
+		   and group 1 as name
+		   --and group 2 as number
+	from CapsWord CW, Phone P
+	limit 10;
+	
+	
+create view SP2_a as
+	extract 
+		CW.type as cwtype, P.type as ptype,
+		pattern (<CW.match>?)(<P.fullNumber>)
+		return group 0 as match
+		   and group 1 as name
+		   and group 2 as number
+	from CapsWord CW, Phone P
+	limit 10;
+
+create view SP2_b as
+	extract 
+		CW.type as cwtype, P.type as ptype,
+		pattern (<CW.match>)(<P.fullNumber>)?
+		return group 0 as match
+		   and group 1 as name
+		   and group 2 as number
+	from CapsWord CW, Phone P
+	limit 2;
+	
+create view SP3 as
+	extract 
+		P.type as ptype, E.type,
+		pattern <P.fullNumber><CW.match>{2,3}<E.annot>
+		return group 0 as match
+		   --and group 1 as name
+	from CapsWord CW, Phone P, Email E
+	limit 10;
+	
+create view SP3_a as
+	extract 
+		P.type as ptype, E.type,
+		pattern ((<CW.match>){2,3})/[\n\r]*/(<P.fullNumber>)/[\n\r]*/(<E.annot>)?
+		return group 1 as person
+		   and group 3 as number
+		   and group 4 as email
+		   and group 0 as match
+	from CapsWord CW, Phone P, Email E
+	limit 10;
+	
+create view SP3_b as
+select S.match as match, S.person as person, S.email as email, S.ptype, S.type as etype
+from
+(
+	extract 
+		P.type as ptype, E.type,
+		pattern (<CW.match>{2,3})/[\n\r]*/(<P.fullNumber>)/[\n\r]*/(((<E.annot>)?))
+		return group 1 as person
+		   and group 2 as number
+		   and group 4 as email
+		   and group 0 as match
+	from CapsWord CW, Phone P, Email E
+	limit 10
+) S
+limit 10;
+
+
+create view SP3_c as
+extract 
+	P.type,
+	pattern (<CW.match>{1,2}) <P.fullNumber>
+	return group 1 as match
+from CapsWord CW, Phone P;
+
+
+
+create view SP3_d as
+extract CW1.type as cw1type, CW2.type as cw2type, P.type as ptype,
+	pattern (<CW1.match> <CW2.match>?) (<P.fullNumber>)
+	return group 0 as fullmatch 
+	   and group 1 as name
+	   and group 2 as number
+from CapsWord CW1, CapsWord CW2, Phone P
+having ContainsRegex(/[\n\r]+/, SpanBetween(name, number));
+
+
+create view SP3_e as
+(
+	extract P.type, pattern (<CW.match>{1,3}) <P.fullNumber>
+		return group 0 as fullmatch and group 1 as match
+	from CapsWord CW, Phone P
+)
+union all
+(
+	extract P.type, pattern (<CW1.match> <CW2.match>?) <P.fullNumber>
+		return group 0 as fullmatch and group 1 as match
+	from CapsWord CW1, CapsWord CW2, Phone P
+	consolidate on match
+);
+
+create view SP3_f as
+(
+	extract P.no, pattern (<CW.match>{1,3}) <P.fullNumber>
+		return group 1 as match
+	from CapsWord CW, Phone P
+)
+minus
+(
+	extract P.no, pattern (<CW1.match> <CW2.match>?) <P.fullNumber>
+		return group 1 as match
+	from CapsWord CW1, CapsWord CW2, Phone P
+);
+
+	
+create view SP4 as
+	extract 
+		P.type as ptype, CW1.type as cw1type, CW2.type as cw2type, CW3.type as cw3type, E.type as etype,
+		pattern <P.fullNumber>? <CW1.match>? <CW2.match> <CW3.match>? <E.annot>
+		return group 0 as match
+	from CapsWord CW1, CapsWord CW2, CapsWord CW3, Phone P, Email E
+	limit 10;
+	
+	
+create view SP5 as
+	extract 
+		1 as no,
+		'caps' as type,
+		pattern (/[A-Z][a-z]+/) 
+		return group 0 as match
+		   and group 1 as capsword
+	from Document D
+	limit 1;
+	
+	
+create view SP6 as
+	extract 
+		'conj' as type,
+		pattern 'Of' as match
+	with inline_match on CapsWord.match
+	from Document D
+	limit 10;
+	
+	
+create view SP6_a as
+	extract 
+		CW.no as no,
+		pattern ('of') (<CW.match>)?
+		return group 0 as match
+		   and group 1 as of_word
+		   and group 2 as word
+	with inline_match on Word.match
+	from CapsWord CW
+	having NotNull(word)
+	limit 10;
+
+create view SP6_b as
+	extract 
+		CW.no as no,
+		pattern (<CW.match>)? ('of')
+		return group 0 as match
+		   and group 2 as of_word
+		   and group 1 as word
+	with inline_match on Word.match
+	from CapsWord CW
+	having NotNull(word)
+	limit 10;
+	
+create view SP6_ab as
+(select * from SP6_a)
+union all
+(select * from SP6_b);
+	
+	
+create view SP6_c as
+	extract 
+		2 as no,
+		pattern <'.COM'[with case exact]>
+		return group 0 as match
+	with inline_match on Email.annot
+	from Document D
+	limit 10;
+	
+
+create view SP7 as
+	extract 
+		'3caps' as type,
+		pattern <CW.match>{1,3}
+		return group 0 as match
+		   --and group 1 as name
+	from CapsWord CW
+	consolidate on match
+	limit 2;
+	
+	
+create view SP8 as
+	extract 
+		'random' as type,
+		pattern ('waiting for'|'one day in summer'|('northern')|('island'))
+		return group 1 as match
+		   and group 2 as match_2
+	from Document D
+	consolidate on match
+	limit 10;
+	
+create view SP8_a as
+	select * 
+	from SP8
+	limit 3;
+	
+-- Test for a bug in the code constructing temporary view names
+create view SP9 as
+	extract 
+		CW1.type as type, CW2.no as no,
+		pattern <CW1.match> /\// <CW2.match> as match
+	from CapsWord CW1, CapsWord CW2;
+
+-- Test for a bug when casting nulls to ensure union compatibility 
+-- for groups returned from alternation and optional nodes
+-- when the target view is not Document;
+detag Document.text as Doc;
+
+create view CapsWordDoc as
+	extract 
+		'CapsWordDoc' as type,
+		4 as no,
+		pattern /[A-Z][a-z]+/ as match
+	from Doc D;
+
+create view SP10 as
+	extract 
+		CW1.type as type, CW2.no as no,
+		pattern <CW1.match> (<CW2.match>)?
+		return group 0 as match
+		   and group 1 as optional
+	from CapsWordDoc CW1, CapsWordDoc CW2
+	limit 10;
+	
+create view SP10_a as
+	extract 
+		CW1.type as type, CW2.no as no,
+		pattern <CW1.match> (<CW2.match>)?
+		return group 0 as match
+		   and group 1 as optional
+		   and group 0 as match1
+		   and group 1 as optional1
+	from CapsWordDoc CW1, CapsWordDoc CW2
+	limit 10;
+	
+
+--create view SP2
+create view SP11_a as
+	extract 
+		CW.type as type, P.no as no,
+		pattern <CW.match> <Token> <P.fullNumber> as match
+	from CapsWord CW, Phone P
+	limit 10;
+	
+create view SP11_b as
+	extract 
+		CW.type as type, P.no as no,
+		pattern <CW.match> <Token>? <P.fullNumber>? as match
+	from CapsWord CW, Phone P
+	consolidate on match
+	limit 10;
+	
+create view SP11_c as
+	extract 
+		CW.type as type, P.no as no,
+		pattern <CW.match>? <Token>{1,2} (<P.fullNumber>) 
+		return group 1 as phone
+		   and group 0 as match
+	from CapsWord CW, Phone P
+	consolidate on match
+	limit 10;
+
+/*
+create view SP11_d as
+	extract pattern <CW.match>? <Token> (<P.fullNumber>)?
+		return group 1 as phone
+		   and group 0 as match
+	from CapsWord CW, Phone P
+	consolidate on match
+	limit 10;
+*/
+	
+create view SP12_a as
+	extract 
+		CW1.type as type, CW2.no as no, P.type as ptype,
+		pattern <CW1.match> <CW2.match> <Token>? (<P.fullNumber>)
+		return group 1 as phone
+		   and group 0 as match
+	from CapsWord CW1, CapsWord CW2, Phone P
+	consolidate on match
+	limit 10;
+	
+create view SP12_b as
+	extract 
+		CW1.type as type, CW2.no as no, P.type as ptype,
+		pattern (<CW1.match>)? <CW2.match> <Token>{1,2} <P.fullNumber> 
+		return group 1 as first 
+		   and group 0 as match
+	from CapsWord CW1, CapsWord CW2, Phone P
+	consolidate on match
+	limit 10;
+	
+create view SP12_c as
+	extract 
+		CW1.type as type, CW2.no as no, P.type as ptype,
+		pattern <CW1.match> (<CW2.match>)? <Token>{1,2} <P.fullNumber> 
+		return group 1 as first 
+		   and group 0 as match
+	from CapsWord CW1, CapsWord CW2, Phone P
+	--consolidate on match
+	limit 10;
+	
+create view LowWord as
+  extract
+      'LowWordTok' as type,
+      5 as no,
+      regex /[a-z]+/ on 1 token in D.text as match
+  from Document D;
+
+-------------------------------------------------------------------------------
+-- BEGIN: Tests for bug [#143219] Sequence pattern issue when a token gap is 
+-- followed or preceded by a optional element
+create view SP12_d as
+	extract 
+		CW1.type as type, CW2.no as no,
+		pattern <CW1.match> <Token>{0,2} (<CW2.match>?)
+		return group 0 as match
+		   and group 1 as opt
+	from CapsWord CW1, CapsWord CW2;
+	
+create view SP12_e as
+	extract 
+		CW1.type as type, CW2.no as no,
+		pattern <CW1.match> <Token>{0,2} <CW2.match>?
+		as match
+	from CapsWord CW1, CapsWord CW2;  
+  
+create view SP12_f as
+	extract 
+		LW1.type as ltype,
+		pattern <LW1.match> <Token>{0,1} <CW.match>{0,3} 
+		as match
+	from CapsWord CW, LowWord LW1;
+	
+create view SP12_g as
+	extract 
+		LW1.type as ltype, CW.type as cwtype,
+		pattern <LW1.match> <Token> <CW.match>? 
+		as match
+	from CapsWord CW, LowWord LW1;
+
+--This statement produces incorrect results consisting of a single CW.match	
+create view SP12_h as
+	extract 
+		LW1.type as ltype, CW.type as ctype,
+		pattern <LW1.match>? <Token> <CW.match> 
+		return group 0 as match
+	from CapsWord CW, LowWord LW1;
+
+--This statement produces incorrect results consisting of a single CW.match	
+create view SP12_i as
+	extract 
+		LW1.type as ltype, CW.type as ctype,
+		pattern (<LW1.match>?) <Token> <CW.match> 
+		return group 0 as match
+		   and group 1 as opt
+	from CapsWord CW, LowWord LW1;
+
+--This statement produces incorrect results consisting of a single CW.match		
+create view SP12_j as
+	extract 
+		CW.type as ctype,
+		pattern <LW1.match>{0,2} <Token> <CW.match> 
+		return group 0 as match
+	from CapsWord CW, LowWord LW1;
+
+--This statement throws exception: "cannot rewrite <LW1.match>{1,2}?" 	
+create view SP12_k as
+	extract 
+		CW.type as ctype,
+		pattern (<LW1.match>{0,2}) <Token> <CW.match> 
+		return group 0 as match
+		   and group 1 as opt
+	from CapsWord CW, LowWord LW1;
+
+create view SP12_l as
+	extract 
+		LW1.type as ltype, CW.type as ctype,
+		pattern (<LW1.match>?) <Token>{1,2} <CW.match> 
+		return group 0 as match
+		   and group 1 as opt
+	from CapsWord CW, LowWord LW1;
+	
+-- END Tests for bug [#143219] Sequence pattern issue when a token gap is 
+-- followed or preceded by a optional element
+-------------------------------------------------------------------------------
+	
+create view SP13_a as
+	extract 
+		P.type as ptype, CW1.type as cw1type, CW2.type as cw2type, CW3.type as cw3type, E.type as etype,
+		pattern <P.fullNumber>? <Token>? (<CW1.match>)? <Token>? (<CW2.match>) (<CW3.match>)? <Token>? <E.annot>
+		return group 1 as first
+		   and group 2 as second
+		   and group 3 as third
+		   and group 0 as match
+	from CapsWord CW1, CapsWord CW2, CapsWord CW3, Phone P, Email E
+	limit 10;
+
+	create view SP14_a as
+    extract 
+    	1 as no,
+    	pattern (<CW.match>{1,4})
+        return group 0 as match
+           and group 1 as match1
+    from CapsWord CW;
+   
+    	create view SP14_b as
+    extract 1 as no,
+    	pattern 
+        (<CW.match>{2,4})
+        return group 0 as match
+           and group 0 as match1
+    from CapsWord CW;
+   
+    	create view SP14_c as
+    extract 1 as no,
+    	pattern 
+        (<CW.match>{3,4})
+        return group 0 as match
+           and group 1 as match1
+    from CapsWord CW;
+  
+    	create view SP14_d as
+    extract 1 as no,
+    	pattern 
+        (<CW.match>{4,4})
+        return group 1 as match
+           and group 1 as match1
+    from CapsWord CW;
+ 
+
+  
+create view SP15_a as
+    extract 1 as no,
+    	pattern 
+        <CW.match>{0,2} (<LW.match>{2,2})
+        return group 0 as fullmatch
+           and group 0 as fullmatch1
+           and group 1 as lowmatch
+           and group 1 as lowmatch1
+    from CapsWord CW, LowWord LW
+	consolidate on lowmatch;
+   
+    
+create view SP15_b as
+    extract 1 as no,
+    	pattern 
+        <CW.match>{1,2} (<LW.match>{2,4})
+        return group 0 as match
+           and group 1 as lowmatch
+    from CapsWord CW, LowWord LW
+    consolidate on lowmatch;	
+
+output view SP1;
+output view SP2;
+output view SP2_a;
+output view SP2_b;
+output view SP3;
+output view SP3_a;
+output view SP3_b;
+output view SP3_c;
+output view SP3_d;
+output view SP3_e;
+output view SP3_f;
+output view SP4;
+output view SP5;
+output view SP6;
+output view SP6_a;
+output view SP6_b;
+output view SP6_ab;
+output view SP6_c;
+output view SP7;
+output view SP8;
+output view SP8_a;
+output view SP9;
+output view SP10;
+output view SP10_a;
+output view SP11_a;
+output view SP11_b;
+output view SP11_c;
+--output view SP11_d;
+output view SP12_a;
+output view SP12_b;
+output view SP12_c;
+output view SP12_d;
+output view SP12_e;
+output view SP12_f;
+output view SP12_g;
+output view SP12_h;
+output view SP12_i;
+output view SP12_j;
+output view SP12_k;
+output view SP12_l;
+output view SP13_a;
+
+output view SP14_a;	
+output view SP14_b;	
+output view SP14_c;	
+output view SP14_d;		
+output view SP15_a;	
+output view SP15_b;	
+
+

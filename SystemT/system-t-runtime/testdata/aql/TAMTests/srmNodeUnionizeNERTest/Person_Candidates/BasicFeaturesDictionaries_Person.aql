@@ -1,0 +1,128 @@
+module Person_Candidates;
+
+create view FamousPeople as
+(
+	extract
+		dictionaries 'WorldLeaders'
+			    and 'PresidentsOfUSA'
+			    and 'CelebritiesOfUSA'
+			    and 'WorldCelebrities'
+			    and 'LeadersOfRussia'
+	    	    and 'LeadersOfChina'
+	       	    and 'LeadersOfIndia'
+	       	    and 'LeadersOfJapan'
+	       	    and 'LeadersOfCambodia'
+	       	    and 'LeadersOfUnitedNations'
+	       	    and 'LeadersOfIran'
+	       	    and 'WorldProfessionalSoccerPlayersShort'	
+	       	    and 'WorldProfessionalRugbyPlayers'	
+	       	    and 'WorldProfessionalMaleTennisPlayers'	
+	       	    and 'WorldProfessionalFemaleTennisPlayers'
+	       	   	and 'ProfessionalCyclists'
+	       	    and 'ProfessionalGolfers'
+	       	    and 'WorldProfessionalBaseballPlayers'
+	       	   	and 'USAMajorLeagueBaseballGoldGloveAwardees'
+	       	    and 'USAMajorLeagueBaseballAllStarPlayers'
+	       	    and 'FormulaOneRacers'
+	       	    and 'ProfessionalCricketersFromPakistan'
+	       	    and 'ProfessionalCricketersFromIndia'
+	       	    and 'ProfessionalCricketersFromAustralia'
+	       	    and 'ProfessionalCricketersFromNewZealand'
+	       	    and 'ProfessionalCricketersFromSriLanka'
+	       	    and 'WorldProfessionalSkiRacers'
+	       	    and 'WorldProfessionalSoccerPlayersLong'
+	       	    and 'MedalistsFrom1996SummerOlympics'
+	       	    and 'MedalistsFrom2000SummerOlympics'
+	       	    and 'MedalistsFrom2002WinterOlympics'
+	       	    and 'IceHockeyPlayersFrom2002WinterOlympics'
+	       	    and 'USOpenBadmintonChampions'
+	       	    and 'ProfessionalRugbyPlayersFromSouthAfrica'
+	       	    and 'ProfessionalRugbyPlayersFromArgentina'
+	       	    and 'ProfessionalRugbyPlayersFromEngland'
+	       	    and 'ProfessionalRugbyPlayersFromItaly'
+	       	    and 'LeadersOfIslamicMovements'
+		on D.text   
+        as person
+from DocumentText D
+)
+union all
+(
+	extract dictionary 'WorldCelebritiesShort'
+		on D.text
+		as person
+	from DocumentText D
+	having MatchesRegex(/\p{Lu}\p{M}*/, person)
+);
+
+create view Initial as
+	extract
+	   dictionaries 'Salutations'
+	          and 'RolesInOrganizations'
+	          and 'RolesInSport'
+	          and 'RolesInFamily'
+	  on D.text   
+      as initial
+	  from DocumentText D
+	  having MatchesRegex(/((\p{Lu}\p{M}*){2}|((\p{Lu}\p{M}*)?(\p{Ll}\p{M}*){1,10}\s*){1,2}.*)/, initial);
+	  
+-- to capture person name suffix
+create view PersonSuffix as
+select D.match as suffix
+from (extract dictionary 'RightContextSuffixesForProperNounNames' on D.text as match from DocumentText D) D
+where Not(ContainsRegex(/\s/, D.match));
+	
+-- Find capitalized words that look like person  names and not in the non-name dictionary
+create view CapsPersonCandidate as
+select R.match as name
+ from (extract regex /(al-|\p{Lu}\p{M}*(\p{L}\p{M}*){0,10})(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}/ 
+ 		on between 1 and 4 tokens in D.text 
+ 			as match 
+ 	  from DocumentText D) R
+where  Not(ContainsDicts(
+		'FiltersForPerson', 
+		'GermanTokensAsFiltersForPerson',
+		'RolesAsFiltersForPerson',
+		'RolesAsWeakFiltersForPerson',
+		'Salutations',
+		'PhoneWordsAsCluesTwo',
+		'GlobalSuffixesForOrganizations',
+   		'SuffixesForGroupsOfOrganizations',
+   		'SuffixesForEducationalOrganizations',
+   		'SuffixesForGovernmentOrganizations',
+   		'SuffixesForMedicalOrganizations',
+   		'SuffixesForMediaAndEntertainmentOrganizations',
+   		'SuffixesForNewspaperOrganizations',
+   		'SuffixesForOtherOrganizations',
+   		'StreetBasedAddressSuffixesAsFilters', 
+   		'DaysInAWeekFromGregorianCalendar',
+   		'MonthsInAYearFromGregorianCalendar',
+   		'WorldNationalities',
+   		'StatesOfUSAAbbreviations',
+   		'StatesOfUSAAbbreviationsChicagoAP',
+   		'WorldCountries',
+   		'WorldContinents',
+   		'RolesInSport',
+   		'PrepositionsInEnglish',   		
+   		'ConjunctionsInEnglish', 
+   		'WorldEthnicities', 
+   		'TokensForOrdinalCounting',
+   		'RolesInFamily', 
+   		'RolesInOrganizations',
+   		 R.match));
+
+   		 
+-- wrong person based on context clue
+create view WrongPersonLeftClue as
+	extract
+		dictionary 'LeftContextNegativeCluesForPerson'
+		on D.text   
+        as clue
+		from DocumentText D;
+
+create view WrongPersonRightClue as
+	extract
+		dictionary 'RightContextNegativeCluesForPerson'
+		on D.text   
+        as clue
+		from DocumentText D;
+   		 

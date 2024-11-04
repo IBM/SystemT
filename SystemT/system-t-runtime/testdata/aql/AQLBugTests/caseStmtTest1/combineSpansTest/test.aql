@@ -1,0 +1,35 @@
+ module combineSpansTest;
+
+-- AQL provided by Thilo 
+-- https://w3-connections.ibm.com/forums/html/topic?id=2590eb31-6381-48ca-b13e-6db409edeb8d#repliesPg=0
+-- RTC 94431
+require document with columns text Text;
+
+ create view AAA as
+  extract
+    regex /aaa/ on d.text as match
+  from Document d
+;
+
+create view BBB as
+  extract
+    regex /bbb/ on d.text as match
+  from Document d
+;
+
+create view Test as
+  select a.match as match1, b.match as match2,
+      -- Span a occurs after span b
+    case when GreaterThan(GetBegin(a.match), GetBegin(b.match))
+      then CombineSpans(b.match, a.match)
+      -- Span b occurs after span a
+      else CombineSpans(a.match, b.match)
+      as match
+  from
+    AAA a,
+    BBB b
+;
+
+
+output view Test; 
+export view Test;

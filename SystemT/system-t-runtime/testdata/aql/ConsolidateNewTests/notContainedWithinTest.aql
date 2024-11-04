@@ -1,0 +1,74 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test cases for consolidators (new)
+--
+-------------------------------------------------------------------------------
+
+create view CapsWord as
+extract 'CapsWord' as type,
+	regex /[A-Z].*/ on 1 token in D.text as match
+from Document D;
+
+create view ShortWord as
+extract 'LowWord' as type,
+	regex /[a-z]{3,7}/ on 1 token in D.text as match
+from Document D;
+
+	
+create dictionary UnitDict
+with case insensitive
+as (
+  'billion',
+  'million'
+);
+
+create view Unit as
+extract dictionary 'UnitDict'
+on D.text as match
+from Document D;
+
+create view Number as 
+extract 'Number' as type,
+	regex /\d+(\.\d+)?/ on D.text as match
+from Document D;
+
+-- Simple extractor
+create view NumberUnit as
+extract pattern <N.match> <U.match>? as match
+from Number N, Unit U
+consolidate on match using 'NotContainedWithin';
+
+output view NumberUnit;
+
+-- a dumb phone extractor to test overlapping spans.
+--create view PhoneSimpleCand as
+--extract
+-- 	regex /\d{3}-\d{3}/
+--	    on D.text as num
+--from Document D;
+--
+--output view PhoneSimpleCand;
+
+create view TwoToThreeShortWords as
+extract blocks
+	with count between 2 and 3
+	and separation between 0 and 10 characters
+	on S.match as capswords
+from ShortWord S;
+
+create view ConsolidatedNotWords as
+extract blocks
+	with count between 2 and 3
+	and separation between 0 and 10 characters
+	on S.match as capswords
+from ShortWord S
+consolidate on capswords using 'NotContainedWithin'; 
+
+output view TwoToThreeShortWords;
+output view ConsolidatedNotWords;
+
+
+
+
+
+

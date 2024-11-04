@@ -1,0 +1,36 @@
+-- removes the duplicatates from the address annotations
+create view PlaceConsolidated as
+    select C.loc as loc
+    from PlaceAll C
+    consolidate on C.loc;
+    
+-- filter out addresses, which overlap with dates, times,
+-- phone numbers and wrong addresses
+create view WrongPlaceConsolidated as
+    (select P.loc as loc
+    from   PlaceConsolidated P,
+	   Dates D 
+    where Overlaps(D.match,P.loc))
+    union all
+    (select P.loc as loc
+    from   PlaceConsolidated P,
+	   Times T 
+    where Overlaps(T.match,P.loc))
+    union all
+    (select P.loc as loc
+    from   PlaceConsolidated P,
+	   PhoneNumCons T 
+    where Overlaps(T.num,P.loc))
+    union all
+    (select P.loc as loc
+    from WrongPlaces P);
+
+create view FinalPlaceConsolidated as
+	(select P.loc as loc from PlaceConsolidated P)
+	minus
+	(select WP.loc as loc from WrongPlaceConsolidated WP);
+
+-- despite the name, this view contains so far only addresses
+create view UrlEmailPlace as 
+    select R.loc as match 
+    from FinalPlaceConsolidated R;

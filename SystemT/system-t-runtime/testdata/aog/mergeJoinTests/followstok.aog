@@ -1,0 +1,76 @@
+###############################################################################
+# followstok.aog
+#
+# ("aog" stands for Avatar Operator Graph.)
+#
+# Test of token distance join/selection predicates.  Looks for "first names"
+# followed within 2-6 tokens by "last names".  The name dictionaries used are
+# rather low-precision, so we get a lot of spurious matches.  The key thing
+# to check is that the different methods of computing the join generate the
+# same result.
+###############################################################################
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+CreateDict(
+    "name" => "dictionaries/first.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+CreateDict(
+    "name" => "dictionaries/last.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+# Find potential first names.
+$FirstName = 
+Project(( "match" => "first" ), 
+	Dictionary("dictionaries/first.dict", "text", $Document));
+
+# Find potential last names.
+$LastName = 
+Project(( "match" => "last" ), 
+	Dictionary("dictionaries/last.dict", "text", $Document));
+	
+# Use a cross-product and selection predicate
+$SelectFollowsTok = 
+ApplyFunc(CombineSpans(GetCol("first"), GetCol("last")) => "Combined", 
+	Select(FollowsTok(GetCol("first"), GetCol("last"),
+			IntConst(2), IntConst(5)),
+		CrossProduct($FirstName, $LastName)
+	)
+);
+	
+# Use a nested loops join
+$NLJoinFollowsTok =
+ApplyFunc(CombineSpans(GetCol("first"), GetCol("last")) => "Combined", 
+	NLJoin(FollowsTok(GetCol("first"), GetCol("last"), 
+			IntConst(2), IntConst(5)), $FirstName, $LastName)
+);
+
+# Use a merge join with $FirstName as the outer.
+$MergeFollowsTok =
+ApplyFunc(CombineSpans(GetCol("first"), GetCol("last")) => "Combined", 
+	SortMergeJoin(FollowsTok(GetCol("first"), GetCol("last"), 
+			IntConst(2), IntConst(5)), $FirstName, $LastName)
+);
+
+# Use a merge join with $LastName as the outer.
+$MergeFollowedByTok =
+ApplyFunc(CombineSpans(GetCol("first"), GetCol("last")) => "Combined", 
+	SortMergeJoin(FollowedByTok(GetCol("last"), GetCol("first"), 
+			IntConst(2), IntConst(5)), $LastName, $FirstName)
+);
+
+################################################################################
+# OUTPUT SPEC
+Output: $SelectFollowsTok, $NLJoinFollowsTok, $MergeFollowsTok, 
+		$MergeFollowedByTok;
+

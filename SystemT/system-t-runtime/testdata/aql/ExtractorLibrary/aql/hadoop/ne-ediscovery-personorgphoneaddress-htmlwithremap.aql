@@ -1,0 +1,141 @@
+---------------------------------------
+-- Document Preprocessing
+---------------------------------------
+include 'core/detag.aql';
+
+----------------------------------------
+-- Basic Named Entity Annotators
+----------------------------------------
+
+--------------------------------------------------------------------------------
+-- First, include the server side version of certain dictionaries
+include 'core/GenericNE/serverSideSpecific/AdditionalDictsForAddress.aql';
+include 'core/GenericNE/serverSideSpecific/AdditionalDictsForOrganization.aql';
+--------------------------------------------------------------------------------
+
+
+include 'core/GenericNE/DictsForAddress.aql';
+--include 'core/GenericNE/DictsForPhoneNumber.aql';
+include 'core/GenericNE/Sentence.aql';
+include 'core/GenericNE/MacrosForTimeDates.aql';
+include 'core/GenericNE/Date.aql';
+include 'core/GenericNE/Time.aql';
+include 'core/GenericNE/PhoneNumber.aql';
+include 'core/GenericNE/Address.aql';
+include 'core/GenericNE/CityStateCountry.aql';
+include 'core/GenericNE/StockExchangeAndTicker.aql';
+include 'core/GenericNE/URL.aql';
+include 'core/GenericNE/EmailAddress.aql';
+include 'core/GenericNE/NotesEmailAddress.aql';
+include 'core/GenericNE/Organization.aql';
+include 'core/GenericNE/Organization-FilterSingleNewLineTab.aql';
+include 'core/GenericNE/Organization-Sentence.aql';
+include 'core/GenericNE/Person.aql';
+include 'core/GenericNE/Person-FilterSingleNewLineTab.aql';
+include 'core/GenericNE/Person-Filter.aql';
+
+include 'core/GenericNE/Address-consolidation.aql';
+include 'core/GenericNE/OrgWithinNotesEmail.aql';
+include 'core/GenericNE/Organization-FilterAddress.aql';
+include 'core/GenericNE/Organization-consolidation.aql';
+include 'core/GenericNE/Person-consolidation.aql';
+
+---------------------------------------------
+-- Consolidation:
+-- For now, we just remove annotations that are completely
+-- contained within other annotations.
+
+
+create view CityStateCountryInvalid1 as
+select C.match as match
+from   AllCityStateCountry C,
+	   PersonFinalAllWithoutDots P
+where  Contains(P.person, C.match);   
+
+create view CityStateCountryInvalid2 as
+select C.match as match
+from   AllCityStateCountry C,
+	   FinalOrgConsolidatedWithoutDots O 
+where  Contains(O.org, C.match);   
+
+create view CityStateCountryInvalid as
+	(select C.match as loc from CityStateCountryInvalid1 C)
+	union all
+	(select C.match as loc from CityStateCountryInvalid2 C);
+
+create view CityStateCountryValid as
+	(select C.match as loc from AllCityStateCountry C)
+	minus
+	(select C.loc as loc from CityStateCountryInvalid C);
+	
+ 
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Output section <<<<<<<<<<<<<<<<
+-- ===========================================================================		
+
+-- change output to remove unwanted types
+-- select P.loc as loc
+-- into Place
+-- from Consolidate('OverlapOrdered',FinalPlaceConsolidated.loc) P;
+ 
+	
+-- 1. Address	
+-- Laura 05/05/2009: globally replaced Place with Address
+/*
+select Remap(P.loc) as loc
+into "com.ibm.systemT.Address"
+-- change output to remove unwanted types
+-- from Place P;
+--from Consolidate('OverlapOrdered',FinalPlaceConsolidated.loc) P;
+from FinalPlaceConsolidated P
+consolidate on P.loc
+using 'LeftToRight';
+*/
+
+create view SystemTAddress as select Remap(A.reference) as loc
+from AddressFinal A;
+
+output view SystemTAddress as 'com.ibm.systemT.Address';
+
+-- 2. Location
+
+create view SystemTLocation as select Remap(P.loc) as loc
+from CityStateCountryValid P
+consolidate on P.loc;
+
+output view SystemTLocation as 'com.ibm.systemT.Location';
+
+-- 3. Organization
+
+create view SystemTOrg as select Remap(O.org) as org
+--from Consolidate('OverlapOrdered',FinalOrgConsolidatedWithoutDots.org) O;
+from FinalOrgConsolidatedWithoutDots O
+consolidate on O.org
+using 'LeftToRight';
+
+output view SystemTOrg as 'com.ibm.systemT.Organization'; 
+
+-- 4. Person
+
+--select P.person as person into
+--PersonFinalAllWithDotsOutput
+--from PersonFinalAllWithDots P;
+
+-- end block change
+--- end changing this block
+create view SystemTPerson as select Remap(P.person) as name
+--from Consolidate(PersonFinalAllWithoutDots.person) P;
+from PersonFinalAllWithoutDots P
+consolidate on P.person;
+
+output view SystemTPerson as 'com.ibm.systemT.Person';
+
+-- 5. PhoneNumber
+
+create view SystemTPhoneNumber as select Remap(P.num) as num
+from PhoneNumOnly P
+-- disallow multiple new line
+where Not(ContainsRegex(/[\n\r]{2,}/, P.num));
+
+output view SystemTPhoneNumber as 'com.ibm.systemT.PhoneNumber';

@@ -1,0 +1,38 @@
+module SentimentMacros; 
+-- TODO: Add AQL content here
+
+
+--------------------------
+-- Agent Roles.
+--------------------------	
+create view Agent as
+	select * from Roles R 
+	where Equals(GetString(R.name),'agent');
+	
+--------------------------
+-- Every roles other than agent.
+--------------------------	
+create view NonAgent as
+	select * from Roles R 
+	where Not(Equals(GetString(R.name),'agent'));
+	
+
+
+--------------------------
+-- Actions without an agent.
+--------------------------	
+create view ActionsNoAgent as
+	(select A.* from Actions A)
+	minus 
+	(select AC.* from Actions AC, Agent AG where Equals(GetText(AC.aid),GetText(AG.aid)));
+	
+--------------------------
+-- Missing agents.
+--------------------------
+create view MissingAgent as
+	select A.aid, A.verbBase, 'agent' as name, emptySpan(A.text) as determiner, emptySpan(A.text) as value, emptySpan(A.text) as head, '' as headNorm
+	from ActionsNoAgent A;
+	 
+
+
+	 

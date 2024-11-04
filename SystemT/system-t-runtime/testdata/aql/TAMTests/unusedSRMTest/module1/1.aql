@@ -1,0 +1,19 @@
+module module1;
+
+create view ValidPhone as
+extract regex /\d{3}(-)\d{3}(-)\d{4}/ 
+on between 1 and 5 tokens in D.text
+as phone
+from Document D;
+
+create view NotAValidPhone as
+extract regex /\d{3}(-)\d{2}(-)\d{4}/
+on between 1 and 5 tokens in  D.text
+as match
+from Document D;
+
+-- This view is not reachable, hence regex for this view won't be part of merged SRM node
+export view ValidPhone;
+
+-- Regex for this view will be part of SRM node
+output view NotAValidPhone;

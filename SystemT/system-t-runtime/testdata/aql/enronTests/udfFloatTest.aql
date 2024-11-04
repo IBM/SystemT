@@ -1,0 +1,22 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- udfFloatTest.aql
+--
+-- Tests of user-defined functions with float parameters and return type.
+-------------------------------------------------------------------------------
+
+-- Declare a UDF that returns true if its input contains no E's.
+create function addFloat(arg1 Float, arg2 Float)
+return Float
+external_name 'udfjars/udfs.jar:com.ibm.test.udfs.FloatUDFs!Add'
+language java
+deterministic
+return null on null input;
+
+-- Test the AddFloat UDF
+create view AddFloat as
+select addFloat(1.5, 3.5) as sum
+from Document D;
+
+output view AddFloat;

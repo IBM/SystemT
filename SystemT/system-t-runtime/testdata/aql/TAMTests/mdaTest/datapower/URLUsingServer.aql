@@ -1,0 +1,136 @@
+module datapower;
+
+import view URLAllInterim from module common;
+
+-------------------------------------------------------------------------------
+-- URLUsingServer.aql
+--
+-- Rules for identifying points in DataPower logs where a DP transaction
+-- makes a remote web services call.
+--
+-- Authors: Sonali Surange, Fred Reiss
+------------------------------------------------------------------------------
+
+-- create facet
+create function getURLUsingServerCategory(val1 String, val2 String)
+	return String
+	external_name 'lib/logAAqlUDFs.jar:com.ibm.logparse.aql.Util!getCategory'
+	language java
+	deterministic
+	return null on null input;
+
+
+
+-- When a DataPower transaction is about to make a web services call, it
+-- generates a log message in the form:
+--     Using Backside Server: <URL>
+create view usingServer as 
+extract pattern 
+	'Using Backside Server:' (<U.URL_Span>)
+return 
+	group 1 as span
+from common.URLAllInterim U;
+
+-- When a DataPower transaction is about to make a web services call, it
+-- generates a log message in the form:
+--     HTTP response code 200 for '<URL>'
+create view serverResponse as 
+extract pattern 
+	'HTTP Response code' (/\d{3}/)  'for \'' (<U.URL_Span>)
+return 
+	group 1 as return_code
+	and group 2 as url
+from common.URLAllInterim U;
+
+--output view serverResponse;
+	
+	
+-- Generate output in a manner consistent with other views in the 
+-- DataPower AQL stack
+create view URLUsingServerOutput as 
+    select U.span as span,
+    		GetText(U.span) as text, 
+    		GetString('URLUsingServer') as field_type
+    from usingServer U;
+
+export view URLUsingServerOutput;
+    
+-- *** TEMPORARY CODE ***
+-- The following doesn't work, due to Defect 26164 ("import table" statement 
+-- has no effect)
+-- import table CodesToCodesPlusValues from module common;
+-- As a workaround we include a copy of the entire table here:
+create table CodesToCodesPlusValues (code Text, val Text)  as 
+values
+('100','100 [Continue]'),
+('102','102 [Switching Protocols]'),
+('103','103 [Processing]'),
+('104','104 [Request-URI too long]'),
+('200','200 [OK]'),
+('201','201 [Created]'),
+('202','202 [Accepted]'),
+('203','203 [Partial Information]'),
+('204','204 [No Response]'),
+('205','205 [Reset Content]'),
+('206','206 [Partial Content]'),
+('207','207 [Multi-Status]'),
+('208','208 [IM Used]'),
+('300','300 [Multiple Choices]'),
+('301','301 [Moved Permanently]'),
+('302','302 [Found]'),
+('303','303 [See Other]'),
+('304','304 [Not Modified]'),
+('305','305 [Use Proxy]'),
+('306','306 [Switch Proxy]'),
+('307','307 [Temporary Redirect]'),
+('400','400 [Bad request]'),
+('401','401 [Unauthorized]'),
+('402','402 [Payment Required]'),
+('403','403 [Forbidden]'),
+('404','404 [Not found]'),
+('405','405 [Method Not Allowed]'),
+('406','406 [Not Acceptable]'),
+('407','407 [Proxy Authentication Required]'),
+('408','408 [Request Timeout]'),
+('409','409 [Conflict]'),
+('410','410 [Gone]'),
+('411','411 [Length Required]'),
+('412','412 [Precondition Failed]'),
+('413','413 [Request Entity Too Large]'),
+('414','414 [Request-URI Too Long]'),
+('415','415 [Unsupported Media Type]'),
+('416','416 [Requested Range Not Satisfiable]'),
+('417','417 [Expectation Failed]'),
+('418','418 [Im a teapot]'),
+('422','422 [Unprocessable Entity]'),
+('423','423 [Locked]'),
+('424','424 [Failed Dependency]'),
+('425','425 [Unordered Collection]'),
+('426','426 [Upgrade Required]'),
+('444','444 [No Response]'),
+('449','449 [Retry With]'),
+('450','450 [Blocked by Windows Parental Controls]'),
+('499','499 [Client Closed Request]'),
+('500','500 [Internal Server Error]'),
+('501','501 [Not Implemented]'),
+('502','502 [Bad Gateway]'),
+('503','503 [Service Unavailable]'),
+('504','504 [Gateway Timeout]'),
+('505','505 [HTTP Version Not Supported]'),
+('506','506 [Variant Also Negotiates]'),
+('507','507 [Insufficient Storage]'),
+('509','509 [Bandwidth Limit Exceeded]'),
+('510','510 [Not Extended');  
+-- END TEMPORARY CODE
+
+create view URLServerResponseOutput as 
+    select 
+    		R.url as span,
+    		GetText(R.url) as text, 
+    		CV.val as return_code,
+    		GetString('URLServerResponse') as field_type,
+    		getURLUsingServerCategory(GetText(CV.val), GetText(R.url)) as category
+    from serverResponse R, CodesToCodesPlusValues CV
+    where Equals(GetText(R.return_code),GetText(CV.code));    
+
+export view URLServerResponseOutput;        

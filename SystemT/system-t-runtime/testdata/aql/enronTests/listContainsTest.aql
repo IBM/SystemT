@@ -1,0 +1,62 @@
+require document with columns text Text;
+
+------------------------------------------------------------------------------
+-- Tests of MINUS support for the List() aggregate function.
+-- ALso test for nulls and Lists
+------------------------------------------------------------------------------
+
+
+create dictionary CommonWordsDict as (
+--	'a', 'the', 'of', 'of a', 'of the'
+'everytime','condo', 'the'
+);
+
+create dictionary OtherWordsDict as (
+	'the','boom','condo'
+	);
+
+create view OtherWords as 
+	select D.match as match, GetText(D.match) as t_match
+	from Dictionary('OtherWordsDict', Document.text) D;
+
+	
+create view CommonWords as 
+	select D.match as match
+	from Dictionary('CommonWordsDict', Document.text) D;
+
+/*
+-- Find pairs of common words within 20 tokens of each other.
+create view WordPairs_Unsorted as
+select D1.match as first, D2.match as second, 
+	CombineSpans(D1.match, D2.match) as annot
+from Dictionary('CommonWords', Document.text) D1,
+	Dictionary('CommonWords', Document.text) D2
+where FollowsTok(D1.match, D2.match, 0, 20);
+--consolidate on GetText(D2.match)
+--using 'ExactMatch';*/
+
+
+
+create view WordPairs_Unsorted as
+select D1.match as first, GetString(D2.match) as second--, GetText(D2.match) as t_second
+from CommonWords D1, CommonWords D2
+where FollowsTok(D1.match, D2.match, 0, 200);
+
+create view WordPairs_Grouped as
+select W.first as first, List(W.second) as l_match
+from WordPairs_Unsorted W
+group by W.first;
+
+	
+create view InList as 
+	select * 
+	from OtherWords O, WordPairs_Grouped W
+	where ListContains(W.l_match, GetString(O.match));
+	
+output view InList;	
+--output view WordPairs_Grouped;
+--output view WordPairs_Unsorted;
+--output view WordPairsAndOtherWords;
+
+
+

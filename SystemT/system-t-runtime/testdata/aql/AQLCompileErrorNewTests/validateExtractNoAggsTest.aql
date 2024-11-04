@@ -1,0 +1,24 @@
+-------------------------------------------------------------------------------
+--
+-- Tests to validate that we do not allow aggregate function calls in EXTRACT statements.
+--
+-------------------------------------------------------------------------------
+
+
+-- Aggregate in extract regex: 
+-- will throw exception: Aggregate function 'Count' not allowed in EXTRACT clause.
+create view Extract1 as
+extract Count(D.text) as cnt,
+	regex /.*/ on D.text as match 
+from Document D;
+
+output view Extract1;
+
+-- Aggregate in extract pattern: 
+-- will throw exception: Aggregate function 'Count' not allowed in EXTRACT clause.
+create view Extract2 as
+extract Count(D.text) as cnt,
+	pattern /.+/ as match 
+from Document D;
+
+output view Extract2;

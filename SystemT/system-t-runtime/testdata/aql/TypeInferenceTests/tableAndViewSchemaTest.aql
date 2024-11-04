@@ -1,0 +1,67 @@
+-------------------------------------------------------------------------------
+-- table.aql
+--
+-- Test of lookup tables in AQL.
+-------------------------------------------------------------------------------
+
+-- Create a dictionary of company names
+create dictionary CompanyNames as
+('IBM', 'Enron', 'Yahoo', 'The Hasson Company');
+
+-- Map some of those company names to locations
+create table NameToLocation (name Text, location Text) as
+values 
+	('IBM', 'USA'), 
+	('Enron', 'Hell'), 
+	('Yahoo', 'Santa Clara'),
+	('Acme Fake Company Names', 'Somewhere');
+
+-- Map locations to imaginary coordinates
+-- Commented out because tables of integers aren't yet supported.
+create table LocationToCoords (location Text, lat Integer, long Integer) as
+values 
+	('USA', 1, 2), 
+	('Hell', 3, 4), 
+	('Santa Clara', 5, 6),
+	('Not a location', 1, 4);
+
+-- Find all matches of the company names dictionary.
+create view Company as
+extract
+	dictionary 'CompanyNames' on D.text as company
+from Document D;
+
+output view Company;
+
+-- Add some location information.
+create view CompanyLoc as
+select N2L.location as loc, C.company as company
+from Company C, NameToLocation N2L
+where Equals(GetText(C.company), GetText(N2L.name))
+order by C.company
+;
+
+-- Convert locations to integer "coordinates"
+create view TargetingInfo as
+select L2C.lat as latitude, L2C.long as longitude,
+	CL.loc as loc, CL.company as company
+from CompanyLoc CL, LocationToCoords L2C
+where Equals(GetText(CL.loc), GetText(L2C.location))
+order by CL.company;
+
+-- Try to do the entire join with one statement.
+create view TargetingInfo2 as
+select L2C.lat as latitude, L2C.long as longitude,
+	N2L.location as loc, CL.company as company
+from CompanyLoc CL, NameToLocation N2L, 
+	LocationToCoords L2C
+where 
+	Equals(GetText(CL.company), GetText(N2L.name))
+	and Equals(GetText(N2L.location), GetText(L2C.location))
+order by CL.company
+;
+
+
+output view CompanyLoc;
+output view TargetingInfo;
+output view TargetingInfo2;

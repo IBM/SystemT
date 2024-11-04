@@ -1,0 +1,332 @@
+create view LocationStockEx as
+select CombineSpans(L.loc, S.match)  as organization
+from LocationConsolidated L, StockEx S
+where FollowsTok(L.loc, S.match, 0, 1)
+  and MatchesRegex(/\s+(\p{Lu}\p{M}*([\p{Ll}\p{Lo}]\p{M}*)+\s+)?/, SpanBetween(L.loc, S.match))
+  and Not(ContainsRegex(/[\n\r\t]{2,}/, SpanBetween(L.loc, S.match)));
+  
+-- Customization 4: remove final dot from match of the form "<Org> ."
+create view OrgWithSpaceDot as
+select O.organization as invalidorg, Chomp(SpanBetween(LeftContext(O.organization,0), O.finaldot)) as validorg
+from
+(
+	extract O.organization as organization,
+		regex /\s+\.\z/ on O.organization as finaldot
+	from OrganizationFull O
+) O;
+  
+--4.13 Organization
+create view  OrganizationUnsorted as
+(select O.organization as organization, O.type as type, O.reference as reference from OrganizationFull O )
+union all
+(select O.organization as organization, '' as type, O.organization as reference from OrganizationVBJ O)
+union all
+( select O.org as organization, '' as type, O.org as reference from  OrgSportsTeam O)
+union all
+(select O.organization as organization, '' as type, O.organization as reference from LocationStockEx O)
+union all
+(select O.validorg as organization, '' as type, O.validorg as reference from OrgWithSpaceDot O)
+union all
+(select O.match as organization, '' as type, O.match as reference from OrgTerrorist O)
+union all
+(select O.match as organization, '' as type, O.match as reference from OrgIslamicMovement O)
+union all
+(select O.match as organization, '' as type, O.match as reference from OrgNewsAgency O)
+--union all
+--(select O.match as organization, '' as type, O.match as reference from OrgPoliticalParty O)
+union all
+(select O.match as organization, '' as type, O.match as reference from OrgByCountry O);
+
+
+--output view OrganizationFull;
+--output view StockExchangeOrg;
+--output view NewspaperShortForm;
+--output view OrgWithSpaceDot;
+--output view OrgSportsGeneral;
+--output view OrgNewsAgency;
+--output view OrgTerrorist;
+--output view OrgByCountry;
+
+
+create view OrganizationInvalid1 as
+select O.invalidorg as organization from OrgWithSpaceDot O;
+
+create dictionary OrgInvalidSportsDict as(
+    --Golf
+	'Firestone', 'Toshiba', 
+	--Athletics
+	'Regis',
+	--Baseball
+	'GM',
+	--Cycling
+	'Quigley', 'IN STYLE', 'sprint', 'SPRINT'
+);
+
+create dictionary SportsNewsClue as(
+	'WORLD SERIES OF GOLF', 'TOSHIBA CLASSIC', 
+	'FIRST DIVISION RESULTS', 'PREMIER DIVISION RESULTS', 'FIRST DIVISION SUMMARIES',
+	'RALYING', 'RALLYING', 'MOTOR RACING', 'LEADING RESULTS',
+	'BASEBALL', 'CYCLING', 'SOCCER', 'ATHLETICS'
+);
+
+create view OrganizationInvalid2 as
+select O.organization as organization 
+from Doc D, OrganizationUnsorted O
+where MatchesDict('OrgInvalidSportsDict', O.organization)
+  and ContainsDict('SportsNewsClue', D.text);
+
+
+create dictionary OrgInvalidExactDict as(
+	'Dow Jones', 'Dow', 'NASDAQ', 'Nasdaq',
+	'Commonwealth of Independent States', 'CIS', 
+	'Parliament', 'Government', 'Tuesday morning',
+	'TO', 'BE', 'Cup', 'Commission', 'Club', 'CLUB', 'Group', 
+	'Cabinet', 'Aki', 'Council', 'Army', 'The',
+	'Democratic Congress', 'Republican Congress'
+);
+
+create dictionary OrgInvalidPartialDict as(
+	'Division'
+);
+
+create view OrganizationInvalid3 as
+select O.organization as organization 
+from OrganizationUnsorted O
+where Or(MatchesDict('OrgInvalidExactDict', 'Exact', O.organization),
+         ContainsDict('OrgInvalidPartialDict', 'Exact', O.organization)
+         );
+
+
+-- Orgs completely contained within CoNLL2003MissingLocationExact
+create view OrganizationInvalid4 as
+select O.organization as organization 
+from CoNLL2003MissingLocationExact L, OrganizationUnsorted O
+where Contains(L.match, O.organization);
+
+
+
+--Orgs with dash to the left or right
+create view OrganizationInvalid5 as
+select O.organization as organization 
+from OrganizationUnsorted O
+where Or( MatchesRegex(/-/,LeftContext(O.organization,1)),
+		  MatchesRegex(/-/,RightContext(O.organization,1))
+		)
+  -- avoid removing seeded Sports teams such as x-Olympiakos
+  and Not(MatchesRegex(/x-/, LeftContextTok(O.organization,2)));
+		
+
+
+
+create dictionary InvalidNationalityOrgClue as(
+	'Senate', 'Ministry', 'Interpol' ,'Duma', 'Coalition', 'Commonwealth'
+);
+
+create view OrganizationInvalid6 as
+select O.organization as orgInvalid, Chomp(SpanBetween(O.nationality, RightContext(O.organization,0))) as orgValid
+from
+(
+	extract O.organization as organization,
+	        dictionary 'nationality.dict' on O.organization as nationality
+	from OrganizationUnsorted O
+	having Equals(GetBegin(organization), GetBegin(nationality))
+	   and ContainsDict('InvalidNationalityOrgClue', organization)
+) O;
+
+
+-- Matches in the 2nd line of the document
+create dictionary UNDict as(
+	'United Nations'
+);
+
+create view OrganizationInvalid7 as
+select O.organization as organization
+from OrganizationUnsorted O, NewsReportSecondLine N
+where Contains(N.line, O.organization)
+  and Not(MatchesDict('UNDict', O.organization));
+
+-- Matches in RALLYING standings
+create view RallyingTiming as
+extract regex /\)\s+(\p{Lu}\p{M}*(\p{Ll}\p{M}*)+\s+){1,3}\d+/ 
+	on between 3 and 5 tokens in D.text as match
+from RallyingDoc D;
+
+--output view RallyingTiming;
+
+create view OrganizationInvalid8 as
+select O.organization as organization
+from OrganizationUnsorted O, RallyingTiming N
+where Contains(N.match, O.organization);
+
+-- Certain matches that are part of Person name
+create dictionary PersonTokenCoNLLDict as(
+	'Kohl\'s', 'Santos', 'Dundee', 'Houston', 'Sion', 'Baia', 'Carter \'s', 'Dole', 'America' --'
+);
+
+create view OrganizationInvalid9 as
+select O.organization as organization
+from OrganizationUnsorted O
+where MatchesDict('PersonTokenCoNLLDict', 'Exact', O.organization)
+  and MatchesRegex(/\p{Lu}\p{M}*.*/, LeftContextTok(O.organization, 1))
+  and MatchesRegex(/[\p{Ll}\p{M}*\d].*/, LeftContextTok(O.organization, 2));
+  
+--output view OrganizationInvalid9;
+
+create view OrganizationInvalid as
+(select O.organization as organization  from OrganizationInvalid1 O)
+union all
+(select O.organization as organization  from OrganizationInvalid2 O)
+union all
+(select O.organization as organization  from OrganizationInvalid3 O)
+--union all
+--(select * from OrganizationInvalid4);
+union all
+(select O.organization as organization  from OrganizationInvalid5 O)
+union all
+(select O.orgInvalid as organization  from OrganizationInvalid6 O)
+union all
+(select O.organization as organization  from OrganizationInvalid7 O)
+union all
+(select O.organization as organization  from OrganizationInvalid8 O)
+union all
+(select O.organization as organization  from OrganizationInvalid9 O);
+
+
+create view OrganizationUnsortedAll as
+(select O.organization as organization from OrganizationUnsorted O)
+union all
+(select O.orgValid as organization from OrganizationInvalid6 O);
+
+
+
+
+
+
+create view OrgUnsortedFiltered as
+(select O.organization as organization from OrganizationUnsortedAll O)
+minus
+(select * from OrganizationInvalid O);
+
+
+/*
+create view OrgExtended1 as
+select CombineSpans(LeftContext(O.organization, 2), O.organization) as organization
+from OrganizationUnsorted O
+where MatchesRegex(/x-/, LeftContext(O.organization, 2));
+*/
+
+/*
+create view Organization as
+select O.organization 
+from OrganizationInvalid5 O
+order by O.organization;
+*/
+
+create view OrgFromCoNLLList as
+extract dictionary 'orgs/conll2003/conll-list-of-orgs.dict'
+	on D.text as organization
+from Doc D;
+
+
+-- Extend current matches if they are contained in larger matches from the CoNLL dictionary
+create view OrgExtended2 as
+select L.organization as organization
+from OrgUnsortedFiltered O, OrgFromCoNLLList L
+where Contains(L.organization, O.organization)
+   and Not(Equals(L.organization, O.organization));
+
+
+
+-- Extend current matches to the left with <CapsWord>-
+-- E.g., British-[American...]
+create view OrgExtended3 as
+select CombineSpans(LeftContextTok(O.organization, 2), O.organization) as organization
+from OrgUnsortedFiltered O
+where MatchesRegex(/\p{Lu}\p{M}*(\p{Ll}\p{M}*)+-/, LeftContextTok(O.organization, 2));
+   
+
+
+-- Merge <Org1> <Org2> into a single match
+create view OrgExtended4 as
+extract pattern (<O1.organization>) (<O2.organization>)
+	return group 1 as org1
+	   and group 2 as org2
+	   and group 0 as organization
+from OrgUnsortedFiltered O1, OrgUnsortedFiltered O2
+having MatchesRegex(/[ ]/, SpanBetween(org1,org2))
+   and Not(ContainsRegex(/\.\z/, org1));
+   
+
+
+
+-- Extend to right with certain prefixes 
+create dictionary OrgSuffixDict as(
+	'Group', 'Laboratories', 'International', 'Assn', 'Systems', 'Brothers', 'Bros'
+);
+
+create view OrgExtended6 as
+select CombineSpans(O.organization, O.rc) as organization
+from 
+(
+	select O.organization as organization, RightContextTok(O.organization, 1) as rc 
+	from OrgUnsortedFiltered O
+) O
+where ContainsDict('OrgSuffixDict', O.rc)
+  and MatchesRegex(/\s+\p{Lu}\p{M}*.*/, O.rc);
+  
+-- extend to left with CapsToken if preceding token is lower case
+create view OrgExtended7 as
+select CombineSpans(O.lc, O.organization) as organization
+from 
+(
+	select O.organization as organization, LeftContextTok(O.organization, 1) as lc 
+	from OrgUnsortedFiltered O
+) O
+where MatchesRegex(/\p{Lu}\p{M}*(\p{Ll}\p{M}*)+\s+/, O.lc)
+  and MatchesRegex(/\p{Ll}\p{M}*.*/, LeftContextTok(O.lc, 1))
+  and Not(ContainsRegex(/[\n\r]/, O.lc))
+  and Not(MatchesDict('nationality.dict', O.lc))
+  and Not(MatchesDict('country.dict', O.lc))
+  and Not(MatchesDict('wkday.dict', O.lc))
+  and Not(MatchesDict('month.dict', O.lc));
+  
+ /* 
+create view OrgExtended8 as
+extract pattern <O.organization> '(' <Token>{1,2} ')' <S.suffix> as organization
+from 
+*/
+  
+--output view OrgExtended7;
+
+create view OrganizationMixed as
+select O.organization 
+from 
+(
+	(select O.organization as organization from OrgUnsortedFiltered O )
+	--union all
+	--(select * from OrgExtended1 O )
+	--union all
+	--(select O.organization as organization from OrgExtended2 O )
+	--union all
+	--(select O.organization as organization from OrgExtended3 O )
+	union all
+	(select O.organization as organization from OrgExtended4 O )
+	union all
+	(select O.organization as organization from OrgExtended6 O )
+	union all
+	(select O.organization as organization from OrgExtended7 O )
+) O
+consolidate on O.organization
+order by O.organization;
+
+
+
+--output view OrganizationInvalid;
+--output view OrganizationUnsorted;
+--output view OrgUnsortedFiltered;
+--output view OrganizationInvalid5;
+--output view OrganizationInvalid6;
+--output view OrgExtended2;
+--output view OrgExtended3;
+--output view OrgExtended4;
+--output view OrganizationMixed;

@@ -1,0 +1,65 @@
+--    <mi category="Solicitation" value="dict;;${0.str}"><w id="0" category=".email.solicitation"/></mi>
+create view SolicitationDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/solicitation/email.solicitation.dict', Document.text) D;	
+
+
+
+create view AdvertisementDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/solicitation/advertisement.dict', Document.text) D;	
+
+
+create view SoliciationIndicatorDict as
+	select
+		D.match as match
+	from
+		Dictionary('legal_concepts/dictionaries/solicitation/indicator.dict', Document.text) D;	
+
+
+
+create view Solicitation1 as
+	select
+		R.match as match
+	from
+		Regex(/(((look)|(apply)|(explor)|(ask)|(need)).{1,5}((for)|(about))?.{1,5}((job)|(employment)|(hire)|(career opportunity)|(contract)))/, Document.text) R;
+
+
+-- "More than one slang words
+create view Solicitation2 as
+	select
+ 		CombineSpans(sol1.match, sol2.match) as match
+	from
+		SoliciationIndicatorDict sol1,
+		SoliciationIndicatorDict sol2
+ 	where  
+ 		FollowsTok(sol1.match, sol2.match, 0, 4);
+
+
+create view SolicitationCombinedRaw as 
+     (select S.match as match from Solicitation1 S)
+     union all
+     (select S.match as match from Solicitation2 S)
+     union all
+     (select S.match as match from SolicitationDict S);
+
+
+create view SolicitationExclude as
+	select
+ 		CombineSpans(ad.match, sol.match) as match
+	from
+		AdvertisementDict ad,
+		SolicitationCombinedRaw sol
+ 	where  
+ 		FollowsTok(ad.match, sol.match, 0, 350);
+
+
+create view SolicitationAll as 
+	(select SolicitationCombinedRaw.match as match from SolicitationCombinedRaw) 
+	minus 
+	(select AdvertisementDict.match as match from AdvertisementDict);
+

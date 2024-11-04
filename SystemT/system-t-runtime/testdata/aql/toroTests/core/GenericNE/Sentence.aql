@@ -1,0 +1,11 @@
+
+--===========================================================================
+-- Sentence annotator
+--===========================================================================
+create view SentenceBoundary as
+select R.match as boundary
+from Regex(/(([\.\?!]+\s)|(\n\s*\n))/, Doc.text) R
+where
+	-- Filter the candidate boundaries.
+	Not(ContainsDict('abbreviation.dict', 
+		CombineSpans(LeftContextTok(R.match, 1), R.match)));

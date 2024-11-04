@@ -1,0 +1,40 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- blocktests.aql
+--
+-- Tests of Block operators.
+-------------------------------------------------------------------------------
+
+-- Find first names
+create view FirstName as 
+select D.match as name
+from Dictionary('dictionaries/first.dict', Document.text) D
+where MatchesRegex(/\A[A-Z][a-z]*\Z/, D.match);
+
+
+-- Find blocks of up at least 3 first names within 50 chars of each other.
+select B.block as annot
+into Block3
+from Block(50, 3, FirstName.name) B;
+
+-- Find blocks of 1 to 3 first names within 50 chars of each other.
+select B.block as annot
+into Block13
+from Block(50, 1, 3, FirstName.name) B;
+
+-- Find blocks of 1 to 3 first names within 6 tokens of each other.
+select B.block as annot
+into BlockTok13
+from BlockTok(10, 1, 3, FirstName.name) B;
+
+-- Find blocks of 2-5 first names within 2 tokens of each other.
+select B.block as annot
+into BlockTok25
+from BlockTok(2, 2, 5, FirstName.name) B;
+
+-- Find blocks of 2-5 first names within 0 tokens of each other.
+select B.block as annot
+into BlockTok025
+from BlockTok(0, 2, 5, FirstName.name) B;
+

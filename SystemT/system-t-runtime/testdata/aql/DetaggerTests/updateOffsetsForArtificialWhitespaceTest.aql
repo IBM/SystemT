@@ -1,0 +1,30 @@
+detag Document.text as DetaggedDoc
+detect content_type always
+annotate
+	element 'table' as Table,
+	element 'tr' as TR,
+    element 'td' as TD
+      	with attribute 'colspan' as ColSpanVal
+       	and  attribute 'rowspan' as RowSpanVal;
+ 
+create view TableDetaggedRemapped as
+select
+	T.match as detaggedTable,
+	Remap(T.match) as remappedTable
+from Table T;
+
+create view TableRowDetaggedRemapped as
+select
+	T.match as detaggedTableRow,
+	Remap(T.match) as remappedTableRow
+from TR T;
+
+create view TableCellDetaggedRemapped as
+select
+	T.match as detaggedTableCell,
+	Remap(T.match) as remappedTableCell
+from TD T;
+
+output view TableDetaggedRemapped;
+output view TableRowDetaggedRemapped;
+output view TableCellDetaggedRemapped;

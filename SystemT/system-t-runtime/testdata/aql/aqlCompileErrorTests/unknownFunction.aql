@@ -1,0 +1,39 @@
+-------------------------------------------------------------------------------
+-- unknownFunction.aql
+
+-- Test for a defect# 13909 and defect# 17856
+-- Incorrect error line number because of unknown function call.
+-------------------------------------------------------------------------------
+create view Phone as
+extract regexes /\d{3}-\d{4}/ and /\+?[Xx]\.?\d{4,5}/
+	on D.text as num
+from Document D;
+
+-- Unknown function getText without alias 
+create view PhoneText as
+select getText(P.num) 
+from Phone P;
+
+output view PhoneText;
+
+-- Find dictionary matches for all first names
+-- Mostly US first names
+
+create view FirstName as
+extract dictionary 'first.dict'
+on D.text as first
+from Document D
+having MatchesRegex(/\p{Lu}\p{M}*.{1,20}/, first);
+
+-- Unknown function name CombineSpan with alias and Unknown function Follow 
+-- used as predicate
+create view PersonPhone as
+select GetText(CombineSpan(F.first, P.num)) as personphone,
+     GetText(F.first) as name,
+     GetText(P.num) as num   
+from FirstName F, Phone P
+where Follow(F.first, P.num, 0,10);
+
+output view PersonPhone; 
+
+

@@ -1,0 +1,764 @@
+module location;
+
+import dictionary ME_LA_StatesDict from module dictionariesAndTables as ME_LA_StatesDict;
+import dictionary ME_LA_CountryDict from module dictionariesAndTables as ME_LA_CountryDict;
+import dictionary ME_LA_StateAbbrvsDict from module dictionariesAndTables as ME_LA_StateAbbrvsDict;
+import dictionary ME_LA_CitiesDict from module dictionariesAndTables as ME_LA_CitiesDict;
+import dictionary ME_LA_AmbiguousCitiesDict from module dictionariesAndTables as ME_LA_AmbiguousCitiesDict;
+import dictionary ME_LA_PopulousNonUSCitiesDict from module dictionariesAndTables as ME_LA_PopulousNonUSCitiesDict; 
+import dictionary ME_LA_Alias_Countries_Dict from module dictionariesAndTables as ME_LA_Alias_Countries_Dict;
+import dictionary ME_LA_Alias_USCities_Dict from module dictionariesAndTables as ME_LA_Alias_USCities_Dict;
+import dictionary ME_LA_Alias_USStates_Dict from module dictionariesAndTables as ME_LA_Alias_USStates_Dict;
+import dictionary ME_LA_Alias_NonUSCities_Dict from module dictionariesAndTables as ME_LA_Alias_NonUSCities_Dict;
+
+import function equalsIgnoreCase from module udfs as equalsIgnoreCase;
+import function toUpperCase from module udfs as toUpperCase;
+import function normalizeKeepAlphaNumeric from module udfs as normalizeKeepAlphaNumeric;
+
+import table ME_LA_AliasToNormalized_Cities from module dictionariesAndTables as ME_LA_AliasToNormalized_Cities;
+import table ME_LA_AliasToNormalized_States from module dictionariesAndTables as ME_LA_AliasToNormalized_States;
+import table ME_LA_AliasToNormalized_Countries from module dictionariesAndTables as ME_LA_AliasToNormalized_Countries;
+import table ME_LA_AliasToNormalized_NonUSCities from module dictionariesAndTables as ME_LA_AliasToNormalized_NonUSCities;
+import table ME_LA_PopulousNonUSCitiesToCountry from module dictionariesAndTables as ME_LA_PopulousNonUSCitiesToCountry;
+import table ME_LA_CountryToCapital from module dictionariesAndTables as ME_LA_CountryToCapital;
+import table ME_LA_StateToAbbrv from module dictionariesAndTables as ME_LA_StateToAbbrv;
+import table ME_LA_CityToState from module dictionariesAndTables as ME_LA_CityToState;
+
+
+/*
+---------------------  GET LINES-------------------------------------
+create view NewLines_RS as 
+    extract 
+      --  regex /(((\n)|(\r))+)|($)|(^)/ on D.text as newline
+      regex /(\n)|($)|(^)/ on D.text as newline
+      from Document D;
+  
+  
+create view ALLDelims_RS as
+    select N.newline as delim, RightContext(N.newline, 70) as l_context
+    from NewLines_RS N;
+    
+    
+create view FastDeslims_RS as 
+    extract A.delim as delim, A.l_context as l_context,
+       -- regex /(((\n)|(\r))+)|(^)|($)/ on A.l_context as second_newline
+       regex /(\n)/ on A.l_context as second_newline
+      from ALLDelims_RS A;
+
+create view FastDelimsSpan_RS as 
+    select A.delim, A.l_context, A.second_newline, SpanBetween(A.delim, A.second_newline) as oneline
+    from FastDeslims_RS A
+    where Not(Overlaps(A.delim, A.second_newline));    
+    
+-- MAKE FULL LINES FOR OUTPUT
+
+
+
+create view LinesOutput_RS as 
+    select  L.oneline as oneline
+    from FastDelimsSpan_RS L
+    consolidate on L.oneline
+    using 'NotContainedWithin';
+
+-----------------------------------------------------
+
+ create view ME_LA_InputText as 
+    select D.oneline as text
+    from LinesOutput_RS D;  
+*/
+
+
+
+
+create view ME_LA_InputText as 
+    select D.text
+    from Document D;
+
+
+------------ EXTRACT CITIES, STATES AND COUNTRIES -----------------------
+
+
+--------------------------
+-- DICT EXTRACTIONS
+--------------------------
+create view ME_LA_StateNames as
+extract
+    D.text as fullspan, dictionary 'ME_LA_StatesDict' on D.text as match
+from ME_LA_InputText D;
+
+
+create view ME_LA_CountryNamesNoAlias as
+extract
+    D.text as fullspan, dictionary 'ME_LA_CountryDict' on D.text as match
+from ME_LA_InputText D;
+
+-- GET THE ABBREVIATIONS, BUT EXCLUDE HIGHLY AMBIGUOUS ENTRIES: IN
+create view ME_LA_StateAbbrvNames as
+    extract
+        D.text as fullspan,dictionary 'ME_LA_StateAbbrvsDict' on D.text as match
+    from ME_LA_InputText D
+    having Not(MatchesRegex(/(in)|(mi)|(me)|(de)|(or)|(ma)|(In)|(Mi)|(Me)|(De)|(Or)|(Ma)|(al)|(as)|(As)|(La)|(la)/, match));
+  
+
+create view ME_LA_StateNamesConsolidatedNoAlias as
+    select D.match, D.fullspan as fullspan
+    from ME_LA_StateNames D
+    consolidate on D.match using 'ContainedWithin';
+
+
+create view ME_LA_CityNames as
+extract
+   D.text as fullspan, dictionary 'ME_LA_CitiesDict' on D.text as match
+from ME_LA_InputText D;
+
+create view ME_LA_CityNamesAmbiguous as
+extract
+   D.text as fullspan, dictionary 'ME_LA_AmbiguousCitiesDict' on D.text as match
+from ME_LA_InputText D;
+
+create view ME_LA_CityNamesConsolidatedNoAlias as
+    select D.match, D.fullspan as fullspan
+    from ME_LA_CityNames D
+    consolidate on D.match using 'ContainedWithin';
+    
+  ---- GET THE FOREIGN HIGHLY POPULATED CITIES 
+ create view ME_LA_PopulousNonUSCitiesNoAlias as
+    extract
+        D.text as fullspan, dictionary 'ME_LA_PopulousNonUSCitiesDict' on D.text as match
+    from ME_LA_InputText D;
+
+
+--------------------------
+----- RESOLVE ALIASES
+--------------------------
+
+create view ME_LA_AliasCountries as
+extract
+    D.text as fullspan, dictionary 'ME_LA_Alias_Countries_Dict' on D.text as match
+from ME_LA_InputText D;
+ 
+create view ME_LA_AliasUSCities as
+extract
+    D.text as fullspan, dictionary 'ME_LA_Alias_USCities_Dict' on D.text as match
+from ME_LA_InputText D;
+
+create view ME_LA_AliasUSStates as
+extract
+    D.text as fullspan, dictionary 'ME_LA_Alias_USStates_Dict' on D.text as match
+from ME_LA_InputText D;
+
+create view ME_LA_Alias_NonUSCities as
+extract
+    D.text as fullspan, dictionary 'ME_LA_Alias_NonUSCities_Dict' on D.text as match
+from ME_LA_InputText D; 
+
+
+
+
+-- ADD THE NORMALIZED VERSION FOR EACH VALUE (WILL BE USED FOR VALUE COMPARISONS), BUT
+-- KEEP THE SPAN OF THE ORIGINAL ANNOTATION FOR SPAN COMPARISONS
+
+create view  ME_LA_CityNamesNotConsolidated as
+    (
+    select GetString(D.match) as match, D.fullspan as fullspan, D.match as orig_match
+    from  ME_LA_CityNamesConsolidatedNoAlias D
+    )
+    union all
+    (
+    select GetString(T.norm) as match, D.fullspan as fullspan, D.match as orig_match
+    from ME_LA_AliasUSCities D, ME_LA_AliasToNormalized_Cities T
+    where equalsIgnoreCase(GetString(D.match), GetString(T.alias))
+    );
+
+create view  ME_LA_CityNamesConsolidatedUnfiltered as    
+    select D.match as match, D.fullspan as fullspan, D.orig_match as orig_match
+    from ME_LA_CityNamesNotConsolidated D
+    consolidate on D.orig_match using 'ContainedWithin';     
+
+create view  ME_LA_StateNamesNotConsolidated as
+    (
+    select GetString(D.match) as match, D.fullspan as fullspan, D.match as orig_match
+    from  ME_LA_StateNamesConsolidatedNoAlias D
+    )
+    union all
+    (
+    select GetString(T.norm) as match, D.fullspan as fullspan, D.match as orig_match
+    from ME_LA_AliasUSStates D, ME_LA_AliasToNormalized_States T
+     where equalsIgnoreCase(GetString(D.match), GetString(T.alias))
+    );
+
+create view  ME_LA_StateNamesConsolidatedUnfiltered as    
+    select D.match as match, D.fullspan as fullspan, D.orig_match as orig_match
+    from ME_LA_StateNamesNotConsolidated D
+    consolidate on D.orig_match using 'ContainedWithin'; 
+     
+    
+create view  ME_LA_CountryNames as
+    (
+    select GetString(D.match) as match, D.fullspan as fullspan, D.match as orig_match
+    from  ME_LA_CountryNamesNoAlias D
+    )
+    union all
+    (
+    select GetString(T.norm) as match, D.fullspan as fullspan, D.match as orig_match
+    from ME_LA_AliasCountries D, ME_LA_AliasToNormalized_Countries T
+    where equalsIgnoreCase(GetString(D.match), GetString(T.alias))
+    );
+ 
+create view  ME_LA_PopulousNonUSCities as
+    (
+    select GetString(D.match) as match, D.fullspan as fullspan, D.match as orig_match, toUpperCase(GetString(D.match)) as match_uc
+    from  ME_LA_PopulousNonUSCitiesNoAlias D
+    )
+    union all
+    (
+    select GetString(T.norm) as match, D.fullspan as fullspan, D.match as orig_match, toUpperCase(GetString(T.norm)) as match_uc
+    from ME_LA_Alias_NonUSCities D, ME_LA_AliasToNormalized_NonUSCities T
+    where equalsIgnoreCase(GetString(D.match), GetString(T.alias))
+    );
+       
+-- GET AMBIGUOUS STATE/CITY NAMES, LIKE IN 'NEW YORK NEW YORK'). IF FULLSPAN OF THE STRONG 
+-- FORM "NAME1, NAME2" THEN ASSIGN IT TO CITY IF BEFORE COMMA, TO STATE IF AFTER COMMA
+create view ME_LA_SpanWithAmbiguousCityState as 
+	select D.match as match, D.fullspan as fullspan, D.orig_match as orig_match
+    from ME_LA_StateNamesConsolidatedUnfiltered D, ME_LA_CityNamesConsolidatedUnfiltered C
+    where Equals(D.orig_match, C.orig_match);
+
+create view ME_LA_AmbiguousCityStateResolvedToCity as
+	select D.match, D.fullspan, D.orig_match
+	from ME_LA_SpanWithAmbiguousCityState D
+	where ContainsRegex(/,/,RightContext(D.orig_match, 5));
+	
+create view ME_LA_AmbiguousCityStateResolvedToState as
+	select D.match, D.fullspan, D.orig_match
+	from ME_LA_SpanWithAmbiguousCityState D
+	where ContainsRegex(/,/,LeftContext(D.orig_match, 5));	
+	
+create view  ME_LA_CityNamesConsolidated as 
+	(
+    select D.match as match, D.fullspan as fullspan, D.orig_match as orig_match
+    from ME_LA_CityNamesConsolidatedUnfiltered D
+    )
+    minus
+    (
+     select D.match as match, D.fullspan as fullspan, D.orig_match as orig_match
+    from ME_LA_AmbiguousCityStateResolvedToState D
+    );	
+    
+create view  ME_LA_StateNamesConsolidated as 
+	(
+    select D.match as match, D.fullspan as fullspan, D.orig_match as orig_match
+    from ME_LA_StateNamesConsolidatedUnfiltered D
+    )
+    minus
+    (
+    select D.match as match, D.fullspan as fullspan, D.orig_match as orig_match
+    from ME_LA_AmbiguousCityStateResolvedToCity D
+    );	
+        
+
+-- GET THE LONGEST MATCH OVERALL    
+create view ME_LA_AllNames as 
+    (
+    select D.match as match, 'state' as prov, D.fullspan as fullspan, D.orig_match as orig_match
+    from ME_LA_StateNamesConsolidated D
+    )
+    union all
+    (
+    select D.match as match, 'city' as prov, D.fullspan as fullspan, D.orig_match as orig_match
+    from ME_LA_CityNamesConsolidated D
+    )
+    union all
+    (
+    select GetString(D.match) as match, 'stateAbbrv' as prov, D.fullspan as fullspan, D.match as orig_match
+    from ME_LA_StateAbbrvNames D
+    )
+    union all
+    (
+    select D.match as match, 'country' as prov, D.fullspan as fullspan, D.orig_match as orig_match
+    from ME_LA_CountryNames D
+    );
+    
+    
+create view ME_LA_AllNamesConsolidated as 
+    select D.match as match, D.prov as prov, D.fullspan as fullspan, D.orig_match as orig_match
+    from ME_LA_AllNames D
+    consolidate on D.orig_match using 'ContainedWithin';    
+    
+-- SEPARATE OUT THE FOREIGN ADDRESSES (BY EXPLICIT COUNTRIES) -------------------
+    
+create view ME_LA_ForeignCountries as 
+    select D.match as country, D.prov as prov, D.fullspan as fullspan, D.orig_match as orig_match
+    from ME_LA_AllNamesConsolidated D, ME_LA_CountryNames C
+    where  Equals(D.fullspan, C.fullspan)
+    and Equals(GetString(C.match),GetString(D.match))
+    and Not(ContainsRegex(/(United States)|(united states)|(US)|(America)|(U\.S\.)/,D.fullspan));
+
+-- for the foreign cities we find, get the mapped country name    
+create view ME_LA_ForeignCitiesMapped as
+    (
+    select D.fullspan as fullspan, D.match as city, T.country as country, D.orig_match as orig_match   
+    from ME_LA_PopulousNonUSCities D, ME_LA_PopulousNonUSCitiesToCountry T
+--    where equalsIgnoreCase(GetString(D.match),GetString(T.city))
+	 where Equals(GetString(D.match_uc),GetString(T.city))
+    )
+    union all
+    (
+    select D.fullspan as fullspan, D.match as city, T.country as country, D.orig_match as orig_match 
+    from ME_LA_PopulousNonUSCities D, ME_LA_CountryToCapital T
+--    where equalsIgnoreCase(GetString(D.match),GetString(T.city))
+    where Equals(GetString(D.match_uc),GetString(T.city))
+    );
+    
+-- when we have a city and mapped country, check if message contained an explicit country as well,
+-- and if the two conflict    
+create view ME_LA_ForeignCitiesCountriesAmbiguous as 
+    select C.fullspan as fullspan, M.city, C.country, C.orig_match as orig_match
+    from ME_LA_ForeignCountries C, ME_LA_ForeignCitiesMapped M
+    where Overlaps(C.fullspan, M.fullspan)
+    and Not(equalsIgnoreCase(GetString(C.country),GetString(M.country)));
+ 
+create view ME_LA_ForeignCountriesNoCities as 
+    (
+    select D.country as country, D.fullspan as fullspan, D.orig_match as orig_match
+    from ME_LA_ForeignCountries D
+    )
+    minus
+    (
+    select D.country as country, D.fullspan as fullspan, D.orig_match as orig_match
+    from ME_LA_ForeignCountries D, ME_LA_ForeignCitiesMapped M
+    where Overlaps(D.fullspan, M.fullspan)
+    );
+
+create view ME_LA_ForeignCitiesCountryUnambiguous as
+    (
+    select C.fullspan as fullspan, C.city as city, C.country as country, C.orig_match as orig_match
+    from ME_LA_ForeignCitiesMapped C
+    consolidate on C.country using 'ContainedWithin'
+    )
+    minus
+    (
+    select C.fullspan as fullspan, A.city as city, C.country as country, C.orig_match as orig_match
+    from ME_LA_ForeignCitiesCountriesAmbiguous A, ME_LA_ForeignCitiesMapped C
+    where Overlaps(A.fullspan, C.fullspan)
+    );
+ 
+ -- prepare final view for foreign entries    
+create view ME_LA_ForeignEntriesUnfiltered as 
+    (
+    select D.fullspan as fullspan, GetString('') as city, GetString(D.country) as country, 'foreigncountrynocity' as prov, D.orig_match as orig_match
+    from ME_LA_ForeignCountriesNoCities D
+    )
+    union all
+    (
+    select  D.fullspan as fullspan, GetString(D.city) as city, GetString(D.country) as country, 'foreigcity' as prov, D.orig_match as orig_match
+    from ME_LA_ForeignCitiesCountryUnambiguous D
+    );
+    --------------------
+  /*  
+ create view ME_LA_USEntries as 
+    (
+    select D.fullspan as fullspan
+    from  ME_LA_AllNamesConsolidated D  
+    )
+    minus
+    (
+    select D.fullspan as fullspan
+    from  ME_LA_ForeignEntries D   
+    );
+   
+create view ME_LA_USNamesConsolidated as
+    select D.*
+    from ME_LA_AllNamesConsolidated D, ME_LA_USEntries US
+    where Overlaps(D.fullspan, US.fullspan); */
+    
+    
+-- TRANSFORM ALL STATES TO ABBREVIATIONS, AND FIND MATCHING PAIRS OF CITY/STATE
+
+create view ME_LA_AllCityStateNamesMappedToAbbrv as 
+    (
+    select GetString(D.match) as match, D.prov as prov, D.fullspan as fullspan, 'city' as semantics, D.orig_match as orig_match
+    from ME_LA_AllNamesConsolidated D
+    where Equals(GetString(D.prov), 'city')
+    )
+    union all
+    (
+    select GetString(D.match) as match, 'state' as prov, D.fullspan as fullspan, 'state' as semantics, D.orig_match as orig_match
+    from  ME_LA_AllNamesConsolidated D
+    where Equals(GetString(D.prov), 'stateAbbrv')
+    )
+    union all
+    (
+    select GetString(SA.abbrv) as match , D.prov as prov, D.fullspan as fullspan, 'state' as semantics, D.orig_match as orig_match
+    from ME_LA_AllNamesConsolidated D, ME_LA_StateToAbbrv SA
+    where Equals(GetString(D.prov), 'state')
+    and equalsIgnoreCase(GetString(D.match),GetString(SA.state))
+    );
+
+create view ME_LA_AllCityStateNamesUpper as
+    select toUpperCase(GetString(D.match)) as city, D.fullspan as fullspan, D.orig_match as orig_match
+    from ME_LA_AllCityStateNamesMappedToAbbrv D
+    where Equals (GetString(D.prov),'city');
+ 
+ -- GIVEN THE CITY, GET THE STATE FROM MAP   
+create view ME_LA_CityStateFromMap as
+	select D.city as city, M.state as state, D.fullspan as fullspan, D.orig_match as orig_match
+    from ME_LA_AllCityStateNamesUpper D, ME_LA_CityToState M
+--    where Equals (GetString(D.prov),'city')
+--    and equalsIgnoreCase(GetString(D.match),GetString(M.city));
+    where Equals(GetString(D.city),GetString(M.city));
+	
+ --- COMPARE THE STATE FOUND FROM MAP TO STATE IN INPUT   
+create view ME_LA_CityState as
+    select M.city as city, M.state as state, M.fullspan as fullspan
+    from  ME_LA_CityStateFromMap M, ME_LA_AllCityStateNamesMappedToAbbrv D
+    where equalsIgnoreCase(GetString(M.state), GetString(D.match))
+    and Overlaps(D.fullspan, M.fullspan)
+    consolidate on M.fullspan
+    using 'ExactMatch'; 
+    
+create view ME_LA_StateOnlyRecsFirstFilter as 
+    (
+    select M.fullspan as fullspan
+    from ME_LA_AllCityStateNamesMappedToAbbrv M
+    where Equals(GetString(M.semantics), 'state')
+    )
+    minus
+    (
+    select  M.fullspan as fullspan
+    from ME_LA_CityState M
+    );       
+    
+
+        
+-- REFINE FOREIGN ENTRIES TO NOT INCLUDE WHAT IS ALREADY RECOGNIZED AS VALID US CITY STATE or JUST STATE
+create view ME_LA_ForeignEntriesToFilter as 
+	(
+	select F.*
+	from ME_LA_ForeignEntriesUnfiltered F,  ME_LA_CityState D
+	where Overlaps(D.fullspan, F.fullspan)
+	)
+	union all
+	(
+	select F.*
+	from ME_LA_ForeignEntriesUnfiltered F,  ME_LA_StateOnlyRecsFirstFilter D
+	where Overlaps(D.fullspan, F.fullspan)
+	);
+	
+
+create view ME_LA_ForeignEntries as
+	(
+	select F.fullspan as fullspan, F.city as city, F.country as country, F.prov as prov, F.orig_match as orig_match
+	from ME_LA_ForeignEntriesUnfiltered F
+	)
+	minus
+	(
+	select F.fullspan as fullspan, F.city as city, F.country as country, F.prov as prov, F.orig_match as orig_match
+	from  ME_LA_ForeignEntriesToFilter F
+	);
+	
+	
+        
+
+-- FILTER OUT THE ENTRIES WHERE CITIES DO NOT MATCH ANY STATE AND ARE PROBABLY FOREIGN, 
+-- AND THE ENTRIES THAT ARE DEFINITELY FOREIGN
+create view ME_LA_CityOnlyRecsWorldFirstFilter as
+    (
+    select M.fullspan as fullspan
+    from ME_LA_CityStateFromMap M
+    )
+    minus
+    (
+    select  M.fullspan as fullspan
+    from ME_LA_CityState M
+    );
+    
+
+ 
+ create view ME_LA_CityOnlyRecsWorldAmbNotFil as
+ 	(
+ 	select M.fullspan as fullspan
+ 	from ME_LA_CityOnlyRecsWorldFirstFilter M
+ 	)
+ minus
+    (
+    select D.fullspan as fullspan
+    from  ME_LA_ForeignEntries D   
+    );
+    
+ create view ME_LA_CityOnlyRecsWorld as
+ 	(
+    select D.fullspan as fullspan
+    from ME_LA_CityOnlyRecsWorldAmbNotFil D
+    )
+  minus 
+    (
+    select D.fullspan as fullspan
+    from ME_LA_CityNamesAmbiguous D
+    );   
+    
+    
+    
+ create view ME_LA_CityOnlyRecsUnconsolidatedFirstFilter as
+    (
+    select M.fullspan as fullspan
+    from   ME_LA_CityOnlyRecsWorld M
+    ) 
+    minus
+    (
+    select M.fullspan as fullspan
+    from ME_LA_PopulousNonUSCities M 
+    );   
+    
+ create view ME_LA_CityOnlyRecsUnconsolidated as
+    (
+    select M.fullspan as fullspan
+    from   ME_LA_CityOnlyRecsUnconsolidatedFirstFilter M
+    ) 
+    minus
+    (
+    select M.fullspan as fullspan
+    from  ME_LA_ForeignEntries M 
+    );  
+
+    
+ 
+   /* 
+create view ME_LA_StateOnlyRecsFirstFilter as 
+    (
+    select M.fullspan as fullspan
+    from ME_LA_AllCityStateNamesMappedToAbbrv M
+    where Equals(GetString(M.semantics), 'state')
+    )
+    minus
+    (
+    select  M.fullspan as fullspan
+    from ME_LA_CityState M
+    );  */     
+    
+ create view ME_LA_StateOnlyRecs as 
+    (
+    select M.fullspan as fullspan
+    from  ME_LA_StateOnlyRecsFirstFilter M
+    )
+    minus
+    (
+    select  M.fullspan as fullspan
+    from ME_LA_ForeignEntries M
+    ); 
+       
+   -- IF A VALID STATE WAS FOUND, BUT CITY/STATE MATCH WAS NOT VALID, LEAVE ONLY THE STATE  
+ create view ME_LA_CityOnlyRecsNotWrongState as 
+  	(
+    select M.fullspan as fullspan
+    from  ME_LA_CityOnlyRecsUnconsolidated M
+    ) 
+    minus
+    (   
+    select M.fullspan as fullspan
+    from  ME_LA_StateOnlyRecs M
+    );  
+    
+create view ME_LA_CityOnlyRecs as
+    select D.* 
+    from ME_LA_CityOnlyRecsNotWrongState D
+    consolidate on D.fullspan using 'ExactMatch';
+       
+create view ME_LA_StateOnly as
+    select  M.match as state, M.fullspan as fullspan
+    from ME_LA_AllCityStateNamesMappedToAbbrv M, ME_LA_StateOnlyRecs R
+    where Overlaps(M.fullspan, R.fullspan)
+    and Equals(GetString(M.semantics), 'state')
+    consolidate on M.fullspan
+    using 'ExactMatch';
+        
+
+create view ME_LA_CityOnly as
+    select M.city as city, M.state as state, M.fullspan as fullspan
+    from ME_LA_CityStateFromMap M, ME_LA_CityOnlyRecs R
+    where Overlaps(M.fullspan, R.fullspan) 
+    consolidate on M.fullspan
+    using 'ExactMatch';
+        
+    
+create view ME_LA_CityORCityState as 
+    (
+    select D.fullspan as fullspan
+    from ME_LA_CityOnly D
+    )
+    union all
+    (
+    select D.fullspan as fullspan
+    from ME_LA_CityState D
+    )
+    union all
+    (
+    select D.fullspan as fullspan
+    from ME_LA_StateOnly D
+    );
+        
+create view ME_LA_Not_CityStateUnconsolidatedFirstFilter as 
+    (
+    select D.fullspan as fullspan
+    from ME_LA_AllNamesConsolidated D
+    )
+    minus
+    (
+    select D.fullspan as fullspan
+    from ME_LA_CityORCityState D
+    );
+    
+create view ME_LA_Not_CityStateUnconsolidated as 
+    (
+    select D.fullspan as fullspan
+    from  ME_LA_Not_CityStateUnconsolidatedFirstFilter D
+    )
+    minus
+    (
+    select D.fullspan as fullspan
+    from ME_LA_ForeignEntries D
+    );      
+
+create view ME_LA_Not_CityState as
+    select D.*
+    from ME_LA_Not_CityStateUnconsolidated D
+    consolidate on D.fullspan
+    using 'ExactMatch';
+    
+
+ create view ME_LA_USEntries as 
+    (
+    select D.fullspan as fullspan
+    from  ME_LA_AllNamesConsolidated D  
+    )
+    minus
+    (
+    select D.fullspan as fullspan
+    from  ME_LA_ForeignEntries D   
+    );
+   
+create view ME_LA_USNamesConsolidated as
+    select D.*
+    from ME_LA_AllNamesConsolidated D, ME_LA_USEntries US
+    where Overlaps(D.fullspan, US.fullspan); 
+    
+-- Renamed by Mauricio
+-- This version will replace the existing address annotator for Twitter.
+--create view ME_LA_MappedAddressOutput as 
+create view MappedAddressOutput as 
+    (
+    select  'citystate' as prov, GetString(normalizeKeepAlphaNumeric(GetString(D.city))) as city, GetString(toUpperCase(GetString(D.state))) as state, GetString('US') as country, D.fullspan as fullspan,GetString(D.fullspan) as fulltext, GetString('true') as hasCityState
+    from ME_LA_CityState D
+    )
+    union all
+    (
+	select  'cityonly' as prov, GetString(normalizeKeepAlphaNumeric(GetString(D.city))) as city, GetString(toUpperCase(GetString(D.state))) as state, GetString('US') as country, D.fullspan as fullspan, GetString(D.fullspan) as fulltext, GetString('false') as hasCityState
+	from ME_LA_CityOnly D
+    )
+    union all
+    (
+    select  'notcitystate' as prov, GetString('') as city, GetString('') as state, GetString('') as country,D.fullspan as fullspan,GetString(D.fullspan) as fulltext, GetString('false') as hasCityState
+    from ME_LA_Not_CityState D
+    )
+    union all
+    (
+    select  D.prov as prov, GetString(normalizeKeepAlphaNumeric(GetString(D.city))) as city, GetString('') as state, GetString(normalizeKeepAlphaNumeric(GetString(D.country))) as country,D.fullspan as fullspan,GetString(D.fullspan) as fulltext, GetString('false') as hasCityState
+    from ME_LA_ForeignEntries D
+    )
+    union all
+    (
+    select  'stateonly' as prov, GetString('') as city, GetString(toUpperCase(GetString(D.state))) as state, GetString('US') as country,D.fullspan as fullspan,GetString(D.fullspan) as fulltext, GetString('false') as hasCityState
+    from ME_LA_StateOnly D
+    )
+    ;
+    
+create view ME_LA_NotInExplicitOutput as
+    (
+    select L.text 
+    from ME_LA_InputText L
+    )
+    minus
+    (
+    select L.text 
+    from ME_LA_InputText L,MappedAddressOutput O -- ME_LA_MappedAddressOutput O
+    where Overlaps(L.text, O.fullspan)
+    );
+    
+create view ME_LA_NotInExplicitOutputNonNull as
+    select D.*
+    from ME_LA_NotInExplicitOutput D
+    where Not(ContainsRegex(/userlocation\": (\"\")|(null})/, D.text));
+
+------------ GET GEO-S --------------------
+create view ME_LA_Geos as
+    extract D.text as text, regex /\-?\d\d?\d?\.\d(\d)*.?[A-Z]?((,\s*)|(\s+))\-?\d\d?\d?\.\d(\d)*(.?[EWSN])?/ on D.text as match
+    from ME_LA_NotInExplicitOutputNonNull D;
+    
+
+    -- NEED REVERSE GEOCODING TO INTERPRET
+-- Renamed by Mauricio
+--create view ME_LA_GeosOutput as 
+create view LA_GeosOutput as 
+    -- select GetString(D.text) as fulltext, D.text as fullspan, GetString(D.match) as geo 
+    select GetString(D.match) as geo 
+    from ME_LA_Geos D;
+
+--create view ME_LA_NotInOutputNonNull as
+--    (
+--    select L.text 
+--    from ME_LA_NotInExplicitOutputNonNull L
+--    )
+--    minus
+--    (
+--    select L.text 
+--    from ME_LA_NotInExplicitOutputNonNull L,LA_GeosOutput G
+--    where Overlaps(L.text, G.fullspan)
+--    );
+     
+   
+
+/*
+ --output view ME_LA_StateNames;
+-- output view ME_LA_CountryNamesNoAlias;
+-- output view ME_LA_StateAbbrvNames;
+-- output view ME_LA_StateNamesConsolidatedNoAlias;
+-- output view ME_LA_CityNames;
+-- output view ME_LA_PopulousNonUSCitiesNoAlias;
+-- output view ME_LA_AliasCountries;
+ output view ME_LA_AliasUSCities;
+ output view ME_LA_AliasUSStates;
+ output view ME_LA_CityNamesConsolidated;
+ output view ME_LA_StateNamesConsolidated;
+ output view ME_LA_CountryNames;
+ output view ME_LA_PopulousNonUSCities  ;
+ output view ME_LA_SpanWithAmbiguousCityState;
+ output view ME_LA_AmbiguousCityStateResolvedToCity;
+ output view ME_LA_AmbiguousCityStateResolvedToState;
+-- 
+-- output view ME_LA_AllNames;
+ output view ME_LA_AllNamesConsolidated;
+ output view ME_LA_ForeignCitiesMapped;
+ output view ME_LA_ForeignCitiesCountriesAmbiguous;
+ output view ME_LA_ForeignCountriesNoCities;
+ output view ME_LA_ForeignCitiesCountryUnambiguous;
+ output view ME_LA_ForeignEntries;
+ output view ME_LA_USEntries;
+-- output view ME_LA_AllCityStateNamesMappedToAbbrv;
+ output view ME_LA_CityStateFromMap;
+
+ output view ME_LA_CityOnlyRecsWorld;
+ output view ME_LA_CityOnlyRecsUnconsolidated;
+ output view ME_LA_CityOnlyRecs;
+ output view ME_LA_StateOnlyRecs;
+ output view ME_LA_StateOnly;
+  output view ME_LA_CityOnly;
+ output view ME_LA_CityORCityState;
+ output view ME_LA_Not_CityStateUnconsolidated;
+ output view ME_LA_Not_CityState; */
+
+-- Renamed by Mauricio
+--output view ME_LA_GeosOutput;
+--output view ME_LA_MappedAddressOutput;
+
+output view LA_GeosOutput;
+output view MappedAddressOutput;

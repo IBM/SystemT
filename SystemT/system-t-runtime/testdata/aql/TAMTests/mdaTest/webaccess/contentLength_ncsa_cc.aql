@@ -1,0 +1,36 @@
+module webaccess;
+
+create view ContentLength_base as 
+select 
+	R.match 
+from 
+	Regex(/[\d]+/, Document.text) R;  
+    	
+create view ContentLength_interim as 
+    select C.match 
+    from ContentLength_base C
+    where Not(MatchesRegex(/\./, LeftContext(C.match, 1)))
+    and Not(MatchesRegex(/\./, RightContext(C.match, 1)));
+
+create view ContentLength as
+select 
+	contentLengthI.match as contentLength
+from 
+	CodesAndValues codeAndValuesF,
+	ContentLength_interim contentLengthI
+where 
+	FollowsTok(codeAndValuesF.match, contentLengthI.match, 0, 0);	
+
+create view ContentLengthOutputInterim as 
+select D.contentLength as contentLength_Span, GetText(D.contentLength) as contentLength_Text
+from ContentLength D;
+
+create view ContentLengthOutput as
+select
+	C.contentLength_Span as span,
+	C.contentLength_Text as text,
+	GetString('ContentLength') as field_type
+from
+	ContentLengthOutputInterim C;
+
+export view ContentLengthOutput;

@@ -1,0 +1,348 @@
+require document with columns text Text;
+-- ****************************************************************************
+--
+-- neRegexesTest.aql
+--
+-- Runs just the regular expression parts of the named entity annotator. 
+-- Does *not* include regular expressions that are not evaluated over the
+-- base document text.
+--
+-- We also include 'hint' regexes that can be used as pre-filters.
+-- ****************************************************************************
+
+
+select R.match as annot
+into Email1 
+from Regex(/\b((?i)([_a-zA-Z0-9-]+(\.[_a-zA-Z0-9-]+)*@[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*\.(([0-9]{1,3})|([a-zA-Z]{2,3})|(aero|coop|info|museum|name))))\b/, Document.text) R;
+
+select R.match as hint
+into Email1_hint 
+from Regex(/@/, Document.text) R;
+
+-------------------------------------------------------------------------------
+
+select R.match as annot
+into Email2_a 
+from   Regex(/\b((\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*[\p{Ll}\p{Lu}\p{Lt}\p{Lo}\p{Nd}\p{Pc}]{1,20}\s*[\/]\s*)((\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}\s*){1,2}[\/]\s*){1,2}(\p{Lu}\p{M}*){2,20}(@(\p{L}\p{M}*){2,20})?)(?!\/)\b/, Document.text) R;
+
+select R.match as annot
+into Email2_a_hint 
+from   Regex(/\//, Document.text) R;
+
+-------------------------------------------------------------------------------
+
+select R.match as annot
+into Email2_b 
+from   Regex(/\b((\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,10}(['-]\p{L}\p{M}*)?(\p{L}\p{M}*){1,10}\s+)(\p{Lu}\p{M}*\s+)?(\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}(['-]\p{L}\p{M}*(\p{L}\p{M}*){1,8})?\w{0,2}\s*[\/]\s*)((\p{Lu}\p{M}*(\p{L}\p{M}*){1,20}\s*){1,2}[\/]\s*){1,2}(\p{Lu}\p{M}*){2,20}(@(\p{L}\p{M}*){1,20})?)(?!\/)\b/, Document.text) R;
+
+select R.match as annot
+into Email2_b_hint 
+from   Regex(/\//, Document.text) R;
+
+-------------------------------------------------------------------------------
+
+select R.match as annot
+into URL1 
+from Regex(/\b((ht|f)tps?:\/\/\w+[\w\-:&=_?\/~.<>@:]+[\w\-:&=_?\/~]{2,})\b/, Document.text) R;
+
+select R.match as annot
+into URL1_hint 
+from Regex(/\/\//, Document.text) R;
+
+-------------------------------------------------------------------------------
+
+select R.match as annot
+into URL1a 
+from Regex(/\b(\w+[\w\-:&=_?\/~.<>@:]+\.(com|edu|org)\/[\w&_?~.<>@:][\w\-:&=_?\/~.<>@:]+[\w\-:&=_?\/~]{2,})\b/, Document.text) R;
+
+create view URL1a_hint as
+select R.match as annot, 
+    CombineSpans(LeftContext(R.match, 100), RightContext(R.match, 100)) 
+        as context
+from Regex(/\.(com|edu|org)\//, Document.text) R;
+
+-- Hinting via context, a 'poor man's RSE'
+select R.match as annot
+into URL1a_hinted 
+from
+Regex(/\b(\w+[\w\-:&=_?\/~.<>@:]+\.(com|edu|org)\/[\w&_?~.<>@:][\w\-:&=_?\/~.<>@:]+[\w\-:&=_?\/~]{2,})\b/,
+    URL1a_hint.context) R;
+
+-- Hinting via join and conditional eval
+select R.match as annot
+into URL1a_hinted2
+from
+    URL1a_hint H,
+    Regex(/\b(\w+[\w\-:&=_?\/~.<>@:]+\.(com|edu|org)\/[\w&_?~.<>@:][\w\-:&=_?\/~.<>@:]+[\w\-:&=_?\/~]{2,})\b/,
+        Document.text) R
+where
+    Contains(R.match, H.annot)
+consolidate on R.match using 'ContainedWithin';
+
+
+-------------------------------------------------------------------------------
+
+select R.match as annot
+into URL2 
+from   Regex(/\b(((([\w]+:)\/\/)|(w\w+\.))(([\d\w]|%[a-fA-f\d]{2,2})+(:([\d\w]|%[a-fA-f\d]{2,2})+)?@)?([\d\w][-\d\w]{0,253}[\d\w]\.)+[\w]{2,4}(:[\d]+)?(\/([-+_~.\d\w]|%[a-fA-f\d]{2,2})*)*(\?(&?([-+_~.\d\w]|%[a-fA-f\d]{2,2})=?)*)?(#([-+_~.\d\w]|%[a-fA-f\d]{2,2})*)?)\b/, Document.text) R;
+
+select R.match as annot
+into URL2_hint 
+from   Regex(/(:\/\/)|(\.)/, Document.text) R;
+
+-------------------------------------------------------------------------------
+
+select R.match as match
+into PhoneNumberInstance 
+from   Regex(/(([Nn](umber|o|um)|#)\s*(is\s*)?)?(\.\s*)?(:\s*)?(\+\s*){0,2}[\d(]([\d ()\-.\/]){9,20}\d\b/, Document.text) R ;
+
+select R.match as match
+into PhoneNumberInstance_hint 
+from   Regex(/\d/, Document.text) R ;
+
+
+-------------------------------------------------------------------------------
+
+select R.match as num
+into PhoneNumber_R1b_2 
+from Regex(/(\+\s*)?\(\s*[1-9]\d{2}\s*\)\s*[\-\.]?\d{3}[\-\.\s*]?\d{4}\b/, Document.text) R;
+
+select R.match as num
+into PhoneNumber_R1b_2_hint 
+from Regex(/\(/, Document.text) R;
+
+
+-------------------------------------------------------------------------------
+
+select R.match as num
+into PhoneNumber_R2a 
+from Regex(/\b(\+\s*)?[1-9]\d{2}\s*[\s\-\.]\d{3}[\-\.\s]\s*\d{4}\b/, Document.text) R;
+
+select R.match as num
+into PhoneNumber_R2a_hint 
+from Regex(/\d{4}/, Document.text) R;
+
+
+-------------------------------------------------------------------------------
+
+select R.match as num
+into PhoneNumber_R3 
+from Regex(/\b\+?(1[\-\.\s]\s*)?(\(\s*)?[1-9]\d{2}(\s*\))?[\-\. ]\d{3}[\-\. ]\d{4}\b/, Document.text) R;
+
+select R.match as num
+into PhoneNumber_R3_hint 
+from Regex(/\d{3}[\-\. ]\d{4}/, Document.text) R;
+
+
+-------------------------------------------------------------------------------
+
+select R.match as num
+into PhoneNumber_R3a 
+from Regex(/\b\+?1[\-\.\s]\s*8\d{2}\s*[\s\-\.][A-Z]{7}\b/, Document.text) R;
+
+-------------------------------------------------------------------------------
+
+select R.match as num
+into PhoneNumber_R4 
+from Regex(/\b[Xx][\.\-]?\d{4,5}\b/, Document.text) R;
+
+-------------------------------------------------------------------------------
+
+select R.match as num
+into PhoneNumber_R5 
+from Regex(/\bext\s*[\.\-\:]?\s*\d{3,5}\b/, 'CASE_INSENSITIVE', Document.text) R;
+
+-------------------------------------------------------------------------------
+ 
+-- This rule modified to get rid of join with PhoneVariant. 
+select R.match as num
+into PhoneNumber_R7a_7b_7c 
+from Regex(/\b([1-9]\d{1,2}\s*[\s\-\.]((\d{2}\s*[\s\-\.]\d{8}})|(\d{5}\s*[\s\-\.]\d{5})|(\d{2}\s*[\s\-\.]\d{4}\s*[\s\-\.]\d{4})))\b/, Document.text) R;
+--from Regex(/\b([1-9]\d{1,2}\s*[\(\s\-\.]((\d{2}\s*[\)\s\-\.]\d{8})|(\d{5}\s*[\)\s\-\.]\d{5})|(\d{2}\s*[\)\s\-\.]\d{4}\s*[\s\-\.]\d{4})))\b/, Document.text) R,
+--     PhoneVariant Var
+--where FollowsTok(Var.annot, R.match, 0, 2)
+--  and MatchesRegex(/\s*\.{0,10}\s*/, SpanBetween(Var.annot, R.match));
+
+-------------------------------------------------------------------------------
+
+select R.match as num
+into PhoneNumber_R8ILPhone 
+from Regex(/\b(972[\-\.]\d{1,2}[\-\.]\d{7})\b/, Document.text) R;
+
+-------------------------------------------------------------------------------
+
+select R.match as match
+into CapsPlace 
+from
+    --Regex(/\b\p{Upper}[\p{Lower}\&]{1,20}\b/, Document.text) R;
+  Regex(/\b\p{Upper}[\p{Lower}\&\.-\/]{1,20}\b/, Document.text) R;
+	 
+
+select R.match as match
+into Zipcode 
+	from
+		Regex(/\b[0-9]{5}(\-[0-9]{4})?\b/, Document.text) R;
+
+-------------------------------------------------------------------------------
+
+select R.match as match
+into NumCP
+	from
+		Regex(/\b([[1-9]\p{Alpha}\-\,]*\d[\d\p{Alpha}\-\,]*)\s+(\p{Upper}\.?\s)?(\p{Upper}[\p{Lower}\&]{1,20}|\d{1,3}(st|nd|rd|th))\b/, Document.text) R;
+		
+-------------------------------------------------------------------------------
+	
+select R.match as match
+into HighwayNum 
+from Regex(/\b\d{1,3}(\s*(N|S|E|W))?(\s*(N|S|E|W))?\b/,Document.text) R;
+	
+-------------------------------------------------------------------------------
+
+	select R.match as match
+ into GermanZipcode 
+	from
+		Regex(/\b(D-)?[0-9]{4,5}\b/, Document.text) R;
+ 
+-------------------------------------------------------------------------------
+
+ select R.match as match
+ into GermanStreetAddress1 
+ from   Regex(/\b(Am\s+)?\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}[ \t]*(-(\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}-){1,2})?[ \t]*([Aa]n [dD]er|[Aa]m|[dD]ie|[dD]er|[dD]as)?[ \t]*([Aa]llee|[Bb]erg|[Cc]haussee|[Dd]amm|[Dd]�mme|[Gg]asse|[Gg]aerten|[Gg]�rten|[Hh]alde|[Hh]�fe|[Hh]of|[Hh]oefe|[Ll]andstra�e|[Ll]andstrasse|[Mm]�rkte|[Mm]arkt|[Mm]aerkte|[Pp]fad|[Pp]latz|[Pp]l�tze|[Rr]ing|[Ss]teig|[Ss]tr\.|[Ss]tra�e|[Ss]trasse|[Uu]fer|[Ww]eg|[Zz]eile)\s*,?\s*([[1-9]\p{L}\p{M}*\-\,])*\d([\d\p{L}\p{M}*\/\-\,])*/, Document.text) R ;
+
+-------------------------------------------------------------------------------
+ 
+ select R.match as match
+ into GermanStreetAddress2 
+ from   Regex(/\b([Aa]llee|[Bb]erg|[Cc]haussee|[Dd]amm|[Dd]�mme|[Gg]asse|[Gg]aerten|[Gg]�rten|[Hh]alde|[Hh]�fe|[Hh]of|[Hh]oefe|[Ll]andstra�e|[Ll]andstrasse|[Mm]�rkte|[Mm]arkt|[Mm]aerkte|[Pp]fad|[Pp]latz|[Pp]l�tze|[Pp]laetze|[Rr]ing|[Ss]teig|[Ss]tr\.|[Ss]tra�e|[Ss]trasse|[Uu]fer|[Ww]eg|[Zz]eile)[ \t]+([Aa]n [dD]er|[Aa]m|[dD]ie|[dD]er|[dD]as)?[ \t]*\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}\s*,?\s*([[1-9]\p{L}\p{M}*\-\,]*\d[\d\p{L}\p{M}*\/\-\,]*)/, Document.text) R ;
+
+-------------------------------------------------------------------------------
+ 
+ select R.match as match
+ into GermanStreetAddress3 
+ from   Regex(/(\b\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}[ \t]*(-(\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}-){1,2})?[ \t]*)?(An [dD]er|[Aa]m|[dD]ie|[dD]er|[dD]as)?[ \t]*(Br�cke|Park|Postfach|Hauptbahnhof)\b\s*,?\s*([[1-9]\p{L}\p{M}*\-\,]*\d[\d\p{L}\p{M}*\/\-\,]*)/, Document.text) R ;
+
+-------------------------------------------------------------------------------
+ 
+select R.match as match
+ into CapsOrg 
+	from
+		--Regex(/\b\p{Upper}[\p{Lower}\&\.\-\,]+\b/, Document.text) R;
+		-- Allow matches such as "the Children's Hospital of Pittsburgh" 
+		--Regex(/\b\p{Upper}[\p{Lower}\&\.'\-\,]+\b/, Document.text) R;
+		-- Allow unicode matches
+		Regex(/\b\p{Lu}\p{M}*[[\p{Ll}\p{Lo}]\p{M}*\&\.'\-\,]+\b/, Document.text) R
+		-- Avoid's capture partial organization name such as "[Univ. of Michigan College] of Engineering"
+	where Not(ContainsDict('dictionaries/lotus/industry_types_prefix.dict', R.match));
+	 
+select R.match as match
+ into DotCom 
+	from
+		--Regex(/\b[\w\&\-]+\.com\b/, Document.text) R;
+		-- Don't allow DOTCOM to be part of a URL
+		Regex(/(?<!\.)\b[\w\&\-]+\.com\b(?!\/)/, Document.text) R;
+-------------------------------------------------------------------------------
+
+create dictionary FilterPersonDict as
+(
+	'Travel', 'Fellow', 'Sir', 'IBMer', 'Researcher', 'All','Tell',
+	'Friends', 'Friend', 'Colleague', 'Colleagues', 'Managers','If',
+	'Customer', 'Users', 'User', 'Valued', 'Executive', 'Chairs',
+	'New', 'Owner', 'Conference', 'Please', 'Outlook', 'Lotus', 'Notes',
+	'This', 'That', 'There', 'Here', 'Subscribers', 'What', 'When', 'Where',
+	'With', 'While', 'Thanks', 'Thanksgiving','Senator', 'Platinum', 'Perspective',
+	'Manager', 'Ambassador', 'Professor', 'Dear', 'Contact', 'Cheers', 'Athelet',
+	'And', 'Act', 'But', 'Hello', 'Call', 'From', 'Center', 'The', 'Take', 'Junior',
+	'Both', 'Communities', 'Greetings', 'Hope', 'Restaurants', 'Properties',
+	'Let', 'Corp', 'Memorial', 'You', 'Your',  'Popcorn', 'Name', 'July', 'June',
+	'Business', 'Administrative', 'South', 'Members', 'Address', 'Please', 'List',
+	'Public', 'Inc', 'Parkway', 'Brother', 'Buy', 'Then', 'Services', 'Statements',
+	'President', 'Commissioner', 'Commitment', 'Commits', 'Hey',
+	'Director', 'End', 'Exit', 'Experiences', 'Finance', 'Elementary', 'Wednesday',
+	'Nov', 'Infrastructure', 'Inside', 'Convention',
+	'Judge', 'Lady', 'Friday',  'Project', 'Projected', 
+	'Recalls', 'Regards', 'Recently', 'Administration', 'Independence', 'Denied',
+	'Unfortunately', 'Under', 'Uncle', 'Utility', 'Unlike', 'Was', 'Were', 'Secretary',
+	'Speaker', 'Chairman', 'Consider', 'Consultant', 'County', 'Court', 'Defensive',
+	'Northwestern', 'Place', 'Hi', 'Futures', 'Athlete', 'Invitational'
+	-- more entries
+	,'If','Our', 'About', 'Analyst', 'On', 'Of' 
+	-- German greetings
+	--'Liebe', 'Lieber', 'Herr', 'Frau', 'Hallo', 'Express',
+	-- German Person Nouns
+	--'Freunde', 'Freund', 'Kollege', 'Kollegin', 'Kollegen','Besitzer',
+	-- German Verbs
+	-- German others
+	--'Alle', 'Neu', 'Bitte'
+	--'Institute', 'Management', 'Committee', 'Communications','Industries','Networks',
+	--'State', 'Club','Company',
+);
+
+create dictionary InitialDict as
+(
+	'rev.', 'col.', 'reverend', 'prof.', 'professor.', 
+	'lady', 'miss.', 'mrs.', 'mrs', 'mr.', 'pt.', 'ms.',
+	'messrs.', 'dr.', 'master.', 'marquis', 'monsieur',
+	'ds', 'di'
+	--'Dear' (Yunyao: comments out to avoid mismatches such as Dear Member),
+	--'Junior' (Yunyao: comments out to avoid mismatches such as Junior National [team player],
+ 	-- If we can have large negative dictionary to eliminate such mismatches, 
+	-- then this may be recovered 
+	--'Name:' ((Yunyao: comments out to avoid mismatches such as 'Name: Last Name')
+	-- for German names
+	-- TODO: need further test
+	,'herr', 'Fraeulein', 'Doktor', 'Herr Doktor', 'Frau Doktor',
+	'Herr Professor', 'Frau professor', 'Baron', 'graf'
+);
+
+
+
+
+-- Find capitalized words that look like person names and not in the non-name dictionary
+select R.match as name
+into CapsPerson 
+--from   Regex(/\b\p{Upper}\p{Lower}[\p{Alpha}]{1,20}\b/, Document.text) R
+--from   Regex(/\b\p{Upper}\p{Lower}[\p{Alpha}]{0,10}(['-][\p{Upper}])?[\p{Alpha}]{1,10}\b/, Document.text) R 
+-- change to enable unicode match
+--from   Regex(/\b\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*[\p{L}\p{M}*]{0,10}(['-][\p{Lu}\p{M}*])?[\p{L}\p{M}*]{1,10}\b/, Document.text) R 
+--from   Regex(/\b\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*[\p{L}\p{M}*]{0,10}(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}\b/, Document.text) R 
+-- Allow fully capitalized words
+from   Regex(/\b\p{Lu}\p{M}*(\p{L}\p{M}*){0,10}(['-][\p{Lu}\p{M}*])?(\p{L}\p{M}*){1,10}\b/, Document.text) R 
+where  Not(ContainsDict('FilterPersonDict', R.match))
+   and Not(ContainsDict('dictionaries/lotus/filterPersonGerman.dict', R.match))
+   and Not(ContainsDict('InitialDict', R.match))
+   and Not(ContainsDict('dictionaries/lotus/Statelist.dict', R.match))
+   and Not(ContainsDict('dictionaries/lotus/organization_suffixes.dict', R.match))
+   --and Not(ContainsDict('dictionaries/lotus/GENERALCITY.dict', R.match))
+   and Not(ContainsDict('dictionaries/lotus/industry_types_retained.dict', R.match))
+   and Not(ContainsDict('dictionaries/lotus/streetSuffixesForPerson.dict', R.match));
+-------------------------------------------------------------------------------
+  
+  --'
+ -- Find strict capitalized words
+select R.match as name
+into StrictCapsPerson 
+--from   Regex(/\b\p{Upper}\p{Lower}[\p{Alpha}]{1,20}\b/, Document.text) R;
+-- changed to enable unicode match
+from   Regex(/\b\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){1,20}\b/, Document.text) R
+where  Not(ContainsDict('FilterPersonDict', R.match))
+   and Not(ContainsDict('dictionaries/lotus/filterPersonGerman.dict', R.match))
+   and Not(ContainsDict('InitialDict', R.match))
+   and Not(ContainsDict('dictionaries/lotus/Statelist.dict', R.match))
+   and Not(ContainsDict('dictionaries/lotus/organization_suffixes.dict', R.match))
+   and Not(ContainsDict('dictionaries/lotus/GENERALCITY.dict', R.match))
+   and Not(ContainsDict('dictionaries/lotus/industry_types_retained.dict', R.match));
+   
+-------------------------------------------------------------------------------
+
+select R.match as word
+into InitialWord 
+from Regex(/\b([\p{Upper}]\.\s*){1,5}\b/, Document.text) R;
+
+-------------------------------------------------------------------------------
+
+select R.match as word
+into WeakInitialWord 
+from Regex(/\b([\p{Upper}]\.?\s*){1,5}\b/, Document.text) R;
+
+-------------------------------------------------------------------------------
+

@@ -1,0 +1,19 @@
+require document with columns text Text;
+--
+-- Positive test case to ensure that plan nodes of external view and normal view
+-- are not merged when joined with Document
+--
+
+-- Declare an external view that is populated at runtime
+create external view Word(match Span) 
+external_name 'Word'; 
+
+-- Select the contents of the external view, but join with Document 
+-- to make sure the plan nodes of Word and WordAll are not merged.
+
+create view WordAll as 
+select W.* 
+from Word W, Document D; 
+
+
+output view WordAll;

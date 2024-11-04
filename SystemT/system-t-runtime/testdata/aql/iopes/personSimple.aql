@@ -1,0 +1,27 @@
+-------------------------------------------------------------------------------
+-- personSimple.aql
+--
+-- A simple person annotator, built for testing UIMA integration; 
+-- looks for known first names, followed by capitalized words. 
+-- Outputs <first name, last name, person> tuples.
+
+-- Exhaustive list of first names.  Also goes to an output, so that our UIMA
+-- test case has two outputs.
+select D.match as name
+into FirstName
+from Dictionary("dictionaries/strictfirst.dict", DocScan.text) D;
+	
+
+-- Treat any capitalized word as a last name.
+create view LastName as
+	select
+		R.match as name
+	from
+		Regex(/\b\p{Upper}\p{Lower}[\p{Alpha}]{1,20}\b/, DocScan.text) R;
+
+-- Generate full names.
+select F.name as firstName, L.name as lastName, CombineSpans(F.name, L.name) as person
+into SimplePerson
+from FirstName F, LastName L
+where FollowsTok(F.name, L.name, 0, 0);
+

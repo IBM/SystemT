@@ -1,0 +1,115 @@
+-- ========================================================================
+-- Time
+-- ========================================================================
+/*
+//CHECKED: This rule will handle time intervals such as  10-11 Sat
+<rule annotation=Time id=1>
+<internal>
+<token attribute={etc}>TWODIGITSINTERVAL</token>
+<token attribute={etc}PRD:WKDAY{etc}>ANYWORD</token>
+</internal>
+</rule>
+*/
+create view Time1 as
+select 
+	CombineSpans(td.match, wkd.match) as match
+from 
+	TwoDigitsInterval td,
+	WKDay wkd
+where 
+	FollowsTok(td.match, wkd.match, 0, 0);
+
+/*
+//CHECKED: This rule will handle time intervals such as  Sat 10-11
+<rule annotation=Time id=2>
+<internal>
+<token attribute={etc}PRD:WKDAY{etc}>ANYWORD</token>
+<token attribute={etc}>TWODIGITSINTERVAL</token>
+</internal>
+</rule>
+*/
+create view Time2 as
+select 
+	CombineSpans(wkd.match, td.match) as match
+from 
+	TwoDigitsInterval td,
+	WKDay wkd
+where 
+	FollowsTok(wkd.match, td.match, 0, 0);
+	
+create view Time2Plus as
+select 
+	CombineSpans(t.match, tz.match) as match
+from 
+	Time2 t,
+	TimeZone tz
+where 
+	FollowsTok(t.match, tz.match, 0, 0);
+
+/*
+This rule will handle times of the form : 9:00 
+<rule annotation=Time id=4>
+<internal>
+<token attribute={etc}>\d{1,2}\\:\d{2}(\\:\d{2})?</token>
+</internal>
+</rule>
+*/
+-- also match 7-9PM
+create view Time4 as
+select 
+	R.match as match
+from 
+--	Regex(/\b(\d{1,2}:\d{2}(:\d{2})?|\d{1,2}-\d{1,2})\s*(A|P)?\b/, DocScan.text) R;
+--	RegexTok(/(\d{1,2}:\d{2}(:\d{2})?|\d{1,2}-\d{1,2})\s*(A|P)?/, 6, DocScan.text) R;
+--  To capture strong patterns only
+	RegexTok(/(\d{1,2}:\d{2}(:\d{2})?)\s*/, 6, DocScan.text) R;
+
+--create view Time4Weak as
+--select 
+--R.match as match
+--from 
+--	Regex(/\b(\d{1,2}:\d{2}(:\d{2})?|\d{1,2}-\d{1,2})\s*(A|P)?\b/, DocScan.text) R;
+
+
+/*
+//CHECKED: This rule will handle times according to a watch: 9:00 A.M, 9 AM, 9:00 PM
+<rule annotation=Time id=3>
+<internal>
+<token attribute={etc}>[0-9\\:\\.]+</token>
+<token attribute={etc}TIMEZONE{etc}>ANYWORD</token>
+</internal>
+</rule>
+*/
+
+create view Time3 as
+select 
+	CombineSpans(t.match, tz.match) as match
+from 
+--	Regex(/\b\d{1,2}([:.][0-5]\d)?\s*(-\s*\d{1,2}([:.][0-5]\d)?)?\b/, DocScan.text) t,
+	RegexTok(/\d{1,2}([:.][0-5]\d){0,2}\s*(-\s*\d{1,2}([:.][0-5]\d){0,2})?/, 10, DocScan.text) t,
+	TimeZone tz 
+where 
+	FollowsTok(t.match, tz.match, 0, 0);	
+	
+------------------------------------------------------------
+-- Union all Times
+------------------------------------------------------------
+create view TimeAll as
+	(select t.match as match from Time1 t)
+	union all
+	(select t.match as match from Time2 t)
+	union all
+	(select t.match as match from Time2Plus t)
+	union all
+	(select t.match as match from Time3 t)
+	union all
+	(select t.match as match from Time4 t);
+	
+------------------------------------------------------------
+-- Consolidate all Times
+------------------------------------------------------------
+create view Times as
+select R.match as match
+--from Consolidate(TimeAll.match) R;
+from TimeAll R
+consolidate on R.match;

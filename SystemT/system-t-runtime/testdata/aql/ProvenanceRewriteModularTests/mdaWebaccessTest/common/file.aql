@@ -1,0 +1,50 @@
+module common;
+
+create view FileOrDirectory as 
+select 
+	R.match as match
+from 
+	Regex(/file:\/[\w\/\:\s\-\.]*/, Document.text) R;
+
+create view FileOrDirectoryBase as 
+select 
+	R.match as match
+from 
+	Regex(/\/[\w\/\:\s\-\.]*/, Document.text) R;
+
+create view FileOrDirWindows as 
+select 
+	R.match as match
+from 
+	Regex(/((?:[a-zA-Z]:)|(?:\\{1,2}\w[-\w]*)\$?)\\{1,2}(?!\.)((?:(?![\\/:*?<>"|])(?![.\x20](?:\\|$))[\x20-\x7E])+\\{1,2}(?!\.))*((?:(?:(?![\\*?<>"|])(?![.]$)[\w\.])+))/, Document.text) R;
+	
+create view SubsequentFileOrDirWindows as
+	select
+ 		CombineSpans(windows.match, base.match) as match
+	from
+		FileOrDirWindows windows,
+		FileOrDirectoryBase base
+ 	where  
+ 		Follows(windows.match, base.match, 0, 0);	
+	
+create view FileOrWindowsBuildingBlock as
+	(select d.match as match from SubsequentFileOrDirWindows d)
+	union all 
+	(select d.match as match from FileOrDirectory d)
+	union all 
+	(select d.match as match from FileOrDirWindows d);
+	
+
+create view FileOrWindowsBuildingBlockConsolidated as
+select C.match as match
+from FileOrWindowsBuildingBlock C
+consolidate on C.match 
+using 'ContainedWithin';    
+
+create view FileOrDirectoryInterim as 
+select D.match as fileOrDir_Span, GetText(D.match) as fileOrDir_Text
+from FileOrWindowsBuildingBlockConsolidated D;
+
+create view FileOrDirOutput as
+select D.fileOrDir_Span as FileOrDir_span, D.fileOrDir_Text as FileOrDir_text, GetString('FileOrDir') as field_type
+from FileOrDirectoryInterim D;

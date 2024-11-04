@@ -1,0 +1,240 @@
+---------------------------------------
+-- Document Preprocessing
+---------------------------------------
+
+include 'core-updated/nodetag.aql';
+
+
+
+---------------------------------------
+-- UDFs Declarations
+---------------------------------------
+create function getAbbreviation(span Span)
+return String
+external_name 'NamedEntityUDFs.jar:com.ibm.avatar.udf.NamedEntityUDFs!getAbbreviation'
+language java
+deterministic
+return null on null input;
+
+create function toUpperCase(span Span)
+return String
+external_name 'NamedEntityUDFs.jar:com.ibm.avatar.udf.NamedEntityUDFs!toUpperCase'
+language java
+deterministic
+return null on null input;
+
+----------------------------------------
+-- Basic Named Entity Annotators
+----------------------------------------
+--------------------------------------------------------------------------------
+-- First, include the server side version of certain dictionaries and views
+include 'core-updated/GenericNE/serverSideSpecific/AdditionalDictsForAddress.aql';
+include 'core-updated/GenericNE/serverSideSpecific/AdditionalDictsForOrganization.aql';
+include 'core-updated/GenericNE/serverSideSpecific/AdditionalDictsForPerson.aql';
+--------------------------------------------------------------------------------
+
+include 'core-updated/GenericNE/DictsForAddress.aql';
+--include 'core-updated/GenericNE/DictsForPhoneNumber.aql';
+include 'core-updated/GenericNE/Sentence.aql';
+include 'core-updated/GenericNE/MacrosForTimeDates.aql';
+include 'core-updated/GenericNE/Date.aql';
+include 'core-updated/GenericNE/Time.aql';
+include 'core-updated/GenericNE/PhoneNumber.aql';
+include 'core-updated/GenericNE/Address.aql';
+include 'core-updated/GenericNE/CityStateCountry.aql';
+include 'core-updated/GenericNE/County.aql';
+include 'core-updated/GenericNE/Town.aql';
+include 'core-updated/GenericNE/StockExchangeAndTicker.aql';
+include 'core-updated/GenericNE/URL.aql';
+include 'core-updated/GenericNE/EmailAddress.aql';
+include 'core-updated/GenericNE/NotesEmailAddress.aql';
+include 'core-updated/GenericNE/Organization.aql';
+include 'core-updated/GenericNE/Organization-FilterSingleNewLineTab.aql';
+include 'core-updated/GenericNE/Organization-Sentence.aql';
+include 'core-updated/GenericNE/Person-BasicFeature.aql';
+include 'core-updated/GenericNE/formalContent/Person-Context-Based.aql';
+include 'core-updated/GenericNE/Person.aql';
+include 'core-updated/GenericNE/Person-FilterSingleNewLineTab.aql';
+include 'core-updated/GenericNE/Person-Filter.aql';
+include 'core-updated/GenericNE/formalContent/Location-Context-Based.aql';
+include 'core-updated/GenericNE/Region.aql';
+include 'core-updated/GenericNE/Facility-CoNLL2003.aql';
+include 'core-updated/GenericNE/StateStrongAbbrev.aql';
+include 'core-updated/GenericNE/WaterBody.aql';
+
+include 'core-updated/GenericNE/Address-consolidation.aql';
+include 'core-updated/GenericNE/OrgWithinNotesEmail.aql';
+include 'core-updated/GenericNE/Organization-FilterAddress.aql';
+include 'core-updated/GenericNE/Organization-SportsTeam-for-CoNLL2003.aql';
+include 'core-updated/GenericNE/Organization-FilterHeadline.aql';
+include 'core-updated/GenericNE/Organization-consolidation.aql';
+include 'core-updated/GenericNE/formalContent/Organization-Context-Based.aql';
+include 'core-updated/GenericNE/Organization-Abbreviation.aql';
+include 'core-updated/GenericNE/OrganizationTypes.aql';
+include 'core-updated/GenericNE/Person-consolidation.aql';
+include 'core-updated/GenericNE/DateTime-consolidation.aql';
+include 'core-updated/GenericNE/Location-consolidation.aql';
+
+ 
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Assign attributes for output section <<<<<<<<<<<<<<<<
+-- ===========================================================================
+include 'core-updated/GenericNE/AttributesAssigner.aql';
+include 'core-updated/GenericNE/AttributesAssigner-Person.aql';
+include 'core-updated/GenericNE/AttributesAssigner-URL.aql';
+include 'core-updated/GenericNE/Location-ValueBasedJoin.aql';
+include 'core-updated/GenericNE/AdditionalPerson.aql';
+include 'core-updated/GenericNE/Organization-ValueBasedJoin-for-CoNLL2003.aql';
+include 'core-updated/GenericNE/Organization-Aggregate.aql';
+
+create view PersonMixed as
+	(select P.person as person from PersonBeforeFinalOrgFilter P)
+	minus
+	(select P.person as person from PersonBeforeFinalOrgFilter P, OrganizationMixed O where Overlaps(P.person, O.organization));
+	
+-- remove candidate that has already been identified as organization
+create view LocationTokenCandidatesConsolidatedInvalid as
+select L.loc as loc
+from OrganizationMixed O,
+     LocationTokenCandidatesConsolidated L
+where Contains(O.organization, L.loc);
+
+create view LocationTokenCandidatesConsolidatedValid as
+	(select L.* from LocationTokenCandidatesConsolidated L)
+	minus
+	(select L.* from LocationTokenCandidatesConsolidatedInvalid L);
+
+
+create view LocationExtendedValidAreOrg as
+select L.*
+from LocationExtendedValidAll L,
+     OrganizationMixed O
+where Overlaps(O.organization, L.loc);
+     
+create view LocationExtendedValidAllFiltered as
+	(select L.* from LocationExtendedValidAll L)
+	minus 
+	(select L.* from LocationExtendedValidAreOrg L);     
+
+create view LocationValidAll as
+	(select L.loc as loc from LocationExtendedValidAllFiltered L)
+	union all
+	(select L.loc as loc from LocationTokenCandidatesConsolidatedValid L);
+
+--output view LocationValidAll;
+
+create view CombinedLocation4 as
+select CombineSpans(C1.loc, C2.loc) as loc
+from   LocationValidAll C1,
+       LocationValidAll C2
+where  FollowsTok(C1.loc, C2.loc, 0, 1)
+  and  MatchesRegex(/\.?[ ]+/, SpanBetween(C1.loc, C2.loc))
+  and  MatchesRegex(/([^\s\w]|(\p{Ll}\p{M}*)+|[\r\n]*)\s*/, LeftContextTok(C1.loc, 1))
+  and  MatchesRegex(/\s*((\p{Ll}\p{M}*)+|[^\s\w])/, RightContextTok(C2.loc, 1));
+
+--output view CombinedLocation4;
+
+create view LocationValidAllExtended as
+	(select L.* from LocationValidAll L)
+	union all
+	(select L.* from CombinedLocation4 L);
+	
+create view LocationExtendedValidConsolidated as
+select L.loc as loc
+from LocationValidAllExtended L
+consolidate on L.loc
+using 'LeftToRight';
+
+
+create view LocationFinal as
+select C.loc as loc
+from LocationExtendedValidConsolidated C
+consolidate on C.loc;
+		
+create view LocationMixed as
+select C.loc as loc
+from LocationFinal C
+order by C.loc;
+
+-------------------------------------------------------------------------------
+-- include possible unambiguous single token matches. 
+-------------------------------------------------------------------------------
+
+include 'core-updated/GenericNE/Disambiguation.aql';
+
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Output section <<<<<<<<<<<<<<<<
+-- ===========================================================================		
+
+-- change output to remove unwanted types
+-- select P.loc as loc
+-- into Place
+-- from Consolidate('OverlapOrdered',FinalPlaceConsolidated.loc) P;
+ 
+-- 1. Address	
+--laura 05/05/2009: globally replaced Place with Address
+/*
+select P.loc as loc
+into "com.ibm.systemT.Address"
+-- change output to remove unwanted types
+-- from Place P;
+--from Consolidate('OverlapOrdered',FinalPlaceConsolidated.loc) P;
+from FinalPlaceConsolidated P
+consolidate on P.loc
+using 'LeftToRight';
+*/
+
+
+select A.reference as loc
+into "com.ibm.systemT.Address"
+from AddressFinal A;
+
+------------------------------------------------------------------
+-- Union together CityStateCountryValid with additional Locations
+create view CityStateCountryValidConsolidated as
+select *
+from CityStateCountryValid C
+consolidate on C.loc;
+
+create view LocationOverlapsCityStateCountryValid as
+select L.*
+from Location L, CityStateCountryValidConsolidated C
+where Overlaps(L.loc, C.reference);
+
+create view LocationNonOverlapsCityStateCountryValid as
+(select * from Location)
+minus
+(select * from LocationOverlapsCityStateCountryValid);
+
+create view CityStateCountryValidAugmented as
+(select C.loc as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityStateCountryValidConsolidated C)
+union all
+(select C.loc as loc, 'generalLocation' as subtype, '' as city, '' as state, '' as country, '' as continent, C.loc as reference from LocationNonOverlapsCityStateCountryValid C);
+------------------------------------------------------------------
+
+
+select P.loc as loc
+into "com.ibm.systemT.Location"
+from CityStateCountryValidAugmented P;
+
+select O.organization as org
+into "com.ibm.systemT.Organization"
+--from Consolidate('OverlapOrdered',FinalOrgConsolidatedWithoutDots.org) O;
+from Organization O;
+
+-- end block change
+--- end changing this block
+select P.person as name
+into "com.ibm.systemT.Person" 
+from Person_ P;
+
+
+select P.num as num
+into "com.ibm.systemT.PhoneNumber"
+from PhoneNumOnly P
+-- disallow multiple new line
+where Not(ContainsRegex(/[\n\r]{2,}/, P.num));
+
+
+

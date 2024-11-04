@@ -1,0 +1,24 @@
+require document with columns text Text;
+
+-------------------------------------------------------------------------------
+-- regexTok.aql
+--
+-- Test of the RegexTok() table function.  Based on the low-level test in
+-- regextok.aog.
+-------------------------------------------------------------------------------
+
+-- First, run the normal Regex operator.
+-- Regular expression finds German street names.
+select R.match as name
+into StreetName 
+from Regex(
+	/\b(Am\s+)?\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}[ \t]*(-(\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}-){1,2})?[ \t]*(An der|die|der|das|Am)?[ \t]*([Aa]llee|[Bb]erg|[Cc]haussee|[Dd]amm|[Dd]�mme|[Gg]asse|[Gg]aerten|[Gg]�rten|[Hh]alde|[Hh]�f|[Hh]oefe|[Ll]andstra�e|[Mm]�rkt|[Mm]aerkte|[Pp]fad|[Pp]latz|[Pp]l�tze|[Rr]ing|[Ss]teig|[Ss]tr\.|[Ss]tra�e|[Ss]trasse|[Uu]fer|[Ww]eg|[Zz]eile)\s*,?\s*([[1-9]\p{L}\p{M}*\-\,])*\d([\d\p{L}\p{M}*\/\-\,])*/,
+	Document.text) R;
+
+-- Next, do the same with the RegexTok operator.
+select R.match as name
+into StreetNameTok
+from RegexTok(
+	/\b(Am\s+)?\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}[ \t]*(-(\p{Lu}\p{M}*[\p{Ll}\p{Lo}]\p{M}*(\p{L}\p{M}*){0,20}-){1,2})?[ \t]*(An der|die|der|das|Am)?[ \t]*([Aa]llee|[Bb]erg|[Cc]haussee|[Dd]amm|[Dd]�mme|[Gg]asse|[Gg]aerten|[Gg]�rten|[Hh]alde|[Hh]�f|[Hh]oefe|[Ll]andstra�e|[Mm]�rkt|[Mm]aerkte|[Pp]fad|[Pp]latz|[Pp]l�tze|[Rr]ing|[Ss]teig|[Ss]tr\.|[Ss]tra�e|[Ss]trasse|[Uu]fer|[Ww]eg|[Zz]eile)\s*,?\s*([[1-9]\p{L}\p{M}*\-\,])*\d([\d\p{L}\p{M}*\/\-\,])*/,
+	11, 
+	Document.text) R;

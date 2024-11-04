@@ -1,0 +1,30 @@
+-- *******************************************
+-- Extracts method name that
+-- (i) has one or more of character in the regex below mentioned in the view Methodid_base
+-- (i) surrounded by a single white space
+-- Eg:
+-- 	[3/28/12 6:18:43:659 PDT] 0000003a ThreadMonitor W   WSVR0605W: Thread "WebContainer : 33" (00000086) has been active for 682777 milliseconds and may be hung.  There is/are 1 thread(s) in total in the server that may be hung.
+-- Here 'WSVR0605W:' is the method ID 
+-- *******************************************
+
+create view Methodid_base as 
+select 
+	R.match 
+from 
+	Regex(/((\p{Lu}|(\[:\]))?(\d{1,2}|( ))?\p{Lu}{1,5}\d{4}\p{Lu})/, Doc.text) R;    
+    	
+   	
+create view Methodid_interim as 
+    select C.match
+    from Methodid_base C
+    where MatchesRegex(/:/, RightContext(C.match, 1));
+--    and MatchesRegex(/\s/, RightContext(C.match, 1));
+
+create view Methodid_wsOutputInterim as
+select D.match as Methodid_ws_Span, GetText(D.match) as Methodid_ws_Text
+from Methodid_interim D;
+
+create view MethodidWSOutput as
+select D.Methodid_ws_Span as span, D.Methodid_ws_Text as text, GetString('MethodidWS') as field_type
+from Methodid_wsOutputInterim D;
+

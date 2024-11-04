@@ -1,0 +1,75 @@
+###############################################################################
+# follows.aog
+#
+# ("aog" stands for Avatar Operator Graph.)
+#
+# Test of character distance join/selection predicates.  Looks for "first names"
+# followed within 10-50 chars by "last names".  The name dictionaries used are
+# rather low-precision, so we get a lot of spurious matches.  The key thing
+# to check is that the different methods of computing the join generate the
+# same result.
+###############################################################################
+$Document = DocScan(
+  (
+    "text" => "Text"
+  )
+);
+
+CreateDict(
+    "name" => "dictionaries/first.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+CreateDict(
+    "name" => "dictionaries/last.dict",
+    "language" => "de,es,en,fr,it,x_unspecified",
+    "case" => "insensitive",
+    "isExternal" => "false"
+);
+
+# Find potential first names.
+$FirstName = 
+Project(( "match" => "first" ), 
+	Dictionary("dictionaries/first.dict", "text", $Document));
+
+# Find potential last names.
+$LastName = 
+Project(( "match" => "last" ), 
+	Dictionary("dictionaries/last.dict", "text", $Document));
+
+# Use a cross-product and selection predicate
+$SelectFollows = 
+ApplyFunc(CombineSpans(GetCol("first"), GetCol("last")) => "Combined", 
+	Select(Follows(GetCol("first"), GetCol("last"),
+			IntConst(10), IntConst(50)),
+		CrossProduct($FirstName, $LastName)
+	)
+);
+	
+# Use a nested loops join
+$NLJoinFollows =
+ApplyFunc(CombineSpans(GetCol("first"), GetCol("last")) => "Combined", 
+	NLJoin(Follows(GetCol("first"), GetCol("last"), 
+		IntConst(10), IntConst(50)), $FirstName, $LastName)
+);
+
+# Use a merge join with $FirstName as the outer.
+$MergeFollows =
+ApplyFunc(CombineSpans(GetCol("first"), GetCol("last")) => "Combined", 
+	SortMergeJoin(Follows(GetCol("first"), GetCol("last"), 
+		IntConst(10), IntConst(50)), $FirstName, $LastName)
+);
+
+# Use a merge join with $LastName as the outer.
+$MergeFollowedBy =
+ApplyFunc(CombineSpans(GetCol("first"), GetCol("last")) => "Combined", 
+	SortMergeJoin(FollowedBy(GetCol("last"), GetCol("first"), 
+		IntConst(10), IntConst(50)), $LastName, $FirstName)
+);
+
+################################################################################
+# OUTPUT SPEC
+Output: $SelectFollows, $NLJoinFollows, $MergeFollows, $MergeFollowedBy;
+

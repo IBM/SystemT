@@ -1,0 +1,154 @@
+-------------------------------------------------------------------------------
+-- 
+-- Test cases for extension to sequence patterns to pass through attributes
+-- Tests for passing through columns from PaternSequenceNode and PatternOptionalNode
+--
+-------------------------------------------------------------------------------
+
+create view CapsWord as
+extract 'CapsWord' as type,
+	regex /[A-Z].*/ on 1 token in D.text as match
+from Document D
+limit 10;
+
+create view LowWord as
+extract 'LowWord' as type,
+	regex /[a-z]*/ on 1 token in D.text as match
+from Document D
+limit 10;
+
+-- Simple sequence with two pass through attributes
+create view Sequence1 as
+extract C.type as ctype, L.type as ltype,
+	    pattern (<C.match>) (<L.match>) 
+	    return group 1 as first
+	       and group 2 as last
+	       and group 0 as match
+from CapsWord C, LowWord L;
+
+output view Sequence1;
+
+-- Simple sequence with one required element followed by one optional element, and one pass through col from each of these elements
+create view Sequence2 as
+extract C.type as ctype, L.type as ltype,
+	    pattern (<C.match>) (<L.match>)? 
+	    return group 1 as first
+	       and group 2 as last
+	       and group 0 as match
+from CapsWord C, LowWord L;
+
+output view Sequence2;
+
+-- Simple sequence with one required element and one optional element, a group from the required, and a pass through col from the optional
+create view Sequence3 as
+extract C.type as ctype,
+	    pattern (<C.match>) (<L.match>)? 
+	    return group 2 as last
+	       and group 0 as match
+from CapsWord C, LowWord L;
+
+output view Sequence3;
+
+-- Simple sequence with one required element and one optional element, a group from the optional, and a pass through col from the required
+create view Sequence4 as
+extract L.type as ltype,
+	    pattern (<C.match>) (<L.match>)? 
+	    return group 1 as first
+	       and group 0 as match
+from CapsWord C, LowWord L;
+
+output view Sequence4;
+
+-- Simple sequence with one optional element followed by one required element, and one pass through col from each of these elements
+create view Sequence5 as
+extract C.type as ctype, L.type as ltype,
+	    pattern (<C.match>)? (<L.match>)
+	    return group 1 as first
+	       and group 2 as last
+	       and group 0 as match
+from CapsWord C, LowWord L;
+
+output view Sequence5;
+
+-- Simple sequence with one optional element followed by one required element, a group from the required, and a pass through col from the optional
+create view Sequence6 as
+extract C.type as ctype,
+	    pattern (<C.match>)? (<L.match>)
+	    return group 2 as last
+	       and group 0 as match
+from CapsWord C, LowWord L;
+
+output view Sequence6;
+
+-- Simple sequence with one optional element followed by one required element, a group from the optional, and a pass through col from the required
+create view Sequence7 as
+extract L.type as ltype,
+	    pattern (<C.match>)? (<L.match>)
+	    return group 1 as first
+	       and group 0 as match
+from CapsWord C, LowWord L;
+
+output view Sequence7;
+
+-- Simple sequence of three with three pass through attributes
+create view Sequence8 as
+extract CombineSpans(C1.match, C2.match) as _12,
+	    CombineSpans(C2.match, C3.match) as _23,
+	    pattern (<C1.match> <C2.match>) <C3.match> 
+	    return group 0 as _123
+from CapsWord C1, CapsWord C2, CapsWord C3;
+
+output view Sequence8;
+
+-- Simple sequence of three elements with one optional and three pass through attributes
+create view Sequence9 as
+extract GetLength(C1.match) as len1,
+		case when NotNull(C2.match) then GetLength(C2.match) else 0 as len2,
+		GetLength(C3.match) as len3,
+	    pattern <C1.match> <C2.match>? <C3.match> as match
+from CapsWord C1, CapsWord C2, CapsWord C3;
+
+output view Sequence9;
+
+-- Simple sequence of three elements with one optional and three pass through attributes
+create view Sequence10 as
+extract GetLength(C1.match) as len1,
+		case when NotNull(C2.match) then GetLength(C2.match) else 0 as len2,
+		case when NotNull(C3.match) then GetLength(C3.match) else 0 as len3,
+	    pattern <C1.match> <C2.match>? <C3.match>? as match
+from CapsWord C1, CapsWord C2, CapsWord C3;
+
+output view Sequence10;
+
+-- Simple sequence with two pass through attributes and a token gap
+create view Sequence11 as
+extract C.type as ctype, L.type as ltype,
+	    pattern (<C.match>) <Token>{1,1} (<L.match>) 
+	    return group 1 as first
+	       and group 2 as last
+	       and group 0 as match
+from CapsWord C, LowWord L;
+
+output view Sequence11;
+
+-- Simple sequence with one required element, one token gap and one optional element, and one pass through col from each of these elements
+create view Sequence12 as
+extract C.type as ctype, L.type as ltype,
+	    pattern (<C.match>) <Token>{1,1} (<L.match>)? 
+	    return group 1 as first
+	       and group 2 as last
+	       and group 0 as match
+from CapsWord C, LowWord L;
+
+output view Sequence12;
+
+-- Simple sequence with one optional element, one token gap and one required element, and one pass through col from each of these elements
+create view Sequence13 as
+extract C.type as ctype, L.type as ltype,
+	    pattern (<C.match>)? <Token>{1,1} (<L.match>)
+	    return group 1 as first
+	       and group 2 as last
+	       and group 0 as match
+from CapsWord C, LowWord L;
+
+output view Sequence13;

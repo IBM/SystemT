@@ -1,0 +1,259 @@
+---------------------------------------
+-- Document Preprocessing
+---------------------------------------
+include 'core/detag.aql';
+----------------------------------------
+-- Basic Named Entity Annotators
+----------------------------------------
+
+--------------------------------------------------------------------------------
+-- First, include the server side version of certain dictionaries
+include 'core/GenericNE/serverSideSpecific/AdditionalDictsForAddress.aql';
+include 'core/GenericNE/serverSideSpecific/AdditionalDictsForOrganization.aql';
+--------------------------------------------------------------------------------
+
+include 'core/GenericNE/DictsForAddress.aql';
+include 'core/GenericNE/Sentence.aql';
+include 'core/GenericNE/MacrosForTimeDates.aql';
+include 'core/GenericNE/Date.aql';
+include 'core/GenericNE/Time.aql';
+include 'core/GenericNE/PhoneNumber.aql';
+include 'core/GenericNE/Address.aql';
+include 'core/GenericNE/CityStateCountry.aql';
+include 'core/GenericNE/County.aql';
+include 'core/GenericNE/StockExchangeAndTicker.aql';
+include 'core/GenericNE/URL.aql';
+include 'core/GenericNE/EmailAddress.aql';
+include 'core/GenericNE/NotesEmailAddress.aql';
+include 'core/GenericNE/Organization.aql';
+include 'core/GenericNE/Organization-FilterSingleNewLineTab.aql';
+include 'core/GenericNE/Organization-Sentence.aql';
+include 'core/GenericNE/Person.aql';
+include 'core/GenericNE/Person-FilterSingleNewLineTab.aql';
+include 'core/GenericNE/Person-Filter.aql';
+
+include 'core/GenericNE/Address-consolidation.aql';
+include 'core/GenericNE/OrgWithinNotesEmail.aql';
+include 'core/GenericNE/Organization-FilterAddress.aql';
+include 'core/GenericNE/Organization-consolidation.aql';
+include 'core/GenericNE/OrganizationTypes.aql';
+include 'core/GenericNE/Person-consolidation.aql';
+include 'core/GenericNE/DateTime-consolidation.aql';
+
+
+----------------------------------------------
+-- Consolidation:
+-- For now, we just remove annotations that are completely
+-- contained within other annotations.
+----------------------------------------------
+create view StateOrCountry as
+	(select S.match as match from StateStrongAll S)
+	union all
+	(select C.match as match from CountryCandidate C);
+
+-- only keep cities that do not have the same name as a country or state
+create view CityConsolidatedFiltered as
+	(select C.match as match from CityConsolidated C)
+	minus 
+	(select SC.match as match from StateOrCountry SC);
+	
+create view CityCountry as
+select CC.match as match, 'city' as subtype, CC.match as city, '' as county, '' as state, C.match as country, '' as continent, CombineSpans(CC.match, C.match) as reference
+from CityConsolidatedFiltered CC,
+	 CountryCandidate C
+where FollowsTok(CC.match, C.match, 0, 1)
+  and MatchesRegex(/\s*[,]?\s*/, SpanBetween(CC.match, C.match))
+  and Not(ContainsRegex(/[\n\r]/, SpanBetween(CC.match, C.match)));
+  
+create view AllCityStateCountryZipcode as
+	(select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.match as reference from AllCityStateCountry C)
+	union all
+	(select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityCountry C);
+
+create view CityStateCountryInvalid1 as
+select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference
+from   AllCityStateCountryZipcode C,
+	   PersonFinalAllWithoutDots P
+where  Contains(P.person, C.match)
+  and  Not(Equals(P.person, C.match));      
+
+create view CityStateCountryInvalid2 as
+select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference
+from   AllCityStateCountryZipcode C,
+	   FinalOrgConsolidatedWithoutDots O 
+where  Contains(O.org, C.match)
+  and  Not(Equals(O.org, C.match));   
+
+create view CityStateCountryInvalid3 as
+select C.match as match, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference
+from   AllCityStateCountryZipcode C,
+	   FinalOrgConsolidatedWithoutDots O 
+where  Overlaps(O.org, C.match)
+  and  Not(Contains(O.org, C.match));  
+ 
+
+create view CityStateCountryInvalid as
+	(select C.match as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityStateCountryInvalid1 C)
+	union all
+	(select C.match as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityStateCountryInvalid2 C)
+	union all
+	(select C.match as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityStateCountryInvalid3 C);
+
+create view CityStateCountryValid as
+	(select C.match as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from AllCityStateCountryZipcode C)
+	minus
+	(select C.loc as loc, C.subtype as subtype, C.city as city, C.state as state, C.country as country, C.continent as continent, C.reference as reference from CityStateCountryInvalid C);
+	
+create view CityConsolidatedInvalid as
+select C.match as match
+from   CityStateCountryInvalid CI,
+	   CityConsolidated C
+where  Equals(CI.loc, C.match);   
+	
+create view CityConsolidatedValid as
+	(select C.match as match from CityConsolidated C)
+	 minus 
+	(select C.match as match from CityConsolidatedInvalid C);
+	
+create view StateCandidateInvalid as
+select S.match as match
+from   StateCandidate S,
+	   FinalOrgConsolidatedWithoutDots O 
+where  Overlaps(O.org, S.match); 
+
+create view StateCandidateValid as
+	(select S.match as match from StateCandidate S)
+	minus
+	(select S.match as match from StateCandidateInvalid S); 
+
+create view CountryCandidateInvalid as
+select C.match as match
+from   CountryCandidate C,
+	   FinalOrgConsolidatedWithoutDots O 
+where  Overlaps(O.org, C.match); 
+
+create view CountryCandidateValid as
+	(select C.match as match from CountryCandidate C)
+	minus
+	(select C.match as match from CountryCandidateInvalid C);
+		
+create view CountyInvalid as
+select C.match as match
+from FinalOrgConsolidatedWithoutDots O,
+	 CountyConsolidated C
+where Contains(O.org, C.match);
+
+create view CountyValid as
+	(select C.match as match from CountyConsolidated C)
+	minus
+	(select C.match as match from CountyInvalid C);
+
+
+---------------------------------------------
+-- Financial Annotators 1
+---------------------------------------------
+include 'core/Financial/CompanyEvents/preprocesswithdetag.aql';
+include 'core/Financial/CompanyEvents/companyinfo.aql';
+include 'core/Financial/CompanyAnalystAnnouncement/CompanyAnalystAnnouncements.aql';
+include 'core/Financial/CompanyAnalystAnnouncement/AnalystAnnouncements.aql';
+include 'core/Financial/CompanyAnalystAnnouncement/CompanyAnnouncements.aql';
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Assign attributes for output section <<<<<<<<<<<<<<<<
+-- ===========================================================================
+include 'core/GenericNE/AttributesAssigner.aql';
+include 'core/Financial/CompanyAnalystAnnouncement/AttributesAssigner-Announcement.aql';
+include 'core/GenericNE/AttributesAssigner-Person.aql';
+include 'core/GenericNE/AttributesAssigner-URL.aql';
+
+create view Person_ as
+select P.person as name, P.first as first, P.middle as middle, P.last as last, P.reference as reference
+from PersonWithAttrAllValid P;
+
+---------------------------------------------
+-- Financial Annotators 2
+---------------------------------------------
+
+include 'core/Financial/CompanyEvents/merger.aql';
+include 'core/Financial/CompanyEvents/acquisition.aql';
+include 'core/Financial/CompanyEvents/jointventure.aql';
+include 'core/Financial/CompanyEvents/alliance.aql';
+include 'core/Financial/CompanyEvents/allevents.aql';
+
+
+---------------------------------------------
+-- Final output types
+---------------------------------------------
+include 'mashupHub/specific/OutputTypes.aql';
+
+
+-- ===========================================================================
+-- >>>>>>>>>>>>>>> Output section <<<<<<<<<<<<<<<<
+-- ===========================================================================		
+
+--4.1 City 
+
+output view City;
+
+--4.2 County: 
+output view County;
+
+--4.3 ZipCode
+output view ZipCode;
+
+--4.4 Address
+output view Address;
+
+--4.5 StateOrProvince
+output view StateOrProvince;
+
+--4.6 Country
+output view Country;
+
+--4.7 Continent: 
+output view Continent;
+
+--4.8 MapLocation
+output view MapLocation;
+
+--4.9 Email Address
+output view EmailAddress;
+
+--4.10 NotesEmailAddress
+output view NotesEmailAddress;
+
+--4.11 PhoneNumber
+output view PhoneNumber;
+
+--4.12 Person
+output view Person;
+
+--4.13 Organization
+output view Organization;
+
+--4.14 DateTime
+output view DateTime;
+
+--4.15 URL
+output view URL;
+
+-- 4.16 Merger
+output view Merger;
+
+-- 4.17 Acquisition
+output view Acquisition;
+
+--4.18 Alliance: 
+output view Alliance;
+
+--4.19 JointVenture:
+output view JointVenture;
+
+--4.20 CompanyEarningsAnnouncement
+output view CompanyEarningsAnnouncement;
+
+--4.21 AnalystEarningsEstimate
+output view AnalystEarningsEstimate;
+
+--4.22 CompanyEarningsGuidance
+output view CompanyEarningsGuidance;

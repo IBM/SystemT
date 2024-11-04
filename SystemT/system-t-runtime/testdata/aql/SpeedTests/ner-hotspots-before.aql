@@ -1,0 +1,70 @@
+require document with columns text Text;
+-------------------------------------------------------------------------------
+-- ner-hotspots-before.aql
+--
+-- AQL file that isolates just the expensive views in NER.
+-------------------------------------------------------------------------------
+
+-----------------------------------------------
+--       View Name  Samples  Seconds  % of Time
+-- --------------------------------------------
+--      AllCapsOrg     3023     3.32       3.15
+--         CapsOrg     2112     2.26       2.40
+-- NumCP❡subquery1     1857     2.00       2.10
+-----------------------------------------------
+
+create view Doc as select Document.text from Document;
+
+--------------------------------------------------------------------------------
+-- AllCapsOrg
+
+create view AllCapsOrg as
+	select 
+		R.match as match
+	from 
+	-- to capture ABC
+	--	Regex(/\b(\p{Lu}\p{M}*){2,}\b/, Doc.text) R;
+	-- allow matches for B&B, BB&T
+	--	Regex(/\b(\p{Lu}\p{M}*){1,2}(\s*&\s*)?(\p{Lu}\p{M}*)+\b/, Doc.text) R
+	-- all matches for StreetSmart
+	--Regex(/\b(\p{Lu}\p{M}*){1,2}((\s*&\s*)?(\p{Lu}\p{M}*)+|([\p{Ll}\p{Lo}]\p{M}*)+(\p{Lu}\p{M}*)([\p{Ll}\p{Lo}]\p{M}*)+)\b/, Doc.text) R;
+	-- to capture CabCabCab
+	RegexTok(/\b(\p{Lu}\p{M}*){1,2}((\s*&\s*)?(\p{Lu}\p{M}*)+|([\p{Ll}\p{Lo}]\p{M}*)+((\p{Lu}\p{M}*)([\p{Ll}\p{Lo}]\p{M}*)+){1,2})/, 3, Doc.text) R;
+
+
+output view AllCapsOrg;
+
+-------------------------------------------------------------------------------
+-- CapsOrg
+create view CapsOrg as
+select
+	R.match as match
+from
+	--Regex(/\b\p{Upper}[\p{Lower}\&\.\-\,]+\b/, Doc.text) R;
+	-- Allow matches such as 'the Children's Hospital of Pittsburgh' 
+	--Regex(/\b\p{Upper}[\p{Lower}\&\.'\-\,]+\b/, Doc.text) R;
+	-- Allow unicode matches
+	--Regex(/\b\p{Lu}\p{M}*[[\p{Ll}\p{Lo}]\p{M}*\&\.'\-\,]+\b/, Doc.text) R;
+	--Regex(/\b\p{Lu}\p{M}*([\p{Ll}\p{Lo}]\p{M}*|[\&\.'\-\,])+\b/, Doc.text) R;
+	-- Avoid capture partial organization name such as '[Univ. of Michigan College] of Engineering'
+	--where Not(ContainsDict(industryType_prefix.dict', R.match));
+	-- switch to faster regex math
+	RegexTok(/\p{Lu}\p{M}*([\p{Ll}\p{Lo}]\p{M}*|[\&\.'\-\,])+\b/, 6, Doc.text) R; --'	
+	
+output view CapsOrg; 
+
+-------------------------------------------------------------------------------
+--NumCP 
+
+create view NumCP as
+select
+    R.match as match
+from
+--    Regex(/\b(([1-9\p{Alpha}][\d\p{Alpha}\-\,]*)?\d[\d\p{Alpha}\-\,]*)\b/, Doc.text) R                
+	RegexTok(/(([1-9\p{Alpha}][\d\p{Alpha}\-\,]*)?\d[\d\p{Alpha}\-\,]*)\b/, 20, Doc.text) R
+where Not(MatchesRegex(/[1-9]\d{3}[,-]\s+.*/, R.match));
+
+-- We disable this output because the new version produces almost the
+-- same output, but not quite.
+-- output view NumCP;
+

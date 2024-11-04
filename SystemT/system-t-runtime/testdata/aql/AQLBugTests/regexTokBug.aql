@@ -1,0 +1,16 @@
+------------------------------------------------------------------------------
+-- regexTokBug.aql
+--
+-- Test to ensure that old (multiple matches per start token) match semantics
+-- don't reappear.
+------------------------------------------------------------------------------
+require document with columns text Text;
+
+create view CapsOrg as
+select R.match as match
+from   RegexTok(/\p{Lu}\p{M}*([\p{Ll}\p{Lo}]\p{M}*|[\&\.'\-\,])+\b/, 6, 
+	Document.text) R;
+
+select C.match as match
+into RegexTokOut
+from CapsOrg C;

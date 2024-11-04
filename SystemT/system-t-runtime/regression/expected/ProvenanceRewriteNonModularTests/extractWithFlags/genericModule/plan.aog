@@ -1,0 +1,79 @@
+$Document = DocScan(
+  (
+    "text" => "Text",
+    "label" => "Text"
+  )
+);
+CreateDict(
+    "name" => "UnitDict",
+    "language" => "en",
+    "case" => "insensitive",
+    "isExternal" => "false",
+    "lemma_match" => "false"
+);
+
+$Revenue =
+Project(
+  (
+    "@@genericModule@@Revenue@@__auto__id" => "__auto__id",
+    "@@genericModule@@Revenue@@__stmt__type" => "__stmt__type",
+    "@@genericModule@@Revenue@@Document_____sep_____D____id" => "Document_____sep_____D____id",
+    "match" => "match"
+  ),
+  ApplyFunc(
+    IntConst(
+      -1
+    ) => "@@genericModule@@Revenue@@Document_____sep_____D____id",
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_EXTRACT_REGEX"
+      ) => "@@genericModule@@Revenue@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@Revenue@@__auto__id",
+        FastRegexTok(/((.\s*)?(first|second|third|fourth)\s*-\s*quarter)?\s*(revenues?)/, (0 => "match"), "CASE_INSENSITIVE", 1, 5,"D.text",
+          Project(
+            (
+              "text" => "D.text"
+            ),
+            $Document
+          )
+        )
+      )
+    )
+  )
+);
+
+$Unit =
+Project(
+  (
+    "@@genericModule@@Unit@@__auto__id" => "__auto__id",
+    "@@genericModule@@Unit@@__stmt__type" => "__stmt__type",
+    "@@genericModule@@Unit@@Document_____sep_____D____id" => "Document_____sep_____D____id",
+    "match" => "match"
+  ),
+  ApplyFunc(
+    IntConst(
+      -1
+    ) => "@@genericModule@@Unit@@Document_____sep_____D____id",
+    ApplyFunc(
+      StringConst(
+        "STMT_TYPE_EXTRACT_DICT"
+      ) => "@@genericModule@@Unit@@__stmt__type",
+      ApplyFunc(
+        AutoID()
+ => "@@genericModule@@Unit@@__auto__id",
+        Dictionary("UnitDict" => "Exact" , "D.text", "match",
+          Project(
+            (
+              "text" => "D.text"
+            ),
+            $Document
+          )
+        )
+      )
+    )
+  )
+);
+
+Output: $Revenue, $Unit;

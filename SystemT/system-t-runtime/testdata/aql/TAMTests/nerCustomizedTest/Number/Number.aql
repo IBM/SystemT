@@ -1,0 +1,33 @@
+module Number; 
+
+-------------------------------------------------------------------------------
+-- Remove invalid candidates to get final Decimal, Integer and Number views
+-------------------------------------------------------------------------------
+
+create view IntegerView as
+	(select I.integerview as integerview
+		from IntegerAllCandidate I)
+	minus
+	(select W.match as integerview
+		from WrongInteger2 W);
+
+
+create view Decimal as
+	(select D.decimal as decimal
+		from DecimalAllCandidate D)
+	minus
+	(select W.match as decimal
+		from WrongDecimal W);
+		
+create view Number as
+	(select N.number as number
+		from NumberCandidate N)
+	union all
+	(select P.percentage as number
+		from Percentage P);
+
+
+export view IntegerView;
+export view Decimal;
+export view Number;
+

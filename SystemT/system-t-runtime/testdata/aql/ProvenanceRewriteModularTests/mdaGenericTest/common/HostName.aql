@@ -1,0 +1,81 @@
+module common;
+
+--  ****************************************************************************
+--	@ragunathan June 08 2011
+--	
+--  Annotator Type: 
+--	Base 
+--  
+--	Purpose: 
+--  Extract 'hostnames' from plain text. 
+--  Hostnames are human-readable nicknames that correspond to a network address.
+--		Eg1: myhost, wikipedia, etc 
+--			(domain-name)
+--		Eg2: myhost.com, edison1.edu, etc 
+--			(domain-name followed by top level domain name)
+--		Eg3: wikipedia.org, myhost.ibm.com, edison1.lab1.iitb.com, en.wikipedia.org, etc 
+--			(fully qualified domain name)
+--
+--	Rules:
+--  (dname.)+(tldname),	where 
+--	* dname is the domain name and 'tldname' is the top level domain name 
+--	* dname, tldname are lables of characters a-z A-Z 0-9 and hypen
+--	* dname, tldname cannot begin or end with a hypen
+--	* 1 =< length(dname), length(tldname) <= 63
+--	* tldname must belog to the set of possible top level domain names as specified by IANA (tlds-alpha-by-domain.dict)
+--
+--	Limitations:
+--	1) This Annotator does not detect hostnames of the form in Eg1. This may be addressed in further versions.
+--	   Since hostnames of this form is so generic, we need to detect some context around it to deem it to be a hostname.
+--
+--	References:
+--	http://en.wikipedia.org/wiki/Hostname
+--	http://data.iana.org/TLD/tlds-alpha-by-domain.txt
+--
+-- ****************************************************************************
+
+-- Run the regex without capturing groups as a filtering pass.
+create view HostNameFilter as
+extract 
+	regex /((([a-zA-Z0-9]{1,1}[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]{0,1}[.]{1,1})+)([a-zA-Z0-9]{1,1}[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]{0,1}))/ 
+	 	 on D.text as match	 
+from Document D;
+
+create view HostNameBuildingBlock as 
+select H.hname as hostname, H.tldname as top_level_domain, H.dname as low_level_domain_name
+from 
+(
+	extract 
+		 regex /((([a-zA-Z0-9]{1,1}[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]{0,1}[.]{1,1})+)([a-zA-Z0-9]{1,1}[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]{0,1}))/ 
+	 	 on F.match
+	 	 return	group 1 as hname
+	 	 	and group 2 as dname
+        	and group 4 as tldname 	 	 
+	from HostNameFilter F
+	having 
+		ContainsDict('dicts/tlds-alpha-by-domain.dict', tldname)
+) H ;
+
+create view hostname as 
+select hbb.hostname as hostname,
+hbb.top_level_domain as top_level_domain,
+hbb.low_level_domain_name as low_level_domain_name
+from HostNameBuildingBlock hbb;
+
+-- View used by webaccess rules
+export view hostname;
+
+create view hostnameDetailsInterim as
+select hbb.hostname as hostname_span,
+GetText(hbb.hostname) as hostname_text,
+hbb.top_level_domain as top_level_domainSpan,
+GetText(hbb.top_level_domain) as top_level_domainText,
+hbb.low_level_domain_name as low_level_domain_nameSpan,
+GetText(hbb.low_level_domain_name) as low_level_domain_nameText
+from HostNameBuildingBlock hbb;
+	
+create view HostnameOutput as
+select D.hostname_span as Hostname_span, D.hostname_text as Hostname_text, GetString('Hostname') as field_type
+from hostnameDetailsInterim D;
+
+export view HostnameOutput;

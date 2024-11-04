@@ -1,0 +1,42 @@
+module module2;
+
+-- Import the function via import module
+import module module1;
+
+require document with columns text Text;
+
+
+-- Define the copy of the first input view, then define the second input view
+-- The first view is not output, because we want to make sure that inputs to
+-- table functions don't get compiled away.  Output a copy of the first input
+-- for verification purposes=.
+create view FirstInputViewCopy as
+extract regex /\d+/ on 1 token in D.text as match
+from Document D;
+
+output view FirstInputViewCopy;
+
+
+
+-- Now the function call...
+create view SecondInputView as
+select S.match as spanCol, 'Dummy string' as textCol
+from 
+    (extract regex /[A-Z][a-z]+/ on 1 token in D.text as match
+    from Document D) S;
+
+output view SecondInputView;
+
+-- Note that we vary the calling convention slightly to exercise more code
+create view TabFuncOutput as 
+select T.* from module1.MyTableFunc("module1.FirstInputView", SecondInputView) T;
+
+output view TabFuncOutput;
+
+create view TabFuncOutput2 as 
+select * from module1.MyTableFunc(module1.FirstInputView, SecondInputView) T;
+
+output view TabFuncOutput2;
+
+
+

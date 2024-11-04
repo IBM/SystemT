@@ -1,0 +1,1356 @@
+<?xml version="1.0"?>
+
+<!-- General build file for jars to export to other projects. -->
+<project name="System T" default="default">
+
+	<!-- Read volatile release properties from an external file. -->
+	<property file="${basedir}/release.properties" />
+
+	<!-- Constants go here -->
+	<property name="basedir" value="." />
+	<property name="tmp.dir" value="${basedir}/tmp" />
+
+	<property name="src.dir" value="${basedir}/../src" />
+
+	<property name="core.src.tmp.dir" value="${tmp.dir}/core/src" />
+	<property name="core.bin.tmp.dir" value="${tmp.dir}/core/bin" />
+
+	<property name="test.src.tmp.dir" value="${tmp.dir}/test/src" />
+	<property name="test.bin.tmp.dir" value="${tmp.dir}/test/bin" />
+
+	<property name="resources.dir"
+		value="${basedir}/../../resources" />
+	<!-- <property name="resources.lib.dir" value="${resources.dir}/libs" /> -->
+	<property name="local.lib.dir" value="${basedir}/../lib" />
+
+	<!-- Location of the JavaCC installation -->
+	<property name="javacc.home"
+		location="${basedir}/../../DevelopmentEnvironmentBinaries/biginsights-shared-libraries/lib/javacc-5.0" />
+
+	<!-- Directory containing the AQL source files for W3 local analysis. -->
+	<property name="local.analysis.aql.dir"
+		value="${basedir}/../testdata/aql/w3" />
+
+	<property name="algebra.class.root" value="${basedir}/../bin" />
+
+	<property name="notesrsc.dir"
+		value="${resources.dir}/Notes8Resources/resources" />
+
+	<!-- The jar files for the SimpleRegex library. Currently, the contents 
+		of these jars get packed into the main SystemT jars. -->
+	<property name="simple.regex.jar"
+		value="${local.lib.dir}/SimpleRegex/systemT_regex.jar" />
+	<property name="simple.regex.src.jar"
+		value="${local.lib.dir}/SimpleRegex/systemT_regex_src.jar" />
+
+	<!-- <property name="avatar.algebra.jar.debug" value="avatarAlgebra.jar" 
+		/> <property name="avatar.algebra.jar.nodebug" value="avatarAlgebraNoDBG.jar" 
+		/> -->
+	<property name="systemt.jar" value="systemT.jar" />
+	<property name="systemt.cpp.jar" value="systemT_C++.jar" />
+	<property name="systemt.src.jar" value="systemT_src.jar" />
+
+	<!-- This is the path for SimpleRegex/build -->
+	<property name="simpleregex"
+		value="${basedir}/../../SimpleRegex/build" />
+
+	<!-- This is the path where the auxiliary libraries are stored -->
+	<property name="resources.lib.dir"
+		value="${basedir}/../../DevelopmentEnvironmentBinaries/biginsights-shared-libraries/lib" />
+
+	<!-- This is the path where Hadoop libraries are stored -->
+	<property name="hadoop.lib.dir"
+		value="${basedir}/../../DevelopmentEnvironmentBinaries/ibm-hadoop" />
+
+	<property name="runtimepath" value="${basedir}/../../Runtime" />
+
+	<property name="biginsightsextractorlibrary"
+		value="${basedir}/../../BigInsightsExtractorLibrary" />
+
+	<!-- Set up a timestamp and date for the manifest of the jars we produce -->
+	<tstamp>
+		<format property="release.timestamp"
+			pattern="MMMM dd, yyyy, HH:mm:ss" locale="en,US" />
+	</tstamp>
+
+
+	<!-- Main classpath for compilation, not including source dir -->
+	<path id="build.class.path">
+		<pathelement path="${classpath}" />
+
+		<!-- Apache UIMA. -->
+		<!-- <pathelement location="${local.lib.dir}/uima-2.2.2-fp1/uima-core.jar" 
+			/> -->
+		<pathelement
+			location="${resources.lib.dir}/uima-2.3.0/uima-core.jar" />
+
+		<!-- JUnit; needed to compile classes with JUnit annotations. -->
+		<pathelement
+			location="${resources.lib.dir}/junit-4.4/junit-4.4.jar" />
+
+		<!-- JUnit extensions. -->
+		<pathelement
+			location="${resources.lib.dir}/junit-addons-1.4/junit-addons-1.4.jar" />
+
+		<!-- Apache ant 1.7.0; only used for tar file support. -->
+		<pathelement
+			location="${resources.lib.dir}/ant-1.7.1/ant.jar" />
+
+		<!-- Apache Xerces-J; required by some test cases when compiling with Sun 
+			Java -->
+		<pathelement
+			location="${resources.lib.dir}/misc/xercesImpl.jar" />
+
+		<!-- Apache Commons-Codec; used for Base64 (for UDFs) -->
+		<pathelement
+			location="${resources.lib.dir}/commons-codec-1.4/commons-codec-1.4.jar" />
+
+		<!-- HTML detagging support -->
+		<pathelement
+			location="${resources.lib.dir}/htmlparser-2.0/htmlparser.jar" />
+
+		<!-- Open csv library -->
+		<pathelement
+			location="${resources.lib.dir}/opencsv-5.9/opencsv-5.9.jar" />
+
+		<!-- SimpleRegex library -->
+		<pathelement location="${simple.regex.jar}" />
+
+		<!-- JSON handler library -->
+		<pathelement location="${resources.lib.dir}/JSON4J.jar" />
+
+	</path>
+
+	<!-- Classpath for running tests to ensure that SystemT works without the 
+		optional Jar files. -->
+	<path id="nolibs.class.path">
+		<pathelement location="${systemt.jar}" />
+
+		<pathelement
+			location="${resources.lib.dir}/junit-4.4/junit-4.4.jar" />
+
+	</path>
+
+	<!-- Invokes target jars from simpleRegex and copies jars from SimpleRegex/build 
+		to Runtime/lib/SimpleRegex -->
+	<target name="simpleregex">
+		<echo message="Calling target jars from simpleRegex ---" />
+		<ant antfile="${simpleregex}/build.xml" target="jars"
+			inheritall="false" />
+
+		<copy todir="${local.lib.dir}/SimpleRegex">
+			<fileset dir="${simpleregex}" casesensitive="yes">
+				<include name="**/*.jar" />
+			</fileset>
+		</copy>
+	</target>
+
+	<!-- Generate the javaCC files -->
+	<target name="javacc">
+		<javacc target="${src.dir}/aql/com/ibm/avatar/aql/AQLParser.jj"
+			outputdirectory="${src.dir}/aql/com/ibm/avatar/aql"
+			javacchome="${javacc.home}" />
+		<javacc
+			target="${src.dir}/algebra/com/ibm/avatar/aog/AOGParser.jj"
+			outputdirectory="${src.dir}/algebra/com/ibm/avatar/aog"
+			javacchome="${javacc.home}" />
+
+
+		<!-- Suppress warnings in the generated source. -->
+		<replace
+			file="${src.dir}/aql/com/ibm/avatar/aql/AQLParserTokenManager.java">
+			<replacetoken><![CDATA[/** Token Manager. */
+public class]]></replacetoken>
+			<replacevalue><![CDATA[/** Token Manager. */
+@SuppressWarnings("all")
+public class]]></replacevalue>
+		</replace>
+
+		<replace
+			file="${src.dir}/algebra/com/ibm/avatar/aog/AOGParserTokenManager.java">
+			<replacetoken><![CDATA[/** Token Manager. */
+public class]]></replacetoken>
+			<replacevalue><![CDATA[/** Token Manager. */
+@SuppressWarnings("all")
+public class]]></replacevalue>
+		</replace>
+
+
+	</target>
+
+	<!-- ================================================================== -->
+	<!-- default -->
+	<!-- ================================================================== -->
+	<!-- Build the SystemT Jars and run the Enron test suite on it. -->
+	<!-- ================================================================== -->
+	<target name="default">
+
+		<echo>Building jars...</echo>
+		<antcall target="jars" />
+
+		<!-- Try out the SystemT jar file by running some JUnit tests. -->
+		<echo>Running tests...</echo>
+		<antcall target="enronTests" />
+
+		<!-- Clean up after ourselves. -->
+		<antcall target="cleanTempDirs" />
+
+	</target>
+
+
+	<!-- ================================================================== -->
+	<!-- jarPrep -->
+	<!-- ================================================================== -->
+	<!-- Pack a temporary directory with files for loading into a JAR. -->
+	<!-- ================================================================== -->
+	<target name="jarPrep" depends="simpleregex,javacc">
+		<!-- Clean out the temp directory. -->
+		<delete dir="${tmp.dir}" />
+		<mkdir dir="${tmp.dir}" />
+
+		<!-- Create some subdirectories within the temporary directory. -->
+		<!-- Core SystemT code -->
+		<mkdir dir="${core.src.tmp.dir}" />
+		<mkdir dir="${core.bin.tmp.dir}" />
+
+		<!-- Testing code -->
+		<mkdir dir="${test.src.tmp.dir}" />
+		<mkdir dir="${test.bin.tmp.dir}" />
+
+		<!-- Copy the core SystemT source files into the temporary directory -->
+		<copy todir="${core.src.tmp.dir}">
+			<!-- Algebra source files -->
+			<fileset dir="${src.dir}/algebra" casesensitive="yes">
+				<include name="**/*.java" />
+				<include name="**/*.properties" />
+			</fileset>
+
+			<!-- API source files -->
+			<fileset dir="${src.dir}/api" casesensitive="yes">
+				<include name="**/*.java" />
+				<include name="**/*.properties" />
+			</fileset>
+
+			<!-- Compiler source files -->
+			<fileset dir="${src.dir}/aql" casesensitive="yes">
+				<include name="**/*.java" />
+				<include name="**/*.properties" />
+			</fileset>
+
+			<!-- Provenance/rule refinement source files -->
+			<fileset dir="${src.dir}/provenance" casesensitive="yes">
+				<include name="**/*.java" />
+				<include name="**/*.properties" />
+			</fileset>
+
+			<!-- SPSS-related source files -->
+			<fileset dir="${src.dir}/spss" casesensitive="yes">
+				<include name="**/*.java" />
+				<include name="**/*.properties" />
+			</fileset>
+
+			<!-- Utilities source files -->
+			<!-- API source files -->
+			<fileset dir="${src.dir}/util" casesensitive="yes">
+				<include name="**/*.java" />
+				<include name="**/*.properties" />
+			</fileset>
+		</copy>
+
+		<!-- Copy test case source files into the temp dir. -->
+		<copy todir="${test.src.tmp.dir}">
+			<fileset dir="${src.dir}/test" casesensitive="yes">
+				<include name="**/*.java" />
+				<include name="**/*.properties" />
+			</fileset>
+		</copy>
+	</target>
+
+	<!-- ================================================================== -->
+	<!-- passingTests -->
+	<!-- ================================================================== -->
+	<!-- Builds the SystemT jar and runs a fully passing subset of the -->
+	<!-- full regression test suite on it. -->
+	<!-- Currently does not include UIMA tests. -->
+	<!-- ================================================================== -->
+	<target name="passingTests" depends="jarPrep">
+		<delete dir="${basedir}/junittestoutput" />
+		<mkdir dir="${basedir}/junittestoutput" />
+
+		<!-- Compile the SystemT source files to make JDK 5.0 compatible class 
+			files. -->
+		<javac srcdir="${core.src.tmp.dir}"
+			destdir="${core.bin.tmp.dir}" target="1.5" debug="Yes"
+			encoding="UTF-8">
+			<classpath>
+				<path refid="build.class.path" />
+			</classpath>
+		</javac>
+
+		<!-- Copy over any resource files in the source tree to the binaries tree, 
+			so they'll be included in the jar. -->
+		<copy todir="${core.bin.tmp.dir}">
+			<fileset dir="${core.src.tmp.dir}" casesensitive="yes">
+				<include name="**/*.properties" />
+			</fileset>
+		</copy>
+
+		<!-- Copy the source and class files from the SimpleRegex jar into the 
+			staging areas so that they get included in the SystemT jars. -->
+		<unzip src="${simple.regex.jar}" dest="${core.bin.tmp.dir}" />
+		<unzip src="${simple.regex.src.jar}" dest="${core.src.tmp.dir}" />
+
+		<!-- Build the main SystemT JAR file -->
+		<jar jarfile="${systemt.jar}" compress="yes">
+			<manifest>
+				<section name="versioninfo">
+					<attribute name="Version"
+						value="${major}.${minor}.${point}" />
+					<attribute name="BuildTime" value="${release.timestamp}" />
+				</section>
+			</manifest>
+			<fileset dir="${core.bin.tmp.dir}" />
+		</jar>
+
+		<!-- Build the version of the SystemT JAR file for the C++ API -->
+		<!--<jar jarfile="${systemt.cpp.jar}" compress="yes"> <manifest> <section 
+			name="versioninfo"> <attribute name="Version" value="${major}.${minor}.${point}" 
+			/> <attribute name="BuildTime" value="${release.timestamp}" /> </section> 
+			</manifest> <fileset dir="${core.bin.tmp.dir}"> -->
+		<!-- Exclude files that have dependencies on other libaries -->
+
+		<!-- ant.jar -->
+		<!--<exclude name="**/TarFileScan.class" /> -->
+
+		<!-- JUnit and junitx -->
+		<!-- <exclude name="com/ibm/avatar/algebra/test/**/*.class" /> <exclude 
+			name="**/TestConstants.class" /> <exclude name="**/TestHarness.class" /> 
+			<exclude name="**/RuntimeTestHarness.class" /> -->
+
+		<!-- UIMA -->
+		<!-- <exclude name="**/LWTokenizer.class" /> <exclude name="com/ibm/avatar/algebra/util/uima/**/*.class" 
+			/> <exclude name="com/ibm/avatar/api/AOGUIMAWrapper.class" /> <exclude name="com/ibm/avatar/api/AQLUIMAWrapper.class" 
+			/> <exclude name="com/ibm/avatar/api/IOPESUIMAWrapper.class" /> <exclude 
+			name="com/ibm/avatar/api/RunUIMA.class" /> <exclude name="com/ibm/avatar/logging/UIMALog*.class" 
+			/> <exclude name="com/ibm/avatar/aql/catalog/UIMACatalogEntry.class" /> <exclude 
+			name="**/UIMACatalog*.class" /> <exclude name="**/GenericPosDecoder.class" 
+			/> <exclude name="**/PosDecoder.class" /> -->
+
+		<!-- xercesImpl.jar -->
+		<!--<exclude name="com/ibm/avatar/algebra/util/document/RSSToDocs.class" 
+			/> -->
+
+		<!-- enc-htmlparser.jar -->
+		<!--<exclude name="com/ibm/avatar/algebra/util/html/HTMLParserDetagger.class" 
+			/> </fileset> </jar> -->
+
+		<!-- Create a jar with just the Java source files. -->
+		<jar jarfile="${systemt.src.jar}" compress="yes">
+			<manifest>
+				<section name="versioninfo">
+					<attribute name="Version"
+						value="${major}.${minor}.${point}" />
+					<attribute name="BuildTime" value="${release.timestamp}" />
+				</section>
+			</manifest>
+			<!-- Only include source files. -->
+			<fileset dir="${core.src.tmp.dir}" includes="**/*.java" />
+		</jar>
+
+		<!-- Compile the test cases. -->
+		<javac srcdir="${test.src.tmp.dir}"
+			destdir="${test.bin.tmp.dir}" target="1.5" debug="Yes"
+			encoding="UTF-8">
+			<!-- Add relevant libraries to classpath -->
+			<classpath>
+				<path refid="build.class.path" />
+				<pathelement location="${systemt.jar}" />
+			</classpath>
+		</javac>
+
+		<!-- Try out the core jar file by running some JUnit tests. -->
+		<junit showoutput="yes" printsummary="yes" haltonfailure="no"
+			fork="yes" maxmemory="1024m" errorProperty="tests.failed"
+			failureProperty="tests.failed" dir="${runtimepath}">
+
+			<jvmarg value="-Dfile.encoding=UTF-8" />
+
+			<!-- Tell the tests where to find config files -->
+			<sysproperty key="avatar.test.dir" value="${basedir}/.." />
+
+			<classpath>
+				<pathelement location="${test.bin.tmp.dir}" />
+				<pathelement location="${systemt.jar}" />
+
+				<!-- the following to libraries have to be picked up from DevelopmentEnvironmentBinaries 
+					only in both QA and Dev environment -->
+				<pathelement
+					location="${resources.lib.dir}/commons-codec-1.4/commons-codec-1.4.jar" />
+				<pathelement
+					location="${resources.lib.dir}/htmlparser-2.0/htmlparser.jar" />
+				<pathelement
+					location="${resources.lib.dir}/uima-2.3.0/uima-core.jar" />
+				<pathelement
+					location="${resources.lib.dir}/icu4j-51.2/icu4j-51_2.jar" />
+				<pathelement
+					location="${resources.lib.dir}/multilingual/an_dlt.jar" />
+				<pathelement
+					location="${resources.lib.dir}/multilingual/dlt.jar" />
+				<pathelement
+					location="${resources.lib.dir}/multilingual/tokenizer.jar" />
+				<pathelement
+					location="${resources.lib.dir}/misc/xercesImpl.jar" />
+				<pathelement
+					location="${resources.lib.dir}/junit-4.4/junit-4.4.jar" />
+				<pathelement
+					location="${resources.lib.dir}/junit-addons-1.4.jar" />
+				<pathelement
+					location="${resources.lib.dir}/opencsv-5.9/opencsv-5.9.jar" />
+				<pathelement location="${resources.lib.dir}/JSON4J.jar" />
+			</classpath>
+
+			<formatter type="xml" />
+			<test
+				name="com.ibm.avatar.algebra.test.experimental.AQLRefineTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test
+				name="com.ibm.avatar.algebra.test.experimental.BackwardCompatibilityModuleTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test
+				name="com.ibm.avatar.algebra.test.experimental.CompressedDictTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test
+				name="com.ibm.avatar.algebra.test.experimental.ProvenanceRewriteNonModularTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test
+				name="com.ibm.avatar.algebra.test.experimental.ProvenanceRewriteModularTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.AOGBugTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.AOGGenTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.AOGParserTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.AQLBlogTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.AQLBugTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test
+				name="com.ibm.avatar.algebra.test.stable.AQLCompileErrorNewTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test
+				name="com.ibm.avatar.algebra.test.stable.AQLCompileErrorTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.AQLDocTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.AQLEnronTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.AQLSpockTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.ChunkingTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test
+				name="com.ibm.avatar.algebra.test.stable.ConsolidateNewTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.ConsolidateTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.CraigslistTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.DetaggerTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test
+				name="com.ibm.avatar.algebra.test.stable.DictEntryLangEncoderTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test
+				name="com.ibm.avatar.algebra.test.stable.DictionaryCompilationTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.DocReaderTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.DocScanTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test
+				name="com.ibm.avatar.algebra.test.stable.ExplainModuleTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test
+				name="com.ibm.avatar.algebra.test.stable.ExternalDictionaryTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test
+				name="com.ibm.avatar.algebra.test.stable.ExternalTableTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test
+				name="com.ibm.avatar.algebra.test.stable.ExternalViewTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test
+				name="com.ibm.avatar.algebra.test.stable.ExtractPatternTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.ICD9Tests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.JavaAPITest"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.LotusBuildTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.MashupHubTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.MemoryTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.MergeJoinTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test
+				name="com.ibm.avatar.algebra.test.stable.ModuleCompilationOrderTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test
+				name="com.ibm.avatar.algebra.test.stable.ModuleMetaDataFactoryTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test
+				name="com.ibm.avatar.algebra.test.stable.ModuleMetaDataGenerationTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.MultiCoreTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.NEEvalTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.ProfilerAPITests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.PushModeTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.RegexTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test
+				name="com.ibm.avatar.algebra.test.stable.RequireDocColsTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.RSEJoinTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.ScalarListTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test
+				name="com.ibm.avatar.algebra.test.stable.SetDefaultDictLangTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test
+				name="com.ibm.avatar.algebra.test.stable.SingleModuleTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.SpeedTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.SPSSTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.TAMTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.TeeTest"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test
+				name="com.ibm.avatar.algebra.test.stable.ThreadSafetyExtractTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test
+				name="com.ibm.avatar.algebra.test.stable.ThreadSafetyTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.ToggleTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test
+				name="com.ibm.avatar.algebra.test.stable.TypeInferenceTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.UtilTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.ValidateOGTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.W3LATests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.W3LAPortedTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.stable.WildcardTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.uima.CCAMockupTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.uima.LangWarePOSTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.uima.MultilingualTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.uima.UIMAPearTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test name="com.ibm.avatar.algebra.test.uima.UIMATests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test
+				name="com.ibm.avatar.algebra.test.uima.ThreadsafeUIMATests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+			<test
+				name="com.ibm.avatar.algebra.test.unstable.BatchAQLRunnerTests"
+				todir="${basedir}/junittestoutput" fork="yes" />
+		</junit>
+
+		<junitreport>
+			<fileset dir="${basedir}/junittestoutput">
+				<include name="*.xml" />
+			</fileset>
+			<report format="noframes"
+				todir="${basedir}/junittestoutput/result" />
+		</junitreport>
+		<move
+			file="${basedir}/junittestoutput/result/junit-noframes.html"
+			tofile="${basedir}/junittestoutput/result/result.html"
+			failonerror="no" />
+
+		<!-- Clean up after ourselves. -->
+		<echo>Cleaning up temporary directories...</echo>
+		<delete dir="${tmp.dir}" />
+
+		<fail if="tests.failed">Test failed; see junittestoutput/result/result.html for
+			more info.</fail>
+	</target>
+
+
+
+	<!-- ================================================================== -->
+	<!-- enronTests -->
+	<!-- ================================================================== -->
+	<!-- Runs the AQL Enron test suite on a SystemT JAR file. -->
+	<!-- ================================================================== -->
+	<target name="enronTests">
+
+		<!-- Compile the test cases. -->
+		<javac srcdir="${test.src.tmp.dir}"
+			destdir="${test.bin.tmp.dir}" target="1.5" debug="Yes"
+			encoding="UTF-8">
+			<!-- Add relevant libraries to classpath -->
+			<classpath>
+				<path refid="build.class.path" />
+				<pathelement location="${systemt.jar}" />
+			</classpath>
+		</javac>
+
+		<!-- Try out the core jar file by running some JUnit tests. -->
+		<junit showoutput="yes" printsummary="yes" haltonfailure="no"
+			fork="yes" maxmemory="1024m" errorProperty="tests.failed"
+			failureProperty="tests.failed">
+
+			<!-- Tell the tests where to find config files -->
+			<sysproperty key="avatar.test.dir" value="${basedir}/.." />
+
+			<classpath>
+				<!-- DO NOT use the build classpath; we want to make sure that basic 
+					AQL runs without extra libs. -->
+				<pathelement location="${test.bin.tmp.dir}" />
+				<pathelement location="${systemt.jar}" />
+				<pathelement
+					location="${resources.lib.dir}/junit-4.4/junit-4.4.jar" />
+				<pathelement
+					location="${resources.lib.dir}/junit-addons-1.4/junit-addons-1.4.jar" />
+				<pathelement
+					location="${resources.lib.dir}/commons-codec-1.4/commons-codec-1.4.jar" />
+			</classpath>
+
+			<formatter type="plain" />
+			<test name="com.ibm.avatar.algebra.test.stable.AQLEnronTests"
+				outfile="testOutput" />
+		</junit>
+		<fail if="tests.failed">Test failed; see testOutput.txt for more info.</fail>
+	</target>
+
+
+	<!-- ================================================================== -->
+	<!-- test-qa -->
+	<!-- ================================================================== -->
+	<!-- Runs the entire regression test suite on the systemT jar file. -->
+	<!-- Takes approximately 1 hour. -->
+	<!-- Pick up the systemT.jar and other dependent libraries from -->
+	<!-- opt/ibm/BigInsights/text-analytics dir in QA environment -->
+	<!-- ================================================================== -->
+	<target name="test-qa" depends="jarPrep">
+		<delete dir="${basedir}/junittestoutput" />
+		<mkdir dir="${basedir}/junittestoutput" />
+
+		<!-- adding the ant-contrib jar in classpath to locate the ant task of 
+			type "if" -->
+		<taskdef resource="net/sf/antcontrib/antlib.xml">
+			<classpath>
+				<pathelement
+					location="${resources.lib.dir}/ant-contrib/ant-contrib-1.0b3.jar" />
+			</classpath>
+		</taskdef>
+
+		<!-- Pick up the systemT.jar and other dependent libraries from opt/ibm/BigInsights/text-analytics 
+			dir in QA environment -->
+		<property environment="env" />
+
+		<if>
+			<isset property="env.BIGINSIGHTS_HOME" />
+			<then>
+
+				<property name="systemtbuild.jar"
+					value="${env.BIGINSIGHTS_HOME}/text-analytics/lib/text-analytics/${systemt.jar}" />
+				<property name="htmlparser.jar"
+					value="${env.BIGINSIGHTS_HOME}/text-analytics/lib/htmlparser-2.0/htmlparser.jar" />
+				<property name="uima-core.jar"
+					value="${env.BIGINSIGHTS_HOME}/text-analytics/lib/uima-2.3.0/uima-core.jar" />
+				<property name="icu4j-51_2.jar"
+					value="${env.BIGINSIGHTS_HOME}/lib/icu4j-51.2/icu4j-51_2.jar" />
+				<property name="an_dlt.jar"
+					value="${env.BIGINSIGHTS_HOME}/text-analytics/lib/multilingual/an_dlt.jar" />
+				<property name="dlt.jar"
+					value="${env.BIGINSIGHTS_HOME}/text-analytics/lib/multilingual/dlt.jar" />
+				<property name="tokenizer.jar"
+					value="${env.BIGINSIGHTS_HOME}/text-analytics/lib/multilingual/tokenizer.jar" />
+				<property name="commons-codec-1.4.jar"
+					value="${env.BIGINSIGHTS_HOME}/text-analytics/lib/commons-codec-1.4/commons-codec-1.4.jar" />
+				<property name="opencsv-5.9.jar"
+					value="${env.BIGINSIGHTS_HOME}/text-analytics/lib/opencsv-5.9/opencsv-5.9.jar" />
+				<property name="JSON4J.jar"
+					value="${env.BIGINSIGHTS_HOME}/text-analytics/lib/JSON4J.jar" />
+
+				<echo
+					message="********* Please note below the location of the systemT.jar and other dependent libraries****" />
+				<echo>$${systemtbuild.jar}=${systemtbuild.jar}</echo>
+				<echo>$${htmlparser.jar}=${htmlparser.jar}</echo>
+				<echo>$${uima-core.jar}=${uima-core.jar}</echo>
+				<echo>$${an_dlt.jar}=${an_dlt.jar}</echo>
+				<echo>$${icu4j-51_2.jar}=${icu4j-51_2.jar}</echo>
+				<echo>$${dlt.jar}=${dlt.jar}</echo>
+				<echo>$${tokenizer.jar}=${tokenizer.jar}</echo>
+				<echo>$${commons-codec-1.4.jar}=${commons-codec-1.4.jar}</echo>
+				<echo>$${opencsv-5.9.jar}=${opencsv-5.9.jar}</echo>
+				<echo>$${JSON4J.jar}=${JSON4J.jar}</echo>
+
+			</then>
+
+			<else>
+				<echo
+					message="BIGINSIGHTS_HOME is not set.Please check if you are running the tests as biadmin user." />
+			</else>
+		</if>
+
+
+		<!-- Compile the test cases. -->
+		<javac srcdir="${test.src.tmp.dir}"
+			destdir="${test.bin.tmp.dir}" target="1.5" debug="Yes"
+			encoding="UTF-8">
+			<!-- Add relevant libraries to classpath -->
+			<classpath>
+				<path refid="build.class.path" />
+				<pathelement location="${systemtbuild.jar}" />
+			</classpath>
+		</javac>
+
+		<!-- Run the JUnit tests. -->
+		<echo message="*********Junit runs started****" />
+		<junit showoutput="yes" printsummary="yes" haltonfailure="no"
+			haltonerror="no" fork="yes" maxmemory="1024m"
+			errorProperty="tests.failed" failureProperty="tests.failed"
+			dir="${runtimepath}">
+
+			<jvmarg value="-Dfile.encoding=UTF-8" />
+			<classpath>
+				<pathelement location="${test.bin.tmp.dir}" />
+				<pathelement location="${systemtbuild.jar}" />
+				<pathelement location="${htmlparser.jar}" />
+				<pathelement location="${uima-core.jar}" />
+				<pathelement location="${an_dlt.jar}" />
+				<pathelement location="${icu4j-51_2.jar}" />
+				<pathelement location="${dlt.jar}" />
+				<pathelement location="${tokenizer.jar}" />
+				<pathelement location="${commons-codec-1.4.jar}" />
+				<pathelement location="${opencsv-5.9.jar}" />
+				<pathelement location="${JSON4J.jar}" />
+
+				<!-- the following to libraries have to be picked up from DevelopmentEnvironmentBinaries 
+					in both QA and Dev environment -->
+				<pathelement
+					location="${resources.lib.dir}/misc/xercesImpl.jar" />
+				<pathelement
+					location="${resources.lib.dir}/junit-4.4/junit-4.4.jar" />
+				<pathelement
+					location="${resources.lib.dir}/junit-addons-1.4.jar" />
+
+			</classpath>
+
+			<formatter type="xml" />
+
+			<batchtest todir="${basedir}/junittestoutput" fork="yes">
+				<fileset dir="${test.src.tmp.dir}" includes="**/*Tests.java">
+				</fileset>
+			</batchtest>
+		</junit>
+
+		<junitreport>
+			<fileset dir="${basedir}/junittestoutput">
+				<include name="*.xml" />
+			</fileset>
+			<report format="noframes"
+				todir="${basedir}/junittestoutput/result" />
+		</junitreport>
+		<move
+			file="${basedir}/junittestoutput/result/junit-noframes.html"
+			tofile="${basedir}/junittestoutput/result/result.html"
+			failonerror="no" />
+		<!-- Clean up temp directories -->
+		<echo>Cleaning up temporary directories...</echo>
+		<delete dir="${tmp.dir}" />
+		<fail if="tests.failed">Test failed; see junittestoutput/result/result.html for
+			more info.</fail>
+	</target>
+
+
+	<!-- ================================================================== -->
+	<!-- test-dev -->
+	<!-- ================================================================== -->
+	<!-- Runs the entire regression test suite on a systemT jat file. -->
+	<!-- In Development environment, this target builds the -->
+	<!-- systemT.jar in Runtime/build and runs the junits against it -->
+	<!-- ================================================================== -->
+	<target name="test-dev" depends="jars">
+		<delete dir="${basedir}/junittestoutput" />
+		<mkdir dir="${basedir}/junittestoutput" />
+
+		<!-- Picks up the systemT.jar from Runtime/build (builds it too) and other 
+			dependent libraries from the /DevelopmentEnvironmentBinaries/biginsights-shared-libraries/lib/ -->
+		<property name="systemtbuild.jar"
+			value="${basedir}/${systemt.jar}" />
+		<property name="htmlparser.jar"
+			value="${resources.lib.dir}/htmlparser-2.0/htmlparser.jar" />
+		<property name="uima-core.jar"
+			value="${resources.lib.dir}/uima-2.3.0/uima-core.jar" />
+		<property name="icu4j-51_2.jar"
+			value="${resources.lib.dir}/icu4j-51.2/icu4j-51_2.jar" />
+		<property name="an_dlt.jar"
+			value="${resources.lib.dir}/multilingual/an_dlt.jar" />
+		<property name="dlt.jar"
+			value="${resources.lib.dir}/multilingual/dlt.jar" />
+
+		<!-- Change for Defect 56856: Remove tokenizer.jar from classpath; this 
+			jar breaks a JUnit test in the "test-dev" target if the jar is in the classpath. 
+			<property name="tokenizer.jar" value="${resources.lib.dir}/multilingual/tokenizer.jar"/> 
+			END change for defect -->
+		<property name="commons-codec-1.4.jar"
+			value="${resources.lib.dir}/commons-codec-1.4/commons-codec-1.4.jar" />
+		<property name="opencsv-5.9.jar"
+			value="${resources.lib.dir}/opencsv-5.9/opencsv-5.9.jar" />
+		<property name="JSON4J.jar"
+			value="${resources.lib.dir}/JSON4J.jar" />
+
+		<!-- Regression tests that hit the Hadoop-related APIs need to pull a whole 
+			bunch of other jars into the classpath. -->
+		<property name="hadoop-core.jar"
+			value="${hadoop.lib.dir}/hadoop-core.jar" />
+		<property name="commons-configuration.jar"
+			value="${hadoop.lib.dir}/share/hadoop/common/lib/commons-configuration-1.6.jar" />
+		<property name="commons-logging.jar"
+			value="${hadoop.lib.dir}/share/hadoop/common/lib/commons-logging-1.1.1.jar" />
+		<property name="guava.jar"
+			value="${hadoop.lib.dir}/share/hadoop/common/lib/guava-11.0.2.jar" />
+		<property name="log4j.jar"
+			value="${hadoop.lib.dir}/share/hadoop/common/lib/log4j-1.2.17.jar" />
+		<property name="slf4j-api.jar"
+			value="${hadoop.lib.dir}/share/hadoop/common/lib/slf4j-api-1.7.5.jar" />
+		<property name="slf4j-log4j.jar"
+			value="${hadoop.lib.dir}/share/hadoop/common/lib/slf4j-log4j12-1.7.5.jar" />
+
+
+		<echo
+			message="********* Please note below the location of the systemT.jar and other dependent libraries****" />
+		<echo>$${systemtbuild.jar}=${systemtbuild.jar}</echo>
+		<echo>$${htmlparser.jar}=${htmlparser.jar}</echo>
+		<echo>$${uima-core.jar}=${uima-core.jar}</echo>
+		<echo>$${an_dlt.jar}=${an_dlt.jar}</echo>
+		<echo>$${icu4j-51_2.jar}=${icu4j-51_2.jar}</echo>
+		<echo>$${dlt.jar}=${dlt.jar}</echo>
+
+		<!-- Change for Defect 56856: Remove tokenizer.jar from classpath; this 
+			jar breaks a JUnit test in the "test-dev" target if the jar is in the classpath. 
+			<echo>$${tokenizer.jar}=${tokenizer.jar}</echo> END change for defect -->
+
+		<echo>$${commons-codec-1.4.jar}=${commons-codec-1.4.jar}</echo>
+		<echo>$${opencsv-5.9.jar}=${opencsv-5.9.jar}</echo>
+		<echo>$${JSON4J.jar}=${JSON4J.jar}</echo>
+
+		<echo>Jaql-related jars:</echo>
+		<echo>$${jaql.jar}=${jaql.jar}</echo>
+
+		<echo>Hadoop-related jars:</echo>
+		<echo>$${hadoop-core.jar}=${hadoop-core.jar}</echo>
+		<echo>$${commons-configuration.jar}=${commons-configuration.jar}</echo>
+		<echo>$${commons-logging.jar}=${commons-logging.jar}</echo>
+		<echo>$${guava.jar}=${guava.jar}</echo>
+		<echo>$${log4j.jar}=${log4j.jar}</echo>
+		<echo>$${slf4j-api.jar}=${slf4j-api.jar}</echo>
+		<echo>$${slf4j-log4j.jar}=${slf4j-log4j.jar}</echo>
+
+		<!-- Compile the test cases. -->
+		<javac srcdir="${test.src.tmp.dir}"
+			destdir="${test.bin.tmp.dir}" target="1.5" debug="Yes"
+			encoding="UTF-8">
+			<!-- Add relevant libraries to classpath -->
+			<classpath>
+				<path refid="build.class.path" />
+				<pathelement location="${systemtbuild.jar}" />
+			</classpath>
+		</javac>
+
+		<!-- Run the JUnit tests. -->
+		<echo message="*********Junit runs started****" />
+		<junit showoutput="yes" printsummary="yes" haltonfailure="no"
+			haltonerror="no" fork="yes" maxmemory="1024m"
+			errorProperty="tests.failed" failureProperty="tests.failed"
+			dir="${runtimepath}">
+
+			<jvmarg value="-Dfile.encoding=UTF-8" />
+
+			<!-- Tell the tests where to find config files -->
+			<sysproperty key="avatar.test.dir" value="${basedir}/.." />
+
+			<classpath>
+				<pathelement location="${test.bin.tmp.dir}" />
+				<pathelement location="${systemtbuild.jar}" />
+				<pathelement location="${htmlparser.jar}" />
+				<pathelement location="${uima-core.jar}" />
+				<pathelement location="${an_dlt.jar}" />
+				<pathelement location="${icu4j-51_2.jar}" />
+				<pathelement location="${dlt.jar}" />
+
+				<!-- Change for Defect 56856: Remove tokenizer.jar from classpath; this 
+					jar breaks a JUnit test in the "test-dev" target if the jar is in the classpath. 
+					<pathelement location="${tokenizer.jar}" /> END change for defect -->
+
+				<pathelement location="${commons-codec-1.4.jar}" />
+				<pathelement location="${opencsv-5.9.jar}" />
+				<pathelement location="${JSON4J.jar}" />
+
+				<!-- Some of the UDFs used in certain regression tests require Jaql's 
+					JSON classes. -->
+				<pathelement location="${jaql.jar}" />
+
+				<!-- Additional libraries required for any tests that touch any class 
+					in Hadoop -->
+				<pathelement location="${hadoop-core.jar}" />
+				<pathelement location="${commons-configuration.jar}" />
+				<pathelement location="${commons-logging.jar}" />
+				<pathelement location="${guava.jar}" />
+				<pathelement location="${log4j.jar}" />
+				<pathelement location="${slf4j-api.jar}" />
+				<pathelement location="${slf4j-log4j.jar}" />
+
+				<!-- the following to libraries have to be picked up from DevelopmentEnvironmentBinaries 
+					in both QA and Dev environment -->
+				<pathelement
+					location="${resources.lib.dir}/misc/xercesImpl.jar" />
+				<pathelement
+					location="${resources.lib.dir}/junit-4.4/junit-4.4.jar" />
+				<pathelement
+					location="${resources.lib.dir}/junit-addons-1.4.jar" />
+
+			</classpath>
+
+			<formatter type="xml" />
+
+			<batchtest todir="${basedir}/junittestoutput" fork="yes">
+				<fileset dir="${test.src.tmp.dir}" includes="**/*Tests.java">
+				</fileset>
+			</batchtest>
+		</junit>
+
+		<junitreport>
+			<fileset dir="${basedir}/junittestoutput">
+				<include name="*.xml" />
+			</fileset>
+			<report format="noframes"
+				todir="${basedir}/junittestoutput/result" />
+		</junitreport>
+		<move
+			file="${basedir}/junittestoutput/result/junit-noframes.html"
+			tofile="${basedir}/junittestoutput/result/result.html"
+			failonerror="no" />
+		<!-- Clean up temp directories -->
+		<echo>Cleaning up temporary directories...</echo>
+		<delete dir="${tmp.dir}" />
+		<fail if="tests.failed">Test failed; see junittestoutput/result/result.html for
+			more info.</fail>
+	</target>
+
+	<!-- ================================================================== -->
+	<!-- jars -->
+	<!-- ================================================================== -->
+	<!-- Build a jar (systemT.jar) containing the operators and AQL, -->
+	<!-- compiled with debug symbols. Also builds a jar (systemT_src.jar) -->
+	<!-- After the systemT.jar is built, it runs the tests under BigInsightsExtractorLibrary 
+		and generates pre-compiled module jars -->
+	<!-- Temp directories created by this target are no longer automatically -->
+	<!-- cleaned up, make sure to call cleanTempDirs target after this one -->
+	<!-- ================================================================== -->
+	<target name="jars" depends="jarPrep">
+
+		<!-- Compile the SystemT source files to make JDK 5.0 compatible class 
+			files. -->
+		<javac srcdir="${core.src.tmp.dir}"
+			destdir="${core.bin.tmp.dir}" target="1.5" debug="Yes"
+			encoding="UTF-8">
+			<classpath>
+				<path refid="build.class.path" />
+			</classpath>
+		</javac>
+
+		<!-- Copy over any resource files in the source tree to the binaries tree, 
+			so they'll be included in the jar. -->
+		<copy todir="${core.bin.tmp.dir}">
+			<fileset dir="${core.src.tmp.dir}" casesensitive="yes">
+				<include name="**/*.properties" />
+			</fileset>
+		</copy>
+
+		<!-- Copy the source and class files from the SimpleRegex jar into the 
+			staging areas so that they get included in the SystemT jars. -->
+		<unzip src="${simple.regex.jar}" dest="${core.bin.tmp.dir}" />
+		<unzip src="${simple.regex.src.jar}" dest="${core.src.tmp.dir}" />
+
+		<!-- Build the main SystemT JAR file -->
+		<jar jarfile="${systemt.jar}" compress="yes">
+			<manifest>
+				<section name="versioninfo">
+					<attribute name="Version"
+						value="${major}.${minor}.${point}" />
+					<attribute name="BuildTime" value="${release.timestamp}" />
+				</section>
+			</manifest>
+			<fileset dir="${core.bin.tmp.dir}" />
+		</jar>
+
+		<!-- Build the version of the SystemT JAR file for the C++ API -->
+		<!--<jar jarfile="${systemt.cpp.jar}" compress="yes"> <manifest> <section 
+			name="versioninfo"> <attribute name="Version" value="${major}.${minor}.${point}" 
+			/> <attribute name="BuildTime" value="${release.timestamp}" /> </section> 
+			</manifest> <fileset dir="${core.bin.tmp.dir}"> -->
+		<!-- Exclude files that have dependencies on other libaries -->
+
+		<!-- ant.jar -->
+		<!--<exclude name="**/TarFileScan.class" /> -->
+
+		<!-- JUnit and junitx -->
+		<!-- <exclude name="com/ibm/avatar/algebra/test/**/*.class" /> <exclude 
+			name="**/TestConstants.class" /> <exclude name="**/TestHarness.class" /> 
+			<exclude name="**/RuntimeTestHarness.class" /> -->
+
+		<!-- UIMA -->
+		<!-- <exclude name="**/LWTokenizer.class" /> <exclude name="com/ibm/avatar/algebra/util/uima/**/*.class" 
+			/> <exclude name="com/ibm/avatar/api/AOGUIMAWrapper.class" /> <exclude name="com/ibm/avatar/api/AQLUIMAWrapper.class" 
+			/> <exclude name="com/ibm/avatar/api/IOPESUIMAWrapper.class" /> <exclude 
+			name="com/ibm/avatar/api/RunUIMA.class" /> <exclude name="com/ibm/avatar/logging/UIMALog*.class" 
+			/> <exclude name="com/ibm/avatar/aql/catalog/UIMACatalogEntry.class" /> <exclude 
+			name="**/UIMACatalog*.class" /> <exclude name="**/GenericPosDecoder.class" 
+			/> <exclude name="**/PosDecoder.class" /> -->
+
+		<!-- xercesImpl.jar -->
+		<!--<exclude name="com/ibm/avatar/algebra/util/document/RSSToDocs.class" 
+			/> -->
+
+		<!-- enc-htmlparser.jar -->
+		<!--<exclude name="com/ibm/avatar/algebra/util/html/HTMLParserDetagger.class" 
+			/> </fileset> </jar> -->
+
+		<!-- Create a jar with just the Java source files. -->
+		<jar jarfile="${systemt.src.jar}" compress="yes">
+			<manifest>
+				<section name="versioninfo">
+					<attribute name="Version"
+						value="${major}.${minor}.${point}" />
+					<attribute name="BuildTime" value="${release.timestamp}" />
+				</section>
+			</manifest>
+			<!-- Only include source files. -->
+			<fileset dir="${core.src.tmp.dir}" includes="**/*.java" />
+		</jar>
+
+		<!-- call the target release from BigInsightsExtractorLibrary project -->
+		<echo
+			message="Calling target release from BigInsightsExtractorLibrary project" />
+		<ant antfile="${biginsightsextractorlibrary}/build.xml"
+			target="release" inheritall="false" />
+
+
+		<!-- Try out the SystemT jar file by running some JUnit tests. -->
+		<!-- <echo>Running tests...</echo> -->
+		<!-- <antcall target="enronTests" /> -->
+
+		<!-- Run the UIMA wrapper pear tests. -->
+		<!-- Comment out the pear tests for now as they don't go through. <echo>Running 
+			the UIMA wrapper pear tests</echo> <antcall target="uimaPearTest"> </antcall> -->
+
+		<!-- We now clean up the temp dirs in a separate target -->
+
+		<echo>Build complete!</echo>
+	</target>
+
+
+
+	<!-- Clean up any temporary directories created -->
+	<target name="cleanTempDirs">
+		<!-- Clean up after ourselves. -->
+		<echo>Cleaning up temporary directories...</echo>
+		<delete dir="${tmp.dir}" />
+	</target>
+
+
+	<!-- Compile the ES2 local analysis pipeline into an AOG file. -->
+	<target name="localAnalysisAOG">
+		<!-- Should we use regex strength reduction when compiling? -->
+		<property name="use.rsr" value="true" />
+		<property name="input.aqlfile.encoding" value="UTF-8" />
+		<property name="aogfile.encoding" value="UTF-8" />
+
+		<java classname="com.ibm.avatar.api.CompileAQL"
+			failonerror="true">
+
+			<classpath>
+				<!-- DO NOT use the build classpath; we want to make sure that basic 
+					AQL runs without extra libs. -->
+				<pathelement location="${test.bin.tmp.dir}" />
+				<pathelement location="${systemt.jar}" />
+				<pathelement
+					location="${resources.lib.dir}/htmlparser-2.0-ibm/enc-htmlparser.jar" />
+				<pathelement
+					location="${resources.lib.dir}/junit-4.4/junit-4.4.jar" />
+			</classpath>
+			<arg value="${local.analysis.aql.dir}/localAnalysis.aql" />
+			<arg value="localAnalysis.aog" />
+			<arg value="${use.rsr}" />
+			<arg value="${input.aqlfile.encoding}" />
+			<arg value="${aogfile.encoding}" />
+		</java>
+	</target>
+
+	<!-- The pear tests require a bit of set-up, so they get a separate target. -->
+	<target name="uimaPearTest">
+
+		<!-- Temporary pear test locations -->
+		<property name="pear.tmp.dir" location="${tmp.dir}/pearTests" />
+		<property name="pear.install.dir"
+			location="${pear.tmp.dir}/install" />
+
+		<mkdir dir="${pear.tmp.dir}" />
+		<mkdir dir="${pear.install.dir}" />
+
+		<!-- Copy the pear sources to the temp dir. We copy them so we can add 
+			the SystemT jar -->
+		<copy todir="${pear.tmp.dir}">
+			<fileset dir="../testdata/uima/uimaTests">
+				<include name="personPear/**" />
+			</fileset>
+			<fileset dir="../testdata/uima/uimaTests">
+				<include name="failingPear/**" />
+			</fileset>
+		</copy>
+
+		<!-- Copy the SystemT jar into the pear lib dirs -->
+		<copy todir="${pear.tmp.dir}/personPear/lib">
+			<fileset dir=".">
+				<include name="systemT.jar" />
+			</fileset>
+		</copy>
+
+		<copy todir="${pear.tmp.dir}/failingPear/lib">
+			<fileset dir=".">
+				<include name="systemT.jar" />
+			</fileset>
+		</copy>
+
+		<!-- Call the unit tests. Note that the SystemT jar should not be on the 
+			classpath since one of the things we want to test is message loading, so 
+			the SystemT messages should not be on the system classpath. -->
+		<junit showoutput="yes" printsummary="yes" haltonfailure="no"
+			fork="yes" maxmemory="1024m" errorProperty="tests.failed"
+			failureProperty="tests.failed">
+
+			<sysproperty key="avatar.test.dir" value="${basedir}" />
+
+			<classpath>
+				<pathelement location="${test.bin.tmp.dir}" />
+				<pathelement
+					location="${resources.lib.dir}/junit-4.4/junit-4.4.jar" />
+				<pathelement
+					location="${resources.lib.dir}/uima-2.3.0/uima-core.jar" />
+			</classpath>
+
+			<formatter type="plain" />
+			<test name="com.ibm.avatar.algebra.test.uima.UIMAPearTests"
+				outfile="testOutput" />
+		</junit>
+		<fail if="tests.failed">Test failed; see testOutput.txt for more info.</fail>
+
+
+	</target>
+
+	<!-- Builds a SystemT Jar and then generates Javadoc from it -->
+	<target name="generateJavadoc" depends="jars, cleanTempDirs">
+		<property name="javadocOutDirectory"
+			value="${basedir}/javadocOutDirectory" />
+
+		<delete dir="${javadocOutDirectory}" />
+		<mkdir dir="${javadocOutDirectory}" />
+
+		<property name="javadocPackages"
+			value="com.ibm.avatar.api,com.ibm.avatar.algebra.datamodel,com.ibm.avatar.algebra.scan,
+			com.ibm.avatar.algebra.util,com.ibm.avatar.algebra.util.lang,com.ibm.avatar.aql" />
+
+		<!-- The following set of properties and the pattern set define what packages, 
+			classes, and interfaces will be documented in the public JavaDoc. -->
+		<property name="apiPackageDir"
+			value="**/api/com/ibm/avatar/api" />
+		<property name="datamodelPackageDir"
+			value="**/algebra/com/ibm/avatar/algebra/datamodel" />
+		<property name="utilLangPackageDir"
+			value="**/util/com/ibm/avatar/algebra/util/lang" />
+		<property name="utilDataPackageDir"
+			value="**/util/com/ibm/avatar/algebra/util/data" />
+		<property name="utilTokenizePackageDir"
+			value="**/util/com/ibm/avatar/algebra/util/tokenize" />
+		<property name="aqlCompilePackageDir"
+			value="**/aql/com/ibm/avatar/aql/compiler" />
+		<property name="apiExceptionsPackageDir"
+			value="**/api/com/ibm/avatar/api/exceptions" />
+		<property name="apiTamPackageDir"
+			value="**/api/com/ibm/avatar/api/tam" />
+		<property name="apiUdfPackageDir"
+			value="**/api/com/ibm/avatar/api/udf" />
+
+		<patternset id="javadocFiles">
+			<!-- Public api classes from com.ibm.avatar.api package -->
+			<include name="${apiPackageDir}/Chunker.java" />
+			<include name="${apiPackageDir}/CompilationSummary.java" />
+			<include name="${apiPackageDir}/CompileAQL.java" />
+			<include name="${apiPackageDir}/CompileAQLParams.java" />
+			<include name="${apiPackageDir}/DocReader.java" />
+			<include name="${apiPackageDir}/EmailChunker.java" />
+			<include name="${apiPackageDir}/ExplainModule.java" />
+			<include name="${apiPackageDir}/ExternalTypeInfo.java" />
+			<include name="${apiPackageDir}/ExternalTypeInfoFactory.java" />
+			<include name="${apiPackageDir}/OperatorGraph.java" />
+
+
+			<!-- Public api classes from com.ibm.avatar.algebra.datamodel package -->
+			<include
+				name="${datamodelPackageDir}/AbstractTupleSchema.java" />
+			<include
+				name="${datamodelPackageDir}/DerivedTupleSchema.java" />
+			<include name="${datamodelPackageDir}/FieldCopier.java" />
+			<include name="${datamodelPackageDir}/FieldGetter.java" />
+			<include name="${datamodelPackageDir}/FieldSetter.java" />
+			<include name="${datamodelPackageDir}/FieldType.java" />
+			<include name="${datamodelPackageDir}/ObjectID.java" />
+			<include name="${datamodelPackageDir}/Pair.java" />
+			<include name="${datamodelPackageDir}/ScalarList.java" />
+			<include name="${datamodelPackageDir}/Span.java" />
+			<include name="${datamodelPackageDir}/TLIter.java" />
+			<include name="${datamodelPackageDir}/Text.java" />
+			<include name="${datamodelPackageDir}/TextSetter.java" />
+			<include name="${datamodelPackageDir}/Tuple.java" />
+			<include name="${datamodelPackageDir}/TupleList.java" />
+			<include name="${datamodelPackageDir}/TupleSchema.java" />
+
+			<!-- Public api classes from com.ibm.avatar.algebra.util.lang package -->
+			<include name="${utilLangPackageDir}/LangCode.java" />
+			<include name="${utilDataPackageDir}/StringPairList.java" />
+
+			<!-- Public api classes from com.ibm.avatar.algebra.util.tokenize package -->
+			<include
+				name="${utilTokenizePackageDir}/TokenizerConfig.java" />
+
+			<!-- Public api classes from com.ibm.avatar.aql.compiler package -->
+			<!-- <include name="${aqlCompilePackageDir}/CompilerException.java" /> -->
+
+			<!-- Public api classes from com.ibm.avatar.api.exceptions package -->
+			<include
+				name="${apiExceptionsPackageDir}/CompilerException.java" />
+			<include
+				name="${apiExceptionsPackageDir}/InvalidCompileParamException.java" />
+			<include
+				name="${apiExceptionsPackageDir}/InvalidModuleElementException.java" />
+			<!-- <include name="${apiExceptionsPackageDir}/ModuleLoadException.java" 
+				/> <include name="${apiExceptionsPackageDir}/ModuleNotLoadedException.java" 
+				/> -->
+			<include
+				name="${apiExceptionsPackageDir}/TableUDFException.java" />
+			<include
+				name="${apiExceptionsPackageDir}/TextAnalyticsException.java" />
+
+			<!-- Public api classes from com.ibm.avatar.api.tam package -->
+			<include name="${apiTamPackageDir}/DictionaryMetadata.java" />
+			<include name="${apiTamPackageDir}/FunctionMetadata.java" />
+			<include name="${apiTamPackageDir}/ModuleMetadata.java" />
+			<include
+				name="${apiTamPackageDir}/ModuleMetadataFactory.java" />
+			<include name="${apiTamPackageDir}/MultiModuleMetadata.java" />
+			<include name="${apiTamPackageDir}/Param.java" />
+			<include name="${apiTamPackageDir}/TableMetadata.java" />
+			<include name="${apiTamPackageDir}/ViewMetadata.java" />
+
+			<!-- Public api classes from com.ibm.avatar.api.udf package -->
+			<include name="${apiUdfPackageDir}/TableUDFBase.java" />
+
+		</patternset>
+
+		<echo message="Building accessible Javadoc" />
+		<javadoc maxmemory="256m" packagenames="$javadocPackages"
+			doctitle="Javadoc classes and APIs" author="false"
+			breakiterator="true" destdir="${javadocOutDirectory}"
+			classpath="${basedir}/systemT.jar" classpathref="build.class.path"
+			encoding="UTF-8">
+			<arg
+				line="-J-Xbootclasspath/p:${basedir}/ibmjavadoc.jar -overview ${basedir}/overview.html" />
+			<fileset dir="${src.dir}">
+				<patternset refid="javadocFiles" />
+			</fileset>
+		</javadoc>
+
+		<echo message="Produce navigation files for Javadoc" />
+		<javadoc maxmemory="256m" packagenames="$javadocPackages"
+			doctitle="Javadoc classes and APIs" useexternalfile="yes"
+			doclet="com.ibm.uti.helpnavigation.HelpNavigationGen"
+			docletpath="${local.lib.dir}/ibmJavadocGenerator/helpnavigation.jar:${local.lib.dir}/ibmJavadocGenerator/JLog2.2.2.jar"
+			encoding="UTF-8" breakiterator="true"
+			destdir="${javadocOutDirectory}">
+			<arg line="-overview ${basedir}/overview.html" />
+			<fileset dir="${src.dir}">
+				<patternset refid="javadocFiles" />
+			</fileset>
+		</javadoc>
+
+
+		<zip destfile="${basedir}/doc.zip">
+			<zipfileset dir="${javadocOutDirectory}"
+				includes="com/ibm/avatar/**/*" />
+			<zipfileset dir="${javadocOutDirectory}"
+				includes="resources/**/*" />
+			<zipfileset dir="${javadocOutDirectory}"
+				includes="allclasses-frame.html" />
+			<zipfileset dir="${javadocOutDirectory}"
+				includes="allclasses-noframe.html" />
+			<zipfileset dir="${javadocOutDirectory}"
+				includes="constant-values.html" />
+			<zipfileset dir="${javadocOutDirectory}"
+				includes="deprecated-list.html" />
+
+			<!-- the default generated help-doc.html has a typo in it. Typo fixed 
+				and stored in the basedir for bundling into archive -->
+			<zipfileset dir="${basedir}" includes="help-doc.html" />
+
+			<zipfileset dir="${javadocOutDirectory}"
+				includes="index.html" />
+			<zipfileset dir="${javadocOutDirectory}"
+				includes="index-all.html" />
+			<zipfileset dir="${javadocOutDirectory}"
+				includes="overview-frame.html" />
+			<zipfileset dir="${javadocOutDirectory}"
+				includes="overview-summary.html" />
+			<zipfileset dir="${javadocOutDirectory}"
+				includes="overview-tree.html" />
+			<zipfileset dir="${javadocOutDirectory}"
+				includes="package-list" />
+			<zipfileset dir="${javadocOutDirectory}"
+				includes="plugin_javadoc.xml" />
+			<zipfileset dir="${javadocOutDirectory}"
+				includes="serialized-form.html" />
+		</zip>
+
+		<zip destfile="${basedir}/textanalytics.zip">
+			<zipfileset dir="${basedir}" includes="doc.zip" />
+			<zipfileset dir="${javadocOutDirectory}"
+				includes="tocaprjav.xml" />
+			<zipfileset dir="${javadocOutDirectory}"
+				includes="stylesheet.css" />
+		</zip>
+
+	</target>
+
+</project>

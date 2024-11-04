@@ -1,0 +1,51 @@
+-------------------------------------------------------------------------------
+-- personphone_demo3.aql
+--
+-- Use consolidation to deal with overlapping matches.
+-------------------------------------------------------------------------------
+
+-- Declare a dictionary of first names, to be loaded from an external file
+create dictionary FirstNameDict from file 'firstnames.dict';
+
+-- Find first names, using an exhaustive dictionary.
+create view FirstName as
+extract
+    dictionary FirstNameDict on D.text as name
+from Document D
+having MatchesRegex(/[A-Z][a-z]*/, name);
+
+-- Find phone numbers, using a pair of regular expressions.
+create view PhoneNumber as
+extract 
+    regexes /\+?\([1-9]\d{2}\)\d{3}-\d{4}/ and /\+?[Xx]\.?\d{4,5}/
+    on D.text as num
+from Document D;
+
+-- Find instances of first name followed within 40 chars by phone number
+create view PersonPhoneAll as
+select name.name as person, phone.num as phone,
+       CombineSpans(name.name, phone.num) as personphone
+from FirstName name, PhoneNumber phone
+where Follows(name.name, phone.num, 0, 40);
+
+-------------------------------------------------------------------------------
+-- Change 1: Add some filtering
+create view PersonPhoneFiltered as 
+( select * from PersonPhoneAll A )
+minus
+(
+    select A.*
+    from PersonPhoneAll A, PhoneNumber P
+    where Contains(SpanBetween(A.person, A.phone), P.num)
+);
+
+-------------------------------------------------------------------------------
+-- Change 2: Consolidate to deal with overlap
+
+-- Remove overlap between annotations
+create view PersonPhone as
+select *
+from PersonPhoneFiltered PPF
+consolidate on PPF.personphone using 'ContainedWithin';
+
+output view PersonPhone;

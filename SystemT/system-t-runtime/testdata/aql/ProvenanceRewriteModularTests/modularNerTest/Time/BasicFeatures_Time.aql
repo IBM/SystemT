@@ -1,0 +1,38 @@
+module Time;
+
+import view DocumentDetagged from module InputDocumentProcessor as DocumentText;
+
+import dictionary WorldTimeZones from module Dictionaries as WorldTimeZones;
+import dictionary DaysInAWeekFromGregorianCalendar from module Dictionaries as DaysInAWeekFromGregorianCalendar;
+
+require document with columns
+text Text;
+
+create view FourDigits as
+select
+	R.match as match
+from
+   (extract regex /((20)|(19)|(18)|(17)|(16))[\p{Nd}][\p{Nd}]/ 
+ 		on between 1 and 4 tokens in D.text 
+ 			as match 
+ 	  from DocumentText D) R;
+    
+create view TwoDigitsInterval as
+select
+	R.match as match
+from
+    (extract regex /((0)|(1)|(2)|(3))?[\d]( )*[\-]( )*((0)|(1)|(2)|(3))?[\d]/
+    	on between 1 and 5 tokens in D.text 
+    	as match from DocumentText D) R;
+
+create view TimeZoneDict as
+	select
+		D.match as match
+	from
+		(extract dictionary 'WorldTimeZones' on D.text as match from DocumentText D) D;
+		
+create view WKDay as
+	select
+		D.match as match
+	from
+		(extract dictionary 'DaysInAWeekFromGregorianCalendar' on D.text as match from DocumentText D) D;

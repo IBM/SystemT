@@ -1,0 +1,447 @@
+-------------------------------------------------------------------------------
+-- homepage.aql
+--
+-- Identify homepage from title
+--
+-- This file produces the features needed for the PersonHome, TitleHome, Semlabel annotators
+--
+-- Depends on HTML.aql, dicts/semlabel/fistSegStrings.aql, dicts/semlabel/lastSegStrings.aql
+-- Based on Huiayu's original Java implementation.
+--
+-- Author: Deepak Kadu
+-------------------------------------------------------------------------------
+/*
+create view SegWithID as
+select TS.elem as elem, 0 as id 
+from TitleSeg TS;
+*/
+
+-- Title segments that do not match the SkipTail and SkipHead dictionaries
+create view TitleSegSkip as
+select S.*
+from SegWithID S
+where Not(MatchesDict('homepage/skipTail.dict',S.elem))
+and Not(MatchesDict('homepage/skipHead.dict',S.elem));
+
+create view TitleSegSkipHead as
+select S.*
+from SegWithID S
+where Not(MatchesDict('homepage/skipHead.dict',S.elem));
+
+create view TitleSegSkipTail as
+select S.*
+from SegWithID S
+where Not(MatchesDict('homepage/skipTail.dict',S.elem));
+
+
+-- First segment from TitleSeg
+-- Obtained by selecting all segments and removing those that are preceded by another segment
+create view FirstSeg as
+(select S.elem as elem, S.id as id from SegWithID S)
+minus
+(select S2.elem as elem, S2.id as id from SegWithID S1, SegWithID S2 where FollowsTok(S1.elem, S2.elem, 1,20) and Equals(S1.id, S2.id));
+
+
+-- Last segment from TitleSeg 
+-- Obtained by selecting all segments and removing those that are followed by another segment
+create view LastSeg as
+(select S.elem as elem, S.id as id from SegWithID S)
+minus
+(select S1.elem as elem, S1.id as id from SegWithID S1, SegWithID S2 where FollowsTok(S1.elem, S2.elem, 1, 20) and Equals(S1.id, S2.id));
+
+
+-- Number of title segments
+create view TitleSegCount as
+select Count(S.elem) as num, S.id as id
+from SegWithID S
+group by S.id;
+
+-- A single title segment
+create view TitleSegSingle as
+select S.id
+from TitleSegCount S
+where Equals(S.num, 1);
+
+-- Multiple title segments
+create view TitleSegMultiple as
+select S.id, S.num
+from TitleSegCount S
+where GreaterThan(S.num, 1);
+
+-- Segment before last segment in TitleSegSkip
+create view BeforeLastSeg as
+select SS.*
+from LastSeg LS, TitleSegSkip SS
+where FollowsTok(SS.elem, LS.elem, 0, 1)
+  and Equals(SS.id, LS.id);
+  
+--First segment from the TitleSegSkip
+create view FirstSegSkip as
+(select S.elem as elem, S.id as id from TitleSegSkipHead S)
+minus
+(select S2.elem as elem, S2.id as id from TitleSegSkipHead S1, TitleSegSkipHead S2 where FollowsTok(S1.elem, S2.elem, 1,20) and Equals(S1.id, S2.id));
+
+--last segment from TitleSegSkip
+create view LastSegSkip as
+(select S.elem as elem, S.id as id from TitleSegSkipTail S)
+minus
+(select S1.elem as elem, S1.id as id from TitleSegSkipTail S1, TitleSegSkipTail S2 where FollowsTok(S1.elem, S2.elem, 1, 20) and Equals(S1.id, S2.id));
+
+
+------------------------------------------------------------------
+--                  CHECK SINGLE SEGMENT
+------------------------------------------------------------------
+
+-- Laura: check_single_segment: authorization
+create dictionary AuthorizationDict as (
+	'authorization'
+);
+
+
+-- Segment is of the form: "<X> authorization"
+-- output (name: <X>, label: "inplace")
+create view CheckSingleSegAuthorization as
+select Chomp(CombineSpans(LeftContext(FS.elem,0), E.match)) as elem, FS.id as id, 'inplace' as label
+from
+(
+	extract
+		--FS.elem as elem,
+		--FS.id as id,
+		dictionary 'AuthorizationDict'  with flags 'IgnoreCase' on FS.elem as match
+	from FirstSeg FS
+	-- only if 'authorization' appears at the end
+	--having Equals(GetEnd(match), GetEnd(elem))
+) E, FirstSeg FS, TitleSegSingle TSS
+where Equals(FS.id, TSS.id)
+  and Contains(FS.elem, E.match)
+  and Equals(GetEnd(E.match), GetEnd(FS.elem));
+
+-- Laura: check_single_segment: authorization
+create dictionary SiteDict as (
+	'site'
+);
+
+-- Segment is of the form: "<X> site" and <X> has a single token, 
+-- output (name: <X>, label: "inplace")
+create view CheckSingleSegSiteExtract as
+select FS.elem as elem, FS.id as id, D.match as match
+from  FirstSeg FS,
+	( extract dictionary 'SiteDict' with flags 'IgnoreCase' on FS.elem as match from FirstSeg FS ) D
+-- only if 'site' appears at the end
+where Equals(GetEnd(D.match), GetEnd(FS.elem))
+  and Contains(FS.elem, D.match);
+		
+create view CheckSingleSegSite as
+select S.elem as elem, S.id as id, 'inplace' as label
+from
+(
+	select Chomp(CombineSpans(LeftContext(S.elem,0), S.match)) as elem, S.id as id
+	from CheckSingleSegSiteExtract S
+) S, TitleSegSingle TSS
+-- only if the name is a single token
+-- TODO: add UDF that checks if a span is a single token, 
+--       as the regex check below works only for whitespace tokenisation
+where Not(ContainsRegex(/\s/, S.elem))
+  and Equals(S.id, TSS.id);
+
+
+create view CheckSingleSeg as
+(select S.elem as name, S.id as id, S.label as label from CheckSingleSegAuthorization S)
+union all
+(select S.elem as name, S.id as id, S.label as label from CheckSingleSegSite S);
+
+
+
+------------------------------------------------------------------
+--                  CHECK LAST SEGMENT
+------------------------------------------------------------------
+
+
+-- Last segment matching a last segment pattern 
+-- given by variable _last_seg_pattern in com.ibm.es2.la.annot.TitleHomePatterns.java 
+create view CheckLastSegRegex as
+select LS.*
+from LastSeg LS
+where MatchesRegex(/\A\s*((?:main|home|top|launch|launcher|resource)\s*(?:page|menu)?)\s*\Z/, 'CASE_INSENSITIVE', LS.elem);
+
+
+-- If a single segment, output (name: <LS>, label: 'last_seg') 
+-- where <LS> is the content of the segment (which is also the last segment) 
+create view CheckLastSegRegexSingle as
+select LS.*, 'last_seg' as label
+from CheckLastSegRegex LS, TitleSegSingle TSS
+where Equals(LS.id, TSS.id);
+
+
+-- If multiple segments, output (name: <BLS>, label: 'last_seg') 
+-- where <BLS> is the content of the segment right before the last segment in the TitleSegSkip view
+create view CheckLastSegRegexMultiple as
+select BLS.*, 'last_seg' as label
+from BeforeLastSeg BLS, CheckLastSegRegex LS, TitleSegMultiple TSM
+where Equals(BLS.id, LS.id) 
+  and Equals(LS.id, TSM.id);
+
+-- Final 
+create view CheckLastSegRegexFinal as
+(select S.elem as name, S.id as id, S.label as label from CheckLastSegRegexSingle S)
+union all
+(select S.elem as name, S.id as id, S.label as label from CheckLastSegRegexMultiple S);
+
+
+-- Last segment matching a last segment dictionary entry 
+-- obtained from w3resources\configs\patterns\last_seg_strings.txt 
+create view CheckLastSegDict as
+select LS.*
+from LastSeg LS
+where MatchesDict('LastSegStringsDict', 'Exact', LS.elem);
+-- Laura: %%%STOPPED HERE %%%
+
+-- Deepak: to continue along the lines of the above
+
+
+
+--Last segment matching a last segment dictionary entry 
+--SemLabel entries which are true in TitleHomePatterns.java 
+--obtained from w3resources\configs\patterns\last_seg_strings.txt 
+create view CheckLastSegDictTrue as
+select LS.*
+from LastSeg LS
+where MatchesDict('LastSegStringsBackwardsDict', 'Exact', LS.elem);
+
+--include'localAnalysis/dicts/semlabel/lastSegStrings.aql';
+
+-- If a single segment, output (name: <LS>, label: '') 
+-- where <LS> is the content of the segment (which is also the last segment)
+create view CheckLastSegDictSingle as 
+select LS.*, '' as label
+from LastSeg LS,CheckLastSegDict LSD,TitleSegSingle TSS
+where Equals(LS.id, LSD.id) and Equals(LSD.id, TSS.id);
+
+-- If multiple segments, output (name: <X>, label: '') 
+--where <X> is either the content of the first segment in TitleSegSkip 
+--if the <STRING>.backwards() == true , or the content of the 
+--segment right before the last segment in TitleSegSkip otherwise
+create view CheckLastSegDictMultiple as
+select BLS.*, '' as label
+from BeforeLastSeg BLS, CheckLastSegDict LSD, TitleSegMultiple TSM
+where Equals(BLS.id, LSD.id) and Equals(LSD.id, TSM.id);
+
+create view CheckLastSegDictMultipleTrue as
+select FSS.*, '' as label
+from FirstSegSkip FSS, CheckLastSegDictTrue LSDT, TitleSegMultiple TSM
+where Equals(FSS.id, LSDT.id) and Equals(LSDT.id, TSM.id);
+
+create view CheckLastSegDictFinal as
+(select S.elem as name, S.id as id, S.label as label from CheckLastSegDictSingle S)
+union all
+(select S.elem as name, S.id as id, S.label as label from CheckLastSegDictMultiple S)
+union all
+(select S.elem as name, S.id as id, S.label as label from CheckLastSegDictMultipleTrue S);
+
+------------------------------------------------------------------
+--                  CHECK FIRST SEGMENT
+------------------------------------------------------------------
+
+-- first segment matching a first segment dictionary entry 
+-- obtained from w3resources\configs\patterns\first_seg_strings.txt 
+-- There is only a single dictionary for first_seg_strings.txt  
+-- because there is no entity from first_seg_strings.txt
+-- file which is true in the Java code from the SemLabel enum.
+create view CheckFirstSegDict as
+select FS.*
+from FirstSeg FS
+where MatchesDict('FirstSegStringsDict', 'Exact', FS.elem);
+
+-- If a single segment, output (name: <FS>, label: '') 
+-- where <FS> is the content of the segment (which is also the first segment)
+create view CheckFirstSegDictSingle as 
+select FS.*, '' as label
+from FirstSeg FS,CheckFirstSegDict FSD,TitleSegSingle TSS 
+where Equals(FS.id, FSD.id) and Equals(FSD.id, TSS.id);
+
+-- If multiple segments, output (name: <X>, label: '') 
+-- where <X> is either the content of the segment right after the first segment  
+-- in TitleSegSkip if the <STRING>.backwards() == true 
+-- or the content of the last segment in TitleSegSkip otherwise
+create view CheckFirstSegDictMultiple as
+select LSS.*, '' as label
+from LastSegSkip LSS, CheckFirstSegDict FSD, TitleSegMultiple TSM
+where Equals(LSS.id, FSD.id) and Equals(FSD.id, TSM.id);
+
+
+create view CheckFirstSegDictFinal as
+(select S.elem as name, S.id as id, S.label as label from CheckFirstSegDictSingle S)
+union all
+(select S.elem as name, S.id as id, S.label as label from CheckFirstSegDictMultiple S);
+
+
+-- first segment matching a first segment pattern 
+-- given by variable _first_seg_pattern in com.ibm.es2.la.annot.TitleHomePatterns.java 
+--output (name: <LS>, label:�first_seg�) where <LS> is the content of the last segment in TitleSegSkip 
+create view CheckFirstSegRegex as
+select LSS.elem as name, LSS.id as id, 'first_seg' as label
+from LastSegSkip LSS,FirstSeg FS
+where MatchesRegex(/^\s*(Main Page|MainPage)\s*$/, 'CASE_INSENSITIVE', FS.elem)
+  and Equals(LSS.id, FS.id);
+
+-- first segment matching a first segment hr pattern 
+-- given by variable _first_seg_hr_pattern in com.ibm.es2.la.annot.TitleHomePatterns.java 
+--output (name: <G1>, label:��) where <G1> is the content of group 1 matched by the pattern
+/*
+create view CheckFirstSegHRRegex as
+select S.name as name, S.id as id,'' as label
+from(
+	extract
+		FS.id as id,
+		regex /You and IBM (\w+.*)/ on FS.elem
+		return group 1 as name
+		from FirstSeg FS
+)S;
+*/
+create view CheckFirstSegHRRegex as
+select E.name as name, FS.id as id,'' as label
+from FirstSeg FS,
+	 (extract regex /You and IBM (\w+.*)/ on FS.elem return group 1 as name from FirstSeg FS) E
+where Contains(FS.elem, E.name);
+
+
+-- If multiple segments, and first segment in TitleSeg is a single token
+-- output (name: <LS>, label:�LQ�) where <LS> is the last segment in TitleSegSkip
+create view CheckFirstSegLQ as 
+select LSS.elem as name, LSS.id as id, 'LQ' as label
+from LastSegSkip LSS,FirstSeg FS, TitleSegMultiple TSM 
+where Not(ContainsRegex(/\s+/, FS.elem))
+  and Equals(LSS.id, FS.id) and Equals(FS.id, TSM.id);
+
+------------------------------------------------------------------
+--                  CHECK EACH SEGMENT
+------------------------------------------------------------------
+
+-- User profile pattern
+create dictionary UserProfileDict as ('user profile');
+
+create view CheckEachSegUserProfile as
+select TS.*, 'is_person' as  label
+from SegWithID TS
+where MatchesDict('UserProfileDict', TS.elem);
+
+
+
+--inplace regex for each segment
+--output (name:<LS>, label:�inplace�)
+-- Laura: test that LastSegSkip comes after TitleSeg for all 3 views below 
+-- Laura: probably need to change the join condition into GreaterThan(GetBegin(LS.elem), GetEnd(TS.elem))
+create view CheckEachSegInplaceRegex1 as
+select LSS.*, 'inplace' as  label
+from LastSegSkip LSS,SegWithID TS,LastSeg LS
+where MatchesRegex(/\b(?:Welcome to)\s+\b(.{2,}(?<!'s?))(?:'s?)? (?:Intranet\s*(?:Home(?:\s*Page)?|(?:Info|Web|Information)\s*(?:Site|Page)|(?:Portal|login)\s*(?:Site|Page)?|Resource page)?|(?:w3\s+|Intranet\s+)?(?:Home(?:\s*Page)?|(?:Info|Web|Intranet|Information)\s*(?:Site|Page)|(?:Portal|login)\s*(?:Site|Page)?|Resource page|Information Center)|Public Files|User Profile)\W*\Z/, 'CASE_INSENSITIVE', TS.elem)
+  and Not(Equals(TS.elem,LS.elem))
+  and Equals(LSS.id, TS.id) and Equals(TS.id, LS.id);
+
+--inplace regex for each segment
+--output (name:<LS>, label:�inplace�) 
+create view CheckEachSegInplaceRegex2 as
+select LSS.*, 'inplace' as  label
+from LastSegSkip LSS, SegWithID TS, LastSeg LS
+where MatchesRegex(/\b((?:Getting Started(?: (?:with|using|on))?)|(?:(?:Intranet\s*(?:Home(?:\s*Page)?|(?:Info|Web|Information)\s*(?:Site|Page)|(?:Portal|login)\s*(?:Site|Page)?|Resource page)?|(?:w3\s+|Intranet\s+)?(?:Home(?:\s*Page)?|(?:Info|Web|Intranet|Information)\s*(?:Site|Page)|(?:Portal|login)\s*(?:Site|Page)?|Resource page|Information Center)|Public Files|User Profile) (?:of|for)|Welcome to|Launch))\s+\b(.{2,}(?<!\W))[\W\d]*\Z/, 'CASE_INSENSITIVE', TS.elem)
+  and Not(Equals(TS.elem,LS.elem))
+  and Equals(LSS.id, TS.id) and Equals(TS.id, LS.id);
+
+--inplace regex for each segment
+--output (name:<LS>, label:�inplace�) 
+create view CheckEachSegInplaceRegex3 as
+select LSS.*, 'inplace' as  label
+from LastSegSkip LSS, SegWithID TS, LastSeg LS
+where  MatchesRegex(/\A\W*(.{2,}(?<!'s?|w3|intranet))(?:'s?)? (?:Intranet\s*(?:Home(?:\s*Page)?|(?:Info|Web|Information)\s*(?:Site|Page)|(?:Portal|login)\s*(?:Site|Page)?|Resource page)?|(?:w3\s+|Intranet\s+)?(?:Home(?:\s*Page)?|(?:Info|Web|Intranet|Information)\s*(?:Site|Page)|(?:Portal|login)\s*(?:Site|Page)?|Resource page|Information Center)|Public Files|User Profile)\W*\Z/, 'CASE_INSENSITIVE', TS.elem)
+  and Not(Equals(TS.elem,LS.elem))
+  and Equals(LSS.id, TS.id) and Equals(TS.id, LS.id);
+
+create view CheckEachSegment as 
+(select S.elem as elem, S.id as id, 'inplace' as label from CheckEachSegInplaceRegex1 S)
+union all
+(select S.elem as elem, S.id as id, 'inplace' as label from CheckEachSegInplaceRegex2 S)
+union all
+(select S.elem as elem, S.id as id, 'inplace' as label from CheckEachSegInplaceRegex3 S);
+
+--TitleSeg segments which equals the last seg
+create view CheckEachSegmentLastSeg as
+select TS.*
+from SegWithID TS, LastSeg LS
+where Equals(TS.elem,LS.elem)
+  and Equals(TS.id, LS.id);
+
+--inplace regex for each segment
+--output (name: <G1>, label:�inplace�) where <G1> group 1 matched in TitleSeg 
+create view CheckEachSegmentinplacepattern1 as
+select S.name as elem, CESLS.id as id, 'inplace' as label
+from(
+	extract 
+		regex /\b(?:Welcome to)\s+\b(.{2,}(?<!'s?))(?:'s?)? (?:Intranet\s*(?:Home(?:\s*Page)?|(?:Info|Web|Information)\s*(?:Site|Page)|(?:Portal|login)\s*(?:Site|Page)?|Resource page)?|(?:w3\s+|Intranet\s+)?(?:Home(?:\s*Page)?|(?:Info|Web|Intranet|Information)\s*(?:Site|Page)|(?:Portal|login)\s*(?:Site|Page)?|Resource page|Information Center)|Public Files|User Profile)\W*\Z/ 
+			with flags 'CASE_INSENSITIVE'
+			on S.elem
+			return group 1 as name
+	from CheckEachSegmentLastSeg S
+) S, CheckEachSegmentLastSeg CESLS
+where Contains(CESLS.elem, S.name);
+
+--inplace regex for each segment
+--output (name: <G1>, label:�inplace�) where <G1> group 1 matched in TitleSeg 
+create view CheckEachSegmentinplacepattern2 as
+select S.name as elem, CESLS.id as id, 'inplace' as label
+from
+(
+	extract
+		regex /\b(?:(?:Getting Started(?: (?:with|using|on))?)|(?:(?:Intranet\s*(?:Home(?:\s*Page)?|(?:Info|Web|Information)\s*(?:Site|Page)|(?:Portal|login)\s*(?:Site|Page)?|Resource page)?|(?:w3\s+|Intranet\s+)?(?:Home(?:\s*Page)?|(?:Info|Web|Intranet|Information)\s*(?:Site|Page)|(?:Portal|login)\s*(?:Site|Page)?|Resource page|Information Center)|Public Files|User Profile) (?:of|for)|Welcome to|Launch))\s+\b(.{2,}(?<!\W))[\W\d]*\Z/ 
+			with flags 'CASE_INSENSITIVE'
+			on S.elem
+			return group 1 as name
+	from CheckEachSegmentLastSeg S
+) S, CheckEachSegmentLastSeg CESLS
+where Contains(CESLS.elem, S.name);
+
+--inplace regex for each segment
+--output (name: <G1>, label:�inplace�) where <G1> group 1 matched in TitleSeg 
+create view CheckEachSegmentinplacepattern3 as
+select S.name as elem, CESLS.id as id, 'inplace' as label
+from
+(
+	extract 
+		regex /\A\W*(.{2,}(?<!'s?|w3|intranet))(?:'s?)? (?:Intranet\s*(?:Home(?:\s*Page)?|(?:Info|Web|Information)\s*(?:Site|Page)|(?:Portal|login)\s*(?:Site|Page)?|Resource page)?|(?:w3\s+|Intranet\s+)?(?:Home(?:\s*Page)?|(?:Info|Web|Intranet|Information)\s*(?:Site|Page)|(?:Portal|login)\s*(?:Site|Page)?|Resource page|Information Center)|Public Files|User Profile)\W*\Z/ 
+			with flags 'CASE_INSENSITIVE'
+			on CESLS.elem
+			return group 1 as name
+	from CheckEachSegmentLastSeg CESLS
+) S, CheckEachSegmentLastSeg CESLS
+where Contains(CESLS.elem, S.name);
+
+--combining all the patterns
+create view CheckEachSegmentPattern as
+(select S.elem as elem, S.id as id, 'person' as label from CheckEachSegUserProfile S)
+union all
+(select S.elem as elem, S.id as id, 'inplace' as label from CheckEachSegmentinplacepattern1 S)
+union all
+(select S.elem as elem, S.id as id, 'inplace' as label from CheckEachSegmentinplacepattern2 S)
+union all
+(select S.elem as elem, S.id as id, 'inplace' as label from CheckEachSegmentinplacepattern3 S);
+
+-- Final 
+create view CheckEachSegFinalAll as
+(select * from CheckEachSegment)
+union all
+(select * from CheckEachSegmentPattern);
+
+
+
+-- Retain the first match from all found
+/*
+create view CheckEachSegFinal as
+select C.*
+from CheckEachSegFinalAll C
+order by C.id, C.elem
+limit 1;
+*/
+create view CheckEachSegFinal as
+(select S.elem as name, S.id as id, S.label as label from CheckEachSegFinalAll S)
+minus
+(select S2.elem as name, S2.id as id, S2.label as label from CheckEachSegFinalAll S1, CheckEachSegFinalAll S2 where FollowsTok(S1.elem, S2.elem, 1,20) and Equals(S1.id, S2.id));
+
