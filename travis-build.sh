@@ -33,4 +33,4 @@ fi
 echo "maven_goal: ${maven_goal}"
 echo "skip_test: ${skip_test}"
 
-mvn clean ${maven_goal} -B -f SystemT/pom.xml -s build/maven-settings.xml -Dmaven.test.skip=${skip_test} -Dartifactory.username=${ARTIFACTORY_USERNAME} -Dartifactory.password=${ARTIFACTORY_API_KEY}
+mvn clean ${maven_goal} -B -f SystemT/pom.xml -s build/maven-settings.xml -Dmaven.test.skip=${skip_test} -Dossrh.username=${OSSRH_USERNAME} -Dossrh.password=${OSSRH_PASSWORD} -Dgpg.passphrase=${GPG_PASSPHRASE}
