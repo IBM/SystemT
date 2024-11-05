@@ -30,6 +30,11 @@ else
     skip_test=true
 fi
 
+# we'll do 5.0.0 release manually, and then configure travis releases as a followup
+maven_goal=install
+echo "maven_goal: ${maven_goal}"
+echo "skip_test: ${skip_test}"
+
 echo "maven_goal: ${maven_goal}"
 echo "skip_test: ${skip_test}"
 
