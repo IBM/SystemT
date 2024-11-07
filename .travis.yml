@@ -1,28 +1,44 @@
 language: java
+# jdk:
+# - oraclejdk8
+
+# The test requires more than 6GB memory, so Ubuntu 14.04 VM which has 7.5 GB memory is used.
+# See https://docs.travis-ci.com/user/reference/overview/#Virtualisation-Environment-vs-Operating-System
 sudo: required
 dist: trusty
+
+# addons:
+#   apt:
+#     packages:
+#     - rpm
+
 cache:
   directories:
-  - "${HOME}/.m2/repository"
+  - ${HOME}/.m2/repository
+
 env:
   global:
+  # Use this to avoid a issue when installing IBM JDK (LAX installer issue)
   - PS1=">"
   - secure: owMsm1kH8KWMoHQI57Ul0RCDlEp9aFZKdO1Cw2gWxVVKSRLLPQBs2pbH/PRDYsUuZNZqRej34H8OKdQl79D0bIPvRjHYpSqKnrtJkatIqFUbdQfodwxzApd8eswe+KHkJlAPR7N4gs+x+aWAUhAQRIFR/34e5XbTBad6jOdfDZMt4XYmw8SwIdQ++HmFFkh5WeffAaEtgULw3sXdv5iwOI0wx8oeVsGGNZsag8+rAYWHqlQaxDsdJFGecD4aRrjC+YsTKomtsQu2+MNy1SU05hJy1EhCws9rF4V6qKcc3O+kYKPKzruEpybchA1FPYOYrhCpJGBaAlKL6Zx0cyD04yJ22tgHJ/taVZA2nuPdsS2A/Ky+LvhYDtV8T5NABVnWERBzW3RLrGw+NvutJ+5cWt0v5KPkzcyPs70KscD+xUwt9oUcrNnHx1zwcDexcRHgjhxkDLTm9kCwSF+Df4u8gOy2T2CiEpnWAD2fr2sSVKmXOWX82S4i/tWaMEKHVnTjl1RMLJzVk7A19xlL2Uw9aTb/MYaLR9Th/HsEyg/eSIRWlFpHRd1x03dwgD1xMwnGzvWfc+UNuxjT/s3e9wteE5OaIH55NiODCA8MNASuKtmq5/jrVOV1wlZ5glDf4JDmOTBqfi3akCI3mnmLupB2COU5p9ywk5O0Vk8D3xv+kCQ=
+
 before_install:
-- openssl aes-256-cbc -K $encrypted_2e6b62dd1b86_key -iv $encrypted_2e6b62dd1b86_iv
-  -in key.gpg.enc -out key.gpg -d
-- wget https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.6.3/apache-maven-3.6.3-bin.tar.gz
-- tar -zxvf apache-maven-3.6.3-bin.tar.gz
-- export MAVEN_HOME=`pwd`"/apache-maven-3.6.3"
-- export PATH=${MAVEN_HOME}/bin:$PATH
-- wget https://public.dhe.ibm.com/ibmdl/export/pub/systems/cloud/runtimes/java/8.0.8.30/linux/x86_64/ibm-java-sdk-8.0-8.30-linux-x86_64.tgz
-- tar -zxvf ibm-java-sdk-8.0-8.30-linux-x86_64.tgz
-- export JAVA_HOME=ibm-java-x86_64-80
-- export PATH=${JAVA_HOME}/bin:${PATH}
-- mvn --version
-- java -version
+# Install IBM JDK8 and compatible maven version
+  - wget https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.6.3/apache-maven-3.6.3-bin.tar.gz
+  - tar -zxvf apache-maven-3.6.3-bin.tar.gz
+  - export MAVEN_HOME=`pwd`"/apache-maven-3.6.3"
+  - export PATH=${MAVEN_HOME}/bin:$PATH
+  - wget https://public.dhe.ibm.com/ibmdl/export/pub/systems/cloud/runtimes/java/8.0.8.30/linux/x86_64/ibm-java-sdk-8.0-8.30-linux-x86_64.tgz
+  - tar -zxvf ibm-java-sdk-8.0-8.30-linux-x86_64.tgz
+  - export JAVA_HOME=ibm-java-x86_64-80
+  - export PATH=${JAVA_HOME}/bin:${PATH}
+  - mvn --version
+  - java -version
+
 install: true
+
 script:
 - travis_wait 120 bash ./travis-build.sh
+
 before_cache:
 - rm -fr ${HOME}/.m2/repository/com/ibm/ai/systemt
