@@ -35,4 +35,4 @@ maven_goal=install
 echo "maven_goal: ${maven_goal}"
 echo "skip_test: ${skip_test}"
 
-mvn clean ${maven_goal} -B -f SystemT/pom.xml -s build/maven-settings.xml -Dmaven.test.skip=${skip_test} -Dossrh.password=${OSSRH_PASSWORD} -Dgpg.passphrase=${GPG_PASSPHRASE} #-Dossrh.username=${OSSRH_USERNAME} -Dossrh.password=${OSSRH_PASSWORD} -Dgpg.passphrase=${GPG_PASSPHRASE}
+mvn clean ${maven_goal} -B -f SystemT/pom.xml -s build/maven-settings.xml -Dmaven.test.skip=${skip_test} -Dgpg.passphrase=${GPG_PASSPHRASE} #-Dossrh.username=${OSSRH_USERNAME} -Dossrh.password=${OSSRH_PASSWORD} -Dgpg.passphrase=${GPG_PASSPHRASE}
