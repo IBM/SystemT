@@ -18,9 +18,9 @@ To understand AQL and create AQL models, refer to the following resources:
 
 ## AQL Reference 
 
-- See [AQL concepts](./ana_txtan_extractors.html) to understand the main concepts in AQL.
-- See [Guideline for writing AQL](./aql-guidelines.html) for examples of most commonly used AQL statements.
-- The [Complete AQL Reference Manual](./aql-ref-guide.html) contains the syntax and examples for all AQL statements.
+- See [AQL concepts](./ana_txtan_extractors.md) to understand the main concepts in AQL.
+- See [Guideline for writing AQL](./aql-guidelines.md) for examples of most commonly used AQL statements.
+- The [Complete AQL Reference Manual](./aql-ref-guide.md) contains the syntax and examples for all AQL statements.
 
 ## Creating AQL Models
 You create AQL models either by:
