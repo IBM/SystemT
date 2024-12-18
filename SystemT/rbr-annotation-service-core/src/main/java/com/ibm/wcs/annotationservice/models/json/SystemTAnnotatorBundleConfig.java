@@ -94,15 +94,15 @@ public class SystemTAnnotatorBundleConfig extends AnnotatorBundleConfig {
     // convert old enum strings to classnames for backward compatibility. to be remove on next major
     // version
     if (tokenizer.toUpperCase().equals("MULTILINGUAL")) {
-      this.tokenizer = "com.ibm.avatar.algebra.util.tokenize.TokenizerConfig$Multilingual";
+      this.tokenizer = "com.ibm.avatar.algebra.util.tokenize.Multilingual";
     }
 
     else if (tokenizer.toUpperCase().equals("MULTILINGUAL_UNIVERSAL")) {
-      this.tokenizer = "com.ibm.avatar.algebra.util.tokenize.TokenizerConfig$MultilingualUniversal";
+      this.tokenizer = "com.ibm.avatar.algebra.util.tokenize.MultilingualUniversal";
     }
 
     else if (tokenizer.toUpperCase().equals("MULTILINGUALUNIVERSAL")) {
-      this.tokenizer = "com.ibm.avatar.algebra.util.tokenize.TokenizerConfig$MultilingualUniversal";
+      this.tokenizer = "com.ibm.avatar.algebra.util.tokenize.MultilingualUniversal";
     }
   }
 
