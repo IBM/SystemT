@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="../img/favicon.ico">
+        <title>Improving AQL performance - MkLorum</title>
+        <link href="../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../css/fontawesome.min.css" rel="stylesheet">
+        <link href="../css/brands.min.css" rel="stylesheet">
+        <link href="../css/solid.min.css" rel="stylesheet">
+        <link href="../css/v4-font-face.min.css" rel="stylesheet">
+        <link href="../css/base.css" rel="stylesheet">
+        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
+        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="..">MkLorum</a>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+
+                    <ul class="nav navbar-nav ms-md-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#improving-the-performance-of-an-extractor" class="nav-link">Improving the performance of an extractor</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#overview-of-aql-runtime-performance-best-practices" class="nav-link">Overview of AQL runtime performance best practices</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#step-1-know-your-performance-requirements" class="nav-link">Step 1: Know your performance requirements</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#step-2-follow-the-optimization-guidelines-for-writing-aql" class="nav-link">Step 2: Follow the optimization guidelines for writing AQL</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-bs-level="2"><a href="#follow-the-guidelines-for-regular-expressions" class="nav-link">Follow the guidelines for regular expressions</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#use-the-and-keyword-instead-of-the-and-built-in-predicate" class="nav-link">Use the and keyword instead of the And() built-in predicate</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#avoid-cartesian-products" class="nav-link">Avoid Cartesian products</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#avoid-udfs-as-join-predicates" class="nav-link">Avoid UDFs as join predicates</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#be-careful-when-using-or-as-a-join-predicate" class="nav-link">Be careful when using Or() as a join predicate</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#use-the-consolidate-clause-wisely" class="nav-link">Use the consolidate clause wisely</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#define-common-subpatterns-explicitly" class="nav-link">Define common subpatterns explicitly</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#step-3-focus-on-writing-aql-instead-of-tuning-performance" class="nav-link">Step 3: Focus on writing AQL instead of tuning performance</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#step-4-use-the-aql-profiler-to-find-problems" class="nav-link">Step 4: Use the AQL Profiler to find problems</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#step-5-tune-the-most-expensive-view-first" class="nav-link">Step 5: Tune the most expensive view first</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#examples-solving-common-performance-problems" class="nav-link">Examples: Solving common performance problems</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-bs-level="2"><a href="#did-not-follow-an-aql-guideline-correct-the-aql" class="nav-link">Did not follow an AQL guideline: Correct the AQL</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#optimizer-could-not-apply-an-optimization-refine-the-view-definition-so-that-optimization-applies" class="nav-link">Optimizer could not apply an optimization: Refine the view definition so that optimization applies</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#optimizer-made-a-mistake-rework-the-view-definition-to-force-the-correct-plan" class="nav-link">Optimizer made a mistake: Rework the view definition to force the correct plan</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#no-efficient-plan-exists-reevaluate-the-semantics-of-the-extractor" class="nav-link">No efficient plan exists: Reevaluate the semantics of the extractor</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="improving-the-performance-of-an-extractor">Improving the performance of an extractor</h1>
+<p>{:.no_toc}</p>
+<ul>
+<li>Table of Contents
+{:toc}</li>
+</ul>
+<h1 id="overview-of-aql-runtime-performance-best-practices">Overview of AQL runtime performance best practices</h1>
+<p>Since you can usually rely on the SystemT Optimizer to choose an efficient execution plan, 
+writing high-performance extraction rules with SystemT is relatively simple. 
+But there are a few best practices that are important to follow to maximize the effectiveness of your extractor.</p>
+<ul>
+<li><strong><a href="#step-1-know-your-performance-requirements">Step 1: Know your performance requirements</a></strong><br />
+To begin, you must understand what level of throughput is acceptable for your application and what kinds of documents the extractor will examine.</li>
+<li><strong><a href="#step-2-follow-the-optimization-guidelines-for-writing-aql">Step 2: Follow the optimization guidelines for writing AQL</a></strong><br />
+These guidelines describe the ways that you can write your AQL code so that the Optimizer has the most latitude in choosing efficient execution plans.</li>
+<li><strong><a href="#step-3-focus-on-writing-aql-instead-of-tuning-performance">Step 3: Focus on writing AQL instead of tuning performance</a></strong><br />
+You can usually rely on the Optimizer to choose an efficient plan, so do not tune performance while you are writing AQL.</li>
+<li><strong><a href="#step-4-use-the-aql-profiler-to-find-problems">Step 4: Use the AQL Profiler to find problems</a></strong><br />
+Sometimes there is not an efficient plan for the particular semantics of the AQL expressions. The AQL Profiler that is included in the public API is designed to help you quickly zero in on these problem cases.</li>
+<li><strong><a href="#step-5-tune-the-most-expensive-view-first">Step 5: Tune the most expensive view first</a></strong><br />
+Focus your performance tuning on views that are heavily represented in the AQL Profiler output.</li>
+<li><strong><a href="#extract-perform-ex">Examples: Solving common performance problems</a></strong><br />
+The main goal of tuning an AQL view is to identify the reason that the view is running slowly, and then fix that problem.</li>
+</ul>
+<h1 id="step-1-know-your-performance-requirements">Step 1: Know your performance requirements</h1>
+<p>To begin, you must understand what level of throughput is acceptable for your application and what kinds of documents the extractor will examine.</p>
+<p>These requirements determine how precisely you need to follow the other best practices.</p>
+<ul>
+<li>
+<p><strong>Different text applications have vastly different performance requirements.</strong></p>
+<p>For example, if you are conducting a sentiment analysis on a small, fixed set of call-center records, you will probably require a throughput of only kilobytes per second. However, if you are analyzing over 10% of a Twitter feed, a throughput of megabytes per second might be needed.</p>
+</li>
+<li>
+<p><strong>Performance tuning takes time and makes the code more difficult to maintain.</strong></p>
+<p>Performance tuning is expensive and takes much time and effort. Changing the structure of the rules for performance adds extra effort later because it makes the AQL rules harder to maintain.</p>
+</li>
+<li>
+<p><strong>If possible, try to design the solution so that high throughput is not needed.</strong></p>
+<p>The best way to tune for performance is to make tuning unnecessary. In many cases, you can achieve this goal just by looking closely at the true requirements of the application. Evaluate the goal of your extractor, and try to determine the most efficient method by answering a few important questions:</p>
+</li>
+<li>
+<p>At what rate is the new data coming in?</p>
+</li>
+<li>Is it possible to increase the level of parallelism (for example, by increasing the number of mappers per node, or the size of the cluster) instead of tuning the single-threaded performance?</li>
+<li>Can the results of an extraction be saved for later?</li>
+</ul>
+<h1 id="step-2-follow-the-optimization-guidelines-for-writing-aql">Step 2: Follow the optimization guidelines for writing AQL</h1>
+<p>These guidelines describe the ways that you can write your AQL code so that the Optimizer has the most latitude in choosing efficient execution plans.</p>
+<p>These optimization guidelines can help you to reduce AQL code errors, and improve the performance of your extractor.</p>
+<h2 id="follow-the-guidelines-for-regular-expressions">Follow the guidelines for regular expressions</h2>
+<p>Write SimpleRegex compatible expressions and use token constraints in your regular expression extraction specifications whenever possible. Write regular expressions that are simple and easy to understand, and do not use regular expressions as a substitute for dictionaries.</p>
+<h3 id="write-simpleregex-compatible-expressions">Write SimpleRegex compatible expressions</h3>
+<p>There are two regular expression engines that are used by the SystemT runtime component, JavaRegex and SimpleRegex. The JavaRegex engine is slower but allows for more advanced processing. The SimpleRegex engine is a fast regular expression evaluation engine, but it supports a slightly limited class of expressions. Since the SimpleRegex engine is more scalable than the Java™ engine, a good practice is to try to write SimpleRegex compatible expressions whenever possible. 
+The SystemT engine automatically chooses the suitable Regex engine for running a given regular expression.</p>
+<p>Most expressions are SimpleRegex compatible. Supported SimpleRegex constructs are:</p>
+<ul>
+<li>Alternation</li>
+<li>Sequence</li>
+<li>Parentheses</li>
+<li>Basic quantifiers such as +, *, ?, {m,n}</li>
+<li>Unicode character classes</li>
+<li>Standard built-ins such as \d, \s</li>
+</ul>
+<p>A regular expression is not SimpleRegex compatible if at least one of the following is true:</p>
+<ul>
+<li>Uses one of these flags: CANON_EQ, COMMENTS, LITERAL, UNICODE, UNIX_LINES</li>
+<li>Contains look-ahead or look-behind constructs such as \A, \Z, \b, ^, $, (?=X), (?!X), (?&lt;=X), or (?&lt;!X)</li>
+<li>Contains capturing groups (such as, <code>return group 1</code> as …)</li>
+</ul>
+<p>The AQL compiler flags a warning for all of the regular expressions that are not SimpleRegex compatible. If you encounter such a warning, try to determine if you can simplify your regular expression to make it SimpleRegex compatible while you preserve the semantics of your extractor.</p>
+<p>As an example, consider this statement for extracting numbers with optional decimals. The statement uses the <code>\b</code> regex character class to indicate that the regular expression matching must be done on tokens considering word boundaries.</p>
+<pre><code class="language-bash">create view NumberUsingJavaRegex as
+extract regex /\b\d+(\.\d+)?\b/
+on D.text as match
+from Document D;
+</code></pre>
+<p>This statement matches stand-alone numbers such as 10.99 in the phrase “I purchased something for 10.99 USD”, but it does not match numbers that are part of a larger word such as ‘20’ in the phrase “I just bought something for USD20”.</p>
+<p>Alternatively, you can rewrite the regular expression to use SimpleRegex:</p>
+<pre><code class="language-bash">create view NumberUsingSimpleRegex as
+extract regex /\d+(\.\d+)?/
+on D.text as match
+from Document D;
+</code></pre>
+<p>In this example, the word boundary <code>\b</code> characters were removed. As a result, the regular expression is compatible with the SimpleRegex engine, but the semantics are slightly different from the original. The new expression <code>\d+(\.\d+)?</code> matches both the numbers '10.99’ and ‘20’ from the phrases “I purchased something for 10.99 USD”, and "I just bought something for USD20”. However, the transformation might be acceptable if the number ‘20’ is not needed in the final result (perhaps due to other constructs used downstream in parts of your AQL code). If it is important to preserve the semantics of the original regular expression while using a regular expression that conforms to SimpleRegex, consider specifying token constraints in the <code>extract regex</code> statement.</p>
+<h3 id="use-token-constraints-in-your-regular-expression-extraction-specifications">Use token constraints in your regular expression extraction specifications</h3>
+<p>The Optimizer performs Shared Regular Expression Matching (SRM), an optimization in which regular expressions that are both on token boundaries and are SimpleRegex compatible are grouped together and evaluated in one pass over the input text. Generally, this means that all regular expressions in the group are evaluated in approximately the same amount of time that it takes to individually evaluate the slowest expression in the group.</p>
+<p>When possible, write your regular expression to take advantage of the SRM optimization. The regular expression should be SimpleRegex compatible and have token constraints. Consider the same AQL example that uses a regular expression with word boundary character class <code>\b</code>, and without token specifications:</p>
+<pre><code class="language-bash">create view Number as 
+extract regex /\b\d+(\.\d+)?\b/
+on D.text as match
+from Document D;
+</code></pre>
+<p>Here is how you would rewrite it to both make it SimpleRegex compatible (by removing the <code>\b</code>) and amenable to SRM (by introducing the token constraints):</p>
+<pre><code class="language-bash">create view NumberSRM as
+extract regex /\d+(\.\d+)?/ on between 1 and 3 tokens
+in D.text as match
+from Document D;
+</code></pre>
+<h3 id="use-dictionaries-instead-of-regular-expressions">Use dictionaries instead of regular expressions</h3>
+<p>An AQL regular expression that matches a list of terms is usually more expensive to evaluate than the equivalent <code>extract dictionary</code> statement. 
+The dictionary evaluator in SystemT is specialized for the particular case of matching large dictionaries of strings on token boundaries, 
+and the SystemT Optimizer generates plans that evaluate multiple <code>extract dictionary</code> statements in a single pass. Therefore, when you are looking for mentions of a set of words or phrases, avoid writing your extractor as a regular expression consisting of an alternation of terms and use a dictionary instead.</p>
+<p>For example, if you are looking for mentions of currencies, do not write your statement using a regular expression:</p>
+<pre><code class="language-bash">-- Not recommended; long alternation of terms should be a dictionary
+create view Currency as
+extract regex /dollar|sterling pound|cent|euro|rupee|yen|peso|rouble/ 
+        with flags 'CASE_INSENSITIVE'
+    on D.text as match
+from Document D;
+</code></pre>
+<p>In addition to the performance-related reasons for using a dictionary, this example also illustrates some additional common mistakes associated with misusing regular expressions:</p>
+<ul>
+<li>The <code>extract regex</code> statement will output matches that start or end in the middle of a word. For example, the statement will match the first four letters of the word “<strong>cent</strong>er”.</li>
+<li>The expression will match the phrase <code>sterling pound</code> only if there is exactly one space character between the two words. If the words <code>sterling</code> and <code>pound</code> appear in a document separated by a carriage return or by two spaces, the regular expression will not produce a match.</li>
+</ul>
+<p>Instead, this rewrite uses a dictionary of terms. Using a dictionary increases performance, makes the AQL code easier to maintain and understand, and the code will be less prone to bugs:</p>
+<pre><code class="language-bash">-- Use a dictionary to match against same list of terms
+create dictionary CurrencyDict as('dollar', 'sterling pound', 'cent', 'euro', 'rupee', 'yen', 'peso', 'rouble'); 
+
+create view CurrencyAlternative as
+extract dictionary 'CurrencyDict' 
+    on D.text as match
+from Document D; 
+</code></pre>
+<h3 id="write-short-and-simple-regular-expressions">Write short and simple regular expressions</h3>
+<p>Avoid writing long and complex regular expressions. In general, long and complex regular expressions make AQL code harder to understand and maintain. This type of regular expressions can be expensive to evaluate. Consider breaking a complex regular expression into smaller expressions, and combining the results of these expressions by using other AQL constructs.</p>
+<p>In the following example, a regular expression is used to identify one to three capitalized words. The words are separated by white space.</p>
+<pre><code class="language-bash">-- Not recommended; long, complex regular expressions are difficult to maintain
+create view OneToThreeCapitalizedWords as
+extract regex /[A-Z][a-z]+(\s+[A-Z][a-z]+){0,2}/ 
+    on D.text as match
+from Document D;
+</code></pre>
+<p>The regular expression becomes harder to maintain as the subexpression for the capitalized word becomes more complex; for example, if it was to support Unicode characters. For ease of maintenance and understanding, you can break down the expression into smaller components. For example, you can use one regular expression with token constraints to find a single capitalized word, and the <code>extract blocks</code> statement to find blocks of one to three capitalized words:</p>
+<pre><code class="language-bash">-- Same extraction in an efficient, simple manner
+
+-- A single capitalized word
+create view CapitalizedWords as
+ extract
+    regex /[A-Z][a-z]+/
+        on 1 token in D.text
+        as word
+from Document D;
+
+-- One to three capitalized words - rewritten avoiding use of long, complex regular expression
+create view OneToThreeCapitalizedWordsBetter as
+ extract blocks
+    with count between 1 and 3
+    and separation 0 tokens
+    on CW.word as capswords
+from CapitalizedWords CW
+consolidate on capswords;
+</code></pre>
+<p>Alternatively, you can also use <code>extract pattern</code> to find one to three capitalized words to make it even simpler and more efficient:</p>
+<pre><code class="language-bash">-- Same extraction using the 'extract pattern' statement 
+
+-- One to three capitalized words
+create view OneToThreeCapitalizedWordsBest as
+ extract pattern &lt;CW.word&gt;{1,3}
+    as capswords
+from CapitalizedWords CW
+consolidate on capswords;
+</code></pre>
+<p>In both cases, since the <code>extract blocks</code> and <code>extract pattern</code> statements return all matches, including the matches that overlap, the <code>consolidate</code> clause was used to remove the matches that overlap.</p>
+<h3 id="watch-for-regular-expressions-that-match-an-empty-string">Watch for regular expressions that match an empty string</h3>
+<p>A match on an empty string can create a serious performance problem. These matches can lead to unexpected results from your downstream AQL code, as well as performance bottlenecks (as many spans and tuples need to be created to hold the result).</p>
+<p>Here is an example of a regular expression that involves an alternation of two optional subexpressions, one of which is an empty string:</p>
+<pre><code class="language-bash">-- Not recommended; the regular expression matches the empty string
+create view OptionalCurrency as
+extract 
+    regex /(\$)?|(US dollar)?/ 
+    on D.text as match 
+from Document D;
+</code></pre>
+<p>In general, regular expressions that match the empty string are programming errors. The longer the regular expression, the easier it is to make such a mistake. Try to keep your regular expressions as simple as permitted by the semantics of your extractor by following the other regular expression guidelines.</p>
+<h2 id="use-the-and-keyword-instead-of-the-and-built-in-predicate">Use the <code>and</code> keyword instead of the And() built-in predicate</h2>
+<p>The Optimizer does not attempt to optimize the order of evaluation of the arguments to the And() predicate.</p>
+<p>A rule that uses the And() built-in predicate such as:</p>
+<pre><code class="language-bash">select ...
+from ...
+where And(predicate1, predicate2);
+</code></pre>
+<p>often runs considerably slower than the same rule in the form of:</p>
+<pre><code class="language-bash">select ...
+from ...
+where predicate1 and predicate2;
+</code></pre>
+<p>When possible, use the SQL-style <code>and</code> keyword instead of the And() predicate.</p>
+<h2 id="avoid-cartesian-products">Avoid Cartesian products</h2>
+<p>Most often, the result of a Cartesian product is very large and takes a long time to compute.</p>
+<p>Cartesian products occur in statements where the <code>from</code> clause contains two or more views or tables, but some of them are not connected through a join predicate (in the <code>where</code> clause). The presence of a Cartesian product usually indicates that the join predicate was omitted by mistake. This is a problem that can be easily corrected.</p>
+<p>In the most simple case, a Cartesian product occurs when there are two views in the <code>from</code> clause, but there is no join predicate relating these two views in the <code>where</code> clause, as in this example:</p>
+<pre><code class="language-bash">create dictionary PersonDict
+as ('Bill Clinton', 'Barack Obama', 'George Bush');
+
+create view Person as
+extract dictionary 'PersonDict'
+on D.text as name
+from Document D;
+
+-- Extract U.S. phone numbers of the form '123-456-7890'
+create view Phone as
+extract regex /\p{Nd}{3}\-\p{Nd}{3}\-\p{Nd}{4}/
+on between 1 and 10 tokens 
+in D.text as number 
+from Document D;
+
+--Cartesian product between Person and Phone
+create view PersonPhone as 
+select P.name, Ph.number 
+from Person P, Phone Ph;
+</code></pre>
+<p>The semantics of this AQL rule is to compute the set of all pairs of <code>Person.name</code> and <code>Phone.number</code> in the input document. If the input contains 1000 persons and 1000 phone numbers, the result consists of 1,000,000 pairs. However, it is unlikely that the intent was to compute all of these pairs. The intent likely was to find pairs of person and phone in close proximity of each other. This goal can be easily accomplished by adding a <code>Follows</code> or <code>FollowsTok</code> join predicate to the <code>where</code> clause:</p>
+<pre><code class="language-bash">--With a join predicate
+create view PersonPhoneJoinWithPredicate as 
+select P.name, Ph.number 
+from Person P, Phone Ph
+where FollowsTok(P.name, Ph.number, 0, 5);
+</code></pre>
+<p>Cartesian products can also occur in more subtle cases. In this example, the <code>from</code> clause consists of four views. However, only A and B, and respectively C and D, are connected by a join predicate. Hence, a Cartesian product occurs between the result of joining A and B and the result of joining C and D.</p>
+<pre><code class="language-bash">create dictionary FirstNamesUSA
+as ('Bill', 'George', 'Barack');
+
+create dictionary FirstNamesUK
+as ('William', 'George', 'Stewart');
+
+create dictionary LastNamesUSA
+as ('Clinton', 'Bush', 'Obama');
+
+create dictionary LastNamesUK
+as ('Clinton', 'Johnson', 'Vaughan');
+
+create view A as
+extract dictionary 'FirstNamesUSA'
+on D.text as match
+from Document D;
+
+create view B as
+extract dictionary 'FirstNamesUK'
+on D.text as match
+from Document D;
+
+create view C as
+extract dictionary 'LastNamesUSA'
+on D.text as match
+from Document D;
+
+create view D as
+extract dictionary 'LastNamesUK'
+on D.text as match
+from Document D;
+
+--Cartesian product between A joined with B and C joined with D
+create view ABCD as 
+select A.* 
+from A, B, C, D 
+where Equals(A.match ,B.match) 
+   and Equals(C.match ,D.match);
+</code></pre>
+<p>To avoid Cartesian products, every view in the <code>from</code> clause must be connected to each of the other views by a single join predicate, or a chain of join predicates. These are some cases when Cartesian products between two views do not introduce a performance bottleneck. There are cases when the result of the Cartesian product is small, regardless of the documents on which you are using your extractor. An example is when both views contain at most a few tuples, or when one of the views has exactly one tuple. For example, the view <code>Document</code> always has a single tuple; therefore, AQL rules that involve a Cartesian product with the view <code>Document</code> (for example, to add additional metadata to an output view) do not introduce performance bottlenecks.</p>
+<pre><code class="language-bash">create dictionary MergerDict
+as ('merged', 'Merged', 'merger', 'Merger', 'merging', 'Merging', 'M&amp;A');
+
+create view Merger as
+extract dictionary 'MergerDict'
+on D.text as mergeMention
+from Document D;
+
+--Cartesian product with the view Document is OK assuming the view Document has a single tuple or small number of tuples of dates
+create view DocumentMergerDate as 
+select M.*, D.text as mergerDate 
+from Document D, Merger M;
+</code></pre>
+<h2 id="avoid-udfs-as-join-predicates">Avoid UDFs as join predicates</h2>
+<p>When the Optimizer is not aware of the semantics of the UDF implementation, it must generate a Nested Loops Join plan that examines every input span. If possible, express the semantics of the UDF in a way that allows the Optimizer to suggest performance improvements.</p>
+<p>A user-defined function (UDF) can appear in the <code>where</code> clause of an AQL <code>select</code> statement as a join predicate. A join predicate is a predicate that determines whether a given pair of tuples from the <code>from</code> clause appears in the output of the view. Consider the following example, which identifies matching pairs of capitalized and lowercase names:</p>
+<pre><code class="language-bash">create dictionary CapsNameDict as
+('GEORGE', 'SAMUEL', 'PETER', 'HENRY');
+
+create dictionary LowNameDict as
+('samuel', 'johnson', 'david', 'george');
+
+create function equalsNormalized (p1 Span, p2 Span)
+return Boolean
+external_name 'udfjars/udfs.jar:com.ibm.test.udfs.MiscScalarFunc!equalsNormalized'
+language java
+deterministic
+return null on null input;
+
+create function normalize (p1 String)
+return String
+external_name 'udfjars/udfs.jar:com.ibm.test.udfs.MiscScalarFunc!normalize'
+language java
+deterministic
+return null on null input;
+
+create view CapsName as
+extract 
+    dictionary 'CapsNameDict' 
+    on D.text as match
+from Document D;
+
+create view LowName as
+extract 
+    dictionary 'LowNameDict' 
+    on D.text as match
+from Document D;
+</code></pre>
+<p>In this case, equalsNormalized() is a UDF function that takes as input two spans, and checks if their normalized values are equal.</p>
+<pre><code class="language-bash">-- 'equalsNormalized' is a UDF that checks normalized values
+create view EqualNormalizedName as 
+select C.match as caps, L.match as low 
+from CapsName C, LowName L 
+where equalsNormalized(L.match, C.match); 
+</code></pre>
+<p>When a <code>select</code> statement uses a UDF in this way, the Optimizer has limited options for compiling the statement. Since the Optimizer is not aware of the semantics of the UDF implementation, it must generate a Nested Loops Join plan that examines every pair of <code>CapsName</code> and <code>LowName</code>. As both of these views grow larger, this execution plan can become very expensive.</p>
+<p>In some cases, it might be possible to express the same semantics in a different way. In the case of the current example, the semantics of this rule can be obtained by using a slightly different UDF, called normalize(), that takes as input a span and outputs the normalized value of the span, together with the built-in predicate Equals() to compare the two normalized values:</p>
+<pre><code class="language-bash">-- Avoid UDF as the join predicate and use built-in function to establish equality
+-- 'normalize', however is a UDF itself, although not used as the join predicate 
+create view EqualNormalizedNameNoUDF as 
+select C.match as caps, L.match as low 
+from CapsName C, LowName L 
+where Equals(normalize(GetString(L.match)), normalize(GetString(C.match)));
+</code></pre>
+<p>In this case, the Optimizer can choose the <code>Hash Join</code> algorithm to implement the semantics of the Equals() predicate, which is usually much faster than using a Nested Loops Join operator.</p>
+<h2 id="be-careful-when-using-or-as-a-join-predicate">Be careful when using Or() as a join predicate</h2>
+<p>The Or() built-in predicate is run with the Nested Loops Join operator. In most cases, if the inputs are supported by faster join operators, it is worthwhile to split the statement into a union of multiple smaller statements.</p>
+<p>For example, consider this sample where Or() is run with the Nested Loops Join operator:</p>
+<pre><code class="language-bash">-- not recommended
+create view CandidatesAll as
+select C.*
+from A, C
+where Or( FollowsTok(A.match, C.match, 0, 5), 
+          FollowsTok(C.match, A.match, 0, 5) );
+</code></pre>
+<p>The view can be rewritten into the union of two statements, which gives the Optimizer the opportunity to use faster join algorithms such as Adjacent Join or Sort Merge Join to implement the FollowsTok() predicates in the two <code>select</code> statements to allow the run time to employ faster join algorithms internally::</p>
+<pre><code class="language-bash">-- above view, rewritten to use union all statement
+create view CandidatesAllBetter as
+(
+    select C.*
+    from A, C
+    where FollowsTok(A.match, C.match, 0, 5)
+)
+union all
+(
+    select C.*
+    from A, C
+    where FollowsTok(C.match, A.match, 0, 5)
+);
+</code></pre>
+<h2 id="use-the-consolidate-clause-wisely">Use the consolidate clause wisely</h2>
+<p>The <code>consolidate</code> clause is designed to be used at specific points in the extractor where overlapping matches are no longer useful downstream and can be removed. Do not use the <code>consolidate</code> clause more often than necessary, but take advantage of its functionality to filter your data.</p>
+<p>If you use the <code>consolidate</code> too often your AQL code can be harder to maintain since each and every statement has an extra <code>consolidate</code> clause. You can also introduce redundant sorting operations, although this is not usually a performance bottleneck.</p>
+<p>More importantly, if you do not use the <code>consolidate</code> clause enough, a large number of intermediate results can be carried downstream from one view to another, past the point where they are technically required by the semantics of the extractor. A large amount of unnecessary intermediate results can increase the memory footprint and slow extractor throughput.</p>
+<p>In this example that illustrates this point, the extractor is looking for mentions of department names, followed within a single token by a phone number.</p>
+<pre><code class="language-bash">-- A single capitalized word
+create view UppercaseWord as
+ extract
+    regex /[A-Z]+/
+        on 1 token in D.text
+        as word
+from Document D;
+
+-- Find organization names as one to two capitalized words
+create view Department as
+ extract blocks
+    with count between 1 and 2
+    and separation 0 tokens
+    on UW.word as name
+from UppercaseWord UW;
+
+-- Find phone numbers of the form xxx-xxxx
+create view Phone as
+    extract regex /d{3}-\d{4}/ on 3 tokens in D.text as number
+    from Document D;
+
+-- Find candidate pairs of department and phone, where the department is followed within one token by the phone
+create view DepartmentPhoneAll as 
+    select D.name, P.number, CombineSpans(D.name, P.number) as deptWithPhone
+    from Department D, Phone P
+    where FollowsTok(D.name, P.number, 1, 1);
+
+-- Consolidate to remove overlapping mentions followed within one token by the phone
+create view DepartmentPhone as 
+    select DP.*
+    from DepartmentPhoneAll DP
+    consolidate on DP.deptWithPhone;
+</code></pre>
+<p>An extremely simplistic Department extractor of a single uppercase word or two uppercase words can help illustrate the issues. Assume the following sample is the input text:</p>
+<pre><code class="language-bash">CS DEPARTMENT 555-1234 
+REGISTRAR 555-5678
+</code></pre>
+<p>The semantics of the <code>extract block</code> statement are to return all mentions, including those mentions that overlap. Therefore, the view <code>Department</code> contains the following spans:</p>
+<pre><code class="language-bash">CS 
+DEPARTMENT 
+CS DEPARTMENT 
+REGISTRAR 
+</code></pre>
+<p>The result of <code>DepartmentPhoneAll</code> is:</p>
+<pre><code class="language-bash">CS, 555-1234 
+DEPARTMENT, 555-1234 
+CS DEPARTMENT, 555-1234 
+REGISTRAR, 555-5678
+
+</code></pre>
+<p>Notice that <code>DepartmentPhoneAll</code> contains overlapping matches that are unnecessary at this point in the extractor. Those overlapping matches are removed by the <code>consolidate</code> clause in the final view <code>DepartmentPhone</code>, to return this desired result:</p>
+<pre><code class="language-bash">CS DEPARTMENT, 555-1234 
+REGISTRAR, 555-5678
+</code></pre>
+<p>However, the overlapping <code>Department</code> spans are probably not needed when you are looking for corresponding phones. The spans result in extra tuples that are created in <code>DepartmentPhoneAll</code> and carried downstream to <code>DepartmentPhone</code>, only to be removed later on by the <code>consolidate</code> clause. Instead, the unnecessary Department partial spans can be removed earlier, in the Department view:</p>
+<pre><code class="language-bash">-- Find organization names as one to two capitalized words
+-- Use the consolidate clause to remove unnecessary overlapping mentions
+create view DepartmentBetter as
+ extract blocks
+    with count between 1 and 2
+    and separation 0 tokens
+    on UW.word as name
+from UppercaseWord UW
+consolidate on name;
+</code></pre>
+<h2 id="define-common-subpatterns-explicitly">Define common subpatterns explicitly</h2>
+<p>Define a view that computes common subpatterns so that the Optimizer does not need to evaluate each pattern.</p>
+<p>The Optimizer does not currently perform common subexpression elimination for sequence pattern expressions. Therefore, subpatterns that appear in multiple pattern expressions are evaluated multiple times. In the following code snippet, the common subexpression <code>&lt;A.match&gt; &lt;B.match&gt;</code> is computed twice; once for <code>Pattern1</code>, and again for <code>Pattern2</code>:</p>
+<pre><code class="language-bash">-- subexpression &lt;A.match&gt; and &lt;B.match&gt; computed twice;  once each for Pattern1 and Pattern2
+create view Pattern1 as
+extract pattern &lt;A.match&gt; &lt;B.match&gt; &lt;C.match&gt; as match
+from A A, B B, C C;
+
+create view Pattern2 as
+extract pattern &lt;A.match&gt; &lt;B.match&gt; &lt;D.match&gt; as match
+from A A, B B, D D;
+</code></pre>
+<p>If you find that multiples of your pattern expressions use a common subpattern, it is a good idea to explicitly define a view that computes the subpattern. You can reuse that view when you define the larger patterns. In this example, the view <code>SubPattern</code> explicitly defines <code>&lt;A.match&gt; &lt;B.match&gt;</code>. This is then reused in the views <code>Pattern1</code> and <code>Pattern2</code>:</p>
+<pre><code class="language-bash">-- Define the common subpattern in its own view so not computed unnecessarily
+create view SubPattern as
+extract pattern &lt;A.match&gt; &lt;B.match&gt; as match
+from A A, B B;
+
+create view Pattern3 as
+extract pattern &lt;AB.match&gt; &lt;C.match&gt; as match
+from SubPattern AB, C C;
+
+create view Pattern4 as
+extract pattern &lt;AB.match&gt; &lt;D.match&gt; as match
+from SubPattern AB, D D;
+</code></pre>
+<h1 id="step-3-focus-on-writing-aql-instead-of-tuning-performance">Step 3: Focus on writing AQL instead of tuning performance</h1>
+<p>You can usually rely on the Optimizer to choose an efficient plan, so do not tune performance while you are writing AQL.</p>
+<p>The SystemT engine has a sophisticated cost-based Optimizer, so you can concentrate on writing AQL rules that are easy to understand and easy to maintain.</p>
+<ul>
+<li>
+<p><strong>Tuning your AQL to force a particular plan can be counter-productive</strong></p>
+<p>The best execution plan is often not obvious, especially when you are considering an extractor that might consist of multiple different modules written by different developers. Tuning AQL rules to produce a particular execution plan that seems optimal can be counter-productive. This tuning always makes the extractor harder to maintain, and it often makes the extractor slower.</p>
+</li>
+<li>
+<p><strong>Write AQL for ease of maintenance and understanding</strong></p>
+<p>Aside from following the basic AQL guidelines, in most cases you will have better performance, as well as improved accuracy and maintainability, if you write AQL rules for ease of maintenance and understanding. Let the Optimizer do its job, then check to make sure that the Optimizer chose the most efficient plan by using the AQL Profiler.</p>
+</li>
+</ul>
+<h1 id="step-4-use-the-aql-profiler-to-find-problems">Step 4: Use the AQL Profiler to find problems</h1>
+<p>Sometimes there is not an efficient plan for the particular semantics of the AQL expressions. 
+The AQL Profiler is designed to help you quickly zero in on these problem cases.
+The AQL Profiler is included in the SystemT low-level Java API (class com.ibm.avatar.api.AQLProfiler)
+and is accessible in the AQL Developer Tooling (Eclipse-based) by right clicking on your AQL project &gt; <code>Profile as</code> &gt; <code>Text Analytics Profiler Configuration</code>.</p>
+<p>The AQL Profiler is a sampling profiler for SystemT operator graphs.
+While one thread runs the extractor over a collection of documents, a second thread periodically samples the state of the first thread, or what the operator is running at that moment. After the extraction thread is done running, the AQL Profiler sums up all of these samples to produce a breakdown of what views and operators account for what percentage of overall run time. This approach gives an accurate picture of the run time of various views and operators, as long as the AQL Profiler is allowed to run for a few tens of seconds.</p>
+<p>The SystemT low-level Java APIs describe how to start the AQL Profiler: 
+You provide a collection of example documents to use as a target of extraction during profiling. 
+The AQL Profiler runs on the set of documents that you specified.</p>
+<p>The documents should represent the kinds of documents that will be used in the end-to-end application, but you do not need a large document set. 
+The AQL Profiler loops over the document collection until it has run for the specified minimum number of seconds. It is recommended to run the AQL Profiler for at least 30 seconds, to ensure the JVM has sufficient time to optimize byte code. This ensures the profiler results are realistic and as expected in production mode when usually an extractor is loaded once, and subsequently used to process many documents over a long period of time.</p>
+<ul>
+<li>
+<p><strong>Hot Views</strong></p>
+<p>Hot views are views within the compiled plans that are responsible for the largest fraction of execution time. The views are sorted from least to most expensive. The view at the lower portion of the table is the most expensive and it is the best target for any hand-tuning efforts.</p>
+</li>
+<li>
+<p><strong>Sequence patterns and subqueries</strong></p>
+<pre><code>Sequence patterns are implemented via an AQL to AQL rewrite. Each sequence pattern turns into one or more AQL views. Each extract pattern statement is turned into a collection of internal views that are based on select and extract statements before they are fed to the Optimizer. You will see these view names in the operator graph plan and the AQL Profiler output. The naming convention for sequence patterns is:
+
+```bash
+_[original view name]_TmpView_[pattern]__[number]
+```
+
+For example:
+
+```
+_AmountWithUnit_TmpView_&lt;N.match&gt; &lt;U.match&gt;__3
+```
+
+A similar approach applies to subqueries in the from clause of a `select` statement.
+</code></pre>
+</li>
+<li>
+<p><strong>Hot Documents</strong></p>
+<p>Hot documents are documents that took unusually long amounts of time to process during the profiling run. The Optimizer attempts to produce plans that are not sensitive to the input documents, but sometimes such plans do not exist. For example, there might be a regular expression that happens to run slowly on particular input strings, or an AQL view can require the extractor to output a view whose size is very large for certain documents.</p>
+<p>If you find a problem document, you can create a document collection with just that document and run the Profiler again.</p>
+<p>The first document in the collection often comes to the top of this list, because the “just in time” Java™ compiler might be generating object code at the same time that it is processing this document.</p>
+</li>
+</ul>
+<h1 id="step-5-tune-the-most-expensive-view-first">Step 5: Tune the most expensive view first</h1>
+<p>Focus your performance tuning on views that are heavily represented in the AQL Profiler output.</p>
+<p>A standard performance tuning practice is that if a view is taking up 10% of the execution time, even if you drop its running time to zero, the overall extractor will only get 10% faster. When you tune for performance it impacts readability and ease of maintenance, so be selective.</p>
+<ul>
+<li>
+<p><strong>Use Amdahl's law</strong></p>
+<p>Amdahl’s Law states that the maximum possible speed enhancement from tuning a view is inversely proportional to what fraction of the execution time that the view represents. If a view takes 5% of the execution time and you make it 100 times faster, the extractor becomes about 1.05 times faster. If a view takes 90% of the execution time and you make it 100 times faster, the extractor becomes about 9.2 times faster.</p>
+</li>
+<li>
+<p><strong>Concentrate efforts on the most expensive view</strong></p>
+<p>Concentrate any tuning efforts on the most expensive view. Each time you make a change to improve performance, it is important to rerun the AQL Profiler and to check whether the view that you are working on is still the most expensive. If another view moves to the top of the list, switch to working on that view.</p>
+</li>
+<li>
+<p><strong>After each round of tuning, rerun the AQL Profiler and repeat</strong></p>
+<p>This process should continue until either the throughput goals of the application are met or all views take approximately the same amount of time to process.</p>
+</li>
+</ul>
+<h1 id="examples-solving-common-performance-problems">Examples: Solving common performance problems</h1>
+<p>The main goal of tuning an AQL view is to identify the reason that the view is running slowly, and then fix that problem.</p>
+<p>Once you determine which view to tune for performance, you can focus on tuning that view. These scenarios illustrate regular causes of performance problems, from most common to least common, and explain ways to fix these performance problems.</p>
+<h2 id="did-not-follow-an-aql-guideline-correct-the-aql">Did not follow an AQL guideline: Correct the AQL</h2>
+<p>The most common performance tuning scenario is the need to correct a case where the basic AQL writing guidelines were not followed. In this example, word boundary checks (<code>\b</code>) in the regular expression prevent Regular Expression Strength Reduction and Shared Regular Expression Matching (RSR/SRM) optimization. These are the most powerful regular expression optimizations.</p>
+<pre><code class="language-bash">create view Number as
+extract regex /\b\d+\b/
+      on D.text
+  as match
+from Document D;
+</code></pre>
+<p>This problem is easily corrected by modifying the view so that it conforms to the guideline. In this case, you can rewrite the <code>extract regex</code> statement to use the <code>on 1 token</code> clause in place of the word boundary checks. This change enables both RSR/SRM to be applied, without changing the results of the view. You can convert the regular expression to an RSR/SRM compatible view that produces the same result.</p>
+<pre><code class="language-bash">create view Number as
+extract regex /\d+/
+      on 1 token 
+      in D.text
+  as match
+from Document D;
+</code></pre>
+<h2 id="optimizer-could-not-apply-an-optimization-refine-the-view-definition-so-that-optimization-applies">Optimizer could not apply an optimization: Refine the view definition so that optimization applies</h2>
+<p>Another common scenario occurs when the Optimizer is unable to apply an optimization due to unnecessary constraints built into the structure of the AQL rules. In this example, the extractor identifies expressions of sentiment that apply to particular IBM® products. The rules are composed of two parts: a very complex and expensive sentiment extractor, and a simple dictionary evaluation that looks for product names:</p>
+<pre><code class="language-bash">-- Table containing &lt;name, sentiment&gt; pairs of well-known software products
+
+create table SentimentTable 
+  (name Text, sentiment Text) as
+values
+  ('Cognos', 'positive'),
+  ('QuickBooks', 'neutral'),
+  ('Office 365', 'positive'),
+  ('Lotus Notes', 'neutral'),
+  ('DB2', 'positive'),
+  ('SQL Server', 'neutral'),
+  ('BigInsights', 'positive'),
+  ('Photoshop', 'positive'),
+  ('Watson', 'positive');
+
+create dictionary IBMProductNameDict
+as ( 'DB2', 'BigInsights', 'Watson');
+
+-- Classify mentions of products as positive or negative
+create view ProductPairs as
+select S.name as name, 
+       S.sentiment as sentiment
+from SentimentTable S
+where MatchesDict('IBMProductNameDict', S.name);
+</code></pre>
+<p>The Optimizer cannot apply the most productive optimizations because of the way the AQL was written. This issue often happens because there are optimizations that occur behind the scenes that conflict with an attempt to hand-tune the AQL for performance while the rules are being written. In this case, the constraint is expressed that only sentiments about IBM products are relevant as an explicit filtering condition over the output tuples of the <code>Sentiment</code> view. There is only one plan that the Optimizer can generate that completely implements the semantics of the view; the Optimizer must evaluate the entire sentiment extractor all of the time, then run the results through a <code>Select</code> operator that filters the sentiments that do not apply to the target products. This plan leads to wasted work, particularly if most of the documents do not contain a product name.</p>
+<p>You can rewrite this view to give the Optimizer more leeway to choose an efficient plan. Take that dictionary match that was expressed as a filtering condition (a MatchesDict() predicate), and rewrite it into a join operator with the results of an <code>extract dictionary</code> statement. The result is a set of rules that has almost the same low-level semantics, and from the perspective of the application the semantics are exactly the same. But the Optimizer can now apply Conditional Evaluation to skip sentiment analysis entirely on documents that do not contain a product name.</p>
+<pre><code class="language-bash">-- Table containing &lt;name, sentiment&gt; pairs of well-known software products
+
+create table SentimentTable 
+  (name Text, sentiment Text) as
+values
+  ('Cognos', 'positive'),
+  ('QuickBooks', 'neutral'),
+  ('Office 365', 'positive'),
+  ('Lotus Notes', 'neutral'),
+  ('DB2', 'positive'),
+  ('SQL Server', 'neutral'),
+  ('BigInsights', 'positive'),
+  ('Photoshop', 'positive'),
+  ('Watson', 'positive');
+
+create dictionary IBMProductNameDict
+as ( 'DB2', 'BigInsights', 'Watson');
+
+create view IBMProductName as
+extract dictionary 'IBMProductNameDict'
+on D.text as name
+from Document D;
+
+-- Classify mentions of products as positive or negative
+create view ProductPairs as
+select S.name as name, 
+       S.sentiment as sentiment
+from SentimentTable S, IBMProductName I
+where Equals(S.name, I.name);
+</code></pre>
+<h2 id="optimizer-made-a-mistake-rework-the-view-definition-to-force-the-correct-plan">Optimizer made a mistake: Rework the view definition to force the correct plan</h2>
+<p>Occasionally, the Optimizer makes a mistake. The Optimizer chooses its plan that is based on a cost model, and this model is not perfect. For example, the cost model currently assumes that all dictionary evaluations are faster than all regular expressions. But in some cases, such as the following example, this assumption is not true.</p>
+<pre><code class="language-bash">create dictionary TheDict as ('the');
+
+create view The as 
+extract dictionary 'TheDict'
+   on D.text as match
+from Document D;
+
+create view Nth as
+extract regex /\d+th/
+   on 1 token 
+   in D.text as match
+from Document D;
+
+-- Find phrases like &quot;the 10th&quot;
+create view TheNth as
+select 
+CombineSpans(T.match, N.match) as match
+from The T, Nth N
+where 
+   FollowsTok(T.match, N.match,0,0);
+</code></pre>
+<p>In this case, evaluating a dictionary that contains the common word <code>the</code> is fairly expensive because that word produces a large number of matches, and it takes time to construct a tuple for each match. The regular expression in this example is small and straightforward. It produces very few matches on most documents, so evaluating this regular expression is likely to be less expensive than running the <code>TheDict</code> dictionary.</p>
+<p>For the overall extractor, which looks for phrases like <code>the 10th</code>, the Optimizer always incorrectly chooses to evaluate the dictionary and to use conditional evaluation or Restricted Span Evaluation (RSE) to reduce the time that is spent on the regular expression. The alternate plan, to evaluate the regular expression first, is actually the one that the Optimizer should choose. This mistake can be corrected by rewriting the AQL so that the Optimizer has no choice but to choose the “correct” plan. Basically, the modification is the inverse of the previous example. Take the join between the views <code>The</code> and <code>NTh</code> and replace that join with a filtering condition on the contents of the <code>Nth</code> view. This rewrite forces the compiler to generate an execution plan that uses RSE to run the <code>TheDict</code> dictionary only on selected portions of each document.</p>
+<pre><code class="language-bash">create dictionary TheDict as ('the');
+
+create view Nth as
+extract regex /\d+th/
+   on between 1 and 1 tokens 
+   in D.text as match
+from Document D;
+
+-- Find phrases like &quot;the 10th&quot;
+create view TheNth as
+select 
+CombineSpans
+  (
+     LeftContextTok(N.match, 1), N.match
+  ) 
+  as match
+from Nth N
+where MatchesDict('TheDict', LeftContextTok(N.match, 1));
+</code></pre>
+<p><strong>Important:</strong> These rewrites harm maintainability and can make the extractor slower if you are not careful. Rework views in this way only if the Profiler indicates that there is a serious performance problem.</p>
+<h2 id="no-efficient-plan-exists-reevaluate-the-semantics-of-the-extractor">No efficient plan exists: Reevaluate the semantics of the extractor</h2>
+<p>A relatively uncommon performance tuning scenario is when there is no possible efficient plan for a given set of AQL rules. Here is an example of how this kind of scenario can occur:</p>
+<pre><code class="language-bash">create view SentenceBoundary as
+extract 
+  D.text as text,
+  regex /(([\.\?!]+\s)|(\n\s*\n))/ on D.text as boundary 
+from Document D;
+
+create view Sentence as
+extract 
+    split using S.boundary 
+    retain right split point
+    on S.text as sentence
+from SentenceBoundary S;
+
+create dictionary ProductNameDict
+as ( 'DB2', 'BigInsights', 'Watson');
+
+create view ProductName as
+extract dictionary 'ProductNameDict'
+on D.text as match
+from Document D;
+
+-- Find pairs of product names that occurred in the same sentence
+create view ProductPairs as
+select N1.match as name1, 
+       N2.match as name2
+from ProductName N1, 
+     ProductName N2, 
+     Sentence S
+where 
+   FollowsTok(N1.match, N2.match, 0, 10) and Contains(S.sentence, N1.match) and Contains(S.sentence, N2.match) and Not(Equals(N1.match, N2.match));
+</code></pre>
+<p>In this example, the view <code>Sentence</code> splits the contents of the document into individual sentences. Imagine that the <code>SentenceBoundary</code> view is expensive because it contains an expensive regular expression. Another view, <code>ProductPairs</code>, looks for sentences that contain mentions of two different product names. Since the <code>Sentence</code> view uses the <code>extract split</code> statement, the join in the <code>ProductPairs</code> view must take the entire collection of sentences as input and identifying sentence boundaries can be expensive. The Optimizer can improve throughput by leveraging Conditional Evaluation to ensure that the <code>Sentence</code> view is only evaluated when the document contains at least one pair of product names. However, that entire view must still run even if the document contains only one product name pair. Basically, even the best possible plan is not very good.</p>
+<p>This problem can be corrected by rethinking the semantics of the extractor. Instead of looking for two product mentions within the same sentence, you can find two product names that do not have a sentence boundary between them. Convert the expensive regular expression for sentence boundaries into a filtering condition (the Not(MatchesRegex())), and the Optimizer can access an execution plan that avoids evaluating the expensive regular expression over most of the document.</p>
+<pre><code class="language-bash">create dictionary ProductNameDict
+as ( 'DB2', 'BigInsights', 'Watson');
+
+create view ProductName as
+extract dictionary 'ProductNameDict'
+on D.text as match
+from Document D;
+
+-- Find pairs of product names that occurred in the same sentence without splitting sentences
+create view ProductPairs as
+select N1.match as name1, 
+       N2.match as name2
+from ProductName N1, 
+     ProductName N2
+where
+   FollowsTok(N1.match, N2.match,0,10) 
+   and Not(MatchesRegex(/(([\.\?!]+\s)|(\n\s*\n))/, SpanBetween(N1.match, N2.match)));s
+</code></pre></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../js/bootstrap.bundle.min.js"></script>
+        <script>
+            var base_url = "..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../js/base.js"></script>
+        <script src="../search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>
