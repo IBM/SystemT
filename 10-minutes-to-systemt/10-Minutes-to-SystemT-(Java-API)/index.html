@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="../../img/favicon.ico">
+        <title>10 Minutes to SystemT (Java-API) - MkLorum</title>
+        <link href="../../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../../css/fontawesome.min.css" rel="stylesheet">
+        <link href="../../css/brands.min.css" rel="stylesheet">
+        <link href="../../css/solid.min.css" rel="stylesheet">
+        <link href="../../css/v4-font-face.min.css" rel="stylesheet">
+        <link href="../../css/base.css" rel="stylesheet">
+        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
+        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="../..">MkLorum</a>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+
+                    <ul class="nav navbar-nav ms-md-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#10-minutes-to-systemt-java-api" class="nav-link">10 Minutes to SystemT (Java-API)</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-bs-level="2"><a href="#add-systemt-to-your-project" class="nav-link">Add SystemT to Your Project</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#analyze-text" class="nav-link">Analyze Text</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="10-minutes-to-systemt-java-api">10 Minutes to SystemT (Java-API)</h1>
+<p>{:.no_toc}</p>
+<ul>
+<li>Table of Contents
+{:toc}</li>
+</ul>
+<h2 id="add-systemt-to-your-project">Add SystemT to Your Project</h2>
+<h3 id="prerequisites">Prerequisites</h3>
+<ul>
+<li>Java Development Kit 8, 11, 17</li>
+</ul>
+<h3 id="installation">Installation</h3>
+<h4 id="add-dependency-to-systemt">Add Dependency to SystemT</h4>
+<p>Add dependency settings to <code>rbr-annotation-service-core</code> in your project's <code>pom.xml</code> file. </p>
+<h2 id="analyze-text">Analyze Text</h2>
+<h3 id="create-aql-code">Create AQL Code</h3>
+<p>We show a very simple AQL code to extract mentions of programming languages and their versions, such as <code>Python version 3.7</code> and <code>Java 8</code>. </p>
+<p>This example is very simplistic. AQL can express much more than we can cover in a simple Hello World example. To learn AQL in depth, see <a href="../Learning-AQL">Learning AQL</a>.</p>
+<p>This is the directory structure and files we will create:</p>
+<pre><code class="language-sh">demoAqlModule
+\
+---main.aql
+</code></pre>
+<p>AQL code is organized in modules. AQL modules are similar to Java packages, or Python libraries. An AQL module can import concepts from other AQL modules, and can export concepts to be consumed in other AQL modules. </p>
+<p>We first create an AQL module called <code>demoAqlModule</code>. An AQL module is a directory. The name of the directory is the name of the AQL module. The AQL code lives in <code>.aql</code> files inside the module directory. </p>
+<p>For more details, see <a href="../../aql-guidelines/">AQL modules reference</a> and <a href="../../aql-ref-guide/">AQL Reference</a>.</p>
+<p>Create a new file, called <code>main.aql</code> in the module directory. Declare the module's name (same as the module directory name).</p>
+<pre><code class="language-sh">module demoAqlModule;
+</code></pre>
+<p>Declare a dictionary containing common programming language names. Also, define the matching semantics for the dictionary (in this case, the matching is case insensitive). Dictionaries can be declared inline, of from files or tables, and can have various matching semantics. </p>
+<pre><code class="language-sh">create dictionary ProgrammingLanguages_Dict 
+   with language as 'en' and case insensitive
+   as ('AQL', 'C++', 'Java', 'JavaScript', 'Objective C', 'Python', 'PhP');
+</code></pre>
+<p>Extract mentions of those names in the input text. The extraction happens on an object <code>Document.text</code>, which by default, represents the input text in AQL.</p>
+<pre><code class="language-sh">create view ProgrammingLanguageName as
+  extract dictionary ProgrammingLanguage_Dict on D.text 
+        as name
+  from Document D;
+</code></pre>
+<p>Use a regular expression to find spans that look like version numbers.</p>
+<pre><code class="language-sh">create view VersionNumber as
+  extract regex /[Vv]?\d{1,3}(\.\d{1,2}){0,3}/ on D.text
+          as version
+  from Document D;
+</code></pre>
+<p>We can now use an AQL pattern to combine our building blocks, <code>ProgrammingLanguageName</code> and <code>VersionNumber</code>, into a larger concept. We declare a pattern to extract mentions of programming languages, optionally followed within 0 to 1 tokens by a version number. Patterns are powerful AQL constructs to match regular expressions over tokens and annotations.</p>
+<pre><code class="language-sh">create view ProgrammingLanguageWithVersion as
+    extract pattern (&lt;P.name&gt;) ( ('version'|'v'|'v.')? (&lt;V.version&gt;) )?
+            return group 0 as fullMatch and
+                   group 1 as name and 
+                   group 4 as version
+            with inline_match on Document.text
+    from ProgrammingLanguageName P, VersionNumber V
+    consolidate on fullMatch using 'LeftToRight';
+</code></pre>
+<p>Since the pattern has optional components, it can match overlapping portions of the text. For example, in the text <code>I use Python 3.7</code>, the pattern matches both <code>Python 3.7</code> and <code>Python</code> (with and without the version number). Therefore, we use the <code>consolidate</code> clause to resolve these overlapping matches. There are many consolidation policies available in AQL, see <a href="../../aql-ref-guide/">AQL Reference</a> for details.</p>
+<p>Finally, we must declare which of the AQL concepts to output. The SystemT runtime engine saves CPU time by not executing any AQL code that does not contribute to an output.</p>
+<pre><code class="language-sh">output view ProgrammingLanguageWithVersion as 'ProgrammingLanguageWithVersion';
+</code></pre>
+<p>You're done creating your first AQL code! But, this is just the beginning. If you want to harness the entire expressive power of AQL, check out <a href="../Learning-AQL">Learning AQL</a>.</p>
+<h3 id="java-api-low-level-vs-high-level">Java API: Low-level vs. High-level</h3>
+<p>SystemT has two Java APIs:</p>
+<ol>
+<li>The low-level Java API allows compiling and executing AQL code. The input and output are low-level Java objects specific to SystemT. In addition, the API provides access to functionality such as querying compiled AQL modules for their input and output schema, and profiling AQL code at runtime. Use this API if you are building an application that requires access to all these functionalitites. For example, the Watson Knowledge Studio (WKS) uses the low-level Java API to generate AQL code, and compile it on the fly in the rule editor.</li>
+<li>The high-level Java API is a simple interface around the most common functionality: compiling and executing compiled AQL code. The API also hides low-level SystemT data objects as Jackson JSON objects for ease of consumption. This API is further wrapped and exposed in SystemT's Python binding.</li>
+</ol>
+<h3 id="using-the-low-level-java-api">Using the Low-level Java API</h3>
+<p>Use this API to compile AQL code programmatically, instantiate a set of compiled AQL modules, and execute them on input documents.
+In addition, this API also provides access to other methods such as querying a set of compiled modules for their input and output schema, and a sample-based AQL Runtime Profiler. See <a href="../../API-Reference/">API Reference</a> for details of each method.</p>
+<h4 id="compile-aql-code-into-text-analytics-modules-tam-files">Compile AQL Code into Text Analytics Modules (TAM) files</h4>
+<p>The following shows how to use the SystemT low-level Java API to compile AQL source code into Text Analytics Modules (.tam) files.</p>
+<pre><code class="language-java">// Set up compilation parameters
+CompileAQLParams params = new CompileAQLParams ();
+
+// The names of source AQL modules to compile
+String[] sourceModuleNames = new String[] {&quot;demoAqlModule&quot;};
+String sourceModuleUri = new File(&quot;./src/main/aql/demoAqlModule&quot;).toURI().toString();
+String[] sourceModuleUris = new String[] { sourceModuleUri};
+params.setInputModules (sourceModuleUris);
+
+// The module path, only if your source AQL uses an AQL library (other compiled AQL modules)
+params.setModulePath (null);
+
+// Set up the output directory where source AQL modules get compiled into .tam files
+String compiledTamUri = new File (&quot;./target&quot;).toURI ().toString () ;
+params.setOutputURI (compiledTamUri);
+
+// Compile AQL modules to .tam files
+CompileAQL.compile (params);
+</code></pre>
+<h4 id="instantiate-extractor-from-tam-files">Instantiate Extractor from TAM Files</h4>
+<p>The following shows how to use the SystemT low-level Java API to instantiate an extractor, known as <code>OperatorGraph</code> object, from Text Analytics Modules (.tam) files.</p>
+<pre><code class="language-java">OperatorGraph og = OperatorGraph.createOG (sourceModuleNames, compiledTamUri, null, null);
+</code></pre>
+<h4 id="execute-extractor">Execute Extractor</h4>
+<p>The following code takes English text and writes analysis result to console. See <a href="../../API-Reference/">API Reference</a> for details of each method.</p>
+<pre><code class="language-java">// Assume the document schema expected by all extractors is (label text, text Text);
+TupleSchema docSchema = og.getDocumentSchema ();
+TextSetter textSetter = docSchema.textSetter (Constants.DOCTEXT_COL);
+
+// Make a document tuple out of the input text
+Tuple docTup = docSchema.createTup ();
+String inputStr = &quot;I like implementing NLP models in AQL. I can execute AQL from Java 8 and Python 3.7.&quot;;
+textSetter.setVal (docTup, new Text (inputStr, LangCode.en));
+
+// Run the extractor
+Map&lt;String, TupleList&gt; result = og.execute (docTup, null, null);
+</code></pre>
+<h4 id="get-result">Get Result</h4>
+<p>The analysis result is stored in <code>TupleList</code> objects. The schema of the tuples in each tuple list, including the names and types of each attribute in the tuple list, along with all tuples, and attribute values can be accessed using the low-level Java API. For details see <a href="../../API-Reference/">API Reference</a>.</p>
+<pre><code class="language-java">// Print the extractor results
+for (String viewName : result.keySet ()) {
+    // All tuples of the output view
+    TupleList tups = result.get (viewName);
+
+    System.out.printf (&quot;Output View %s:\n&quot;, viewName);
+
+    // The schema of the output view
+    AbstractTupleSchema schema = tups.getSchema ();
+
+    // Iterate through the tuples of the output view
+    TLIter itr = tups.iterator ();
+    while (itr.hasNext ()) {
+        Tuple tup = itr.next ();
+        System.out.printf (&quot;\n   %s\n&quot;, tup);
+
+        // Create and use accessor objects -- do this ONCE, ahead of time.
+        // The accessor objects should be created ONCE, ahead of time. The accessors can be
+        // reused subsequently to access values of all tuples of this output view, across all input documents      
+        for (int fieldIx = 0; fieldIx &lt; schema.size (); fieldIx++) {
+
+            // Obtain the field name from the view schema
+            String fieldName = schema.getFieldNameByIx (fieldIx);
+
+            // Use a Span accessor to access fields of type Span.
+            if (schema.getFieldTypeByIx (fieldIx).getIsSpan ()) {
+                FieldGetter&lt;Span&gt; accessor = schema.spanAcc (fieldName);
+
+                // Using the accessor to get the field value
+                Span span = accessor.getVal (tup);
+                if (null == span)
+                    System.out.printf (&quot;    %s: %s\n&quot;, fieldName, null);
+                else
+                    System.out.printf (&quot;    %s: %s, beginOffset: %d, endOffset: %d\n&quot;, fieldName, span.getText (), span.getBegin(), span.getEnd());
+            }
+            // Use an Integer accessor to access fields of type Integer
+            else if (schema.getFieldTypeByIx (fieldIx).getIsIntegerType ()) {
+                FieldGetter&lt;Integer&gt; accessor = schema.intAcc (fieldName);
+
+                // Using the accessor to get the field value
+                int intVal = accessor.getVal (tup);
+                System.out.printf (&quot;    %s: %d\n&quot;, fieldName, intVal);
+            }
+            // Similarly, we have accessors for other scalar data types in AQL, such as 
+            // Text, Float, Boolean and ScalarList
+        }
+    }
+}
+</code></pre>
+<p>For the following input text:</p>
+<pre><code class="language-curl">I like implementing NLP models in AQL. I can execute AQL from Java 8 and Python 3.7.
+</code></pre>
+<p>The above code will print to console:</p>
+<pre><code class="language-sh">Output View ProgrammingLanguageWithVersion:
+
+   [[34-37]: 'AQL', [34-37]: 'AQL', NULL(3 fields)]
+    fullMatch: AQL, beginOffset: 34, endOffset: 37
+    name: AQL, beginOffset: 34, endOffset: 37
+    version: null
+
+   [[53-56]: 'AQL', [53-56]: 'AQL', NULL(3 fields)]
+    fullMatch: AQL, beginOffset: 53, endOffset: 56
+    name: AQL, beginOffset: 53, endOffset: 56
+    version: null
+
+   [[62-68]: 'Java 8', [62-66]: 'Java', [67-68]: '8'(3 fields)]
+    fullMatch: Java 8, beginOffset: 62, endOffset: 68
+    name: Java, beginOffset: 62, endOffset: 66
+    version: 8, beginOffset: 67, endOffset: 68
+
+   [[73-83]: 'Python 3.7', [73-79]: 'Python', [80-83]: '3.7'(3 fields)]
+    fullMatch: Python 3.7, beginOffset: 73, endOffset: 83
+    name: Python, beginOffset: 73, endOffset: 79
+    version: 3.7, beginOffset: 80, endOffset: 83
+</code></pre>
+<h4 id="using-external-dictionaries-and-tables">Using external dictionaries and tables</h4>
+<p>When you are creating the operator graph, you can also pass on the content of the external dictionaries and the external tables that are required by the loaded compiled modules by using the com.ibm.avatar.api.ExternalTypeInfo API.</p>
+<p>The following example shows how to load modules and pass the content of external dictionaries by using the OperatorGraph.createOG() API:</p>
+<pre><code class="language-java">// URI to the location where the compiled modules should be stored
+String COMPILED_MODULES_PATH = new File (&quot;textAnalytics/bin&quot;).toURI ().toString ();
+
+// Name of the AQL modules to be loaded
+String[] TEXTANALYTICS_MODULES = new String[] { &quot;main&quot;, &quot;metricsIndicator_dictionaries&quot;,
+      &quot;metricsIndicator_externalTypes&quot;, &quot;metricsIndicator_features&quot;, &quot;metricsIndicator_udfs&quot; };
+
+// Create an instance of tokenizer
+TokenizerConfig TOKENIZER = new TokenizerConfig.Standard ();
+
+// Create an empty instance of the container used to pass in actual content of external dictionaries and
+// external tables to the loader
+ExternalTypeInfo externalTypeInfo = ExternalTypeInfoFactory.createInstance ();
+
+// Qualified name of the external dictionary 'abbreviations' declared in the module 'metricsIndicator_dictionaries'
+// through the 'create external dictionary...' statement
+String EXTERNAL_DICT_NAME = &quot;metricsIndicator_dictionaries.abbreviations&quot;;
+
+// URI pointing to the file abbreviations.dict containing entries for 'abbreviations' external dictionary
+String EXTERNAL_DICT_URI = new File (&quot;resource/dictionaries&quot;, &quot;abbreviations.dict&quot;).toURI ().toString ();
+
+// Populate the empty ExternalTypeInfo object with entries for 'abbreviations' dictionary
+externalTypeInfo.addDictionary (EXTERNAL_DICT_NAME, EXTERNAL_DICT_URI);
+
+// Similarly, populate the content of external tables into ExternalTypeInfo object
+// using the ExternalTypeInfo.addTable() API
+
+// Instantiate the OperatorGraph object
+OperatorGraph extractor = OperatorGraph.createOG (TEXTANALYTICS_MODULES, COMPILED_MODULES_PATH, externalTypeInfo, TOKENIZER);
+</code></pre>
+<h4 id="using-external-views">Using external views</h4>
+<p>If your extractor contains external views, you must first prepare the content in a format as specified in file formats for external artifacts and the create external view statement. 
+Then, pass the extractor as one of the input arguments to the execute API.
+The execute() method then annotates the document and returns the extraction results.</p>
+<p><strong>Note:</strong> The content for external views that are defined inside an extractor is optional. 
+The execute() method will not return an error if the content for one or more external views is not provided for annotating input documents.</p>
+<p>The following example shows how to populate external views while annotating documents:</p>
+<pre><code class="language-java">// Load Operator Graph
+OperatorGraph extractor = OperatorGraph.createOG (TEXTANALYTICS_MODULES, COMPILED_MODULES_PATH, externalTypeInfo,
+      TOKENIZER);
+
+// Directory containing the collection of documents to extract information from, in one of the supported input
+// collection formats.
+File INPUT_DATA_COLLECTION = new File (&quot;data/ibmQuarterlyReports&quot;);
+
+// Open a reader over input document set.
+DocReader inputDataReader = new DocReader (INPUT_DATA_COLLECTION);
+
+// Qualified name of the external view as it is defined in a &quot;create external view&quot; statement of your extractor.
+// In this code snippet we assume the external view has been declared using the following AQL statement:
+// create external view MyExternalView(stringField Text, integerField Integer)
+// external_name MyExternalView_ExternalName;
+String EXTERNAL_VIEW_NAME = &quot;ModuleName.MyExternalView&quot;;
+
+// Obtain the schema of the external view from the loaded OperatorGraph
+TupleSchema externalViewSchema = extractor.getExternalViewSchema (EXTERNAL_VIEW_NAME);
+
+// Prepare accessor objects to get and set values for different fields from and in a tuple.
+// In this example, the first column of the view is of type text,
+// and the second column is of type integer.
+
+// Setter for the text field
+TextSetter textSetter = externalViewSchema.textSetter (externalViewSchema.getFieldNameByIx (0));
+
+// Setter for the integer field
+FieldSetter&lt;Integer&gt; intSetter = externalViewSchema.intSetter (externalViewSchema.getFieldNameByIx (1));
+
+// Similarly you can create setter for fields with other data types
+// like float,span ..etc
+
+// Prepare a Tuplelist with two tuples { {&quot;text1&quot;,1}, {&quot;test2&quot;,2} }
+TupleList externalViewTups = new TupleList (externalViewSchema);
+Tuple externalViewTup;
+
+// Prepare two external view tuples
+externalViewTup = externalViewSchema.createTup ();
+textSetter.setVal (externalViewTup, &quot;text1&quot;);
+intSetter.setVal (externalViewTup, 1);
+externalViewTups.add (externalViewTup);
+externalViewTup = externalViewSchema.createTup ();
+textSetter.setVal (externalViewTup, &quot;text2&quot;);
+intSetter.setVal (externalViewTup, 2);
+externalViewTups.add (externalViewTup);
+
+// Process the documents one at a time.
+System.err.println (&quot;Executing SystemT ...&quot;);
+int ndoc = 0;
+while (inputDataReader.hasNext ()) {
+    Tuple doc = inputDataReader.next ();
+
+    // Prepare the content of the external view in a map where the
+    // key represents an external view name, and the value is the list of tuples of that external view
+    Map&lt;String, TupleList&gt; extViewTupMap = new HashMap&lt;String, TupleList&gt; ();
+    extViewTupMap.put (EXTERNAL_VIEW_NAME, externalViewTups);
+
+    // Annotate the current document, generating every single output
+    // type that the extractor produces.
+    // The second argument is an optional list of what output types to generate; null means &quot;return all types&quot;
+    // The third argument is the content of the external views
+    Map&lt;String, TupleList&gt; results = extractor.execute (doc, null, extViewTupMap);
+}
+</code></pre>
+<h4 id="query-the-extractor-schema-and-other-metadata">Query the extractor schema and other metadata</h4>
+<p>Class OperatorGraph provides APIs to query a loaded operator graph about its input document schema, and to list all the output types and their schema. The following example illustrates the use of these APIs:</p>
+<pre><code class="language-java">// Load Operator Graph
+OperatorGraph extractor = OperatorGraph.createOG (TEXTANALYTICS_MODULES, COMPILED_MODULES_PATH, externalTypeInfo, TOKENIZER);
+
+// Schema of the document expected by the loaded Operator Graph
+TupleSchema inputDocumentSchema = extractor.getDocumentSchema ();
+
+System.out.println (&quot;\n Displaying input document schema of the constructed extractor : &quot;);
+System.out.println (inputDocumentSchema.toString ());
+
+// Schema for every output view type in this extractor
+Map&lt;String, TupleSchema&gt; outputTypesSchema = extractor.getOutputTypeNamesAndSchema ();
+
+for (String outputType : outputTypesSchema.keySet ()) {
+    System.out.println (&quot;Output schema for output view type : &quot; + outputType);
+    System.out.println (outputTypesSchema.get (outputType));
+}
+</code></pre>
+<ul>
+<li><strong>ModuleMetadata API</strong></li>
+</ul>
+<p>Class ModuleMetadata provides APIs to query the Text Analytics module (TAM) about the:</p>
+<pre><code>- schema of the view `Document`
+- list of elements \(views/tables/functions/dictionaries\) exported by the module
+- list of views output by the module
+- schema of the exported or output views
+- external dictionaries, tables and views declared in the module
+- list of other modules that this module depends upon
+</code></pre>
+<p>The following example illustrates how to load the module metadata from a compiled Text Analytics module (TAM), and later query the loaded module about its metadata:</p>
+<pre><code class="language-java">// URI to the location where the compiled modules should be stored
+String COMPILED_MODULES_PATH = new File (&quot;textAnalytics/bin&quot;).toURI ().toString ();
+
+// Name of the compiled AQL modules 
+String[] TEXTANALYTICS_MODULES = new String[] { &quot;main&quot;, &quot;metricsIndicator_dictionaries&quot;,
+          &quot;metricsIndicator_externalTypes&quot;, &quot;metricsIndicator_features&quot;, &quot;metricsIndicator_udfs&quot; };
+
+// Read metadata for all the modules compiled in Step#1
+ModuleMetadata[] modulesMetadata = ModuleMetadataFactory.readMetaData (TEXTANALYTICS_MODULES, COMPILED_MODULES_PATH);
+
+// Query metadata of each module to obtain the following:
+// 1) Exported views and their schemas
+// 2) External dictionaries and external tables
+
+for (int metadataIndex = 0; metadataIndex &lt; modulesMetadata.length; ++metadataIndex) {
+
+    ModuleMetadata metadata = modulesMetadata[metadataIndex];
+    System.out.printf (&quot;\n Displaying metadata for module named '%s': &quot;, metadata.getModuleName ());
+
+    // Obtain list of views exported by this module and their schema
+    String[] exportedViews = metadata.getExportedViews ();
+    for (int exportedviewIndex = 0; exportedviewIndex &lt; exportedViews.length; exportedviewIndex++) {
+        // Fetch ViewMetadata for exported view
+        ViewMetadata exportedViewMetadata = metadata.getViewMetadata (exportedViews[exportedviewIndex]);
+        System.out.printf (&quot;\n Exported view name is '%s' and its schema is '%s'.&quot;, exportedViews[exportedviewIndex],
+            exportedViewMetadata.getViewSchema ());
+    }
+
+    // Obtain list of external dictionaries and inquire if it is required to pass in entries for the dictionary while
+    // loading
+    String[] externalDictionaries = metadata.getExternalDictionaries ();
+    for (int externalDictIndex = 0; externalDictIndex &lt; externalDictionaries.length; externalDictIndex++) {
+        // Fetch metadata for the external dictionary
+        DictionaryMetadata dictionaryMetadata = metadata.getDictionaryMetadata (externalDictionaries[externalDictIndex]);
+        System.out.printf (&quot;\n External dictionary name is '%s' and it is an '%s' dictionary.&quot;,
+            externalDictionaries[externalDictIndex], dictionaryMetadata.isAllowEmpty () ? &quot;Optional&quot; : &quot;Required&quot;);
+    }
+
+    // Similarly, you can obtain list of external tables and inquire if it is required to pass in entries for the table
+    // while loading
+
+    // Obtain list of modules this module depends on 
+    List&lt;String&gt; dependentModules = metadata.getDependentModules (); 
+    System.out.printf (&quot;\n Module named '%s' depends on following modules %s.&quot;, 
+          metadata.getModuleName (), 
+          dependentModules);
+}
+</code></pre>
+<ul>
+<li><strong>MultiModuleMetadata API</strong></li>
+</ul>
+<p>While individual modules contain metadata to describe their own schema and artifacts, applications might need metadata about the attributes of combined modules, numerous times, without having to create and load the extractor in memory. The MultiModuleMetadata API provides metadata for extractors formed from a group of modules.</p>
+<p>The following example illustrates the usage of the MultiModuleMetadata API:</p>
+<pre><code class="language-java">/**
+ * Method to illustrate the ability to understand what an extractor represents before having to create it
+ * 
+ * Useful when an application consuming text-analytics needs to know extractor specifics ahead of creating extractor
+ * This can also be used by say, a tool that displays extractor specifics for users before they choose within the tool 
+ *  
+ * @throws TextAnalyticsException
+ * @throws Exception
+ */
+public void illustrateMultiModuleMetadata() throws TextAnalyticsException, Exception {
+
+    MultiModuleMetadata modulesMetadata = ModuleMetadataFactory.readAllMetaData(TEXTANALYTICS_MODULES, COMPILED_MODULES_PATH);
+
+    System.out.println(&quot;Input document schema across these modules : &quot;+ modulesMetadata.getDocSchema());
+
+    System.out.println(&quot;Tokenizer used in creating this extractor : &quot;+modulesMetadata.getTokenizerType());
+
+    String[] outputViews = modulesMetadata.getOutputViews();
+
+    // Schema of each output view across these modules
+    for (String outputView : outputViews) {
+        ViewMetadata viewMetadata = modulesMetadata.getViewMetadata(outputView);
+        System.out.println(&quot;Schema for output view : &quot;+ outputView + &quot; is &quot;+ viewMetadata.getViewSchema());
+    }
+
+    // Schema of each exported view across these modules
+    String[] exportedViews = modulesMetadata.getExportedViews();
+    for(String exportedView : exportedViews) {
+        ViewMetadata viewMetadata = modulesMetadata.getViewMetadata(exportedView);
+        System.out.println(&quot;Schema for exported view : &quot;+ exportedView + &quot; is &quot; + viewMetadata.getViewSchema());
+    }
+
+    // Particulars of any function being exported from within any of the modules
+    String[] exportedFunctions = modulesMetadata.getExportedFunctions();
+    for (String exportedFunction : exportedFunctions) {
+
+        // Fetch function metadata
+        FunctionMetadata functionMetadata = modulesMetadata.getFunctionMetadata(exportedFunction);
+
+        System.out.println(&quot;Particulars of exported function : &quot;+exportedFunction);
+
+        System.out.println(&quot;Function external name : &quot;+functionMetadata.getExternalName());
+
+        // Function input parameters
+        Param[] functionParams = functionMetadata.getParameters();
+        int ix = 0;
+        for (Param functionParam : functionParams)
+            System.out.println(&quot;Function parameter #&quot;+(++ix)+&quot;--&gt; Name : &quot;+functionParam.getName()+&quot; ; Type : &quot;+functionParam.getType());
+
+        // Function return type
+        System.out.println(&quot;Function return type : &quot;+functionMetadata.getReturnType());
+    }
+
+    /**
+     * Like above, one could use similar public methods exposed by the MultiModuleMetadata API to obtain information
+     * about dictionaries, tables, comments relevant to the modules being considered.
+    */
+}
+
+</code></pre>
+<h4 id="the-docreader-api">The DocReader API</h4>
+<p>The SystemT low-level Java API also includes the <a href="#docreader-api">DocReader API</a>, 
+a convenient Java API for reading input document collections that are stored on the local file 
+system in one of the supported input collection formats.
+The DocReader API supports the input document collections that use the data collection formats.</p>
+<h5 id="annotating-a-document-collection-non-json-non-csv">Annotating a document collection (non-JSON, non-CSV)</h5>
+<p>The following example demonstrates how to annotate document collections in an input format that allows only the default document schema (text Text, [label Text])). 
+Create a DocReader object, and pass in the location of the input document collection as its parameter. Then, use the DocReader.next() function to obtain the next document in a collection.</p>
+<pre><code class="language-java">// Directory containing the collection of documents from which to extract information, in one of the supported input collection formats.
+File INPUT_DOCS_FILE = new File (&quot;/path/to/input/collection/on/disk&quot;);
+
+// Create the operator graph
+String modulePath = &quot;/path/to/modules/on/disk&quot;;
+
+TokenizerConfig tokenizer = new TokenizerConfig.Standard ();
+OperatorGraph og = OperatorGraph.createOG (new String[] { &quot;module1&quot;, &quot;module2&quot; }, modulePath, null, tokenizer);
+
+// Open a reader over input document set 
+DocReader docs = new DocReader (INPUT_DOCS_FILE);
+
+while (docs.hasNext ()) {
+    Tuple docTuple = docs.next ();
+
+    // Execute the operator graph on the current document, generating every single output type that the extractor produces.
+    Map&lt;String, TupleList&gt; results = og.execute (docTuple, null, null);
+
+    // Process the results as required
+}
+</code></pre>
+<h5 id="annotating-a-csv-document-collection">Annotating a CSV document collection</h5>
+<p>Annotating a CSV document collection is similar to annotating a regular document collection, 
+except that a CSV file can support a non-default document schema. 
+When you create the DocReader object for a CSV document collection, use the constructor that specifies a custom document schema, as seen in the following example. 
+Then, use DocReader.next() to traverse the collection.</p>
+<pre><code class="language-java">// Directory containing the collection of documents from which to extract information in CSV format
+File INPUT_DOCS_FILE = new File (&quot;/path/to/csv/input/collection/on/disk/&quot;);
+
+// Create the operator graph
+String modulePath = &quot;/path/to/modules/on/disk&quot;;
+
+TokenizerConfig tokenizer = new TokenizerConfig.Standard ();
+OperatorGraph og = OperatorGraph.createOG (new String[] { &quot;module1&quot;, &quot;module2&quot; }, modulePath, null, tokenizer);
+
+// Use the operator graph to determine the document schema.
+TupleSchema docSchema = og.getDocumentSchema ();
+
+// Open a reader over input document set
+DocReader docs = new DocReader (INPUT_DOCS_FILE, docSchema, null);
+
+while (docs.hasNext ()) {
+    Tuple docTuple = docs.next ();
+
+    // Execute the operator graph on the current document, generating every single output type that the extractor produces.
+    Map&lt;String, TupleList&gt; results = og.execute (docTuple, null, null);
+
+    // Process the results as required
+}
+</code></pre>
+<h5 id="annotating-a-json-document-collection">Annotating a JSON document collection</h5>
+<p>For a JSON document collection, use the static method DocReader.makeDocAndExternalPairsItr() 
+to retrieve an Iterator that returns the document content and any corresponding external view tuples. 
+To use this method, you must build an external view map object that represents all the external views, 
+with corresponding external names and document schemas.</p>
+<pre><code class="language-java">// Directory containing the collection of documents from which to extract information in a JSON format.    
+File INPUT_DOCS_FILE = new File (&quot;/path/to/json/input/collection/on/disk&quot;);     
+
+// Create the operator graph    
+String modulePath = &quot;/path/to/modules/on/disk&quot;;     
+
+TokenizerConfig tokenizer = new TokenizerConfig.Standard ();    
+OperatorGraph og = OperatorGraph.createOG (new String[] { &quot;module1&quot;, &quot;module2&quot; }, modulePath, null, tokenizer);    
+Map&lt;Pair&lt;String, String&gt;, TupleSchema&gt; extViewsMap = new HashMap&lt;Pair&lt;String, String&gt;, TupleSchema&gt; ();     
+
+// Prepare external view map for (String extViewName : og.getExternalViewNames ()) {     
+// Get external name of the external view
+
+String extViewExternalName = og.getExternalViewExternalName (extViewName);
+
+// Get schema of external view
+Pair&lt;String, String&gt; extViewNamePair = new Pair&lt;String, String&gt; (extViewName, extViewExternalName);
+TupleSchema schema = og.getExternalViewSchema (extViewName);
+
+extViewsMap.put (extViewNamePair, schema);
+
+// iterate over doc tuples with associated external views
+Iterator&lt;Pair&lt;Tuple, Map&lt;String, TupleList&gt;&gt;&gt; itr = DocReader.makeDocandExternalPairsItr (  
+INPUT_DOCS_FILE.toURI ().toString (), og.getDocumentSchema (), extViewsMap);
+
+while (itr.hasNext ()) {
+    Pair&lt;Tuple, Map&lt;String, TupleList&gt;&gt; docExtViewTup = itr.next ();
+
+    Tuple docTuple = docExtViewTup.first;
+    Map&lt;String, TupleList&gt; extViewData = docExtViewTup.second;
+
+    Map&lt;String, TupleList&gt; results = og.execute (docTuple, null, extViewData);
+
+    // Process the results as required
+
+}
+</code></pre>
+<h4 id="text-analytics-uri-formats">Text Analytics URI formats</h4>
+<p>You can specify the input and output location of your files with Uniform Resource Identifiers (URIs).</p>
+<p>The following operations are examples of API calls that use URIs:</p>
+<ul>
+<li>Reading an AQL file for compilation</li>
+<li>Writing a TAM file</li>
+<li>Loading modules from a TAM file</li>
+<li>Loading module metadata</li>
+<li>Loading external artifact data</li>
+</ul>
+<p>Compared to other applications, SystemT has a flexible definition of what constitutes a valid URI. 
+You can use a URI that does not contain a file system scheme (schemeless URI),
+as well as file system schemes of type HDFS.</p>
+<ol>
+<li>The full HDFS URI (hdfs://namenode.ibm.com:9080/directory/file.tam) has an HDFS scheme and specified authority.</li>
+<li>The HDFS URI (hdfs:///directory/file.tam) has an HDFS scheme and no specified authority.</li>
+<li>The local URI (file:///directory/file.tam) has a local file system scheme and no specified authority.</li>
+<li>The schemeless absolute URI (/directory/file.tam) has a POSIX-compliant absolute file path.</li>
+<li>The schemeless relative URI (directory/file.tam) has a POSIX-compliant relative file path.</li>
+</ol>
+<p>For more information about the specifics of the following APIs, see the Javadoc classes and APIs.</p>
+<table>
+<thead>
+<tr>
+<th>Java API</th>
+<th>Supported URI formats</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CompileAQLParams(...) [constructor]</td>
+<td>- Local<br>- Schemeless absolute<br>- Schemeless relative</td>
+</tr>
+<tr>
+<td>CompileAQLParams.setInputModules(...)</td>
+<td>- Local<br>- Schemeless absolute<br>- Schemeless relative</td>
+</tr>
+<tr>
+<td>CompileAQLParams.setModulePath(...)</td>
+<td>- Local<br>- Schemeless absolute<br>- Schemeless relative</td>
+</tr>
+<tr>
+<td>CompileAQLParams.setOutputURI(...)</td>
+<td>- Local<br>- Schemeless absolute<br>- Schemeless relative</td>
+</tr>
+<tr>
+<td>OperatorGraph.createOG(...)</td>
+<td>- Full HDFS<br>- HDFS<br>- Local<br>- Schemeless absolute<br>- Schemeless relative</td>
+</tr>
+<tr>
+<td>OperatorGraph.validateOG(...)</td>
+<td>- Full HDFS<br>- HDFS<br>- Local<br>- Schemeless absolute<br>- Schemeless relative</td>
+</tr>
+<tr>
+<td>ExternalTypeInfo.addDictionary(...)</td>
+<td>- Full HDFS<br>- HDFS<br>- Local<br>- Schemeless absolute<br>- Schemeless relative</td>
+</tr>
+<tr>
+<td>ExternalTypeInfo.addTable(...)</td>
+<td>- Full HDFS<br>- HDFS<br>- Local<br>- Schemeless absolute<br>- Schemeless relative</td>
+</tr>
+<tr>
+<td>ModuleMetadataFactory.readMetaData(...)</td>
+<td>- Full HDFS<br>- HDFS<br>- Local<br>- Schemeless absolute<br>- Schemeless relative</td>
+</tr>
+<tr>
+<td>ModuleMetadataFactory.readAllMetaData(...)</td>
+<td>- Local<br>- Schemeless absolute<br>- Schemeless relative</td>
+</tr>
+</tbody>
+</table>
+<p>Schemeless URIs (formats 5 and 6) are resolved to a schemed URI in a process that is called scheme auto-discovery 
+so that you can reuse a URI in applications without committing to a specific underlying file system scheme:</p>
+<ul>
+<li>If you are using APIs that do not support a distributed file system (for example, compile APIs), 
+the auto-resolved scheme is always local file system (file://).</li>
+<li>If the APIs support a distributed file system (for example OperatorGraph.createOG()), 
+the auto-resolved scheme is one of HDFS if installed ( hdfs://), otherwise it is the local file system (file://). 
+To determine whether a DFS is installed, SystemT attempts to read the fs.default.name property 
+from the file core-site.xml in the directory that is specified by the environment variable HADOOP_CONF_DIR. 
+It then sets the scheme to be identical to the scheme of the URI contained in that property. 
+If the read fails for any reason, the scheme is set to local file system.</li>
+</ul>
+<p>When the scheme is auto-discovered in a relative file path URI (format 6), the URI is resolved to an absolute URI:</p>
+<ul>
+<li>If the scheme is a distributed file system ( hdfs://), you can assume that the URI is relative to the root of the DFS that is specified.</li>
+<li>If the scheme is local file system (file://), then you can assume that the URI is relative to the current working directory (usually the directory from which the application was started).</li>
+</ul>
+<h5 id="example-1">Example 1</h5>
+<p>In this first example, you can create an operator graph with the module path of <code>application/modules</code> (format 6), using the OperatorGraph.createOG() API. 
+The system checks $HADOOP_CONF_DIR/core-site.xml for the property file fs.default.name, which is set to hdfs://bigserver.widgets.org. 
+The module path is then set to hdfs://bigserver.widgets.org/application/modules.</p>
+<h5 id="example-2">Example 2</h5>
+<p>In the same environment, the HADOOP_CONF_DIR environment variable is not set and the directory where SystemT is started is your home directory /home/username. 
+With no distributed file system found, the module path is set to file:///home/username/application/modules.</p>
+<h3 id="using-the-high-level-java-api">Using the High-level Java API</h3>
+<h4 id="prepare-compiled-text-analytics-modules-tam-files">Prepare Compiled Text Analytics Modules (TAM) files</h4>
+<p>SystemT's high-level API is designed to compile AQL code and to execute compiled AQL code (TAM modules). For reference, AQL compilation can be completed by using either the <a href="#configuration-for-aql-compilation">high-level API</a> or the <a href="#compile-aql-code-into-text-analytics-modules-tam-files">low-level API</a>,</p>
+<pre><code class="language-sh">tams
+\
+---demoAqlModule.tam
+</code></pre>
+<h4 id="create-configuration-file">Create Configuration File</h4>
+<p>SystemT high-level API is designed to integrate application easily, so the input object and output annotation result are defined as Jackson Json node. To construct annotation result, we need to setup annotation core module by using a configuration json file named <code>manifest.json</code></p>
+<p>Here is the <code>manifest.json</code> used in this tutorial:</p>
+<pre><code class="language-json">{
+  &quot;annotator&quot;: {
+    &quot;version&quot;: &quot;1.0&quot;,
+    &quot;key&quot;: &quot;Demo&quot;
+  },
+  &quot;annotatorRuntime&quot;: &quot;SystemT&quot;,
+  &quot;version&quot;: &quot;1.0&quot;,
+  &quot;acceptedContentTypes&quot;: [
+    &quot;text/html&quot;,
+    &quot;text/plain&quot;
+  ],
+  &quot;serializeAnnotatorInfo&quot;: false,
+  &quot;location&quot;: &quot;./model&quot;,
+  &quot;serializeSpan&quot;: &quot;locationAndText&quot;,
+  &quot;tokenizer&quot;: &quot;standard&quot;,
+  &quot;modulePath&quot;: [
+    &quot;tams&quot;
+  ],
+  &quot;moduleNames&quot;: [
+    &quot;demoAqlModule&quot;
+  ],
+  &quot;inputTypes&quot;: null,
+  &quot;outputTypes&quot;: [
+    &quot;ProgrammingLanguageName&quot;, &quot;ProgrammingLanguageWithVersion&quot;
+  ],
+  &quot;externalDictionaries&quot;: null,
+  &quot;externalTables&quot;: {}
+}
+</code></pre>
+<p>This looks hard to understand at a glance, but not many fields are mandatory to modify for trial. For a complete reference, see <a href="../Specification-of-manifest.json">Specification of manifest.json</a>.</p>
+<p>Here's some key fields to use your own custom annotator.</p>
+<ul>
+<li>Model file path:<br />
+  Set <code>location</code> to the model folder.
+  <code>sh
+    "location": "./model",</code></li>
+<li>Module path:<br />
+  Path to <code>.tam</code> folder path relative to the value in <code>location</code>.
+  <code>sh
+    "modulePath": [
+      "tams"
+    ]</code></li>
+<li>Module name:<br />
+  Names of AQL modules that you want to execute (coincide with the names of TAM files without <code>.tam</code> extension).
+  <code>sh
+    "moduleNames": [
+      "demoAqlModule"
+    ]</code></li>
+<li>Output types:<br />
+  Output views that you want to execute (other output views may exist in your TAM files, but they will not be executed unless explicitly included here).
+  <code>sh
+    "outputTypes": [
+      "ProgrammingLanguageName", "ProgrammingLanguageWithVersion"
+    ]</code></li>
+</ul>
+<p>For further details, please refer to <a href="../Specification-of-manifest.json">Specification of manifest.json</a></p>
+<p>Now we have</p>
+<pre><code class="language-sh">.
+├── model
+│   ├── manifest.json
+│   ├── tams
+│   │   └── demoAqlModule.tam
+│   └── aql
+│       └── demoAqlModule
+│           └── main.aql
+</code></pre>
+<h5 id="configuration-for-aql-compilation">Configuration for AQL Compilation</h5>
+<p>Add the following field to specify the location of the AQL files, if you'd like to compile and execute a model including AQL files.</p>
+<ul>
+<li>Source modules:<br />
+  Path to <code>.aql</code> folder path relative to the value in <code>location</code>.
+  <code>sh
+    "sourceModules": [
+      "aql/demoAqlModule"
+    ]</code></li>
+</ul>
+<h4 id="instantiate-and-execute-extractor">Instantiate and Execute Extractor</h4>
+<p>The following code takes English text and writes analysis result to console. See <a href="../../API-Reference/">API Reference</a> for details of each method.</p>
+<pre><code class="language-java">// Annotation service core object (an embeddable library, not a service)
+AnnotationService as = new AnnotationService();
+
+// Use jackson objectmapper to read manifest.json and dump result
+ObjectMapper mapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+
+// STEP 1. Load configuration (manifest.json)
+Path manifestPath = Paths.get(&quot;model/manifest.json&quot;);
+AnnotatorBundleConfig cfg = mapper.readValue (Files.readAllBytes (manifestPath), 
+AnnotatorBundleConfig.class);
+
+// STEP 2. Prepare execution parameter
+// LanguageCode for text
+String language = &quot;en&quot;;
+ExecuteParams execParams = new ExecuteParams (-1L, language, null,
+    AnnotatorBundleConfig.ContentType.PLAIN.getValue (), null);
+
+// Text to process
+String text = &quot;I like implementing NLP models in AQL. I can execute AQL from Java 8 and Python 3.7.&quot;;
+
+ObjectNode objNode = mapper.createObjectNode ();
+objNode.put (&quot;label&quot;, &quot;docLabel&quot;);
+objNode.put (&quot;text&quot;, text);
+
+// STEP 3. Invoke annotation service core and get result
+JsonNode outputJson = as.invoke (cfg, objNode, execParams);
+</code></pre>
+<h4 id="get-result_1">Get Result</h4>
+<p>The analysis result is stored in <code>Jackson JsonNode</code> objects.</p>
+<p>For the following input text:</p>
+<pre><code class="language-curl">I like implementing NLP models in AQL. I can execute AQL from Java 8 and Python 3.7.
+</code></pre>
+<p>The above code will print to console:</p>
+<pre><code class="language-json">{
+  &quot;annotations&quot; : {
+    &quot;ProgrammingLanguageName&quot; : [ {
+      &quot;name&quot; : {
+        &quot;location&quot; : {
+          &quot;begin&quot; : 34,
+          &quot;end&quot; : 37
+        },
+        &quot;text&quot; : &quot;AQL&quot;
+      }
+    }, {
+      &quot;name&quot; : {
+        &quot;location&quot; : {
+          &quot;begin&quot; : 53,
+          &quot;end&quot; : 56
+        },
+        &quot;text&quot; : &quot;AQL&quot;
+      }
+    }, {
+      &quot;name&quot; : {
+        &quot;location&quot; : {
+          &quot;begin&quot; : 62,
+          &quot;end&quot; : 66
+        },
+        &quot;text&quot; : &quot;Java&quot;
+      }
+    }, {
+      &quot;name&quot; : {
+        &quot;location&quot; : {
+          &quot;begin&quot; : 73,
+          &quot;end&quot; : 79
+        },
+        &quot;text&quot; : &quot;Python&quot;
+      }
+    } ],
+    &quot;ProgrammingLanguageWithVersion&quot; : [ {
+      &quot;fullMatch&quot; : {
+        &quot;location&quot; : {
+          &quot;begin&quot; : 34,
+          &quot;end&quot; : 37
+        },
+        &quot;text&quot; : &quot;AQL&quot;
+      },
+      &quot;name&quot; : {
+        &quot;location&quot; : {
+          &quot;begin&quot; : 34,
+          &quot;end&quot; : 37
+        },
+        &quot;text&quot; : &quot;AQL&quot;
+      },
+      &quot;version&quot; : null
+    }, {
+      &quot;fullMatch&quot; : {
+        &quot;location&quot; : {
+          &quot;begin&quot; : 53,
+          &quot;end&quot; : 56
+        },
+        &quot;text&quot; : &quot;AQL&quot;
+      },
+      &quot;name&quot; : {
+        &quot;location&quot; : {
+          &quot;begin&quot; : 53,
+          &quot;end&quot; : 56
+        },
+        &quot;text&quot; : &quot;AQL&quot;
+      },
+      &quot;version&quot; : null
+    }, {
+      &quot;fullMatch&quot; : {
+        &quot;location&quot; : {
+          &quot;begin&quot; : 62,
+          &quot;end&quot; : 68
+        },
+        &quot;text&quot; : &quot;Java 8&quot;
+      },
+      &quot;name&quot; : {
+        &quot;location&quot; : {
+          &quot;begin&quot; : 62,
+          &quot;end&quot; : 66
+        },
+        &quot;text&quot; : &quot;Java&quot;
+      },
+      &quot;version&quot; : {
+        &quot;location&quot; : {
+          &quot;begin&quot; : 67,
+          &quot;end&quot; : 68
+        },
+        &quot;text&quot; : &quot;8&quot;
+      }
+    }, {
+      &quot;fullMatch&quot; : {
+        &quot;location&quot; : {
+          &quot;begin&quot; : 73,
+          &quot;end&quot; : 83
+        },
+        &quot;text&quot; : &quot;Python 3.7&quot;
+      },
+      &quot;name&quot; : {
+        &quot;location&quot; : {
+          &quot;begin&quot; : 73,
+          &quot;end&quot; : 79
+        },
+        &quot;text&quot; : &quot;Python&quot;
+      },
+      &quot;version&quot; : {
+        &quot;location&quot; : {
+          &quot;begin&quot; : 80,
+          &quot;end&quot; : 83
+        },
+        &quot;text&quot; : &quot;3.7&quot;
+      }
+    } ]
+  },
+  &quot;instrumentationInfo&quot; : {
+    &quot;annotator&quot; : {
+      &quot;version&quot; : &quot;1.0&quot;,
+      &quot;key&quot; : &quot;Demo&quot;
+    },
+    &quot;runningTimeMS&quot; : 4,
+    &quot;documentSizeChars&quot; : 92,
+    &quot;numAnnotationsTotal&quot; : 8,
+    &quot;numAnnotationsPerType&quot; : [ {
+      &quot;annotationType&quot; : &quot;ProgrammingLanguageName&quot;,
+      &quot;numAnnotations&quot; : 4
+    }, {
+      &quot;annotationType&quot; : &quot;ProgrammingLanguageWithVersion&quot;,
+      &quot;numAnnotations&quot; : 4
+    } ],
+    &quot;interrupted&quot; : false,
+    &quot;success&quot; : true
+  }
+}
+</code></pre></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../../js/bootstrap.bundle.min.js"></script>
+        <script>
+            var base_url = "../..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../../js/base.js"></script>
+        <script src="../../search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>
