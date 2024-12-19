@@ -8,7 +8,7 @@ description: Specifying a JSON formatted configuration file for SystemT
 ---
 
 # Specification of manifest.json
-{:.no_toc}
+
 
 * Table of Contents
 {:toc}

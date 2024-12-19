@@ -9,7 +9,7 @@ description: The SystemT Optimizer
 ---
 
 # SystemT Optimizer
-{:.no_toc}
+
 
 * Table of Contents
 {:toc}

@@ -9,7 +9,7 @@ description: Data formats for DocReader API
 ---
 
 # Data collection formats
-{:.no_toc}
+
 
 
 

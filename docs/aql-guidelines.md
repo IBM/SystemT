@@ -10,7 +10,7 @@ description: AQL guidelines
 ---
 
 # Guidelines for writing AQL
-{:.no_toc}
+
 
 * Table of Contents
 {:toc}

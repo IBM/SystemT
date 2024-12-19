@@ -8,7 +8,7 @@ description: SystemT API reference
 ---
 
 # Annotation Query Language reference
-{:.no_toc}
+
 
 Annotation Query Language (AQL) is the primary language that is used to create {{site.data.keyword.knowledgestudiofull}} advanced rules extractors.
 

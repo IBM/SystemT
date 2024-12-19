@@ -10,7 +10,7 @@ description: Improve extractor performance
 ---
 
 # Improving the performance of an extractor
-{:.no_toc}
+
 
 * Table of Contents
 {:toc}

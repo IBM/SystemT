@@ -7,10 +7,6 @@ description: SystemT and AQL (Annotation Query Language) home page
 ---
 
 # SystemT and AQL model development
-{:.no_toc}
-
-* Table of Contents
-{:toc}
 
 SystemT provides:
 - AQL (Annotation Query Language): a declarative rule language for expressing transparent, explainable NLP algorithms on top of NLP Primitives and Operators. 

@@ -8,7 +8,7 @@ description: Add SystemT (Java API) to your project in 10 minutes
 ---
 
 # 10 Minutes to SystemT (Java-API)
-{:.no_toc}
+
 
 * Table of Contents
 {:toc}

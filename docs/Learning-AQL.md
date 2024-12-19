@@ -8,7 +8,7 @@ description: Learn about AQL (Annotation Query Language)
 ---
 
 # Learning AQL
-{:.no_toc}
+
 
 AQL (Annotation Query Language) is the language for expressing NLP rules in Watson NLP.
 To understand AQL and create AQL models, refer to the following resources:

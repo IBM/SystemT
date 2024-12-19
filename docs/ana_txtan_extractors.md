@@ -9,7 +9,7 @@ description: What are extractors?
 ---
 
 # AQL concepts
-{:.no_toc}
+
 
 * Table of Contents
 {:toc}
