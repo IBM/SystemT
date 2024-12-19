@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="../img/favicon.ico">
+        <title>Data formats for DocReader API - MkLorum</title>
+        <link href="../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../css/fontawesome.min.css" rel="stylesheet">
+        <link href="../css/brands.min.css" rel="stylesheet">
+        <link href="../css/solid.min.css" rel="stylesheet">
+        <link href="../css/v4-font-face.min.css" rel="stylesheet">
+        <link href="../css/base.css" rel="stylesheet">
+        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
+        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="..">MkLorum</a>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+
+                    <ul class="nav navbar-nav ms-md-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#data-collection-formats" class="nav-link">Data collection formats</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-bs-level="2"><a href="#utf-8-encoded-text-files" class="nav-link">UTF-8 encoded text files</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#utf-8-encoded-csv-files" class="nav-link">UTF-8 encoded CSV files</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#utf-8-encoded-json-files-in-hadoop-text-input-format" class="nav-link">UTF-8 encoded JSON files in Hadoop text input format</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#examples" class="nav-link">Examples</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-bs-level="2"><a href="#example-1-extractor-with-a-custom-document-schema" class="nav-link">Example 1: Extractor with a custom document schema</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#example-2-extractor-that-uses-multiple-modules-with-external-views" class="nav-link">Example 2: Extractor that uses multiple modules with external views</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#example-3-extractor-that-uses-a-module-with-external-views-but-not-all-of-the-external-views-are-populated" class="nav-link">Example 3: Extractor that uses a module with external views but not all of the external views are populated</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#example-4-external-views-with-an-attribute-of-type-span" class="nav-link">Example 4: External views with an attribute of type Span</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="data-collection-formats">Data collection formats</h1>
+<p>{:.no_toc}</p>
+<p>The DocReader API from SystemT low-level Java API supports specific formats to represent a data collection.
+A data collection is a document or a set of documents from which you want to extract text or discover patterns.</p>
+<p><strong>Restriction:</strong> All input documents must be UTF-8 encoded files, or the analysis can produce unexpected results. Also, while the data collections must contain text files, the content of these text files is not restricted to plain text. Non-binary content such as HTML or XML is also accepted.</p>
+<p>A data collection must be in one of the following formats:</p>
+<ul>
+<li>Table of Contents
+{:toc}</li>
+</ul>
+<h2 id="utf-8-encoded-text-files">UTF-8 encoded text files</h2>
+<p>A data collection in this format can consist of a single UTF-8 encoded file, or a set of UTF-8 encoded text files, that are contained in a directory, archive, or a single comma-delimited file.</p>
+<h3 id="a-single-text-file">A single text file</h3>
+<p>A UTF-8 encoded single text file must have a .txt, .htm, .html, .xhtml, or .xml file extension. For a text file, the DocReader.next() API create one Document tuple with the schema as (text Text) or (text Text, label Text) based on the document schema of the loaded extractor. The value for the <code>text</code> field is the content of the file, and the value of the label field is the name of the file.</p>
+<h3 id="text-files-in-a-directory">Text files in a directory</h3>
+<p>A data collection format can be a directory that contains UTF-8 encoded text files. For each file in the directory, the DocReader.next() API create one Document tuple with the schema as (text Text)or (text Text, label Text) based on the document schema of the loaded extractor. The value of the <code>text</code> field is the content of the file, and the value of the <code>label</code> field is the name of the file.</p>
+<h3 id="text-files-in-an-archive">Text files in an archive</h3>
+<p>A data collection can be an archive file in a .zip, .tar, .tar.gz, or .tgz archive format that contains UTF-8 encoded text files. For each file in the archive file, the DocReader.next() API create one Document tuple with the schema as (text Text) or (text Text, label Text) based on the document schema of the loaded extractor. The value for the <code>text</code> field is the content of the file, and the value of the <code>label</code> field is the name of the file.</p>
+<h3 id="a-single-comma-delimited-file">A single comma-delimited file</h3>
+<p>A UTF-8 encoded comma-delimited file (.del) must be in the following format:</p>
+<ul>
+<li>Each row represents a single document. Rows are separated by new lines.</li>
+<li>Each row has three comma-separated columns that represent the identifier (of type Integer), label (of type String), and text (of type String).</li>
+<li>The label and text string values must be surrounded by the character string delimiter, which is a double quotation mark ("). Any double quotation marks inside these values must be escaped ("").</li>
+<li>The document label can be any character string (for example, a file name) which must be unique.</li>
+<li>For each row in the .del file, the DocReader.next() API create one Document tuple with the schema as (text Text) or (text Text, label Text) based on the document schema of the loaded extractor. The value for the <code>text</code> field is the value of the third column of the row, and the value of the <code>label</code> field is the value of the second column of the row.</li>
+</ul>
+<p>The following is an example of a .del file in this format that contains two documents with labels, doc_1.txt and doc_2.txt.</p>
+<pre><code class="language-bash">1,&quot;doc_1.txt&quot;,&quot;This is an example document.&quot;
+2,&quot;doc_2.txt&quot;,&quot;This is an example document with &quot;&quot;double quotation marks&quot;&quot; that need to be escaped&quot;
+</code></pre>
+<h2 id="utf-8-encoded-csv-files">UTF-8 encoded CSV files</h2>
+<p>A data collection in this format can consist of a single UTF-8 encoded comma-delimited file with a header row.</p>
+<h3 id="a-single-comma-delimited-with-header-file">A single comma-delimited with header file</h3>
+<p>A UTF-8 encoded comma-delimited file with header (.csv) must be in the following format:</p>
+<ul>
+<li>The first line of the file must be a header row that has comma-separated columns that represent the header or column-name, which specify the column field names.</li>
+<li>Columns can be of the data type Integer, Float, Text, or Boolean.</li>
+<li>Data of type Text must be surrounded by a double quotation mark ("). In the following example of a CSV file, the field <code>First_name</code> is of type Text, so all of its values are enclosed in double quotation marks (such as "Rohan").</li>
+<li>For each row in the CSV file, the DocReader.next() API create one Document tuple with the schema according to the document schema of the loaded extractor.</li>
+<li>You must specify the document schema in the AQL script by using the require document with columns statement. Headers that are not defined in the statement are ignored. The fields do not need to be specified in the order that they appear in the document.</li>
+</ul>
+<p>The following is an example of a CSV file in this format:</p>
+<pre><code class="language-bash">First_name, Last_name, Id, Avg_score, Passed, Remarks
+“Rajeshwar”, “Kalakuntla”, 101, 70.96, true, ”Pass – First class”
+“Jayatheerthan”, “Krishna”, 102, 85.96, true, ”Pass - Distinction”
+“Nisanth”, “Simon”, 103, 80.96, true, ” Pass - Distinction”
+“Rahul”, “Kumar”, 104, 49.96, false, ”Failed”
+“Rohan”, “Reddy”, 105, 59.96, true, ”Pass – Second class”
+</code></pre>
+<p>The first row of the CSV file is the header and it contains six columns: <code>First_name</code>, <code>Last_name</code>, <code>Id</code>, <code>Avg_score</code>, <code>Passed</code>, and <code>Remarks</code>.The remaining data is the CSV content.</p>
+<p>The following require document with columns statement establishes the column header labels and data types:</p>
+<pre><code class="language-bash">require document with columns
+        First_name Text and
+        Last_name  Text and
+        Id         Integer and
+        Avg_score  Float and
+        Passed     Boolean;
+</code></pre>
+<p>Notice that the <code>Remarks</code> column is not used in the following statement, so the AQL will not have access to the <code>Remarks</code> column.</p>
+<h2 id="utf-8-encoded-json-files-in-hadoop-text-input-format">UTF-8 encoded JSON files in Hadoop text input format</h2>
+<p>A data collection in this format consists of a single UTF-8 encoded JSON (.json) file in Hadoop text input format.</p>
+<p>In this format, there is one JSON record per line. Each JSON record encodes the fields of one input document, and optionally, the external view content that is associated with that document.</p>
+<p>The document record is divided into multiple fields corresponding to a document schema (the structured format of the input document). 
+Unlike the other data collection formats, which require a schema of (text Text, label Text), the JSON format allows the parsing of documents with a custom schema. 
+The DocReader API aligns the schema that is read from the input JSON record with the expected input schema for the extractor. The expected input schema is the union of the schemas of its component modules (defined 
+by the <code>require document with columns</code> statement of an AQL file) in that extractor. 
+For example, if one module requires a document schema of (text Text) and another module requires a document schema of (id Integer), 
+an extractor that is derived from both modules requires a document schema (text Text, id Integer).</p>
+<p>It is expected that the field names read from the JSON file are equal to the names of the extractor schema, and that the field types read from the JSON file are compatible with the types of the extractor schema.
+If the JSON input does not contain a required document field, an exception occurs. If the JSON input contains extraneous fields that are not specified by the extractor schema, the fields are ignored.</p>
+<p>In addition to the document schema fields, the document record can include a special field named ExternalViews. This field is a record where the name of each element is the external name of the external view (declared in AQL as external_name). The value of that element is an array of records. Each record corresponds to a tuple of an external view. As with the document schema, the field names and field types of each external view tuple must correspond with their defined schema in AQL. When a JSON input data file contains documents with <code>ExternalViews</code> fields, every document in that JSON data file must contain a field named <code>ExternalViews</code>, whether r not this field is populated with some external view content for that document. The following table shows the correspondence between JSON types and AQL types:</p>
+<table>
+<thead>
+<tr>
+<th>AQL type</th>
+<th>JSON type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Text</td>
+<td>String</td>
+</tr>
+<tr>
+<td>Integer</td>
+<td>Long</td>
+</tr>
+<tr>
+<td>Float</td>
+<td>Double</td>
+</tr>
+<tr>
+<td>Boolean</td>
+<td>Boolean</td>
+</tr>
+<tr>
+<td>String</td>
+<td>String</td>
+</tr>
+<tr>
+<td>Scalar list</td>
+<td>Array</td>
+</tr>
+<tr>
+<td>Span</td>
+<td>Record of the form {begin: Long, end: Long} or {begin: Long, end: Long, docref: String}</td>
+</tr>
+</tbody>
+</table>
+<p>A value of AQL type Span is represented as a JSON record with the following fields:</p>
+<ul>
+<li><strong>begin</strong> of type JSON Long represents the begin offset of the span value. This field is mandatory.</li>
+<li><strong>end</strong> of type JSON Long represents the end offset of the span value. This field is mandatory.</li>
+<li><strong>docref</strong> of type JSON String represents the field of type Text in the view <strong>Document</strong> that holds the Text value that the span’s begin and end offsets refer to. This attribute is optional. If missing, the span is assumed to be over the field <strong>text</strong> of the view <strong>Document</strong>.</li>
+</ul>
+<h1 id="examples">Examples</h1>
+<p><strong>Requirement:</strong> The example data is formatted for readability, but each JSON record must be entered on a single line.</p>
+<h2 id="example-1-extractor-with-a-custom-document-schema">Example 1: Extractor with a custom document schema</h2>
+<p>In this example, you see a code snippet of a single module with a required Document schema of four fields, one field for each of the four AQL data types that are supported by the <code>require document with columns</code> statement.</p>
+<pre><code class="language-bash">module baseball;
+
+require document 
+    with columns avg Float 
+             and hr Integer 
+             and mvp Boolean 
+             and name Text;
+</code></pre>
+<p>The following example shows a JSON file that consists of three input documents that are suitable for use as input documents for the extractor. The example data is formatted for readability, but each JSON record must be on a single line. No external view contents are present in any of the three documents. The rbi field in the first document is not required by the document schema, and is therefore ignored.</p>
+<pre><code class="language-bash">{&quot;avg&quot;:0.357,&quot;hr&quot;:40,&quot;mvp&quot;:true,&quot;rbi&quot;:139,&quot;name&quot;:&quot;Cabrera, Miguel&quot;}
+{&quot;avg&quot;:0.326,&quot;hr&quot;:30,&quot;mvp&quot;:false,&quot;name&quot;:&quot;Trout, Mike&quot;}
+{&quot;avg&quot;:0.219,&quot;hr&quot;:1,&quot;mvp&quot;:false,&quot;name&quot;:&quot;Punto, Nick&quot;}
+</code></pre>
+<h2 id="example-2-extractor-that-uses-multiple-modules-with-external-views">Example 2: Extractor that uses multiple modules with external views</h2>
+<p>This example shows code snippets from various modules.</p>
+<ol>
+<li>Module email has Document schema (text Text) and an external view, EmailMetadata, with schema (toAddress Text, title Text) and external name, EmailMetadataSrc.</li>
+</ol>
+<pre><code class="language-bash">module email;
+
+require document with columns text Text;
+
+create external view EmailMetadata(toAddress Text, title Text)
+external_name 'EmailMetadataSrc';
+</code></pre>
+<ol>
+<li>Module spam has Document schema (label Text) and one external view, SpamMetadata with schema (spamChance Float) and external name, SpamMetadataSrc.</li>
+</ol>
+<pre><code class="language-bash">module spam;
+
+require document with columns label Text;
+
+create external view SpamMetadata(spamChance Float)
+external_name 'SpamMetadataSrc';
+</code></pre>
+<p>The following example shows a JSON file with a single document record that can be used as input to an extractor that combines both modules. This extractor has a unionized schema (label Text, text Text), and access to both external views. Notice the usage of external names of external views in the ExternalViews record.</p>
+<pre><code class="language-bash">{ &quot;label&quot;: &quot;email.txt&quot;, &quot;text&quot;: &quot;Send this to 20 other people!&quot;, &quot;ExternalViews&quot;: { &quot;EmailMetadataSrc&quot;: [ { &quot;toAddress&quot;:&quot;John Doe&quot;, &quot;title&quot;:&quot;Make Money Fast&quot; }, { &quot;toAddress&quot;:&quot;Jane Smith&quot;, &quot;title&quot;:&quot;Make Money Fast&quot; } ], &quot;SpamMetadataSrc&quot;: [ { &quot;spamChance&quot;:.999 } ] }}
+</code></pre>
+<h2 id="example-3-extractor-that-uses-a-module-with-external-views-but-not-all-of-the-external-views-are-populated">Example 3: Extractor that uses a module with external views but not all of the external views are populated</h2>
+<p>The JSON input in this example contains documents with ExternalViews defined in each record, but the second record is not populated with external view content.</p>
+<pre><code class="language-bash">module whitehouse;
+
+require document with columns
+      id Integer
+      and label Text
+      and text Text
+      and url Text
+      and timeStamp Text;
+
+create external view EmailMetadata (fromAddress Text, toAddress Text, msgid Integer) 
+external_name 'EmailMetadataSrc1';
+
+output view EmailMetadata;
+
+create view dumpDocument as
+select D.id, D.label, D.text, D.url, D.timeStamp
+from Document D;
+
+output view dumpDocument;
+</code></pre>
+<pre><code class="language-bash">{&quot;id&quot;: 123, &quot;label&quot;: &quot;dem.whitehouse.txt&quot;, &quot;text&quot;: &quot;Yes we can!&quot;, &quot;url&quot;: &quot;www.whitehouse.gov&quot;, &quot;timeStamp&quot;: &quot;03:00&quot;, &quot;ExternalViews&quot;: { &quot;EmailMetadataSrc1&quot;: [{&quot;fromAddress&quot;: &quot;Barack Obama&quot;,&quot;toAddress&quot;: &quot;Hillary Clinton&quot;,&quot;msgid&quot;: 2012}]}}
+{&quot;id&quot;: 125,&quot;label&quot;: &quot;wh2.txt&quot;,&quot;text&quot;: &quot;DON'T PRESS IT!&quot;,&quot;url&quot;: &quot;www.whitehouse.org&quot;,&quot;timeStamp&quot;: &quot;22:01&quot;,&quot;ExternalViews&quot;: {&quot;EmailMetadataSrc1&quot;: []}}
+</code></pre>
+<h2 id="example-4-external-views-with-an-attribute-of-type-span">Example 4: External views with an attribute of type Span</h2>
+<p>In this example, you see a code snippet of a single module with a required Document schema with two fields, and an external view with a single field of type Span.</p>
+<pre><code class="language-bash">module baseball;
+
+require document 
+        with columns text Text 
+                 and url Text;
+
+create external view ExternalSpans (annotation Span)
+external_name 'ExternalSpansSrc';
+</code></pre>
+<p>The following example shows a JSON file that consists of one input document, with two tuples in the external view.
+ The span in the first tuple has all three fields, including the optional field <strong>docref</strong>:<code>{"begin":4, "end":11, "docref":"url"}</code>
+ and represents the span [4-11] on the text “www.ibm.com” which is the value of the <strong>url</strong> field of the view 
+ <strong>Document</strong>, spanning the text “ibm.com”. Notice that the span value in the second tuple <code>{"begin":0, "end":4}</code> 
+ does not have the optional docref attribute. This represents the span [0-4] on the text “Some news” 
+ which is the value of the <strong>text</strong> field of the view <strong>Document</strong>, therefore spanning the text “Some”.</p>
+<pre><code class="language-bash">{&quot;text&quot;:&quot;Some news&quot;,&quot;url&quot;:&quot;www.ibm.com&quot;,&quot;ExternalViews&quot;:{&quot;ExternalSpansSrc&quot;:[{&quot;annotation&quot;:{&quot;begin&quot;:4, &quot;end&quot;:11, &quot;docref&quot;:&quot;url&quot;}},{&quot;annotation&quot;:{&quot;begin&quot;:0,&quot;end&quot;:4}}]}
+</code></pre></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../js/bootstrap.bundle.min.js"></script>
+        <script>
+            var base_url = "..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../js/base.js"></script>
+        <script src="../search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>
