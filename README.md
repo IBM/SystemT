@@ -1,6 +1,6 @@
 # SystemT
 
-SystemT Runtime Engine
+[![Build Status](https://app.travis-ci.com/IBM/SystemT.svg?token=8SfZpYTKzWTnJoE6qtVv&branch=main)](https://app.travis-ci.com/IBM/SystemT)
 
 This repository contains the SystemT runtime engine.
 SystemT is a system for specifying and executing rule-based NLP models. The NP models are specified in the Annotation Query Language (AQL).
