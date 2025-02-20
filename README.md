@@ -1,11 +1,9 @@
 # SystemT
 
-SystemT Runtime Engine
+[![Build Status](https://app.travis-ci.com/IBM/SystemT.svg?token=8SfZpYTKzWTnJoE6qtVv&branch=main)](https://app.travis-ci.com/IBM/SystemT)
 
-
-This repository contains the SystemT runtime engine and prebuilt extractor libraries as maintained and enhanced in Watson NLP, starting 2018.
-
-SystemT is a language and runtime engine for developing Natural Language Processing algorithms. The primary language used by the engine is AQL (Annotation Query Language).
+This repository contains the SystemT runtime engine.
+SystemT is a system for specifying and executing rule-based NLP models. The NP models are specified in the Annotation Query Language (AQL).
 
 # Development
 
@@ -13,18 +11,13 @@ SystemT is a language and runtime engine for developing Natural Language Process
 
 1. system-t-runtime: the SystemT Runtime engine
 2. simple-regex: the accelerated regex engine of SystemT
-3. rbr-annotation-service-core
+3. rbr-annotation-service-core: a simple wrapper for executing AQL models configured using a simple JSON specification
 
 
 ## Build Locally
 
 ```bash
-$ mvn clean install -f SystemT/pom.xml -s build/maven-settings.xml -Dmaven.test.skip=true
-```
-
-To build Sentiment on Linux (to obtain the correct output for regression tests):
-```bash
-./build/build_in_docker.sh
+mvn clean install -f SystemT/pom.xml -s build/maven-settings.xml -Dmaven.test.skip=true
 ```
 
 ## Eclipse Settings
